@@ -40,18 +40,18 @@
     let selectedDates = [];
 
     async function init() {
-      try {
-        await liff.init({ liffId: LIFF_ID });
-        if (!liff.isLoggedIn()) { liff.login(); return; }
-        const profile = await liff.getProfile();
-        userId = profile.userId;
-        const res = await fetch(GAS_URL);
-        const data = await res.json();
-        renderForm(data.dates, profile.displayName);
-      } catch(e) {
-        document.getElementById('app').innerHTML = '<div class="error">エラーが発生しました。<br>' + e.message + '</div>';
-      }
-    }
+  try {
+    await liff.init({ liffId: LIFF_ID });
+    if (!liff.isLoggedIn()) { liff.login(); return; }
+    const profile = await liff.getProfile();
+    userId = profile.userId;
+    const res = await fetch(GAS_URL);
+    const data = await res.json();
+    renderForm(data.dates, profile.displayName);
+  } catch(e) {
+    document.getElementById('app').innerHTML = '<div class="error">エラーが発生しました。<br>' + e.message + '</div>';
+  }
+}
 
     function renderForm(dates, name) {
       document.getElementById('app').innerHTML = `
