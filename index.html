@@ -69,14 +69,26 @@
     }
 
     async function submit() {
-      const btn = document.querySelector('.submit-btn');
-      btn.disabled = true; btn.textContent = '送信中...';
-      try {
-        const res = await fetch(GAS_URL, {
-  method: 'POST',
-  headers: {'Content-Type': 'text/plain'},
-  body: JSON.stringify({ userId, dates: selectedDates })
-});
+  const btn = document.querySelector('.submit-btn');
+  btn.disabled = true; btn.textContent = '送信中...';
+  try {
+    const params = new URLSearchParams({
+      action: 'submit',
+      userId: userId,
+      dates: selectedDates.join(',')
+    });
+    const res = await fetch(GAS_URL + '?' + params.toString());
+    const data = await res.json();
+    if (data.status === 'ok') {
+      document.getElementById('app').innerHTML = `<div class="success"><div class="icon">✅</div><h2>送信完了しました！</h2><p>お疲れ様です。<br>シフトが確定したらLINEでお知らせします。</p></div>`;
+    } else {
+      document.getElementById('app').innerHTML = '<div class="error">' + (data.message || 'エラーが発生しました') + '</div>';
+    }
+  } catch(e) {
+    btn.disabled = false; btn.textContent = '送信する';
+    alert('エラー: ' + e.message);
+  }
+}
 const data = await res.json();
         const data = await res.json();
         if (data.status === 'ok') {
