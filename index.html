@@ -40,12 +40,11 @@ var L='2009637457-ECOGmo94';
 var myUid='';
 var sel=[];
 
-function dbg(s){document.getElementById('app').innerHTML='<div class="error" style="font-size:12px">'+s+'</div>';}
 function er(m){document.getElementById('app').innerHTML='<div class="error">'+m+'</div>';}
 
 function showReg(){
   document.getElementById('app').innerHTML='<div class="reg-box"><p>初回登録が必要です。氏名を入力してください。</p><input type="text" id="ni" placeholder="例：山田 太郎"><button class="submit-btn" id="regBtn">登録する</button></div>';
-  document.getElementById('regBtn').addEventListener('click', function(){
+  document.getElementById('regBtn').addEventListener('click',function(){
     var n=document.getElementById('ni').value.trim();
     if(!n){alert('氏名を入力してください');return;}
     var b=document.getElementById('regBtn');
@@ -54,7 +53,7 @@ function showReg(){
       .then(function(r){return r.json();})
       .then(function(d){
         if(d.status==='ok'){load(n);}
-        else{er(d.message||'登録失敗');}
+        else{er(d.message||'登録失敗。管理者にお問い合わせください。');}
       })
       .catch(function(e){er('登録失敗: '+e.message);});
   });
@@ -64,7 +63,7 @@ function load(name){
   fetch(G)
     .then(function(r){return r.json();})
     .then(function(d){rend(d.dates,name);})
-    .catch(function(e){er('失敗: '+e.message);});
+    .catch(function(e){er('日付取得失敗: '+e.message);});
 }
 
 function rend(dates,name){
@@ -91,37 +90,33 @@ function rend(dates,name){
       .then(function(r){return r.json();})
       .then(function(d){
         if(d.status==='ok'){
-          document.getElementById('app').innerHTML='<div class="success"><div class="icon">&#x2705;</div><h2>送信完了しました！</h2><p>お疲れ様です。シフトが確定したらLINEでお知らせします。</p></div>';
+          document.getElementById('app').innerHTML='<div class="success"><div class="icon">&#x2705;</div><h2>送信完了しました！</h2><p>お疲れ様です。<br>シフトが確定したらLINEでお知らせします。</p></div>';
         }else if(d.message&&d.message.indexOf('見つかりません')>-1){
           showReg();
-        }else{er(d.message||'エラー');}
+        }else{
+          er(d.message||'エラーが発生しました。');
+        }
       })
-      .catch(function(e){b.disabled=false;b.textContent='送信する';er('失敗: '+e.message);});
+      .catch(function(e){b.disabled=false;b.textContent='送信する';er('送信失敗: '+e.message);});
   });
 }
 
-dbg('STEP1: liff.init開始...');
 liff.init({liffId:L})
   .then(function(){
-    dbg('STEP2: init完了 loggedIn='+liff.isLoggedIn());
     if(!liff.isLoggedIn()){liff.login();return;}
     return liff.getProfile();
   })
   .then(function(p){
-    if(!p){dbg('STEP3: profileなし');return;}
-    dbg('STEP3: '+p.displayName+' uid='+p.userId.substring(0,8)+'...');
+    if(!p)return;
     myUid=p.userId;
     return fetch(G+'?action=check&userId='+encodeURIComponent(myUid))
       .then(function(r){return r.json();})
       .then(function(d){
-        dbg('STEP4: check='+JSON.stringify(d));
-        setTimeout(function(){
-          if(d.status==='ok'){load(d.name);}
-          else{showReg();}
-        },1000);
+        if(d.status==='ok'){load(d.name);}
+        else{showReg();}
       });
   })
-  .catch(function(e){er('エラー: '+e.message+' code:'+e.code);});
+  .catch(function(e){er('エラーが発生しました。時間をおいて再度お試しください。');});
 </script>
 </body>
 </html>
