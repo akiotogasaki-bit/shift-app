@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>シフト管理</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,sans-serif;background:#f5f5f5;min-height:100vh}
+.header{background:#2c2c2c;color:#fff;padding:16px;text-align:center;font-size:18px;font-weight:bold}
+.container{padding:16px;max-width:480px;margin:0 auto}
+.card{background:#fff;border-radius:12px;padding:16px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,0.08)}
+.card h2{font-size:14px;color:#666;margin-bottom:12px;font-weight:bold}
+.btn{width:100%;border:none;border-radius:10px;padding:16px;font-size:16px;font-weight:bold;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:8px}
+.btn:disabled{opacity:0.5;cursor:not-allowed}
+.btn-primary{background:#2c2c2c;color:#fff}
+.btn-green{background:#06C755;color:#fff}
+.btn-blue{background:#2c5282;color:#fff}
+.btn-orange{background:#dd6b20;color:#fff}
+.result{border-radius:10px;padding:12px;font-size:14px;margin-top:8px;display:none;line-height:1.6}
+.result.success{background:#f0fff4;color:#2f855a;border:1px solid #9ae6b4}
+.result.error{background:#fff0f0;color:#c00;border:1px solid #ffcccc}
+.result.loading{background:#ebf8ff;color:#2b6cb0;border:1px solid #90cdf4}
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.week-info{background:#ebf8ff;border-radius:10px;padding:12px;font-size:13px;color:#2b6cb0;margin-bottom:16px;text-align:center}
+</style>
+</head>
+<body>
+<div class="header">&#9881; シフト管理</div>
+<div class="container">
+<div class="week-info" id="weekInfo">来週の日付を読み込み中...</div>
+<div class="card">
+<h2>&#128203; シフト割り振り</h2>
+<button class="btn btn-primary" onclick="runAction('assign')" id="btn-assign">シフト割り振り実行</button>
+<div class="result" id="result-assign"></div>
+</div>
+<div class="card">
+<h2>&#128202; シフト表</h2>
+<button class="btn btn-blue" onclick="runAction('view')" id="btn-view">見やすい版を作成</button>
+<div class="result" id="result-view"></div>
+</div>
+<div class="card">
+<h2>&#128232; LINE通知</h2>
+<button class="btn btn-green" onclick="runAction('notify')" id="btn-notify">シフト通知を送信</button>
+<div class="result" id="result-notify"></div>
+</div>
+<div class="card">
+<h2>&#128276; リマインド</h2>
+<button class="btn btn-orange" onclick="runAction('remind')" id="btn-remind">リマインドを今すぐ送信</button>
+<div class="result" id="result-remind"></div>
+</div>
+</div>
+<script>
+var G='https://script.google.com/macros/s/AKfycby2w7DLb-HULShiC5rKhD_wKg_TGjpx5nURr4Mk-E4Mzg_koC7eJbBedQ6u5QfwsJ_T4Q/exec';
+fetch(G).then(function(r){return r.json();}).then(function(d){
+  if(d.dates&&d.dates.length>0){document.getElementById('weekInfo').textContent='対象週：'+d.dates[0]+' 〜 '+d.dates[d.dates.length-1];}
+}).catch(function(){document.getElementById('weekInfo').textContent='日付情報の取得に失敗しました';});
+function runAction(action){
+  var btn=document.getElementById('btn-'+action);
+  var result=document.getElementById('result-'+action);
+  var labels={assign:'シフト割り振り実行',view:'見やすい版を作成',notify:'シフト通知を送信',remind:'リマインドを送信'};
+  var messages={assign:'シフトの割り振りを実行しますか？
+（既存のシフト表は上書きされます）',view:'シフト表（見やすい版）を作成しますか？',notify:'スタッフ全員にシフト確定のLINE通知を送信しますか？',remind:'スタッフ全員にシフト提出リマインドを今すぐ送信しますか？'};
+  if(!confirm(messages[action]))return;
+  btn.disabled=true;
+  btn.innerHTML='<span class="spinner"></span> 実行中...';
+  result.className='result loading';result.style.display='block';
+  result.textContent='処理中です。しばらくお待ちください...';
+  fetch(G+'?action=admin&task='+action)
+    .then(function(r){return r.json();})
+    .then(function(d){
+      btn.disabled=false;btn.textContent=labels[action];
+      if(d.status==='ok'){result.className='result success';result.textContent='✅ '+(d.message||'完了しました');}
+      else{result.className='result error';result.textContent='❌ '+(d.message||'エラーが発生しました');}
+    })
+    .catch(function(e){btn.disabled=false;btn.textContent=labels[action];result.className='result error';result.textContent='❌ 通信エラー: '+e.message;});
+}
+</script>
+</body>
+</html>
