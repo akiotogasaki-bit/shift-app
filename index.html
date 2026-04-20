@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>シフト希望提出</title>
+<title>シフト管理</title>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -20,6 +20,8 @@ body{font-family:-apple-system,sans-serif;background:#f5f5f5;min-height:100vh}
 .date-btn.selected .check{background:#06C755;border-color:#06C755;color:#fff}
 .submit-btn{width:100%;background:#06C755;color:#fff;border:none;border-radius:12px;padding:16px;font-size:17px;font-weight:bold;cursor:pointer;margin-top:8px}
 .submit-btn:disabled{background:#ccc}
+.approve-btn{width:100%;background:#1a73e8;color:#fff;border:none;border-radius:12px;padding:16px;font-size:17px;font-weight:bold;cursor:pointer;margin-top:16px}
+.approve-btn:disabled{background:#ccc}
 .loading{text-align:center;padding:60px 16px;color:#999;font-size:15px}
 .error{background:#fff0f0;border:1px solid #ffcccc;border-radius:12px;padding:16px;color:#c00;font-size:14px;margin-bottom:16px}
 .success{text-align:center;padding:40px 16px}
@@ -29,19 +31,75 @@ body{font-family:-apple-system,sans-serif;background:#f5f5f5;min-height:100vh}
 .reg-box{background:#fff;border-radius:12px;padding:16px;margin-bottom:16px}
 .reg-box p{font-size:14px;color:#333;margin-bottom:12px;line-height:1.6}
 .reg-box input{width:100%;border:2px solid #e0e0e0;border-radius:8px;padding:12px;font-size:16px;margin-bottom:12px}
+.shift-table-wrap{overflow-x:auto;margin-bottom:16px;border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,0.08)}
+table{border-collapse:collapse;min-width:100%;background:#fff;font-size:13px}
+th{background:#4a86e8;color:#fff;padding:10px 12px;text-align:center;white-space:nowrap}
+td{padding:9px 12px;border:1px solid #e0e0e0;text-align:center;white-space:nowrap}
+td.base-cell{background:#e8f0fe;font-weight:bold;text-align:left}
+td.unassigned{background:#FF9999}
+td.waiting{background:#FFFF99}
+.notice{background:#fff8e1;border:1px solid #ffe082;border-radius:12px;padding:12px 16px;font-size:13px;color:#795548;margin-bottom:16px}
 </style>
 </head>
 <body>
-<div class="header">シフト希望提出</div>
+<div class="header" id="pageTitle">シフト管理</div>
 <div class="container"><div id="app"><div class="loading">読み込み中...</div></div></div>
 <script>
 var G='https://script.google.com/macros/s/AKfycby2w7DLb-HULShiC5rKhD_wKg_TGjpx5nURr4Mk-E4Mzg_koC7eJbBedQ6u5QfwsJ_T4Q/exec';
 var L='2009637457-ECOGmo94';
+var AKIO='Ub4fed3dcdac21e9fa8737f031f5a6d32';
+var MANAGER='U09bb63a664b0070a073c74c48830f2b7';
 var myUid='';
 var sel=[];
 
 function er(m){document.getElementById('app').innerHTML='<div class="error">'+m+'</div>';}
 
+// ── 管理者用：シフト確認画面 ──
+function showApprove(){
+  document.getElementById('pageTitle').textContent='シフト確認';
+  fetch(G+'?action=getShift')
+    .then(function(r){return r.json();})
+    .then(function(d){
+      if(d.status!=='ok'){er(d.message);return;}
+      var rows=d.data;
+      var h='<div class="notice">📋 内容を確認してください。修正が必要な場合はスプレッドシートで修正後、送信ボタンを押してください。</div>';
+      h+='<div class="shift-table-wrap"><table><tr>';
+      rows[0].forEach(function(c){h+='<th>'+c+'</th>';});
+      h+='</tr>';
+      for(var i=1;i<rows.length;i++){
+        h+='<tr>';
+        rows[i].forEach(function(c,j){
+          var cls=j===0?'base-cell':'';
+          if(c==='【未割当】')cls='unassigned';
+          if(rows[i][0]==='※割り当て待ち')cls='waiting';
+          h+='<td class="'+cls+'">'+(c||'')+'</td>';
+        });
+        h+='</tr>';
+      }
+      h+='</table></div>';
+      h+='<button class="approve-btn" id="apBtn">✉️ このシフトで全員に送信する</button>';
+      document.getElementById('app').innerHTML=h;
+      document.getElementById('apBtn').addEventListener('click',function(){
+        if(!confirm('このシフト内容でスタッフ全員にLINEを送信します。よろしいですか？'))return;
+        var b=document.getElementById('apBtn');
+        b.disabled=true;b.textContent='送信中...';
+        fetch(G+'?action=approve&userId='+encodeURIComponent(myUid))
+          .then(function(r){return r.json();})
+          .then(function(d){
+            if(d.status==='ok'){
+              document.getElementById('app').innerHTML='<div class="success"><div class="icon">&#x2705;</div><h2>送信完了しました！</h2><p>全スタッフにシフトを通知しました。</p></div>';
+            }else{
+              alert('エラー：'+(d.message||''));
+              b.disabled=false;b.textContent='✉️ このシフトで全員に送信する';
+            }
+          })
+          .catch(function(e){alert('送信失敗: '+e.message);b.disabled=false;b.textContent='✉️ このシフトで全員に送信する';});
+      });
+    })
+    .catch(function(e){er('シフト取得失敗: '+e.message);});
+}
+
+// ── スタッフ用 ──
 function showReg(){
   document.getElementById('app').innerHTML='<div class="reg-box"><p>初回登録が必要です。氏名を入力してください。</p><input type="text" id="ni" placeholder="例：山田 太郎"><button class="submit-btn" id="regBtn">登録する</button></div>';
   document.getElementById('regBtn').addEventListener('click',function(){
@@ -67,6 +125,7 @@ function load(name){
 }
 
 function rend(dates,name){
+  document.getElementById('pageTitle').textContent='シフト希望提出';
   var h='<div class="name-box">こんにちは、<span>'+name+'</span> さん</div>';
   h+='<div class="section-title">出勤できる日を選んでください</div>';
   h+='<div class="date-list">';
@@ -101,14 +160,20 @@ function rend(dates,name){
   });
 }
 
+// ── 初期化 ──
 liff.init({liffId:L})
   .then(function(){
-    if(!liff.isLoggedIn()){liff.login();return;}
+    if(!liff.isLoggedIn()){liff.login({redirectUri:location.href});return;}
     return liff.getProfile();
   })
   .then(function(p){
     if(!p)return;
     myUid=p.userId;
+    // userIdで管理者判定
+    if(myUid===AKIO||myUid===MANAGER){
+      showApprove();
+      return;
+    }
     return fetch(G+'?action=check&userId='+encodeURIComponent(myUid))
       .then(function(r){return r.json();})
       .then(function(d){
