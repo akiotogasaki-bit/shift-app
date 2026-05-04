@@ -565,8 +565,37 @@ body {
     <div class="header-user" id="user-name-location">読み込み中...</div>
   </div>
   <div class="section-title">担当拠点</div>
-  <div class="location-list" id="location-list">
-    <div style="text-align:center;padding:40px;color:var(--ink-mute);font-size:14px;">読み込み中...</div>
+  <div style="padding:0 16px 24px;">
+    <select id="location-select" style="
+      width:100%;
+      padding:14px 16px;
+      font-size:16px;
+      font-family:inherit;
+      background:var(--white);
+      border:1.5px solid var(--border);
+      border-radius:12px;
+      color:var(--ink);
+      appearance:none;
+      -webkit-appearance:none;
+      background-image:url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2224%22 height=%2224%22 viewBox=%220 0 24 24%22><path fill=%22%239A9A9A%22 d=%22M7 10l5 5 5-5z%22/></svg>');
+      background-repeat:no-repeat;
+      background-position:right 12px center;
+    ">
+      <option value="">拠点を選択してください</option>
+    </select>
+    <button onclick="confirmLocation()" style="
+      width:100%;
+      margin-top:12px;
+      padding:16px;
+      background:var(--red);
+      color:#fff;
+      border:none;
+      border-radius:12px;
+      font-size:16px;
+      font-weight:700;
+      font-family:inherit;
+      cursor:pointer;
+    ">選択する</button>
   </div>
 </div>
 
@@ -848,13 +877,18 @@ function showScreen(name) {
 // LOCATION SELECT
 // ─────────────────────────────────────
 function renderLocations() {
-  const list = document.getElementById('location-list');
-  list.innerHTML = state.locations.map(loc => `
-    <div class="location-item" onclick="selectLocation('${loc.id}')">
-      <span class="location-name">${loc.name}</span>
-      <span class="location-arrow">›</span>
-    </div>
-  `).join('');
+  const select = document.getElementById('location-select');
+  select.innerHTML = '<option value="">拠点を選択してください</option>' +
+    state.locations.map(loc =>
+      `<option value="${loc.id}">${loc.name}</option>`
+    ).join('');
+}
+
+function confirmLocation() {
+  const select = document.getElementById('location-select');
+  const id = select.value;
+  if (!id) { showToast('拠点を選択してください'); return; }
+  selectLocation(id);
 }
 
 function selectLocation(id) {
