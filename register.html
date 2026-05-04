@@ -1028,7 +1028,7 @@ function toggleCoupon() {
 function openCashModal() {
   const total = cartTotal();
   document.getElementById('modal-total').textContent = `¥${total.toLocaleString()}`;
-  document.getElementById('received-amount').value = '';
+  document.getElementById('received-amount').value = total;
   document.getElementById('change-amount').textContent = '¥ —';
   document.getElementById('cash-confirm-btn').disabled = true;
   document.getElementById('cash-modal').classList.add('show');
