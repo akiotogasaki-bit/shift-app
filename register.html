@@ -635,7 +635,20 @@ body {
       <div class="header-title" id="reg-location-name">拠点名</div>
       <div class="header-sub" style="color:rgba(255,255,255,.6);">販売レジ</div>
     </div>
-    <div class="header-user" id="reg-sales-count" style="color:#F4C430;">販売数: 0個</div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div class="header-user" id="reg-sales-count" style="color:#F4C430;">販売数: 0個</div>
+      <button onclick="showScreen('final')" style="
+        background:rgba(255,255,255,.15);
+        color:#FFF;
+        border:1px solid rgba(255,255,255,.3);
+        border-radius:20px;
+        padding:6px 12px;
+        font-size:12px;
+        font-family:inherit;
+        cursor:pointer;
+        white-space:nowrap;
+      ">締め →</button>
+    </div>
   </div>
 
   <div style="overflow-y:auto;flex:1;padding-bottom:160px;">
@@ -1030,7 +1043,7 @@ function openCashModal() {
   document.getElementById('modal-total').textContent = `¥${total.toLocaleString()}`;
   document.getElementById('received-amount').value = total;
   document.getElementById('change-amount').textContent = '¥0';
-document.getElementById('cash-confirm-btn').disabled = false;
+  document.getElementById('cash-confirm-btn').disabled = false;
   document.getElementById('cash-modal').classList.add('show');
 }
 
@@ -1180,23 +1193,7 @@ function showToast(msg) {
   setTimeout(() => toast.classList.remove('show'), 2000);
 }
 
-// Register screen → Final button
-// Add a floating button on register screen
-window.addEventListener('load', () => {
-  const regScreen = document.getElementById('screen-register');
-  const finBtn = document.createElement('button');
-  finBtn.textContent = '締め処理へ →';
-  finBtn.style.cssText = `
-    position:fixed;top:60px;right:12px;
-    background:rgba(255,255,255,.15);
-    color:#FFF;border:1px solid rgba(255,255,255,.3);
-    border-radius:20px;padding:6px 14px;font-size:12px;
-    cursor:pointer;z-index:150;font-family:inherit;
-    backdrop-filter:blur(4px);
-  `;
-  finBtn.onclick = () => showScreen('final');
-  regScreen.appendChild(finBtn);
-});
+// 締めボタンはヘッダーに統合済み
 
 // ─────────────────────────────────────
 // BOOT
