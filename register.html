@@ -735,6 +735,19 @@ body {
       </div>
     </div>
 
+    <div class="result-card">
+      <div class="result-card-header">申し送り</div>
+      <div class="form-row">
+        <textarea id="final-memo" placeholder="特記事項・申し送りがあれば入力してください" style="
+          width:100%;padding:8px 10px;
+          border:1.5px solid var(--border);border-radius:8px;
+          font-size:14px;font-family:inherit;
+          background:var(--cream);color:var(--ink);
+          resize:none;height:80px;line-height:1.6;
+        "></textarea>
+      </div>
+    </div>
+
     <button class="btn-primary" id="btn-submit-final" onclick="submitFinal()">報告を提出する</button>
     <div class="bottom-pad"></div>
   </div>
@@ -1180,7 +1193,13 @@ function processPayPay() {
 }
 
 function recordSales(method) {
-  state.soldCount += state.cart.reduce((sum, item) => sum + item.qty, 0);
+  const teaIds = state.products.filter(p => p.name.includes('お茶')).map(p => p.id);
+  state.cart.forEach(item => {
+    if (teaIds.includes(item.product.id)) {
+      state.teaSoldCount = (state.teaSoldCount || 0) + item.qty;
+    }
+    state.soldCount += item.qty;
+  });
   document.getElementById('reg-sales-count').textContent = `販売数: ${state.soldCount}個`;
 }
 
@@ -1204,17 +1223,24 @@ function calcFinal() {
   const registerEnd  = parseInt(document.getElementById('register-end').value) || 0;
   const cashFromReg  = registerEnd - state.registerStart;
   const diff         = cashFromReg - state.cashSales;
-  const totalDelivery = Object.values(state.deliveryCount).reduce((a, b) => a + b, 0);
-  const sellRate     = totalDelivery > 0 ? Math.round(state.soldCount / totalDelivery * 1000) / 10 : 0;
-  const incentive    = Math.floor(state.soldCount / state.incentiveUnit) * state.incentiveRate;
+  // お茶を完売率の計算から除外
+  const teaIds = state.products.filter(p => p.name.includes('お茶')).map(p => p.id);
+  const totalDelivery = Object.entries(state.deliveryCount)
+    .filter(([id]) => !teaIds.includes(id))
+    .reduce((sum, [, v]) => sum + v, 0);
+  const nonTeaSold = state.soldCount - (state.teaSoldCount || 0);
+  const sellRate   = totalDelivery > 0 ? Math.round(nonTeaSold / totalDelivery * 1000) / 10 : 0;
+  const nonTeaSoldForIncentive = state.soldCount - (state.teaSoldCount || 0);
+  const incentive    = Math.floor(nonTeaSoldForIncentive / state.incentiveUnit) * state.incentiveRate;
   const totalSalary  = state.baseGigSalary + incentive;
 
   document.getElementById('res-cash').textContent    = `¥${state.cashSales.toLocaleString()}`;
   document.getElementById('res-paypay').textContent  = `¥${state.paypayAmount.toLocaleString()}`;
+  const nonTeaSold = state.soldCount - (state.teaSoldCount || 0);
   document.getElementById('res-delivery').textContent = `${totalDelivery}個`;
-  document.getElementById('res-sold').textContent    = `${state.soldCount}個`;
+  document.getElementById('res-sold').textContent    = `${state.soldCount}個（お茶除く：${nonTeaSold}個）`;
   document.getElementById('res-rate').textContent    = `${sellRate}%`;
-  document.getElementById('res-incentive').textContent = `¥${incentive.toLocaleString()}（${state.soldCount}個）`;
+  document.getElementById('res-incentive').textContent = `¥${incentive.toLocaleString()}（${nonTeaSoldForIncentive}個）`;
   document.getElementById('res-base').textContent    = `¥${state.baseGigSalary.toLocaleString()}`;
   document.getElementById('res-total').textContent   = `¥${totalSalary.toLocaleString()}`;
 
@@ -1233,7 +1259,7 @@ function calcFinal() {
   document.getElementById('btn-calc-final').style.display = 'none';
 
   // complete画面用
-  document.getElementById('comp-sold').textContent      = `${state.soldCount}個`;
+  document.getElementById('comp-sold').textContent      = `${state.soldCount}個（お茶除く：${nonTeaSoldForIncentive}個）`;
   document.getElementById('comp-rate').textContent      = `${sellRate}%`;
   document.getElementById('comp-incentive').textContent = `¥${incentive.toLocaleString()}`;
   document.getElementById('comp-base').textContent      = `¥${state.baseGigSalary.toLocaleString()}`;
