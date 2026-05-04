@@ -761,7 +761,7 @@ const state = {
   incentiveUnit: 10,
   incentiveRate: 100,
   baseGigSalary: 0,
-  GAS_URL: 'https://script.google.com/macros/s/YOUR_GAS_DEPLOY_ID/exec', // ← GASデプロイ後に変更
+  GAS_URL: 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5AawPDc7aluPokONkYz6f2ikwl0S487JvhKdKh6QSp1xhEhA/exec',
 };
 
 // ─────────────────────────────────────
@@ -781,11 +781,12 @@ async function init() {
     await loadMasterData();
     showScreen('location');
   } catch (e) {
-    console.error(e);
-    // 開発時のフォールバック
-    state.userName = 'テストユーザー';
-    loadDemoData();
-    showScreen('location');
+    document.getElementById('screen-loading').innerHTML =
+      `<div style="color:#fff;padding:40px;font-size:13px;word-break:break-all;">
+        <p style="font-size:18px;margin-bottom:16px;">⚠️ 初期化エラー</p>
+        <p>${e.message}</p>
+        <p style="margin-top:16px;opacity:.7;">${e.stack || ''}</p>
+      </div>`;
   }
 }
 
@@ -794,14 +795,28 @@ async function init() {
 // ─────────────────────────────────────
 async function loadMasterData() {
   try {
-    const res = await fetch(`${state.GAS_URL}?action=getMaster`);
-    const data = await res.json();
-    state.products  = data.products  || [];
-    state.locations = data.locations || [];
-    state.incentiveUnit = data.incentiveUnit || 10;
-    state.incentiveRate = data.incentiveRate || 100;
+    const res = await fetch(`${state.GAS_URL}?action=getMaster`, {
+      method: 'GET',
+      redirect: 'follow',
+    });
+    const text = await res.text();
+    const data = JSON.parse(text);
+    if (data && data.products && data.products.length > 0) {
+      state.products      = data.products  || [];
+      state.locations     = data.locations || [];
+      state.incentiveUnit = data.incentiveUnit || 10;
+      state.incentiveRate = data.incentiveRate || 100;
+      state.couponDefault = data.couponDefault || 300;
+    } else {
+      loadDemoData();
+    }
   } catch (e) {
-    loadDemoData();
+    document.getElementById('screen-loading').innerHTML =
+      `<div style="color:#fff;padding:40px;font-size:13px;word-break:break-all;">
+        <p style="font-size:18px;margin-bottom:16px;">⚠️ マスタ取得エラー</p>
+        <p>${e.message}</p>
+      </div>`;
+    document.getElementById('screen-loading').classList.add('active');
   }
 }
 
