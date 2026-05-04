@@ -1029,8 +1029,8 @@ function openCashModal() {
   const total = cartTotal();
   document.getElementById('modal-total').textContent = `¥${total.toLocaleString()}`;
   document.getElementById('received-amount').value = total;
-  document.getElementById('change-amount').textContent = '¥ —';
-  document.getElementById('cash-confirm-btn').disabled = true;
+  document.getElementById('change-amount').textContent = '¥0';
+document.getElementById('cash-confirm-btn').disabled = false;
   document.getElementById('cash-modal').classList.add('show');
 }
 
