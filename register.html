@@ -636,10 +636,7 @@ body {
       <div class="header-sub" style="color:rgba(255,255,255,.6);">販売レジ</div>
     </div>
     <div style="display:flex;align-items:center;gap:10px;">
-      <div style="display:flex;align-items:center;gap:10px;">
-  <div class="header-user" id="reg-sales-count" style="color:#F4C430;">販売数: 0個</div>
-  <button onclick="showScreen('final')" style="background:rgba(255,255,255,.15);color:#FFF;border:1px solid rgba(255,255,255,.3);border-radius:20px;padding:6px 12px;font-size:12px;font-family:inherit;cursor:pointer;">締め →</button>
-</div>
+      <div class="header-user" id="reg-sales-count" style="color:#F4C430;">販売数: 0個</div>
       <button onclick="showScreen('final')" style="
         background:rgba(255,255,255,.15);
         color:#FFF;
@@ -749,6 +746,19 @@ body {
   <div class="complete-icon">✅</div>
   <div class="complete-title">報告完了</div>
   <div class="complete-sub">本日もお疲れ様でした！<br>報告内容が送信されました。</div>
+  <button onclick="goToEdit()" style="
+    background:rgba(255,255,255,.2);
+    color:#FFF;
+    border:1px solid rgba(255,255,255,.4);
+    border-radius:12px;
+    padding:12px 24px;
+    font-size:14px;
+    font-family:inherit;
+    cursor:pointer;
+    margin-bottom:16px;
+    width:100%;
+    max-width:320px;
+  ">📝 報告内容を確認・修正する</button>
   <div class="complete-card">
     <div class="complete-row"><span>販売数</span><span id="comp-sold">0個</span></div>
     <div class="complete-row"><span>完売率</span><span id="comp-rate">0%</span></div>
@@ -759,6 +769,85 @@ body {
       <span id="comp-total" style="font-size:20px;">¥0</span>
     </div>
   </div>
+</div>
+
+
+<!-- EDIT REPORT -->
+<div id="screen-edit" class="screen">
+  <div class="app-header">
+    <div>
+      <div class="header-title">報告確認・編集</div>
+      <div class="header-sub">当日16:00まで修正可能</div>
+    </div>
+  </div>
+  <div class="form-section">
+    <div id="edit-deadline-alert" class="alert-card" style="display:none;">
+      <p>⚠️ 編集期限（16:00）を過ぎているため、修正できません。</p>
+    </div>
+
+    <div class="form-card">
+      <div class="form-card-title">納品数（種類別）</div>
+      <div id="edit-delivery-inputs"></div>
+    </div>
+
+    <div class="form-card">
+      <div class="form-card-title">レジ金額</div>
+      <div class="form-row">
+        <span class="form-label">レジ開始金額</span>
+        <input type="number" class="form-input" id="edit-register-start" inputmode="numeric">
+        <span class="form-unit">円</span>
+      </div>
+      <div class="form-row">
+        <span class="form-label">レジ最終金額</span>
+        <input type="number" class="form-input" id="edit-register-end" inputmode="numeric">
+        <span class="form-unit">円</span>
+      </div>
+    </div>
+
+    <div class="form-card">
+      <div class="form-card-title">売上</div>
+      <div class="form-row">
+        <span class="form-label">現金売上</span>
+        <input type="number" class="form-input" id="edit-cash-sales" inputmode="numeric">
+        <span class="form-unit">円</span>
+      </div>
+      <div class="form-row">
+        <span class="form-label">PayPay売上</span>
+        <input type="number" class="form-input" id="edit-paypay-amount" inputmode="numeric">
+        <span class="form-unit">円</span>
+      </div>
+    </div>
+
+    <div class="form-card">
+      <div class="form-card-title">差異コメント</div>
+      <div class="form-row">
+        <textarea id="edit-diff-comment" style="
+          width:100%;padding:8px 10px;
+          border:1.5px solid var(--border);border-radius:8px;
+          font-size:14px;font-family:inherit;
+          background:var(--cream);color:var(--ink);
+          resize:none;height:60px;line-height:1.6;
+        "></textarea>
+      </div>
+    </div>
+
+    <div class="form-card">
+      <div class="form-card-title">申し送り</div>
+      <div class="form-row">
+        <textarea id="edit-memo" style="
+          width:100%;padding:8px 10px;
+          border:1.5px solid var(--border);border-radius:8px;
+          font-size:14px;font-family:inherit;
+          background:var(--cream);color:var(--ink);
+          resize:none;height:80px;line-height:1.6;
+        "></textarea>
+      </div>
+    </div>
+  </div>
+
+  <button class="btn-primary" id="btn-edit-submit" onclick="submitEdit()">修正を保存する</button>
+  <button class="btn-secondary" onclick="showScreen('complete')">戻る</button>
+  <div class="bottom-pad"></div>
 </div>
 
 <!-- CASH MODAL -->
@@ -1171,11 +1260,14 @@ function submitFinal() {
     date: new Date().toLocaleDateString('ja-JP'),
     deliveryCount: state.deliveryCount,
     registerStart: state.registerStart,
+    registerEnd: parseInt(document.getElementById('register-end').value) || 0,
     cashSales: state.cashSales,
     paypayAmount: state.paypayAmount,
     paypayCount: state.paypayCount,
     soldCount: state.soldCount,
+    baseGigSalary: state.baseGigSalary,
     diffComment: comment,
+    memo: document.getElementById('final-memo').value.trim(),
   };
 
   fetch(state.GAS_URL, {
@@ -1197,6 +1289,81 @@ function showToast(msg) {
 }
 
 // 締めボタンはヘッダーに統合済み
+
+
+// ─────────────────────────────────────
+// EDIT REPORT
+// ─────────────────────────────────────
+function goToEdit() {
+  const now  = new Date();
+  const hour = now.getHours();
+  const canEdit = hour < 16;
+
+  // 納品数入力欄を生成
+  const container = document.getElementById('edit-delivery-inputs');
+  container.innerHTML = state.products.map(p => `
+    <div class="form-row">
+      <span class="form-label">${p.name}</span>
+      <input type="number" class="form-input" id="edit-delivery-${p.id}"
+        value="${state.deliveryCount[p.id] || 0}" inputmode="numeric" ${canEdit ? '' : 'disabled'}>
+      <span class="form-unit">個</span>
+    </div>
+  `).join('');
+
+  document.getElementById('edit-register-start').value  = state.registerStart || 0;
+  document.getElementById('edit-register-end').value    = parseInt(document.getElementById('register-end')?.value) || 0;
+  document.getElementById('edit-cash-sales').value      = state.cashSales || 0;
+  document.getElementById('edit-paypay-amount').value   = state.paypayAmount || 0;
+  document.getElementById('edit-diff-comment').value    = document.getElementById('diff-comment')?.value || '';
+  document.getElementById('edit-memo').value            = document.getElementById('final-memo')?.value || '';
+
+  // 編集期限チェック
+  const alert = document.getElementById('edit-deadline-alert');
+  const btn   = document.getElementById('btn-edit-submit');
+  if (!canEdit) {
+    alert.style.display = 'block';
+    btn.disabled = true;
+    btn.style.opacity = '0.4';
+    ['edit-register-start','edit-register-end','edit-cash-sales','edit-paypay-amount','edit-diff-comment','edit-memo']
+      .forEach(id => { const el = document.getElementById(id); if(el) el.disabled = true; });
+  } else {
+    alert.style.display = 'none';
+    btn.disabled = false;
+    btn.style.opacity = '1';
+  }
+
+  showScreen('edit');
+}
+
+function submitEdit() {
+  const deliveryCount = {};
+  state.products.forEach(p => {
+    deliveryCount[p.id] = parseInt(document.getElementById(`edit-delivery-${p.id}`)?.value) || 0;
+  });
+
+  const payload = {
+    action:        'editReport',
+    userId:        state.userId,
+    date:          new Date().toLocaleDateString('ja-JP'),
+    deliveryCount,
+    registerStart: parseInt(document.getElementById('edit-register-start').value) || 0,
+    registerEnd:   parseInt(document.getElementById('edit-register-end').value) || 0,
+    cashSales:     parseInt(document.getElementById('edit-cash-sales').value) || 0,
+    paypayAmount:  parseInt(document.getElementById('edit-paypay-amount').value) || 0,
+    diffComment:   document.getElementById('edit-diff-comment').value.trim(),
+    memo:          document.getElementById('edit-memo').value.trim(),
+  };
+
+  fetch(state.GAS_URL, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }).then(() => {
+    showToast('修正を保存しました');
+    setTimeout(() => showScreen('complete'), 1500);
+  }).catch(() => {
+    showToast('保存に失敗しました。再度お試しください。');
+  });
+}
 
 // ─────────────────────────────────────
 // BOOT
