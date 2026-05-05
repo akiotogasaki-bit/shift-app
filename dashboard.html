@@ -1,0 +1,1064 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>お江戸弁当 社員ダッシュボード</title>
+<style>
+:root {
+  --red: #C0392B;
+  --red-dark: #922B21;
+  --gold: #B8860B;
+  --gold-light: #F9F0D0;
+  --ink: #1C1C1C;
+  --ink-soft: #4A4A4A;
+  --ink-mute: #8A8A8A;
+  --cream: #FDF8F0;
+  --cream-dark: #F0E8D8;
+  --white: #FFFFFF;
+  --border: #E0D5C5;
+  --green: #27AE60;
+  --green-light: #D5F5E3;
+  --orange: #E67E22;
+  --blue: #2980B9;
+  --blue-light: #D6EAF8;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', sans-serif;
+  background: var(--cream);
+  color: var(--ink);
+  min-height: 100vh;
+}
+
+/* ── HEADER ── */
+.header {
+  background: var(--red);
+  color: var(--white);
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 12px rgba(0,0,0,.2);
+}
+.header-left h1 { font-size: 18px; font-weight: 700; letter-spacing: .05em; }
+.header-left p { font-size: 11px; opacity: .75; margin-top: 2px; }
+.header-right { display: flex; align-items: center; gap: 12px; }
+.update-time { font-size: 11px; opacity: .7; }
+.refresh-btn {
+  background: rgba(255,255,255,.2);
+  border: 1px solid rgba(255,255,255,.3);
+  color: #FFF;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.refresh-btn:hover { background: rgba(255,255,255,.3); }
+
+/* ── NAV TABS ── */
+.nav-tabs {
+  background: var(--white);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.nav-tabs::-webkit-scrollbar { display: none; }
+.tab-btn {
+  padding: 12px 20px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-mute);
+  border: none;
+  background: none;
+  cursor: pointer;
+  white-space: nowrap;
+  border-bottom: 3px solid transparent;
+  font-family: inherit;
+  transition: all .15s;
+}
+.tab-btn.active { color: var(--red); border-bottom-color: var(--red); font-weight: 700; }
+
+/* ── CONTENT ── */
+.content { padding: 16px; max-width: 900px; margin: 0 auto; }
+
+/* ── TAB PANELS ── */
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* ── KPI ROW ── */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.kpi-card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+.kpi-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+}
+.kpi-card.red::before { background: var(--red); }
+.kpi-card.gold::before { background: var(--gold); }
+.kpi-card.green::before { background: var(--green); }
+.kpi-card.blue::before { background: var(--blue); }
+.kpi-label { font-size: 11px; color: var(--ink-mute); letter-spacing: .08em; margin-bottom: 6px; }
+.kpi-value { font-size: 24px; font-weight: 700; color: var(--ink); line-height: 1; }
+.kpi-value span { font-size: 13px; font-weight: 400; color: var(--ink-mute); }
+.kpi-sub { font-size: 11px; color: var(--ink-mute); margin-top: 4px; }
+
+/* ── SECTION TITLE ── */
+.section-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-mute);
+  letter-spacing: .1em;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.section-title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* ── RANKING CARDS ── */
+.rank-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+@media(max-width: 480px) { .rank-grid { grid-template-columns: 1fr; } }
+
+.rank-card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.rank-card-header {
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .05em;
+}
+.rank-card-header.best { background: var(--green-light); color: #1A7A42; }
+.rank-card-header.worst { background: #FDEDEC; color: var(--red-dark); }
+.rank-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid #F5F0E8;
+  cursor: pointer;
+  transition: background .1s;
+}
+.rank-item:last-child { border-bottom: none; }
+.rank-item:hover { background: var(--cream); }
+.rank-num {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  margin-right: 10px;
+  flex-shrink: 0;
+}
+.rank-num.gold { background: #FFF0B3; color: #7D6500; }
+.rank-num.silver { background: #F0F0F0; color: #555; }
+.rank-num.bronze { background: #FFE8D6; color: #8B4513; }
+.rank-num.bad { background: #FDEDEC; color: var(--red); }
+.rank-name { font-size: 14px; flex: 1; }
+.rank-staff { font-size: 11px; color: var(--ink-mute); }
+.rank-rate {
+  font-size: 16px;
+  font-weight: 700;
+  min-width: 50px;
+  text-align: right;
+}
+.rank-rate.high { color: var(--green); }
+.rank-rate.low { color: var(--red); }
+.rate-bar-wrap { width: 60px; height: 4px; background: #EEE; border-radius: 2px; margin-left: 8px; }
+.rate-bar { height: 100%; border-radius: 2px; }
+.rate-bar.high { background: var(--green); }
+.rate-bar.low { background: var(--red); }
+
+/* ── FULL LIST ── */
+.list-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.sort-btns { display: flex; gap: 6px; }
+.sort-btn {
+  padding: 5px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--white);
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--ink-soft);
+}
+.sort-btn.active { background: var(--red); color: #FFF; border-color: var(--red); }
+
+.location-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  font-size: 13px;
+}
+.location-table th {
+  background: var(--ink);
+  color: #FFF;
+  padding: 10px 12px;
+  text-align: left;
+  font-weight: 500;
+  font-size: 12px;
+}
+.location-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #F0EDE5;
+  cursor: pointer;
+}
+.location-table tr:last-child td { border-bottom: none; }
+.location-table tr:hover td { background: var(--cream); }
+.location-table .rate-cell { font-weight: 700; }
+.location-table .rate-cell.high { color: var(--green); }
+.location-table .rate-cell.low { color: var(--red); }
+.location-table .not-reported { color: var(--ink-mute); font-style: italic; }
+
+/* ── DETAIL MODAL ── */
+.modal-bg {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.5);
+  z-index: 200;
+  display: flex;
+  align-items: flex-end;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s;
+}
+.modal-bg.show { opacity: 1; pointer-events: all; }
+.modal-sheet {
+  background: var(--white);
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
+  border-radius: 16px 16px 0 0;
+  max-height: 85vh;
+  overflow-y: auto;
+  transform: translateY(100%);
+  transition: transform .25s cubic-bezier(.32,0,.15,1);
+}
+.modal-bg.show .modal-sheet { transform: translateY(0); }
+.modal-header {
+  background: var(--red);
+  color: #FFF;
+  padding: 16px 20px;
+  position: sticky;
+  top: 0;
+}
+.modal-header h2 { font-size: 16px; font-weight: 700; }
+.modal-header p { font-size: 12px; opacity: .75; margin-top: 2px; }
+.modal-close {
+  position: absolute;
+  top: 16px; right: 16px;
+  background: rgba(255,255,255,.2);
+  border: none;
+  color: #FFF;
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.modal-body { padding: 16px; }
+
+.product-row {
+  display: flex;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  gap: 10px;
+}
+.product-row:last-child { border-bottom: none; }
+.product-row-name { font-size: 13px; flex: 1; color: var(--ink-soft); }
+.product-row-nums { font-size: 12px; color: var(--ink-mute); white-space: nowrap; }
+.product-row-rate { font-size: 14px; font-weight: 700; min-width: 45px; text-align: right; }
+.product-rate-bar { flex: 1; max-width: 100px; height: 6px; background: #EEE; border-radius: 3px; }
+.product-rate-fill { height: 100%; border-radius: 3px; background: var(--green); }
+
+/* ── DAILY SUMMARY (16時以降) ── */
+.daily-summary {
+  background: var(--ink);
+  color: #FFF;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+.daily-summary-title {
+  font-size: 12px;
+  color: rgba(255,255,255,.5);
+  letter-spacing: .1em;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.daily-summary-title::after { content: ''; flex: 1; height: 1px; background: rgba(255,255,255,.1); }
+.daily-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+@media(min-width: 600px) { .daily-kpi-grid { grid-template-columns: repeat(4, 1fr); } }
+.daily-kpi {
+  background: rgba(255,255,255,.08);
+  border-radius: 8px;
+  padding: 12px;
+  text-align: center;
+}
+.daily-kpi-label { font-size: 10px; color: rgba(255,255,255,.5); margin-bottom: 6px; letter-spacing: .08em; }
+.daily-kpi-value { font-size: 20px; font-weight: 700; }
+.daily-kpi-value.gold { color: #F4C430; }
+.daily-kpi-value.green { color: #58D68D; }
+.daily-kpi-value.red { color: #EC7063; }
+.daily-kpi-value.blue { color: #85C1E9; }
+
+/* ── WEATHER ── */
+.weather-bar {
+  background: var(--blue-light);
+  border: 1px solid #AED6F1;
+  border-radius: 10px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: var(--blue);
+}
+.weather-item { display: flex; align-items: center; gap: 4px; }
+
+/* ── REPORT STATUS ── */
+.status-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+.status-badge.done { background: var(--green-light); color: #1A7A42; }
+.status-badge.pending { background: #FEF9E7; color: #7D6608; }
+.status-badge.none { background: #F5F5F5; color: var(--ink-mute); }
+
+/* ── LOADING ── */
+.loading-wrap {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--ink-mute);
+}
+.loader {
+  width: 32px; height: 32px;
+  border: 3px solid var(--border);
+  border-top-color: var(--red);
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+  margin: 0 auto 16px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── WEEKLY/MONTHLY ── */
+.period-selector {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.period-btn {
+  padding: 6px 16px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--white);
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--ink-soft);
+}
+.period-btn.active { background: var(--red); color: #FFF; border-color: var(--red); }
+
+.stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+.stats-table th {
+  background: var(--red);
+  color: #FFF;
+  padding: 10px 12px;
+  text-align: left;
+  font-weight: 500;
+  font-size: 12px;
+}
+.stats-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #F0EDE5;
+}
+.stats-table tr:last-child td { border-bottom: none; }
+.stats-table tr:nth-child(even) td { background: #FAFAF8; }
+.stats-table td:first-child { font-weight: 700; color: var(--ink); }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-left">
+    <h1>🍱 お江戸弁当</h1>
+    <p>社員ダッシュボード</p>
+  </div>
+  <div class="header-right">
+    <span class="update-time" id="update-time">--:--</span>
+    <button class="refresh-btn" onclick="loadAll()">🔄 更新</button>
+  </div>
+</div>
+
+<!-- NAV TABS -->
+<div class="nav-tabs">
+  <button class="tab-btn active" onclick="switchTab('realtime')">リアルタイム</button>
+  <button class="tab-btn" onclick="switchTab('weekly')">週報</button>
+  <button class="tab-btn" onclick="switchTab('monthly')">月報</button>
+</div>
+
+<!-- CONTENT -->
+<div class="content">
+
+  <!-- REALTIME TAB -->
+  <div id="tab-realtime" class="tab-panel active">
+    <div class="loading-wrap" id="rt-loading">
+      <div class="loader"></div>
+      <p>データを読み込み中...</p>
+    </div>
+    <div id="rt-content" style="display:none;">
+
+      <!-- 天気 -->
+      <div class="weather-bar" id="weather-bar">
+        <span>🌤</span>
+        <span class="weather-item" id="w-condition">--</span>
+        <span class="weather-item">🌡 <span id="w-temp">--</span>℃</span>
+        <span class="weather-item">💨 <span id="w-wind">--</span>m/s</span>
+      </div>
+
+      <!-- KPI -->
+      <div class="kpi-grid" id="kpi-grid"></div>
+
+      <!-- 16時以降のまとめ -->
+      <div id="daily-summary-wrap" style="display:none;">
+        <div class="daily-summary" id="daily-summary"></div>
+      </div>
+
+      <!-- ベスト・ワースト -->
+      <div class="section-title">完売率ランキング</div>
+      <div class="rank-grid" id="rank-grid"></div>
+
+      <!-- 全拠点一覧 -->
+      <div class="section-title">全拠点一覧</div>
+      <div class="list-controls">
+        <div class="sort-btns">
+          <button class="sort-btn active" onclick="sortLocations('rate_desc')" id="sort-best">ベスト順</button>
+          <button class="sort-btn" onclick="sortLocations('rate_asc')" id="sort-worst">ワースト順</button>
+          <button class="sort-btn" onclick="sortLocations('name')" id="sort-name">拠点名順</button>
+        </div>
+        <span style="font-size:12px;color:var(--ink-mute);" id="reported-count"></span>
+      </div>
+      <table class="location-table" id="location-table">
+        <thead>
+          <tr>
+            <th>拠点名</th>
+            <th>担当者</th>
+            <th>販売数</th>
+            <th>完売率</th>
+            <th>売上</th>
+            <th>状況</th>
+          </tr>
+        </thead>
+        <tbody id="location-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- WEEKLY TAB -->
+  <div id="tab-weekly" class="tab-panel">
+    <div class="loading-wrap" id="wk-loading" style="display:none;">
+      <div class="loader"></div>
+      <p>集計中...</p>
+    </div>
+    <div id="wk-content">
+      <div class="period-selector" id="week-selector"></div>
+      <div id="weekly-data"></div>
+    </div>
+  </div>
+
+  <!-- MONTHLY TAB -->
+  <div id="tab-monthly" class="tab-panel">
+    <div class="loading-wrap" id="mo-loading" style="display:none;">
+      <div class="loader"></div>
+      <p>集計中...</p>
+    </div>
+    <div id="mo-content">
+      <div class="period-selector" id="month-selector"></div>
+      <div id="monthly-data"></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- DETAIL MODAL -->
+<div class="modal-bg" id="detail-modal">
+  <div class="modal-sheet">
+    <div class="modal-header" style="position:relative;">
+      <h2 id="modal-location-name">拠点名</h2>
+      <p id="modal-location-sub">担当者</p>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5AawPDc7aluPokONkYz6f2ikwl0S487JvhKdKh6QSp1xhEhA/exec';
+
+let allData     = [];
+let masterData  = { locations: [], products: [] };
+let currentSort = 'rate_desc';
+
+// ─────────────────────────────────────
+// INIT
+// ─────────────────────────────────────
+async function loadAll() {
+  updateTime();
+  try {
+    const [master, reports] = await Promise.all([
+      fetchJSON(`${GAS_URL}?action=getMaster`),
+      fetchJSON(`${GAS_URL}?action=getTodayReports`),
+    ]);
+    masterData = master;
+    allData    = reports.data || [];
+    renderRealtime();
+  } catch (e) {
+    document.getElementById('rt-loading').innerHTML =
+      `<p style="color:var(--red);">データ取得エラー：${e.message}</p>`;
+  }
+}
+
+async function fetchJSON(url) {
+  const res  = await fetch(url, { redirect: 'follow' });
+  const text = await res.text();
+  return JSON.parse(text);
+}
+
+function updateTime() {
+  const now = new Date();
+  document.getElementById('update-time').textContent =
+    `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')} 更新`;
+}
+
+// ─────────────────────────────────────
+// REALTIME
+// ─────────────────────────────────────
+function renderRealtime() {
+  document.getElementById('rt-loading').style.display = 'none';
+  document.getElementById('rt-content').style.display = 'block';
+
+  const now     = new Date();
+  const isAfter16 = now.getHours() >= 16;
+
+  // 天気（最新の報告から取得）
+  const latestWithWeather = allData.find(r => r.weather);
+  if (latestWithWeather) {
+    document.getElementById('w-condition').textContent = latestWithWeather.weather;
+    document.getElementById('w-temp').textContent      = latestWithWeather.temperature;
+    document.getElementById('w-wind').textContent      = latestWithWeather.windspeed;
+  }
+
+  // KPI計算
+  const reported   = allData.filter(r => r.reported);
+  const totalLocs  = masterData.locations.length;
+  const totalSold  = reported.reduce((s, r) => s + (r.soldCount || 0), 0);
+  const totalSales = reported.reduce((s, r) => s + (r.totalSales || 0), 0);
+  const avgRate    = reported.length > 0
+    ? Math.round(reported.reduce((s, r) => s + (r.sellRate || 0), 0) / reported.length * 10) / 10
+    : 0;
+
+  document.getElementById('kpi-grid').innerHTML = `
+    <div class="kpi-card red">
+      <div class="kpi-label">報告完了</div>
+      <div class="kpi-value">${reported.length}<span> / ${totalLocs}</span></div>
+      <div class="kpi-sub">拠点</div>
+    </div>
+    <div class="kpi-card gold">
+      <div class="kpi-label">総販売数</div>
+      <div class="kpi-value">${totalSold}<span> 個</span></div>
+    </div>
+    <div class="kpi-card green">
+      <div class="kpi-label">平均完売率</div>
+      <div class="kpi-value">${avgRate}<span> %</span></div>
+    </div>
+    <div class="kpi-card blue">
+      <div class="kpi-label">売上合計</div>
+      <div class="kpi-value" style="font-size:18px;">¥${totalSales.toLocaleString()}</div>
+    </div>
+  `;
+
+  // 16時以降のまとめ
+  if (isAfter16 && reported.length > 0) {
+    renderDailySummary(reported);
+  }
+
+  // ランキング
+  renderRanking(reported);
+
+  // 全拠点テーブル
+  renderLocationTable();
+
+  // 報告件数
+  document.getElementById('reported-count').textContent = `${reported.length}/${totalLocs}拠点 報告済み`;
+}
+
+function renderDailySummary(reported) {
+  const wrap = document.getElementById('daily-summary-wrap');
+  wrap.style.display = 'block';
+
+  const cashTotal    = reported.reduce((s, r) => s + (r.cashSales || 0), 0);
+  const paypayTotal  = reported.reduce((s, r) => s + (r.paypayAmount || 0), 0);
+  const couponTotal  = reported.reduce((s, r) => s + (r.couponCount || 0), 0);
+  const laborTotal   = reported.reduce((s, r) => s + (r.totalSalary || 0), 0);
+
+  document.getElementById('daily-summary').innerHTML = `
+    <div class="daily-summary-title">本日の最終集計</div>
+    <div class="daily-kpi-grid">
+      <div class="daily-kpi">
+        <div class="daily-kpi-label">現金売上</div>
+        <div class="daily-kpi-value gold">¥${cashTotal.toLocaleString()}</div>
+      </div>
+      <div class="daily-kpi">
+        <div class="daily-kpi-label">PayPay売上</div>
+        <div class="daily-kpi-value blue">¥${paypayTotal.toLocaleString()}</div>
+      </div>
+      <div class="daily-kpi">
+        <div class="daily-kpi-label">クーポン使用</div>
+        <div class="daily-kpi-value green">${couponTotal}<span style="font-size:14px;"> 枚</span></div>
+      </div>
+      <div class="daily-kpi">
+        <div class="daily-kpi-label">人件費合計</div>
+        <div class="daily-kpi-value red">¥${laborTotal.toLocaleString()}</div>
+      </div>
+    </div>
+  `;
+}
+
+function renderRanking(reported) {
+  if (reported.length === 0) {
+    document.getElementById('rank-grid').innerHTML =
+      '<p style="color:var(--ink-mute);font-size:13px;grid-column:1/-1;">まだ報告がありません</p>';
+    return;
+  }
+
+  const sorted = [...reported].sort((a, b) => (b.sellRate || 0) - (a.sellRate || 0));
+  const best3  = sorted.slice(0, 3);
+  const worst3 = [...sorted].reverse().slice(0, 3);
+
+  const rankNumClass = (i) => i === 0 ? 'gold' : i === 1 ? 'silver' : 'bronze';
+
+  const renderItems = (items, isBest) => items.map((r, i) => `
+    <div class="rank-item" onclick="openModal('${r.locationId}')">
+      <div class="rank-num ${isBest ? rankNumClass(i) : 'bad'}">${i + 1}</div>
+      <div>
+        <div class="rank-name">${r.locationName}</div>
+        <div class="rank-staff">${r.userName}</div>
+      </div>
+      <div class="rate-bar-wrap">
+        <div class="rate-bar ${isBest ? 'high' : 'low'}" style="width:${r.sellRate || 0}%"></div>
+      </div>
+      <div class="rank-rate ${isBest ? 'high' : 'low'}">${r.sellRate || 0}%</div>
+    </div>
+  `).join('');
+
+  document.getElementById('rank-grid').innerHTML = `
+    <div class="rank-card">
+      <div class="rank-card-header best">🏆 完売率ベスト3</div>
+      ${renderItems(best3, true)}
+    </div>
+    <div class="rank-card">
+      <div class="rank-card-header worst">⚠️ 完売率ワースト3</div>
+      ${renderItems(worst3, false)}
+    </div>
+  `;
+}
+
+function renderLocationTable() {
+  const locations = masterData.locations || [];
+  const dataMap   = {};
+  allData.forEach(r => { if (r.locationId) dataMap[r.locationId] = r; });
+
+  let rows = locations.map(loc => {
+    const r = dataMap[loc.id];
+    return { loc, r };
+  });
+
+  // ソート
+  if (currentSort === 'rate_desc') {
+    rows.sort((a, b) => ((b.r?.sellRate || -1) - (a.r?.sellRate || -1)));
+  } else if (currentSort === 'rate_asc') {
+    rows.sort((a, b) => {
+      if (!a.r) return 1;
+      if (!b.r) return -1;
+      return (a.r.sellRate || 0) - (b.r.sellRate || 0);
+    });
+  } else {
+    rows.sort((a, b) => a.loc.name.localeCompare(b.loc.name, 'ja'));
+  }
+
+  document.getElementById('location-tbody').innerHTML = rows.map(({ loc, r }) => {
+    if (!r) {
+      return `
+        <tr>
+          <td>${loc.name}</td>
+          <td class="not-reported">未報告</td>
+          <td class="not-reported">—</td>
+          <td class="not-reported">—</td>
+          <td class="not-reported">—</td>
+          <td><span class="status-badge none">未報告</span></td>
+        </tr>`;
+    }
+    const rateClass = r.sellRate >= 80 ? 'high' : r.sellRate >= 50 ? '' : 'low';
+    return `
+      <tr onclick="openModal('${loc.id}')">
+        <td>${loc.name}</td>
+        <td>${r.userName || '—'}</td>
+        <td>${r.soldCount || 0}個</td>
+        <td class="rate-cell ${rateClass}">${r.sellRate || 0}%</td>
+        <td>¥${(r.totalSales || 0).toLocaleString()}</td>
+        <td><span class="status-badge done">報告済</span></td>
+      </tr>`;
+  }).join('');
+}
+
+function sortLocations(type) {
+  currentSort = type;
+  ['best','worst','name'].forEach(k => {
+    document.getElementById(`sort-${k}`)?.classList.toggle('active', 
+      (k === 'best' && type === 'rate_desc') ||
+      (k === 'worst' && type === 'rate_asc') ||
+      (k === 'name' && type === 'name')
+    );
+  });
+  renderLocationTable();
+}
+
+// ─────────────────────────────────────
+// DETAIL MODAL
+// ─────────────────────────────────────
+function openModal(locationId) {
+  const loc = (masterData.locations || []).find(l => l.id === locationId);
+  const r   = allData.find(d => d.locationId === locationId);
+  if (!loc || !r) return;
+
+  document.getElementById('modal-location-name').textContent = loc.name;
+  document.getElementById('modal-location-sub').textContent  = `担当：${r.userName || '—'}`;
+
+  const products = masterData.products || [];
+  const delivery = JSON.parse(r.deliveryCountJson || '{}');
+  const sales    = JSON.parse(r.productSalesJson  || '{}');
+
+  let bodyHtml = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+      <div class="kpi-card green"><div class="kpi-label">販売数</div><div class="kpi-value">${r.soldCount || 0}<span> 個</span></div></div>
+      <div class="kpi-card gold"><div class="kpi-label">完売率</div><div class="kpi-value">${r.sellRate || 0}<span> %</span></div></div>
+      <div class="kpi-card red"><div class="kpi-label">売上合計</div><div class="kpi-value" style="font-size:16px;">¥${(r.totalSales||0).toLocaleString()}</div></div>
+      <div class="kpi-card blue"><div class="kpi-label">本日ギャラ</div><div class="kpi-value" style="font-size:16px;">¥${(r.totalSalary||0).toLocaleString()}</div></div>
+    </div>
+    <div style="font-size:12px;font-weight:700;color:var(--ink-mute);letter-spacing:.1em;margin-bottom:10px;">商品別完売率</div>
+  `;
+
+  products.forEach(p => {
+    const d    = Number(delivery[p.id] || 0);
+    const s    = Number(sales[p.id]    || 0);
+    const rate = d > 0 ? Math.round(s / d * 100) : null;
+    const rateStr = rate !== null ? `${rate}%` : '—';
+    const barW    = rate !== null ? rate : 0;
+    bodyHtml += `
+      <div class="product-row">
+        <div class="product-row-name">${p.name}</div>
+        <div class="product-row-nums">${s}/${d}個</div>
+        <div class="product-rate-bar"><div class="product-rate-fill" style="width:${barW}%"></div></div>
+        <div class="product-row-rate" style="color:${barW >= 80 ? 'var(--green)' : barW > 0 ? 'var(--gold)' : 'var(--ink-mute)'}">${rateStr}</div>
+      </div>`;
+  });
+
+  if (r.memo) {
+    bodyHtml += `
+      <div style="margin-top:16px;background:var(--gold-light);border-left:3px solid var(--gold);padding:10px 14px;border-radius:0 8px 8px 0;font-size:13px;color:var(--ink-soft);">
+        <div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:4px;">申し送り</div>
+        ${r.memo}
+      </div>`;
+  }
+
+  document.getElementById('modal-body').innerHTML = bodyHtml;
+  document.getElementById('detail-modal').classList.add('show');
+}
+
+function closeModal() {
+  document.getElementById('detail-modal').classList.remove('show');
+}
+document.getElementById('detail-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+
+// ─────────────────────────────────────
+// WEEKLY
+// ─────────────────────────────────────
+async function loadWeekly(weekStart) {
+  document.getElementById('wk-loading').style.display = 'block';
+  document.getElementById('weekly-data').innerHTML = '';
+  try {
+    const res = await fetchJSON(`${GAS_URL}?action=getWeeklyReport&weekStart=${weekStart}`);
+    renderWeeklyData(res.data || []);
+  } catch (e) {
+    document.getElementById('weekly-data').innerHTML = `<p style="color:var(--red);">取得エラー</p>`;
+  }
+  document.getElementById('wk-loading').style.display = 'none';
+}
+
+function renderWeeklyData(data) {
+  if (!data.length) {
+    document.getElementById('weekly-data').innerHTML = '<p style="color:var(--ink-mute);font-size:13px;">この週のデータがありません</p>';
+    return;
+  }
+
+  // 拠点別集計
+  const byLocation = {};
+  data.forEach(r => {
+    if (!byLocation[r.locationName]) {
+      byLocation[r.locationName] = { sold: 0, sales: 0, count: 0, rates: [] };
+    }
+    byLocation[r.locationName].sold  += r.soldCount || 0;
+    byLocation[r.locationName].sales += r.totalSales || 0;
+    byLocation[r.locationName].count++;
+    if (r.sellRate) byLocation[r.locationName].rates.push(r.sellRate);
+  });
+
+  const rows = Object.entries(byLocation)
+    .map(([name, d]) => ({
+      name,
+      sold: d.sold,
+      sales: d.sales,
+      days: d.count,
+      avgRate: d.rates.length > 0 ? Math.round(d.rates.reduce((a,b)=>a+b,0)/d.rates.length*10)/10 : 0,
+    }))
+    .sort((a, b) => b.sales - a.sales);
+
+  const totalSales = rows.reduce((s, r) => s + r.sales, 0);
+  const totalSold  = rows.reduce((s, r) => s + r.sold, 0);
+
+  document.getElementById('weekly-data').innerHTML = `
+    <div class="kpi-grid" style="margin-bottom:16px;">
+      <div class="kpi-card red"><div class="kpi-label">総売上</div><div class="kpi-value" style="font-size:18px;">¥${totalSales.toLocaleString()}</div></div>
+      <div class="kpi-card gold"><div class="kpi-label">総販売数</div><div class="kpi-value">${totalSold}<span> 個</span></div></div>
+      <div class="kpi-card green"><div class="kpi-label">営業日数</div><div class="kpi-value">${new Set(data.map(r=>r.date)).size}<span> 日</span></div></div>
+    </div>
+    <table class="stats-table">
+      <thead><tr><th>拠点名</th><th>営業日数</th><th>販売数</th><th>平均完売率</th><th>売上合計</th></tr></thead>
+      <tbody>${rows.map(r => `
+        <tr>
+          <td>${r.name}</td>
+          <td>${r.days}日</td>
+          <td>${r.sold}個</td>
+          <td>${r.avgRate}%</td>
+          <td>¥${r.sales.toLocaleString()}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+// ─────────────────────────────────────
+// MONTHLY
+// ─────────────────────────────────────
+async function loadMonthly(yearMonth) {
+  document.getElementById('mo-loading').style.display = 'block';
+  document.getElementById('monthly-data').innerHTML = '';
+  try {
+    const res = await fetchJSON(`${GAS_URL}?action=getMonthlyReport&yearMonth=${yearMonth}`);
+    renderMonthlyData(res.data || [], yearMonth);
+  } catch (e) {
+    document.getElementById('monthly-data').innerHTML = `<p style="color:var(--red);">取得エラー</p>`;
+  }
+  document.getElementById('mo-loading').style.display = 'none';
+}
+
+function renderMonthlyData(data, yearMonth) {
+  if (!data.length) {
+    document.getElementById('monthly-data').innerHTML = '<p style="color:var(--ink-mute);font-size:13px;">この月のデータがありません</p>';
+    return;
+  }
+
+  // 曜日別集計
+  const byDay = { '月':{sold:0,count:0}, '火':{sold:0,count:0}, '水':{sold:0,count:0}, '木':{sold:0,count:0}, '金':{sold:0,count:0} };
+  data.forEach(r => {
+    if (byDay[r.dayOfWeek]) {
+      byDay[r.dayOfWeek].sold  += r.soldCount || 0;
+      byDay[r.dayOfWeek].count++;
+    }
+  });
+
+  // 天気別集計
+  const byWeather = {};
+  data.forEach(r => {
+    if (!r.weather) return;
+    if (!byWeather[r.weather]) byWeather[r.weather] = { sold: 0, count: 0 };
+    byWeather[r.weather].sold  += r.soldCount || 0;
+    byWeather[r.weather].count++;
+  });
+
+  const totalSales = data.reduce((s, r) => s + (r.totalSales||0), 0);
+  const totalSold  = data.reduce((s, r) => s + (r.soldCount||0), 0);
+  const avgRate    = data.length > 0 ? Math.round(data.reduce((s,r)=>s+(r.sellRate||0),0)/data.length*10)/10 : 0;
+
+  document.getElementById('monthly-data').innerHTML = `
+    <div class="kpi-grid" style="margin-bottom:16px;">
+      <div class="kpi-card red"><div class="kpi-label">月間売上</div><div class="kpi-value" style="font-size:18px;">¥${totalSales.toLocaleString()}</div></div>
+      <div class="kpi-card gold"><div class="kpi-label">月間販売数</div><div class="kpi-value">${totalSold}<span> 個</span></div></div>
+      <div class="kpi-card green"><div class="kpi-label">平均完売率</div><div class="kpi-value">${avgRate}<span> %</span></div></div>
+    </div>
+
+    <div class="section-title">曜日別平均販売数</div>
+    <table class="stats-table" style="margin-bottom:16px;">
+      <thead><tr><th>曜日</th><th>営業日数</th><th>平均販売数</th></tr></thead>
+      <tbody>${Object.entries(byDay).map(([day, d]) => `
+        <tr>
+          <td>${day}曜日</td>
+          <td>${d.count}日</td>
+          <td>${d.count > 0 ? Math.round(d.sold/d.count) : '—'}個</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+
+    <div class="section-title">天気別平均販売数</div>
+    <table class="stats-table">
+      <thead><tr><th>天気</th><th>日数</th><th>平均販売数</th></tr></thead>
+      <tbody>${Object.entries(byWeather).map(([weather, d]) => `
+        <tr>
+          <td>${weather}</td>
+          <td>${d.count}日</td>
+          <td>${Math.round(d.sold/d.count)}個</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+// ─────────────────────────────────────
+// TABS
+// ─────────────────────────────────────
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach((b, i) => {
+    b.classList.toggle('active', ['realtime','weekly','monthly'][i] === tab);
+  });
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById(`tab-${tab}`).classList.add('active');
+
+  if (tab === 'weekly')  initWeekSelector();
+  if (tab === 'monthly') initMonthSelector();
+}
+
+function initWeekSelector() {
+  const selector = document.getElementById('week-selector');
+  if (selector.innerHTML) return;
+  const weeks = [];
+  const now = new Date();
+  for (let i = 0; i < 8; i++) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - d.getDay() + 1 - i * 7);
+    const label = `${d.getMonth()+1}/${d.getDate()}週`;
+    const val   = d.toISOString().split('T')[0];
+    weeks.push({ label, val });
+  }
+  selector.innerHTML = weeks.map((w, i) => `
+    <button class="period-btn ${i===0?'active':''}" onclick="selectWeek('${w.val}', this)">${w.label}</button>
+  `).join('');
+  loadWeekly(weeks[0].val);
+}
+
+function selectWeek(val, btn) {
+  document.querySelectorAll('#week-selector .period-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  loadWeekly(val);
+}
+
+function initMonthSelector() {
+  const selector = document.getElementById('month-selector');
+  if (selector.innerHTML) return;
+  const months = [];
+  const now = new Date();
+  for (let i = 0; i < 6; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const label = `${d.getFullYear()}年${d.getMonth()+1}月`;
+    const val   = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    months.push({ label, val });
+  }
+  selector.innerHTML = months.map((m, i) => `
+    <button class="period-btn ${i===0?'active':''}" onclick="selectMonth('${m.val}', this)">${m.label}</button>
+  `).join('');
+  loadMonthly(months[0].val);
+}
+
+function selectMonth(val, btn) {
+  document.querySelectorAll('#month-selector .period-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  loadMonthly(val);
+}
+
+// ─────────────────────────────────────
+// AUTO REFRESH (5分ごと)
+// ─────────────────────────────────────
+loadAll();
+setInterval(loadAll, 5 * 60 * 1000);
+</script>
+</body>
+</html>
