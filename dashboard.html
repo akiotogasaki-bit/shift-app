@@ -645,54 +645,93 @@ async function selectDeliveryDate(date) {
 function renderDeliveryOrders(orders, date) {
   const dt = new Date(date.replace(/\//g, '-'));
   const dayNames = ['日','月','火','水','木','金','土'];
-  const dateLabel = `${date.slice(5)}（${dayNames[dt.getDay()]}）`;
 
-  let html = `
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
-      <select id="delivery-date-selector" onchange="selectDeliveryDate(this.value)"
-        style="flex:1;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px;font-size:14px;font-family:inherit;background:var(--white);color:var(--ink);">
-      </select>
-      <span style="font-size:13px;color:var(--ink-mute);white-space:nowrap;">${orders.length}件</span>
-    </div>`;
+  let html = '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">'
+    + '<select id="delivery-date-selector" onchange="selectDeliveryDate(this.value)" style="flex:1;padding:10px 12px;border:1.5px solid #D5D8DC;border-radius:10px;font-size:14px;font-family:inherit;background:white;color:#1C1C1C;"></select>'
+    + '<span style="font-size:13px;color:#9A9A9A;white-space:nowrap;">' + orders.length + '件</span>'
+    + '</div>';
 
-  // セレクターの選択肢を再描画
   setTimeout(() => renderDeliveryDateSelector(), 0);
 
   if (orders.length === 0) {
-    html += '<p style="color:var(--ink-mute);font-size:13px;text-align:center;padding:30px 0;">この日の配達はありません</p>';
+    html += '<p style="color:#9A9A9A;font-size:13px;text-align:center;padding:30px 0;">この日の配達はありません</p>';
     document.getElementById('dv-content').innerHTML = html;
     return;
   }
 
-  // 時間順にソート
   orders.sort((a, b) => (a.time || '').localeCompare(b.time || ''));
 
-  html += orders.map((o, i) => {
-    const header = '<div style="background:#1A3C5E;color:white;padding:10px 14px;">'
-      + '<div style="font-size:13px;font-weight:bold;margin-bottom:2px;">' + (o.time || '時間未定') + '</div>'
+  orders.forEach(function(o) {
+    var card = document.createElement('div');
+    card.style.cssText = 'background:white;border:1px solid #D5D8DC;border-radius:12px;overflow:hidden;margin-bottom:12px;';
+
+    // ヘッダー
+    var hdr = document.createElement('div');
+    hdr.style.cssText = 'background:#1A3C5E;color:white;padding:10px 14px;';
+    hdr.innerHTML = '<div style="font-size:13px;font-weight:bold;margin-bottom:2px;">' + (o.time || '時間未定') + '</div>'
       + '<div style="font-size:12px;opacity:0.85;">' + (o.address || '住所未定') + '</div>'
-      + '<div style="font-size:10px;opacity:0.6;margin-top:2px;">' + o.orderNo + '</div>'
-      + '</div>';
-    const detailDiv = o.detail ? '<div style="padding:8px 14px;background:#F8F4EE;font-size:12px;color:#4A4A4A;">📍 ' + o.detail + '</div>' : '';
-    return \`
-    <div style="background:white;border:1px solid #D5D8DC;border-radius:12px;overflow:hidden;margin-bottom:12px;">
-      \${header}
-      \${detailDiv}\`
-      <div style="padding:10px 14px;">
-        ${row('受取担当者', o.contact)}
-        ${row('当日連絡先', o.phone, true)}
-        ${row('注文内容', o.order)}
-        ${row('会計種別', o.payment)}
-        ${row('当日帳票', o.doc)}
-        ${o.note ? `<div style="margin-top:8px;background:var(--gold-light,#FFF8DC);border-left:3px solid #B8860B;padding:8px 10px;border-radius:0 6px 6px 0;font-size:12px;color:#666;">
-          <span style="font-size:10px;font-weight:700;color:#B8860B;display:block;margin-bottom:2px;">備考</span>${o.note}
-        </div>` : ''}
-        ${(o.collectYN || o.collect) ? `<div style="margin-top:8px;background:#F0FAF4;border-left:3px solid var(--green);padding:8px 10px;border-radius:0 6px 6px 0;font-size:12px;color:#1A7A42;">
-          <span style="font-size:10px;font-weight:700;display:block;margin-bottom:2px;">回収</span>
-          ${o.collectYN ? o.collectYN : ''}${o.collect ? '　' + o.collect : ''}
-        </div>` : ''}
-      </div>
-    </div>\`; }).join('');
+      + '<div style="font-size:10px;opacity:0.6;margin-top:2px;">' + (o.orderNo || '') + '</div>';
+    card.appendChild(hdr);
+
+    // 配達場所詳細
+    if (o.detail) {
+      var det = document.createElement('div');
+      det.style.cssText = 'padding:8px 14px;background:#F8F4EE;font-size:12px;color:#4A4A4A;';
+      det.textContent = '📍 ' + o.detail;
+      card.appendChild(det);
+    }
+
+    // 明細
+    var body = document.createElement('div');
+    body.style.cssText = 'padding:6px 14px;';
+    var rows = [
+      ['受取担当者', o.contact, false],
+      ['当日連絡先', o.phone, true],
+      ['注文内容', o.order, false],
+      ['会計種別', o.payment, false],
+      ['当日帳票', o.doc, false],
+    ];
+    rows.forEach(function(r) {
+      if (!r[1]) return;
+      var row = document.createElement('div');
+      row.style.cssText = 'display:flex;gap:8px;padding:5px 0;border-bottom:1px solid #F5F0E8;font-size:13px;align-items:flex-start;';
+      var label = document.createElement('span');
+      label.style.cssText = 'color:#9A9A9A;min-width:80px;flex-shrink:0;padding-top:2px;font-size:12px;';
+      label.textContent = r[0];
+      row.appendChild(label);
+      var val = document.createElement('span');
+      val.style.cssText = 'color:#1C1C1C;flex:1;';
+      if (r[0] === '注文内容') {
+        val.innerHTML = r[1].split(/\n|\r\n|\r/).filter(function(l){return l.trim();}).map(function(l){return '<div>' + l.trim() + '</div>';}).join('');
+      } else if (r[2]) {
+        val.innerHTML = '<a href="tel:' + r[1] + '" style="color:#2471A3;font-weight:bold;">' + r[1] + '</a>';
+      } else {
+        val.textContent = r[1];
+      }
+      row.appendChild(val);
+      body.appendChild(row);
+    });
+
+    // 備考
+    if (o.note) {
+      var noteDiv = document.createElement('div');
+      noteDiv.style.cssText = 'margin-top:6px;background:#FFF8DC;border-left:3px solid #B8860B;padding:8px 10px;border-radius:0 6px 6px 0;font-size:12px;color:#666;';
+      noteDiv.innerHTML = '<span style="font-size:10px;font-weight:bold;color:#B8860B;display:block;margin-bottom:2px;">備考</span>' + o.note;
+      body.appendChild(noteDiv);
+    }
+
+    // 回収
+    if (o.collectYN || o.collect) {
+      var colDiv = document.createElement('div');
+      colDiv.style.cssText = 'margin-top:6px;background:#F0FAF4;border-left:3px solid #27AE60;padding:8px 10px;border-radius:0 6px 6px 0;font-size:12px;color:#1A7A42;';
+      colDiv.innerHTML = '<span style="font-size:10px;font-weight:bold;display:block;margin-bottom:2px;">回収</span>' + (o.collectYN || '') + (o.collect ? '　' + o.collect : '');
+      body.appendChild(colDiv);
+    }
+
+    body.style.paddingBottom = '8px';
+    card.appendChild(body);
+    html += card.outerHTML;
+  });
 
   document.getElementById('dv-content').innerHTML = html;
 }
