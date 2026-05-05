@@ -463,7 +463,6 @@ body {
   <button class="tab-btn active" onclick="switchTab('realtime')">リアルタイム</button>
   <button class="tab-btn" onclick="switchTab('weekly')">週報</button>
   <button class="tab-btn" onclick="switchTab('monthly')">月報</button>
-  <button class="tab-btn" onclick="switchTab('shift')">シフト管理</button>
 </div>
 
 <!-- CONTENT -->
@@ -549,94 +548,6 @@ body {
 
 </div>
 
-  <!-- SHIFT TAB -->
-  <div id="tab-shift" class="tab-panel">
-    <div style="padding:8px 0 16px;">
-
-      <!-- 状態表示 -->
-      <div id="shift-status" style="
-        background:var(--white);
-        border:1px solid var(--border);
-        border-radius:10px;
-        padding:14px 16px;
-        margin-bottom:16px;
-        font-size:13px;
-        color:var(--ink-soft);
-        min-height:48px;
-      ">準備完了</div>
-
-      <!-- シフト操作ボタン -->
-      <div style="display:grid;gap:10px;">
-
-        <button onclick="runShiftTask('assign')" style="
-          padding:16px;background:#1A3C5E;color:#FFF;
-          border:none;border-radius:12px;font-size:15px;font-weight:700;
-          font-family:inherit;cursor:pointer;text-align:left;
-          display:flex;align-items:center;gap:12px;
-        ">
-          <span style="font-size:24px;">📋</span>
-          <div>
-            <div>シフト割り振り</div>
-            <div style="font-size:11px;font-weight:400;opacity:.7;">回答をもとにシフトを自動割り振り</div>
-          </div>
-        </button>
-
-        <button onclick="runShiftTask('view')" style="
-          padding:16px;background:#2471A3;color:#FFF;
-          border:none;border-radius:12px;font-size:15px;font-weight:700;
-          font-family:inherit;cursor:pointer;text-align:left;
-          display:flex;align-items:center;gap:12px;
-        ">
-          <span style="font-size:24px;">📊</span>
-          <div>
-            <div>シフト表を作成</div>
-            <div style="font-size:11px;font-weight:400;opacity:.7;">見やすい版のシフト表を生成</div>
-          </div>
-        </button>
-
-        <button onclick="runShiftTask('notifyManagers')" style="
-          padding:16px;background:#27AE60;color:#FFF;
-          border:none;border-radius:12px;font-size:15px;font-weight:700;
-          font-family:inherit;cursor:pointer;text-align:left;
-          display:flex;align-items:center;gap:12px;
-        ">
-          <span style="font-size:24px;">✅</span>
-          <div>
-            <div>管理者に確認依頼を送信</div>
-            <div style="font-size:11px;font-weight:400;opacity:.7;">シフト確認のLINEを管理者に送る</div>
-          </div>
-        </button>
-
-        <button onclick="runShiftTask('notify')" style="
-          padding:16px;background:#E67E22;color:#FFF;
-          border:none;border-radius:12px;font-size:15px;font-weight:700;
-          font-family:inherit;cursor:pointer;text-align:left;
-          display:flex;align-items:center;gap:12px;
-        ">
-          <span style="font-size:24px;">📣</span>
-          <div>
-            <div>スタッフにシフト通知を送信</div>
-            <div style="font-size:11px;font-weight:400;opacity:.7;">確定シフトをLINEで全員に送る</div>
-          </div>
-        </button>
-
-        <button onclick="runShiftTask('remind')" style="
-          padding:16px;background:#8E44AD;color:#FFF;
-          border:none;border-radius:12px;font-size:15px;font-weight:700;
-          font-family:inherit;cursor:pointer;text-align:left;
-          display:flex;align-items:center;gap:12px;
-        ">
-          <span style="font-size:24px;">🔔</span>
-          <div>
-            <div>シフト提出リマインドを送信</div>
-            <div style="font-size:11px;font-weight:400;opacity:.7;">販売員にリマインドLINEを送る</div>
-          </div>
-        </button>
-
-      </div>
-    </div>
-  </div>
-
 <!-- DETAIL MODAL -->
 <div class="modal-bg" id="detail-modal">
   <div class="modal-sheet">
@@ -655,36 +566,6 @@ const GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5A
 let allData     = [];
 let masterData  = { locations: [], products: [] };
 let currentSort = 'rate_desc';
-
-// ─────────────────────────────────────
-// SHIFT MANAGEMENT
-// ─────────────────────────────────────
-async function runShiftTask(task) {
-  const statusEl = document.getElementById('shift-status');
-  const labels = {
-    assign:         'シフト割り振り中...',
-    view:           'シフト表を作成中...',
-    notifyManagers: '管理者に送信中...',
-    notify:         'スタッフに通知送信中...',
-    remind:         'リマインド送信中...',
-  };
-  statusEl.textContent = labels[task] || '処理中...';
-  statusEl.style.color = 'var(--blue)';
-
-  try {
-    const res  = await fetchJSON(`${GAS_URL}?action=admin&task=${task}`);
-    if (res.status === 'ok') {
-      statusEl.textContent = '✅ ' + res.message;
-      statusEl.style.color = 'var(--green)';
-    } else {
-      statusEl.textContent = '❌ エラー：' + res.message;
-      statusEl.style.color = 'var(--red)';
-    }
-  } catch (e) {
-    statusEl.textContent = '❌ 通信エラー：' + e.message;
-    statusEl.style.color = 'var(--red)';
-  }
-}
 
 // ─────────────────────────────────────
 // INIT
@@ -1186,14 +1067,13 @@ function renderMonthlyData(data, yearMonth) {
 // ─────────────────────────────────────
 function switchTab(tab) {
   document.querySelectorAll('.tab-btn').forEach((b, i) => {
-    b.classList.toggle('active', ['realtime','weekly','monthly','shift'][i] === tab);
+    b.classList.toggle('active', ['realtime','weekly','monthly'][i] === tab);
   });
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.getElementById(`tab-${tab}`).classList.add('active');
 
-  if (tab === 'weekly')  initWeekSelector();
-  if (tab === 'monthly') initMonthSelector();
-  if (tab === 'shift') {} // no init needed
+  if (tab === 'weekly')    initWeekSelector();
+  if (tab === 'monthly')   initMonthSelector();
 }
 
 function initWeekSelector() {
