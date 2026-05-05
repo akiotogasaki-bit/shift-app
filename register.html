@@ -1310,7 +1310,8 @@ function clearCart() {
 // ─────────────────────────────────────
 async function checkTodayReport() {
   try {
-    const today = new Date().toLocaleDateString('ja-JP');
+    const now   = new Date();
+    const today = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')}`;
     const res   = await fetch(`${state.GAS_URL}?action=getReport&date=${encodeURIComponent(today)}&userId=${state.userId}`, { redirect: 'follow' });
     const data  = JSON.parse(await res.text());
     return data && data.locationId ? data : null;
