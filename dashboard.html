@@ -669,11 +669,14 @@ function renderDeliveryOrders(orders, date) {
         ${row('受取担当者', o.contact)}
         ${row('当日連絡先', o.phone, true)}
         ${row('注文内容', o.order)}
-        ${row('回収時間', o.collect)}
         ${row('会計種別', o.payment)}
         ${row('当日帳票', o.doc)}
         ${o.note ? `<div style="margin-top:8px;background:var(--gold-light,#FFF8DC);border-left:3px solid #B8860B;padding:8px 10px;border-radius:0 6px 6px 0;font-size:12px;color:#666;">
           <span style="font-size:10px;font-weight:700;color:#B8860B;display:block;margin-bottom:2px;">備考</span>${o.note}
+        </div>` : ''}
+        ${(o.collectYN || o.collect) ? `<div style="margin-top:8px;background:#F0FAF4;border-left:3px solid var(--green);padding:8px 10px;border-radius:0 6px 6px 0;font-size:12px;color:#1A7A42;">
+          <span style="font-size:10px;font-weight:700;display:block;margin-bottom:2px;">回収</span>
+          ${o.collectYN ? o.collectYN : ''}${o.collect ? '　' + o.collect : ''}
         </div>` : ''}
       </div>
     </div>`).join('');
@@ -683,11 +686,17 @@ function renderDeliveryOrders(orders, date) {
 
 function row(label, value, isPhone) {
   if (!value) return '';
-  const val = isPhone
-    ? `<a href="tel:${value}" style="color:var(--blue);font-weight:700;">${value}</a>`
-    : `<span style="color:var(--ink);">${value}</span>`;
-  return `<div style="display:flex;gap:8px;padding:5px 0;border-bottom:1px solid #F5F0E8;font-size:13px;">
-    <span style="color:var(--ink-mute);min-width:80px;flex-shrink:0;">${label}</span>
+  let val;
+  if (isPhone) {
+    val = `<a href="tel:${value}" style="color:var(--blue);font-weight:700;">${value}</a>`;
+  } else if (label === '注文内容') {
+    const lines = value.split(/\n|\r\n|\r/).filter(l => l.trim());
+    val = `<div style="color:var(--ink);line-height:1.8;">${lines.map(l => `<div>${l.trim()}</div>`).join('')}</div>`;
+  } else {
+    val = `<span style="color:var(--ink);">${value}</span>`;
+  }
+  return `<div style="display:flex;gap:8px;padding:5px 0;border-bottom:1px solid #F5F0E8;font-size:13px;align-items:flex-start;">
+    <span style="color:var(--ink-mute);min-width:80px;flex-shrink:0;padding-top:2px;">${label}</span>
     ${val}
   </div>`;
 }
