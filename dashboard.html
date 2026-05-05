@@ -751,8 +751,8 @@ function renderLocationTable() {
       return (a.r.sellRate || 0) - (b.r.sellRate || 0);
     });
   } else {
-    rows.sort((a, b) => a.loc.name.localeCompare(b.loc.name, 'ja'));
-  }
+    rows.sort((a, b) => a.loc.id.localeCompare(b.loc.id));
+}
 
   document.getElementById('location-tbody').innerHTML = rows.map(({ loc, r }) => {
     if (!r) {
