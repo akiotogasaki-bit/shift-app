@@ -270,13 +270,7 @@ body {
       </div>
     </button>
 
-    <button class="task-btn btn-remind" onclick="runTask('remind')">
-      <span class="icon">🔔</span>
-      <div class="text-wrap">
-        <div class="title">シフト提出リマインドを送信</div>
-        <div class="desc">販売員にリマインドLINEを送る</div>
-      </div>
-    </button>
+
 
   </div>
 </div>
@@ -312,7 +306,7 @@ async function runTask(task) {
     assign: 'シフト割り振り中...',
     view:   'シフト表を作成中...',
     notify: 'スタッフに通知送信中...',
-    remind: 'リマインド送信中...',
+
   };
   dot.className    = 'status-dot active';
   text.textContent = labels[task] || '処理中...';
