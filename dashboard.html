@@ -585,26 +585,26 @@ let selectedDelivery = '';
 const deliveryCache  = {};  // ローカルキャッシュ
 
 async function initDelivery() {
-  document.getElementById('dv-loading').style.display = 'block';
-  document.getElementById('dv-content').innerHTML = '';
+  const loadingEl = document.getElementById('dv-loading');
+  const contentEl = document.getElementById('dv-content');
+  loadingEl.style.display = 'block';
+  contentEl.innerHTML = '';
   try {
-    const res  = await fetchJSON(`${GAS_URL}?action=getDeliveryOrders`);
+    const res  = await fetchJSON(GAS_URL + '?action=getDeliveryOrders');
     deliveryDates = res.availableDates || [];
-    renderDeliveryDateSelector();
     if (deliveryDates.length > 0) {
-      // 今日以降で最も近い日付をデフォルト選択
-      const now = new Date();
-      const todayStr = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')}`;
-      const future  = deliveryDates.filter(d => d >= todayStr);
+      const now      = new Date();
+      const todayStr = now.getFullYear() + '/' + String(now.getMonth()+1).padStart(2,'0') + '/' + String(now.getDate()).padStart(2,'0');
+      const future   = deliveryDates.filter(function(d){ return d >= todayStr; });
       const defaultDate = future.length > 0 ? future[0] : deliveryDates[deliveryDates.length - 1];
-      selectDeliveryDate(defaultDate);
+      await selectDeliveryDate(defaultDate);
     } else {
-      document.getElementById('dv-content').innerHTML = '<p style="color:var(--ink-mute);font-size:13px;padding:20px;">配達データがありません</p>';
+      contentEl.innerHTML = '<p style="color:#9A9A9A;font-size:13px;padding:20px;">配達データがありません</p>';
     }
   } catch(e) {
-    document.getElementById('dv-content').innerHTML = `<p style="color:var(--red);font-size:13px;padding:20px;">取得エラー：${e.message}</p>`;
+    contentEl.innerHTML = '<p style="color:#C0392B;font-size:13px;padding:20px;">取得エラー：' + e.message + '</p>';
   }
-  document.getElementById('dv-loading').style.display = 'none';
+  loadingEl.style.display = 'none';
 }
 
 function renderDeliveryDateSelector() {
