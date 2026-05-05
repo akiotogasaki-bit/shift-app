@@ -667,14 +667,17 @@ function renderDeliveryOrders(orders, date) {
   // 時間順にソート
   orders.sort((a, b) => (a.time || '').localeCompare(b.time || ''));
 
-  html += orders.map((o, i) => `
-    <div style="background:var(--white);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:12px;">
-      <div style="background:var(--navy);color:#FFF;padding:10px 14px;">
-        <div style="font-size:13px;font-weight:700;margin-bottom:2px;">${o.time || '時間未定'}</div>
-        <div style="font-size:12px;opacity:.85;">${o.address || '住所未定'}</div>
-        <div style="font-size:10px;opacity:.6;margin-top:2px;">${o.orderNo}</div>
-      </div>
-      ${o.detail ? `<div style="padding:8px 14px;background:#F8F4EE;font-size:12px;color:var(--ink-soft);">📍 ${o.detail}</div>` : ''}
+  html += orders.map((o, i) => {
+    const header = '<div style="background:#1A3C5E;color:white;padding:10px 14px;">'
+      + '<div style="font-size:13px;font-weight:bold;margin-bottom:2px;">' + (o.time || '時間未定') + '</div>'
+      + '<div style="font-size:12px;opacity:0.85;">' + (o.address || '住所未定') + '</div>'
+      + '<div style="font-size:10px;opacity:0.6;margin-top:2px;">' + o.orderNo + '</div>'
+      + '</div>';
+    const detailDiv = o.detail ? '<div style="padding:8px 14px;background:#F8F4EE;font-size:12px;color:#4A4A4A;">📍 ' + o.detail + '</div>' : '';
+    return \`
+    <div style="background:white;border:1px solid #D5D8DC;border-radius:12px;overflow:hidden;margin-bottom:12px;">
+      \${header}
+      \${detailDiv}\`
       <div style="padding:10px 14px;">
         ${row('受取担当者', o.contact)}
         ${row('当日連絡先', o.phone, true)}
@@ -689,7 +692,7 @@ function renderDeliveryOrders(orders, date) {
           ${o.collectYN ? o.collectYN : ''}${o.collect ? '　' + o.collect : ''}
         </div>` : ''}
       </div>
-    </div>`).join('');
+    </div>\`; }).join('');
 
   document.getElementById('dv-content').innerHTML = html;
 }
