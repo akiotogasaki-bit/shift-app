@@ -582,6 +582,7 @@ let currentSort = 'rate_desc';
 // ─────────────────────────────────────
 let deliveryDates    = [];
 let selectedDelivery = '';
+const deliveryCache  = {};  // ローカルキャッシュ
 
 async function initDelivery() {
   document.getElementById('dv-loading').style.display = 'block';
@@ -622,10 +623,18 @@ async function selectDeliveryDate(date) {
   selectedDelivery = date;
   const sel = document.getElementById('delivery-date-selector');
   if (sel) sel.value = date;
+
+  // ローカルキャッシュがあれば即座に表示
+  if (deliveryCache[date]) {
+    renderDeliveryOrders(deliveryCache[date], date);
+    return;
+  }
+
   document.getElementById('dv-loading').style.display = 'block';
   try {
     const res    = await fetchJSON(`${GAS_URL}?action=getDeliveryOrders&date=${encodeURIComponent(date)}`);
     const orders = res.orders || [];
+    deliveryCache[date] = orders; // キャッシュに保存
     renderDeliveryOrders(orders, date);
   } catch(e) {
     document.getElementById('dv-content').innerHTML = `<p style="color:var(--red);">取得エラー：${e.message}</p>`;
