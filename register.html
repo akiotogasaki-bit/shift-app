@@ -957,6 +957,17 @@ async function init() {
 
     await loadMasterData();
 
+    // 当日の提出済み報告を確認
+    const todayReport = await checkTodayReport();
+    if (todayReport) {
+      const choices = ['修正する', '新規入力'];
+      const msg = `本日すでに報告が提出されています。\n\n拠点：${todayReport.locationName}\n販売数：${todayReport.soldCount}個\n完売率：${todayReport.sellRate}%\n\n報告内容を修正しますか？`;
+      if (confirm(msg)) {
+        loadEditFromReport(todayReport);
+        return;
+      }
+    }
+
     // 前回の途中データを確認
     const restored = restoreState();
     if (restored) {
@@ -1292,6 +1303,69 @@ function clearCart() {
   document.getElementById('coupon-amount').style.display = 'none';
   document.getElementById('coupon-unit-label').style.display = 'none';
   renderCart();
+}
+
+// ─────────────────────────────────────
+// CHECK TODAY'S SUBMITTED REPORT
+// ─────────────────────────────────────
+async function checkTodayReport() {
+  try {
+    const today = new Date().toLocaleDateString('ja-JP');
+    const res   = await fetch(`${state.GAS_URL}?action=getReport&date=${encodeURIComponent(today)}&userId=${state.userId}`, { redirect: 'follow' });
+    const data  = JSON.parse(await res.text());
+    return data && data.locationId ? data : null;
+  } catch(e) {
+    return null;
+  }
+}
+
+function loadEditFromReport(report) {
+  // stateに報告データをセット
+  const loc = state.locations.find(l => l.id === report.locationId);
+  if (!loc) { showScreen('location'); return; }
+
+  state.location      = loc;
+  state.baseGigSalary = loc.baseGigSalary || 0;
+
+  // edit画面の各フィールドに値をセット
+  document.getElementById('start-location-name').textContent  = loc.name;
+  document.getElementById('reg-location-name').textContent    = loc.name;
+  document.getElementById('final-location-name').textContent  = loc.name;
+
+  // edit画面の入力欄を生成してから値を入れる
+  const container = document.getElementById('edit-delivery-inputs');
+  container.innerHTML = state.products.map(p => `
+    <div class="form-row">
+      <span class="form-label">${p.name}</span>
+      <input type="number" class="form-input" id="edit-delivery-${p.id}"
+        value="${(report.deliveryCount || {})[p.id] || 0}" inputmode="numeric">
+      <span class="form-unit">個</span>
+    </div>
+  `).join('');
+
+  document.getElementById('edit-register-start').value  = report.registerStart  || 0;
+  document.getElementById('edit-register-end').value    = report.registerEnd    || 0;
+  document.getElementById('edit-cash-sales').value      = report.cashSales      || 0;
+  document.getElementById('edit-paypay-amount').value   = report.paypayAmount   || 0;
+  document.getElementById('edit-diff-comment').value    = report.diffComment    || '';
+  document.getElementById('edit-memo').value            = report.memo           || '';
+
+  // 編集期限チェック
+  const now     = new Date();
+  const canEdit = now.getHours() < 16;
+  const alert   = document.getElementById('edit-deadline-alert');
+  const btn     = document.getElementById('btn-edit-submit');
+  if (!canEdit) {
+    alert.style.display = 'block';
+    btn.disabled = true;
+    btn.style.opacity = '0.4';
+  } else {
+    alert.style.display = 'none';
+    btn.disabled = false;
+    btn.style.opacity = '1';
+  }
+
+  showScreen('edit');
 }
 
 // ─────────────────────────────────────
