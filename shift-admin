@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>お江戸弁当 シフト管理</title>
+<style>
+:root {
+  --navy: #1A3C5E;
+  --blue: #2471A3;
+  --blue-light: #D6EAF8;
+  --ink: #1C1C1C;
+  --ink-soft: #4A4A4A;
+  --ink-mute: #9A9A9A;
+  --cream: #F4F6F9;
+  --white: #FFFFFF;
+  --border: #D5D8DC;
+  --green: #27AE60;
+  --red: #C0392B;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', sans-serif;
+  background: var(--cream);
+  color: var(--ink);
+  min-height: 100vh;
+  max-width: 480px;
+  margin: 0 auto;
+}
+.header {
+  background: var(--navy);
+  color: #FFF;
+  padding: 16px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 8px rgba(0,0,0,.2);
+}
+.header h1 { font-size: 17px; font-weight: 700; }
+.header p { font-size: 11px; opacity: .7; margin-top: 2px; }
+
+.content { padding: 16px; padding-bottom: calc(32px + var(--safe-bottom)); }
+
+.status-card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 20px;
+  font-size: 13px;
+  color: var(--ink-soft);
+  min-height: 50px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.status-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--ink-mute);
+  flex-shrink: 0;
+}
+.status-dot.active { background: var(--blue); animation: pulse .8s infinite; }
+.status-dot.success { background: var(--green); }
+.status-dot.error { background: var(--red); }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+.section-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-mute);
+  letter-spacing: .1em;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.section-title::after { content:''; flex:1; height:1px; background:var(--border); }
+
+.task-btn {
+  width: 100%;
+  padding: 16px;
+  border: none;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 10px;
+  transition: opacity .15s, transform .1s;
+  color: #FFF;
+}
+.task-btn:active { opacity: .8; transform: scale(.98); }
+.task-btn .icon { font-size: 28px; flex-shrink: 0; }
+.task-btn .text-wrap .title { font-size: 15px; }
+.task-btn .text-wrap .desc { font-size: 11px; font-weight: 400; opacity: .75; margin-top: 3px; }
+
+.btn-assign        { background: var(--navy); }
+.btn-view          { background: var(--blue); }
+.btn-notify-mgr    { background: #27AE60; }
+.btn-notify-staff  { background: #E67E22; }
+.btn-remind        { background: #8E44AD; }
+
+.weekly-flow {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+.flow-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #F0EDE5;
+  gap: 12px;
+  font-size: 13px;
+}
+.flow-item:last-child { border-bottom: none; }
+.flow-num {
+  width: 24px; height: 24px;
+  background: var(--navy);
+  color: #FFF;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.flow-day { font-size: 11px; color: var(--ink-mute); margin-left: auto; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>📋 シフト管理</h1>
+  <p>お江戸弁当 管理者専用</p>
+</div>
+
+<div class="content">
+
+  <!-- ステータス -->
+  <div class="status-card" id="status-card">
+    <div class="status-dot" id="status-dot"></div>
+    <span id="status-text">ボタンをタップして操作してください</span>
+  </div>
+
+  <!-- 週次フロー -->
+  <div class="section-title">週次フロー</div>
+  <div class="weekly-flow">
+    <div class="flow-item">
+      <div class="flow-num">1</div>
+      <span>シフト割り振り</span>
+      <span class="flow-day">日曜</span>
+    </div>
+    <div class="flow-item">
+      <div class="flow-num">2</div>
+      <span>シフト表を作成</span>
+      <span class="flow-day">日曜</span>
+    </div>
+    <div class="flow-item">
+      <div class="flow-num">3</div>
+      <span>管理者に確認依頼を送信</span>
+      <span class="flow-day">日曜</span>
+    </div>
+    <div class="flow-item">
+      <div class="flow-num">4</div>
+      <span>スタッフにシフト通知を送信</span>
+      <span class="flow-day">日曜</span>
+    </div>
+  </div>
+
+  <!-- 操作ボタン -->
+  <div class="section-title">操作</div>
+
+  <button class="task-btn btn-assign" onclick="runTask('assign')">
+    <span class="icon">📋</span>
+    <div class="text-wrap">
+      <div class="title">シフト割り振り</div>
+      <div class="desc">回答をもとにシフトを自動割り振り</div>
+    </div>
+  </button>
+
+  <button class="task-btn btn-view" onclick="runTask('view')">
+    <span class="icon">📊</span>
+    <div class="text-wrap">
+      <div class="title">シフト表を作成</div>
+      <div class="desc">見やすい版のシフト表を生成</div>
+    </div>
+  </button>
+
+  <button class="task-btn btn-notify-mgr" onclick="runTask('notifyManagers')">
+    <span class="icon">✅</span>
+    <div class="text-wrap">
+      <div class="title">管理者に確認依頼を送信</div>
+      <div class="desc">シフト確認のLINEを管理者に送る</div>
+    </div>
+  </button>
+
+  <button class="task-btn btn-notify-staff" onclick="runTask('notify')">
+    <span class="icon">📣</span>
+    <div class="text-wrap">
+      <div class="title">スタッフにシフト通知を送信</div>
+      <div class="desc">確定シフトをLINEで販売員全員に送る</div>
+    </div>
+  </button>
+
+  <button class="task-btn btn-remind" onclick="runTask('remind')">
+    <span class="icon">🔔</span>
+    <div class="text-wrap">
+      <div class="title">シフト提出リマインドを送信</div>
+      <div class="desc">販売員にリマインドLINEを送る</div>
+    </div>
+  </button>
+
+</div>
+
+<script>
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5AawPDc7aluPokONkYz6f2ikwl0S487JvhKdKh6QSp1xhEhA/exec';
+
+async function runTask(task) {
+  const dot    = document.getElementById('status-dot');
+  const text   = document.getElementById('status-text');
+  const labels = {
+    assign:         'シフト割り振り中...',
+    view:           'シフト表を作成中...',
+    notifyManagers: '管理者に送信中...',
+    notify:         'スタッフに通知送信中...',
+    remind:         'リマインド送信中...',
+  };
+
+  dot.className  = 'status-dot active';
+  text.textContent = labels[task] || '処理中...';
+
+  try {
+    const res  = await fetch(`${GAS_URL}?action=admin&task=${task}`, { redirect: 'follow' });
+    const data = JSON.parse(await res.text());
+    if (data.status === 'ok') {
+      dot.className    = 'status-dot success';
+      text.textContent = '✅ ' + data.message;
+    } else {
+      dot.className    = 'status-dot error';
+      text.textContent = '❌ エラー：' + data.message;
+    }
+  } catch (e) {
+    dot.className    = 'status-dot error';
+    text.textContent = '❌ 通信エラー：' + e.message;
+  }
+}
+</script>
+</body>
+</html>
