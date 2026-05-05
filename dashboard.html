@@ -463,6 +463,7 @@ body {
   <button class="tab-btn active" onclick="switchTab('realtime')">リアルタイム</button>
   <button class="tab-btn" onclick="switchTab('weekly')">週報</button>
   <button class="tab-btn" onclick="switchTab('monthly')">月報</button>
+  <button class="tab-btn" onclick="switchTab('delivery')">配達</button>
 </div>
 
 <!-- CONTENT -->
@@ -548,6 +549,15 @@ body {
 
 </div>
 
+  <!-- DELIVERY TAB -->
+  <div id="tab-delivery" class="tab-panel">
+    <div class="loading-wrap" id="dv-loading" style="display:none;">
+      <div class="loader"></div>
+      <p>読み込み中...</p>
+    </div>
+    <div id="dv-content"></div>
+  </div>
+
 <!-- DETAIL MODAL -->
 <div class="modal-bg" id="detail-modal">
   <div class="modal-sheet">
@@ -566,6 +576,121 @@ const GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5A
 let allData     = [];
 let masterData  = { locations: [], products: [] };
 let currentSort = 'rate_desc';
+
+// ─────────────────────────────────────
+// DELIVERY
+// ─────────────────────────────────────
+let deliveryDates    = [];
+let selectedDelivery = '';
+
+async function initDelivery() {
+  document.getElementById('dv-loading').style.display = 'block';
+  document.getElementById('dv-content').innerHTML = '';
+  try {
+    const res  = await fetchJSON(`${GAS_URL}?action=getDeliveryOrders`);
+    deliveryDates = res.availableDates || [];
+    renderDeliveryDateSelector();
+    if (deliveryDates.length > 0) {
+      // 今日以降で最も近い日付をデフォルト選択
+      const now = new Date();
+      const todayStr = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')}`;
+      const future  = deliveryDates.filter(d => d >= todayStr);
+      const defaultDate = future.length > 0 ? future[0] : deliveryDates[deliveryDates.length - 1];
+      selectDeliveryDate(defaultDate);
+    } else {
+      document.getElementById('dv-content').innerHTML = '<p style="color:var(--ink-mute);font-size:13px;padding:20px;">配達データがありません</p>';
+    }
+  } catch(e) {
+    document.getElementById('dv-content').innerHTML = `<p style="color:var(--red);font-size:13px;padding:20px;">取得エラー：${e.message}</p>`;
+  }
+  document.getElementById('dv-loading').style.display = 'none';
+}
+
+function renderDeliveryDateSelector() {
+  const sel = document.getElementById('delivery-date-selector');
+  if (!sel) return;
+  sel.innerHTML = deliveryDates.map(d => {
+    const dt = new Date(d.replace(/\//g, '-'));
+    const dayNames = ['日','月','火','水','木','金','土'];
+    const label = `${d.slice(5)}（${dayNames[dt.getDay()]}）`;
+    return `<option value="${d}">${label}</option>`;
+  }).join('');
+  if (selectedDelivery) sel.value = selectedDelivery;
+}
+
+async function selectDeliveryDate(date) {
+  selectedDelivery = date;
+  const sel = document.getElementById('delivery-date-selector');
+  if (sel) sel.value = date;
+  document.getElementById('dv-loading').style.display = 'block';
+  try {
+    const res    = await fetchJSON(`${GAS_URL}?action=getDeliveryOrders&date=${encodeURIComponent(date)}`);
+    const orders = res.orders || [];
+    renderDeliveryOrders(orders, date);
+  } catch(e) {
+    document.getElementById('dv-content').innerHTML = `<p style="color:var(--red);">取得エラー：${e.message}</p>`;
+  }
+  document.getElementById('dv-loading').style.display = 'none';
+}
+
+function renderDeliveryOrders(orders, date) {
+  const dt = new Date(date.replace(/\//g, '-'));
+  const dayNames = ['日','月','火','水','木','金','土'];
+  const dateLabel = `${date.slice(5)}（${dayNames[dt.getDay()]}）`;
+
+  let html = `
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+      <select id="delivery-date-selector" onchange="selectDeliveryDate(this.value)"
+        style="flex:1;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px;font-size:14px;font-family:inherit;background:var(--white);color:var(--ink);">
+      </select>
+      <span style="font-size:13px;color:var(--ink-mute);white-space:nowrap;">${orders.length}件</span>
+    </div>`;
+
+  // セレクターの選択肢を再描画
+  setTimeout(() => renderDeliveryDateSelector(), 0);
+
+  if (orders.length === 0) {
+    html += '<p style="color:var(--ink-mute);font-size:13px;text-align:center;padding:30px 0;">この日の配達はありません</p>';
+    document.getElementById('dv-content').innerHTML = html;
+    return;
+  }
+
+  // 時間順にソート
+  orders.sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+
+  html += orders.map((o, i) => `
+    <div style="background:var(--white);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:12px;">
+      <div style="background:var(--navy);color:#FFF;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;">
+        <span style="font-size:14px;font-weight:700;">${o.time ? o.time + '　' : ''}${o.address || o.detail || '配達先不明'}</span>
+        <span style="font-size:11px;opacity:.7;">${o.orderNo}</span>
+      </div>
+      ${o.detail ? `<div style="padding:8px 14px;background:#F8F4EE;font-size:12px;color:var(--ink-soft);">📍 ${o.detail}</div>` : ''}
+      <div style="padding:10px 14px;">
+        ${row('受取担当者', o.contact)}
+        ${row('当日連絡先', o.phone, true)}
+        ${row('注文内容', o.order)}
+        ${row('回収時間', o.collect)}
+        ${row('会計種別', o.payment)}
+        ${row('当日帳票', o.doc)}
+        ${o.note ? `<div style="margin-top:8px;background:var(--gold-light,#FFF8DC);border-left:3px solid #B8860B;padding:8px 10px;border-radius:0 6px 6px 0;font-size:12px;color:#666;">
+          <span style="font-size:10px;font-weight:700;color:#B8860B;display:block;margin-bottom:2px;">備考</span>${o.note}
+        </div>` : ''}
+      </div>
+    </div>`).join('');
+
+  document.getElementById('dv-content').innerHTML = html;
+}
+
+function row(label, value, isPhone) {
+  if (!value) return '';
+  const val = isPhone
+    ? `<a href="tel:${value}" style="color:var(--blue);font-weight:700;">${value}</a>`
+    : `<span style="color:var(--ink);">${value}</span>`;
+  return `<div style="display:flex;gap:8px;padding:5px 0;border-bottom:1px solid #F5F0E8;font-size:13px;">
+    <span style="color:var(--ink-mute);min-width:80px;flex-shrink:0;">${label}</span>
+    ${val}
+  </div>`;
+}
 
 // ─────────────────────────────────────
 // INIT
@@ -1067,13 +1192,14 @@ function renderMonthlyData(data, yearMonth) {
 // ─────────────────────────────────────
 function switchTab(tab) {
   document.querySelectorAll('.tab-btn').forEach((b, i) => {
-    b.classList.toggle('active', ['realtime','weekly','monthly'][i] === tab);
+    b.classList.toggle('active', ['realtime','weekly','monthly','delivery'][i] === tab);
   });
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.getElementById(`tab-${tab}`).classList.add('active');
 
   if (tab === 'weekly')    initWeekSelector();
   if (tab === 'monthly')   initMonthSelector();
+  if (tab === 'delivery')  initDelivery();
 }
 
 function initWeekSelector() {
