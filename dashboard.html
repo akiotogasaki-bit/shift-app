@@ -502,7 +502,7 @@ body {
         <div class="sort-btns">
           <button class="sort-btn active" onclick="sortLocations('rate_desc')" id="sort-best">ベスト順</button>
           <button class="sort-btn" onclick="sortLocations('rate_asc')" id="sort-worst">ワースト順</button>
-          <button class="sort-btn" onclick="sortLocations('name')" id="sort-name">ID順</button>
+          <button class="sort-btn" onclick="sortLocations('name')" id="sort-name">拠点名順</button>
         </div>
         <span style="font-size:12px;color:var(--ink-mute);" id="reported-count"></span>
       </div>
@@ -751,8 +751,8 @@ function renderLocationTable() {
       return (a.r.sellRate || 0) - (b.r.sellRate || 0);
     });
   } else {
-    rows.sort((a, b) => a.loc.id.localeCompare(b.loc.id));
-}
+    rows.sort((a, b) => a.loc.name.localeCompare(b.loc.name, 'ja'));
+  }
 
   document.getElementById('location-tbody').innerHTML = rows.map(({ loc, r }) => {
     if (!r) {
@@ -871,44 +871,93 @@ function renderWeeklyData(data) {
     return;
   }
 
+  const products = masterData.products || [];
+  const teaIds   = products.filter(p => p.name.includes('お茶')).map(p => p.id);
+
+  // 商品別集計（全拠点合計）
+  const productDelivery = {};
+  const productSales    = {};
+  products.forEach(p => { productDelivery[p.id] = 0; productSales[p.id] = 0; });
+
   // 拠点別集計
   const byLocation = {};
   data.forEach(r => {
+    // 拠点別
     if (!byLocation[r.locationName]) {
-      byLocation[r.locationName] = { sold: 0, sales: 0, count: 0, rates: [] };
+      byLocation[r.locationName] = { sold: 0, soldNoTea: 0, sales: 0, count: 0, rates: [] };
     }
     byLocation[r.locationName].sold  += r.soldCount || 0;
     byLocation[r.locationName].sales += r.totalSales || 0;
     byLocation[r.locationName].count++;
     if (r.sellRate) byLocation[r.locationName].rates.push(r.sellRate);
+
+    // 商品別（お茶除外の拠点別販売数）
+    const delivery = JSON.parse(r.deliveryCountJson || '{}');
+    const sales    = JSON.parse(r.productSalesJson  || '{}');
+    let teaSold = 0;
+    products.forEach(p => {
+      productDelivery[p.id] += Number(delivery[p.id] || 0);
+      productSales[p.id]    += Number(sales[p.id]    || 0);
+      if (teaIds.includes(p.id)) teaSold += Number(sales[p.id] || 0);
+    });
+    byLocation[r.locationName].soldNoTea += (r.soldCount || 0) - teaSold;
   });
 
   const rows = Object.entries(byLocation)
     .map(([name, d]) => ({
       name,
       sold: d.sold,
+      soldNoTea: d.soldNoTea,
       sales: d.sales,
       days: d.count,
-      avgRate: d.rates.length > 0 ? Math.round(d.rates.reduce((a,b)=>a+b,0)/d.rates.length*10)/10 : 0,
+      avgRate:    d.rates.length > 0 ? Math.round(d.rates.reduce((a,b)=>a+b,0)/d.rates.length*10)/10 : 0,
+      avgPerDay:  d.count > 0 ? Math.round(d.soldNoTea / d.count) : 0,
     }))
     .sort((a, b) => b.sales - a.sales);
 
   const totalSales = rows.reduce((s, r) => s + r.sales, 0);
   const totalSold  = rows.reduce((s, r) => s + r.sold, 0);
+  const operDays   = new Set(data.map(r => r.date)).size;
+
+  // 商品別完売率テーブル
+  const productRows = products.map(p => {
+    const d    = productDelivery[p.id] || 0;
+    const s    = productSales[p.id]    || 0;
+    const rate = d > 0 ? Math.round(s / d * 100) : null;
+    return { name: p.name, d, s, rate };
+  }).filter(p => p.d > 0);
 
   document.getElementById('weekly-data').innerHTML = `
     <div class="kpi-grid" style="margin-bottom:16px;">
-      <div class="kpi-card red"><div class="kpi-label">総売上</div><div class="kpi-value" style="font-size:18px;">¥${totalSales.toLocaleString()}</div></div>
-      <div class="kpi-card gold"><div class="kpi-label">総販売数</div><div class="kpi-value">${totalSold}<span> 個</span></div></div>
-      <div class="kpi-card green"><div class="kpi-label">営業日数</div><div class="kpi-value">${new Set(data.map(r=>r.date)).size}<span> 日</span></div></div>
+      <div class="kpi-card red"><div class="kpi-label">週間売上</div><div class="kpi-value" style="font-size:18px;">¥${totalSales.toLocaleString()}</div></div>
+      <div class="kpi-card gold"><div class="kpi-label">週間販売数</div><div class="kpi-value">${totalSold}<span> 個</span></div></div>
+      <div class="kpi-card green"><div class="kpi-label">営業日数</div><div class="kpi-value">${operDays}<span> 日</span></div></div>
     </div>
+
+    <div class="section-title">商品別完売率（週間合計）</div>
+    <table class="stats-table" style="margin-bottom:16px;">
+      <thead><tr><th>商品名</th><th>納品数</th><th>販売数</th><th>完売率</th></tr></thead>
+      <tbody>${productRows.map(p => {
+        const rateStr  = p.rate !== null ? `${p.rate}%` : '—';
+        const rateColor = p.rate >= 80 ? 'var(--green)' : p.rate >= 50 ? 'var(--gold)' : 'var(--red)';
+        return `<tr>
+          <td>${p.name}</td>
+          <td>${p.d}個</td>
+          <td>${p.s}個</td>
+          <td style="font-weight:700;color:${rateColor}">${rateStr}</td>
+        </tr>`;
+      }).join('')}
+      </tbody>
+    </table>
+
+    <div class="section-title">拠点別集計</div>
     <table class="stats-table">
-      <thead><tr><th>拠点名</th><th>営業日数</th><th>販売数</th><th>平均完売率</th><th>売上合計</th></tr></thead>
+      <thead><tr><th>拠点名</th><th>営業日数</th><th>1日平均販売数<br><small style="font-weight:400;opacity:.7;">お茶除く</small></th><th>平均完売率</th><th>売上合計</th></tr></thead>
       <tbody>${rows.map(r => `
         <tr>
           <td>${r.name}</td>
           <td>${r.days}日</td>
-          <td>${r.sold}個</td>
+          <td>${r.avgPerDay}個</td>
           <td>${r.avgRate}%</td>
           <td>¥${r.sales.toLocaleString()}</td>
         </tr>`).join('')}
