@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>お江戸弁当 納品推奨</title>
+<style>
+:root {
+  --navy: #1A3C5E;
+  --blue: #2471A3;
+  --blue-light: #D6EAF8;
+  --red: #C0392B;
+  --green: #27AE60;
+  --ink: #1C1C1C;
+  --ink-soft: #4A4A4A;
+  --ink-mute: #9A9A9A;
+  --cream: #F4F6F9;
+  --white: #FFFFFF;
+  --border: #D5D8DC;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', sans-serif;
+  background: var(--cream);
+  color: var(--ink);
+  min-height: 100vh;
+  max-width: 480px;
+  margin: 0 auto;
+}
+.header {
+  background: var(--navy);
+  color: #FFF;
+  padding: 14px 16px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 8px rgba(0,0,0,.2);
+}
+.header-left h1 { font-size: 16px; font-weight: 700; }
+.header-left p { font-size: 11px; opacity: .7; margin-top: 2px; }
+.refresh-btn {
+  background: rgba(255,255,255,.2);
+  border: 1px solid rgba(255,255,255,.3);
+  color: #FFF;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+/* タブ */
+.tab-bar {
+  background: var(--white);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  position: sticky;
+  top: 56px;
+  z-index: 99;
+}
+.tab-btn {
+  flex: 1;
+  padding: 11px 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-mute);
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  font-family: inherit;
+  transition: all .15s;
+  text-align: center;
+  line-height: 1.3;
+}
+.tab-btn.active { color: var(--navy); border-bottom-color: var(--navy); font-weight: 700; }
+.tab-btn.rain { color: var(--blue); }
+.tab-btn.rain.active { color: var(--blue); border-bottom-color: var(--blue); }
+
+.content { padding: 14px 16px calc(24px + var(--safe-bottom)); }
+
+/* 雨バッジ */
+.rain-badge {
+  display: inline-block;
+  background: var(--blue);
+  color: #FFF;
+  font-size: 9px;
+  padding: 1px 4px;
+  border-radius: 6px;
+  margin-left: 2px;
+  vertical-align: middle;
+}
+
+/* 雨予報 */
+.rain-alert {
+  background: var(--blue-light);
+  border: 1px solid #AED6F1;
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+.rain-alert-title { font-size: 12px; font-weight: 700; color: var(--blue); margin-bottom: 8px; }
+.rain-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(0,0,0,.06);
+  font-size: 13px;
+}
+.rain-row:last-child { border-bottom: none; }
+.rain-date { font-weight: 700; color: var(--navy); min-width: 90px; }
+.rain-time { color: var(--blue); flex: 1; }
+.rain-prob {
+  background: var(--blue);
+  color: #FFF;
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 8px;
+}
+
+/* 推奨テーブル */
+.rec-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  font-size: 13px;
+}
+.rec-table th {
+  background: var(--navy);
+  color: #FFF;
+  padding: 10px 12px;
+  text-align: left;
+  font-weight: 500;
+  font-size: 12px;
+}
+.rec-table th:last-child { text-align: center; }
+.rec-table td {
+  padding: 11px 12px;
+  border-bottom: 1px solid #F0EDE5;
+}
+.rec-table tr:last-child td { border-bottom: none; }
+.rec-table tr:nth-child(even) td { background: #FAFAF8; }
+.rec-val {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--navy);
+  text-align: center;
+}
+.rec-val.none { color: var(--ink-mute); font-size: 13px; font-weight: 400; }
+.note { font-size: 11px; color: var(--ink-mute); text-align: right; margin-top: 8px; }
+
+/* ローディング */
+.loading-wrap { text-align: center; padding: 60px 20px; color: var(--ink-mute); }
+.loader {
+  width: 32px; height: 32px;
+  border: 3px solid var(--border);
+  border-top-color: var(--navy);
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+  margin: 0 auto 16px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <h1>📦 翌週の納品推奨数</h1>
+    <p id="header-sub">読み込み中...</p>
+  </div>
+  <button class="refresh-btn" onclick="reload()">🔄 更新</button>
+</div>
+
+<!-- タブバー -->
+<div class="tab-bar" id="tab-bar">
+  <button class="tab-btn active" id="tab-0" onclick="switchTab(0)">月</button>
+  <button class="tab-btn" id="tab-1" onclick="switchTab(1)">火</button>
+  <button class="tab-btn" id="tab-2" onclick="switchTab(2)">水</button>
+  <button class="tab-btn" id="tab-3" onclick="switchTab(3)">木</button>
+  <button class="tab-btn" id="tab-4" onclick="switchTab(4)">金</button>
+  <button class="tab-btn rain" id="tab-5" onclick="switchTab(5)">🌧<br>雨予報</button>
+</div>
+
+<div class="content">
+  <div class="loading-wrap" id="loading">
+    <div class="loader"></div>
+    <p>計算中...</p>
+  </div>
+  <div id="main-content" style="display:none;"></div>
+</div>
+
+<script>
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5AawPDc7aluPokONkYz6f2ikwl0S487JvhKdKh6QSp1xhEhA/exec';
+
+let allRecs    = [];
+let rainAlerts = [];
+let weekDays   = [];
+let currentTab = 0;
+
+async function loadData() {
+  document.getElementById('loading').style.display = 'block';
+  document.getElementById('main-content').style.display = 'none';
+
+  try {
+    const res  = await fetch(`${GAS_URL}?action=getRecommendations`, { redirect: 'follow' });
+    const data = JSON.parse(await res.text());
+    allRecs    = data.recommendations || [];
+    rainAlerts = data.rainAlerts      || [];
+
+    // 翌週の月〜金の日付を計算
+    const today      = new Date();
+    const dayOfWeek  = today.getDay();
+    const daysToMon  = dayOfWeek === 0 ? 1 : 8 - dayOfWeek;
+    const nextMonday = new Date(today);
+    nextMonday.setDate(today.getDate() + daysToMon);
+
+    const dayNames = ['日','月','火','水','木','金','土'];
+    const keys     = ['mon','tue','wed','thu','fri'];
+    weekDays = Array.from({length: 5}, (_, i) => {
+      const d = new Date(nextMonday);
+      d.setDate(nextMonday.getDate() + i);
+      const mm  = d.getMonth() + 1;
+      const dd  = d.getDate();
+      // 雨予報があるか
+      const dateStr  = `${String(mm).padStart(2,'0')}/${String(dd).padStart(2,'0')}`;
+      const hasRain  = rainAlerts.some(r => r.date === dateStr);
+      return { label: `${mm}/${dd}`, dayLabel: dayNames[d.getDay()], key: keys[i], hasRain };
+    });
+
+    // タブのラベルを更新
+    weekDays.forEach((d, i) => {
+      const btn = document.getElementById(`tab-${i}`);
+      btn.innerHTML = `${d.dayLabel}<br><span style="font-size:10px;">${d.label}</span>${d.hasRain ? '<span class="rain-badge">雨</span>' : ''}`;
+    });
+
+    // 雨予報タブのバッジ
+    if (rainAlerts.length > 0) {
+      document.getElementById('tab-5').innerHTML = `🌧<br><span style="font-size:10px;">雨予報</span><span class="rain-badge">${rainAlerts.length}</span>`;
+    }
+
+    // ヘッダー更新
+    const now = new Date();
+    document.getElementById('header-sub').textContent =
+      `${now.getMonth()+1}/${now.getDate()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')} 更新`;
+
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('main-content').style.display = 'block';
+
+    switchTab(currentTab);
+  } catch(e) {
+    document.getElementById('loading').innerHTML = `<p style="color:var(--red);font-size:13px;">取得エラー：${e.message}</p>`;
+  }
+}
+
+function switchTab(idx) {
+  currentTab = idx;
+  for (let i = 0; i <= 5; i++) {
+    const btn = document.getElementById(`tab-${i}`);
+    btn.classList.toggle('active', i === idx);
+  }
+
+  const container = document.getElementById('main-content');
+
+  if (idx === 5) {
+    // 雨予報タブ
+    if (rainAlerts.length === 0) {
+      container.innerHTML = '<p style="color:var(--ink-mute);font-size:13px;text-align:center;padding:40px 0;">1週間以内に雨予報はありません ☀️</p>';
+      return;
+    }
+    container.innerHTML = `
+      <div class="rain-alert">
+        <div class="rain-alert-title">🌧 雨予報アラート（11:00〜13:00）</div>
+        ${rainAlerts.map(r => `
+          <div class="rain-row">
+            <span class="rain-date">${r.date}（${r.dayName}）</span>
+            <span class="rain-time">${r.hours}</span>
+            ${r.prob ? `<span class="rain-prob">${r.prob}%</span>` : ''}
+          </div>`).join('')}
+      </div>`;
+    return;
+  }
+
+  // 曜日タブ
+  const day = weekDays[idx];
+  if (!day) return;
+
+  if (allRecs.length === 0) {
+    container.innerHTML = '<p style="color:var(--ink-mute);font-size:13px;padding:20px;">データが不足しています（過去データが必要です）</p>';
+    return;
+  }
+
+  const rows = allRecs.map((r, i) => {
+    const v = r[day.key];
+    return `<tr>
+      <td>${r.locationName}</td>
+      <td class="rec-val ${v === null || v === undefined ? 'none' : ''}">${v !== null && v !== undefined ? v + '個' : '—'}</td>
+    </tr>`;
+  }).join('');
+
+  container.innerHTML = `
+    ${day.hasRain ? `<div style="background:#FEF9E7;border:1px solid #F39C12;border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:#7D6608;">
+      ⚠️ この日は雨予報があります。納品数を少なめに調整することを検討してください。
+    </div>` : ''}
+    <table class="rec-table">
+      <thead>
+        <tr>
+          <th>拠点名</th>
+          <th style="text-align:center;">推奨納品数</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <p class="note">過去4週の加重平均×1.1　※「—」はデータ不足</p>`;
+}
+
+function reload() {
+  loadData();
+}
+
+loadData();
+</script>
+</body>
+</html>
