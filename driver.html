@@ -263,6 +263,58 @@ body {
   font-family: inherit;
   cursor: pointer;
 }
+
+/* ── BREAKDOWN MODAL ── */
+.modal-bg {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.6);
+  z-index: 200;
+  display: flex;
+  align-items: flex-end;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s;
+}
+.modal-bg.show { opacity: 1; pointer-events: all; }
+.modal-sheet {
+  background: var(--white);
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  border-radius: 16px 16px 0 0;
+  padding: 20px 16px calc(20px + var(--safe-bottom));
+  transform: translateY(100%);
+  transition: transform .25s cubic-bezier(.32,0,.15,1);
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.modal-bg.show .modal-sheet { transform: translateY(0); }
+.modal-handle {
+  width: 36px; height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  margin: 0 auto 16px;
+}
+.modal-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 14px;
+  text-align: center;
+}
+.breakdown-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid #F0EDE5;
+  font-size: 14px;
+}
+.breakdown-row:last-child { border-bottom: none; }
+.breakdown-name { color: var(--ink-soft); }
+.breakdown-val { font-weight: 700; color: var(--blue); }
+.breakdown-zero { color: var(--ink-mute); }
 </style>
 </head>
 <body>
@@ -304,10 +356,11 @@ body {
 
   <!-- 残数入力 -->
   <div id="tab-residual" class="tab-panel">
-    <div class="residual-summary">
+    <div class="residual-summary" onclick="openBreakdown()" style="cursor:pointer;">
       <div class="residual-summary-label">残数合計（お茶除く）</div>
       <div class="residual-summary-count" id="residual-total">0</div>
       <div class="residual-summary-unit">個</div>
+      <div style="font-size:11px;opacity:.6;margin-top:6px;">タップで内訳を確認</div>
     </div>
     <div class="product-list" id="product-list"></div>
   </div>
@@ -518,7 +571,38 @@ function restart() {
   showScreen('main');
 }
 
+// ── 内訳モーダル ──
+function openBreakdown() {
+  const teaIds = state.products.filter(p => p.name.includes('お茶')).map(p => p.id);
+  const rows = state.products.map(p => {
+    const val    = parseInt(document.getElementById(`res-${p.id}`)?.value) || 0;
+    const isTea  = teaIds.includes(p.id);
+    return { name: p.name, val, isTea };
+  });
+
+  document.getElementById('breakdown-list').innerHTML = rows.map(r => `
+    <div class="breakdown-row">
+      <span class="breakdown-name">${r.name}${r.isTea ? ' <small style="color:var(--ink-mute);font-size:11px;">※合計外</small>' : ''}</span>
+      <span class="${r.val > 0 ? 'breakdown-val' : 'breakdown-zero'}">${r.val}個</span>
+    </div>
+  `).join('');
+
+  document.getElementById('breakdown-modal').classList.add('show');
+}
+
+function closeBreakdown() {
+  document.getElementById('breakdown-modal').classList.remove('show');
+}
+
 init();
 </script>
+<!-- BREAKDOWN MODAL -->
+<div class="modal-bg" id="breakdown-modal" onclick="if(event.target===this)closeBreakdown()">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">残数内訳</div>
+    <div id="breakdown-list"></div>
+  </div>
+</div>
 </body>
 </html>
