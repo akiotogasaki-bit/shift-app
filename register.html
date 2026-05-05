@@ -518,6 +518,56 @@ body {
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
 /* ── NAV ── */
+/* ── SOLDOUT TOGGLE ── */
+.product-btn.soldout {
+  opacity: .55;
+  position: relative;
+}
+.product-btn.soldout::after {
+  content: '完売';
+  position: absolute;
+  top: 6px; right: 6px;
+  background: var(--red);
+  color: #FFF;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+.soldout-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 5px;
+  padding-top: 5px;
+  border-top: 1px solid #333;
+}
+.soldout-label {
+  font-size: 10px;
+  color: #888;
+}
+.soldout-toggle {
+  width: 34px; height: 18px;
+  background: #444;
+  border-radius: 9px;
+  position: relative;
+  cursor: pointer;
+  transition: background .2s;
+  flex-shrink: 0;
+}
+.soldout-toggle.on { background: var(--red); }
+.soldout-toggle::after {
+  content: '';
+  position: absolute;
+  width: 14px; height: 14px;
+  background: #FFF;
+  border-radius: 50%;
+  top: 2px; left: 2px;
+  transition: left .2s;
+}
+.soldout-toggle.on::after { left: 18px; }
+
 .bottom-nav {
   position: fixed;
   bottom: 0;
@@ -565,6 +615,22 @@ body {
     <div class="header-user" id="user-name-location">読み込み中...</div>
   </div>
   <div class="section-title">担当拠点</div>
+  <div style="padding:0 16px 8px;">
+    <button onclick="showSpotInput()" style="width:100%;padding:12px;background:transparent;color:var(--ink-soft);border:1.5px dashed var(--border);border-radius:12px;font-size:13px;font-family:inherit;cursor:pointer;">
+      📋 スポット（当日のみ）で入力する
+    </button>
+  </div>
+  <div id="spot-input-area" style="display:none;padding:0 16px 12px;">
+    <div class="form-card">
+      <div class="form-card-title">お名前（スポット）</div>
+      <div class="form-row">
+        <input type="text" id="spot-name" placeholder="例：田中 太郎" maxlength="20"
+          style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:15px;font-family:inherit;background:var(--cream);">
+      </div>
+    </div>
+    <button onclick="confirmSpot()" style="width:100%;padding:14px;background:var(--ink-soft);color:#FFF;border:none;border-radius:12px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;margin-bottom:8px;">スポットで続ける</button>
+    <button onclick="cancelSpot()" style="width:100%;padding:10px;background:transparent;color:var(--ink-mute);border:1px solid var(--border);border-radius:12px;font-size:13px;font-family:inherit;cursor:pointer;">キャンセル</button>
+  </div>
   <div style="padding:0 16px 24px;">
     <select id="location-select" style="
       width:100%;
@@ -734,6 +800,15 @@ body {
         <span class="form-unit">円</span>
       </div>
     </div>
+    <div class="form-card">
+      <div class="form-card-title">賄い</div>
+      <div class="form-row">
+        <span class="form-label">本日の賄い</span>
+        <span style="font-size:12px;color:var(--ink-mute);margin-right:8px;" id="makanai-note">無しの場合+¥300</span>
+        <div class="coupon-toggle" id="makanai-toggle" onclick="toggleMakanai()" style="background:var(--green);"></div>
+        <span style="font-size:13px;color:var(--ink-soft);margin-left:8px;" id="makanai-label">有り</span>
+      </div>
+    </div>
   </div>
   <button class="btn-primary" id="btn-calc-final" onclick="calcFinal()">集計する</button>
 
@@ -755,9 +830,9 @@ body {
       <div class="result-row"><span class="result-label">納品数</span><span class="result-value" id="res-delivery">0個</span></div>
       <div class="result-row"><span class="result-label">販売数</span><span class="result-value" id="res-sold">0個</span></div>
       <div class="result-row"><span class="result-label">完売率</span><span class="result-value gold" id="res-rate">0%</span></div>
-      <div class="result-row"><span class="result-label">インセンティブ</span><span class="result-value gold" id="res-incentive">¥0</span></div>
-      <div class="result-row"><span class="result-label">基本ギャラ</span><span class="result-value" id="res-base">¥0</span></div>
-      <div class="result-row" style="background:#FFF8DC;">
+      <div class="result-row salary-row"><span class="result-label">インセンティブ</span><span class="result-value gold" id="res-incentive">¥0</span></div>
+      <div class="result-row salary-row"><span class="result-label">基本ギャラ</span><span class="result-value" id="res-base">¥0</span></div>
+      <div class="result-row salary-row" style="background:#FFF8DC;">
         <span class="result-label" style="font-weight:700;">本日の合計</span>
         <span class="result-value big" id="res-total">¥0</span>
       </div>
@@ -935,6 +1010,11 @@ const state = {
   couponAmount: 300,
   soldCount: 0,
   productSales: {},     // { productId: qty }
+  soldOutMap: {},       // { productId: '14:32' } 初回完売時刻
+  makanaiあり: true,    // 賄い有無（デフォルト：有り）
+  fixedSalary: 0,       // 固定ギャラ（0=通常計算）
+  staffRole: '',        // 属性
+  isSpot: false,        // スポットバイト
   incentiveUnit: 10,
   incentiveRate: 100,
   baseGigSalary: 0,
@@ -1013,6 +1093,7 @@ async function loadMasterData() {
       state.incentiveUnit = data.incentiveUnit || 10;
       state.incentiveRate = data.incentiveRate || 100;
       state.couponDefault = data.couponDefault || 300;
+      state.staffList     = data.staffList || [];
     } else {
       loadDemoData();
     }
@@ -1061,6 +1142,24 @@ function renderLocations() {
     ).join('');
 }
 
+function showSpotInput() {
+  document.getElementById('spot-input-area').style.display = 'block';
+}
+function cancelSpot() {
+  document.getElementById('spot-input-area').style.display = 'none';
+  document.getElementById('spot-name').value = '';
+}
+function confirmSpot() {
+  const name = document.getElementById('spot-name').value.trim();
+  if (!name) { showToast('お名前を入力してください'); return; }
+  const select = document.getElementById('location-select');
+  if (!select.value) { showToast('拠点を選択してください'); return; }
+  state.isSpot   = true;
+  state.userName = name + '（スポット）';
+  cancelSpot();
+  selectLocation(select.value);
+}
+
 function confirmLocation() {
   const select = document.getElementById('location-select');
   const id = select.value;
@@ -1071,6 +1170,10 @@ function confirmLocation() {
 function selectLocation(id) {
   state.location = state.locations.find(l => l.id === id);
   state.baseGigSalary = state.location.baseGigSalary || 0;
+  // スタッフ設定から固定ギャラ・属性を取得
+  const staffInfo = (state.staffList || []).find(s => s.userId === state.userId);
+  state.fixedSalary = staffInfo ? (staffInfo.fixedSalary || 0) : 0;
+  state.staffRole   = staffInfo ? (staffInfo.role || '販売員') : '販売員';
 
   document.getElementById('start-location-name').textContent = state.location.name;
   document.getElementById('start-user-name').textContent = state.userName;
@@ -1140,14 +1243,53 @@ function renderProducts() {
     const imgHtml = p.photoUrl
       ? `<img src="${p.photoUrl}" alt="${p.name}" onerror="this.parentElement.innerHTML='🍱'">`
       : '🍱';
+    const isSoldOut = !!state.soldOutMap[p.id];
+    const soldOutTime = state.soldOutMap[p.id] || '';
     return `
-      <div class="product-btn" onclick="addToCart('${p.id}')">
+      <div class="product-btn ${isSoldOut ? 'soldout' : ''}" onclick="addToCart('${p.id}')">
         <div class="product-img">${imgHtml}</div>
         <div class="product-name">${p.name}</div>
         <div class="product-price">¥${p.price.toLocaleString()}</div>
+        <div class="soldout-row" onclick="event.stopPropagation()">
+          <span class="soldout-label">${isSoldOut ? `完売 ${soldOutTime}` : '完売'}</span>
+          <div class="soldout-toggle ${isSoldOut ? 'on' : ''}" onclick="toggleSoldOut('${p.id}')"></div>
+        </div>
       </div>
     `;
   }).join('');
+}
+
+function toggleSoldOut(productId) {
+  if (state.soldOutMap[productId]) {
+    // 解除
+    delete state.soldOutMap[productId];
+  } else {
+    // 初回完売時刻を記録
+    const now = new Date();
+    const time = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+    state.soldOutMap[productId] = time;
+    // 非同期でGASに送信
+    sendSoldOutEvent(productId, time);
+  }
+  saveState();
+  renderProducts();
+}
+
+function sendSoldOutEvent(productId, time) {
+  const product = state.products.find(p => p.id === productId);
+  const payload = {
+    action:       'submitSoldOut',
+    userId:       state.userId,
+    userName:     state.userName,
+    locationId:   state.location?.id,
+    locationName: state.location?.name,
+    productId,
+    productName:  product?.name || '',
+    soldOutTime:  time,
+    timestamp:    new Date().toISOString(),
+  };
+  fetch(state.GAS_URL, { method: 'POST', body: JSON.stringify(payload) })
+    .catch(e => console.warn('soldout sync error:', e));
 }
 
 function addToCart(productId) {
@@ -1386,6 +1528,7 @@ function saveState() {
       soldCount:     state.soldCount,
       teaSoldCount:  state.teaSoldCount || 0,
       productSales:  state.productSales,
+      soldOutMap:    state.soldOutMap || {},
       savedAt:       new Date().toISOString(),
     };
     localStorage.setItem('oedo_register_state', JSON.stringify(save));
@@ -1414,6 +1557,7 @@ function restoreState() {
     state.soldCount     = save.soldCount     || 0;
     state.teaSoldCount  = save.teaSoldCount  || 0;
     state.productSales  = save.productSales  || {};
+    state.soldOutMap    = save.soldOutMap    || {};
     return true;
   } catch(e) { return false; }
 }
@@ -1489,12 +1633,25 @@ function calcFinal() {
   document.getElementById('btn-calc-final').style.display = 'none';
   document.getElementById('btn-recalc').style.display = 'block';
 
+  // スポットはギャラ行を非表示
+  document.querySelectorAll('.salary-row').forEach(el => {
+    el.style.display = state.isSpot ? 'none' : '';
+  });
+
   // complete画面用
   document.getElementById('comp-sold').textContent      = `${state.soldCount}個（お茶除く：${nonTeaSold}個）`;
   document.getElementById('comp-rate').textContent      = `${sellRate}%`;
   document.getElementById('comp-incentive').textContent = `¥${incentive.toLocaleString()}`;
   document.getElementById('comp-base').textContent      = `¥${state.baseGigSalary.toLocaleString()}`;
   document.getElementById('comp-total').textContent     = `¥${totalSalary.toLocaleString()}`;
+}
+
+function toggleMakanai() {
+  state['makanaiあり'] = !state['makanaiあり'];
+  const toggle = document.getElementById('makanai-toggle');
+  const label  = document.getElementById('makanai-label');
+  toggle.style.background = state['makanaiあり'] ? 'var(--green)' : '#888';
+  label.textContent = state['makanaiあり'] ? '有り' : '無し';
 }
 
 function recalcFinal() {
@@ -1530,6 +1687,7 @@ function submitFinal() {
     paypayAmount: state.paypayAmount,
     paypayCount: state.paypayCount,
     soldCount: state.soldCount,
+    soldOutMap: state.soldOutMap,
     productSales: state.productSales,
     baseGigSalary: state.baseGigSalary,
     diffComment: comment,
