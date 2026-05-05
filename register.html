@@ -1604,10 +1604,20 @@ function calcFinal() {
   const totalDelivery = Object.entries(state.deliveryCount)
     .filter(([id]) => !teaIds.includes(id))
     .reduce((sum, [, v]) => sum + v, 0);
-  const nonTeaSold = state.soldCount - (state.teaSoldCount || 0);
-  const sellRate   = totalDelivery > 0 ? Math.round(nonTeaSold / totalDelivery * 1000) / 10 : 0;
-  const incentive    = Math.floor(nonTeaSold / state.incentiveUnit) * state.incentiveRate;
-  const totalSalary  = state.baseGigSalary + incentive;
+  const nonTeaSold   = state.soldCount - (state.teaSoldCount || 0);
+  const sellRate     = totalDelivery > 0 ? Math.round(nonTeaSold / totalDelivery * 1000) / 10 : 0;
+  const makanaiBonus = state['makanaiあり'] ? 0 : 300;
+  const role         = state.staffRole || '販売員';
+  let incentive      = 0;
+  let totalSalary    = 0;
+  if (state.isSpot || role === '社員' || role === 'ドライバー') {
+    totalSalary = 0;
+  } else if (state.fixedSalary > 0) {
+    totalSalary = state.fixedSalary + makanaiBonus;
+  } else {
+    incentive   = Math.floor(nonTeaSold / state.incentiveUnit) * state.incentiveRate;
+    totalSalary = state.baseGigSalary + incentive + makanaiBonus;
+  }
 
   document.getElementById('res-cash').textContent    = `¥${state.cashSales.toLocaleString()}`;
   document.getElementById('res-paypay').textContent  = `¥${state.paypayAmount.toLocaleString()}`;
