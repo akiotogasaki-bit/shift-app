@@ -1292,7 +1292,6 @@ function calcFinal() {
 
   document.getElementById('res-cash').textContent    = `¥${state.cashSales.toLocaleString()}`;
   document.getElementById('res-paypay').textContent  = `¥${state.paypayAmount.toLocaleString()}`;
-  const nonTeaSold = state.soldCount - (state.teaSoldCount || 0);
   document.getElementById('res-delivery').textContent = `${totalDelivery}個`;
   document.getElementById('res-sold').textContent    = `${state.soldCount}個（お茶除く：${nonTeaSold}個）`;
   document.getElementById('res-rate').textContent    = `${sellRate}%`;
