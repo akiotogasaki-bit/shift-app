@@ -8,7 +8,6 @@
 <style>
 :root {
   --blue: #2471A3;
-  --blue-dark: #1A5276;
   --blue-light: #D6EAF8;
   --ink: #1C1C1C;
   --ink-soft: #4A4A4A;
@@ -17,28 +16,26 @@
   --white: #FFFFFF;
   --border: #D5D8DC;
   --green: #27AE60;
+  --green-light: #D5F5E3;
   --red: #C0392B;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
-
 * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-
 body {
-  font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif;
+  font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', sans-serif;
   background: var(--cream);
   color: var(--ink);
   min-height: 100vh;
   max-width: 480px;
   margin: 0 auto;
 }
-
 .screen { display: none; min-height: 100vh; flex-direction: column; }
 .screen.active { display: flex; }
 
-/* ── HEADER ── */
+/* HEADER */
 .app-header {
   background: var(--blue);
-  color: var(--white);
+  color: #FFF;
   padding: 14px 16px 12px;
   display: flex;
   align-items: center;
@@ -50,96 +47,151 @@ body {
 }
 .header-title { font-size: 16px; font-weight: 700; }
 .header-sub { font-size: 11px; opacity: .75; margin-top: 2px; }
-.header-user { font-size: 12px; opacity: .8; text-align: right; }
+.header-user { font-size: 12px; opacity: .8; }
 
-/* ── LOADING ── */
-#screen-loading {
-  align-items: center;
-  justify-content: center;
-  background: var(--blue);
-}
-.loading-logo { color: var(--white); text-align: center; }
+/* LOADING */
+#screen-loading { align-items: center; justify-content: center; background: var(--blue); }
+.loading-logo { color: #FFF; text-align: center; }
 .loading-logo h1 { font-size: 26px; font-weight: 700; margin-bottom: 8px; }
 .loading-logo p { font-size: 13px; opacity: .7; margin-bottom: 40px; }
 .loader {
   width: 40px; height: 40px;
   border: 3px solid rgba(255,255,255,.3);
-  border-top-color: var(--white);
+  border-top-color: #FFF;
   border-radius: 50%;
   animation: spin .8s linear infinite;
   margin: 0 auto;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ── LOCATION SELECT ── */
-.section-label {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--ink-mute);
-  letter-spacing: .1em;
-  padding: 16px 16px 8px;
-}
-.search-wrap {
-  padding: 0 16px 12px;
-}
-.search-input {
-  width: 100%;
-  padding: 10px 14px;
-  border: 1.5px solid var(--border);
-  border-radius: 10px;
-  font-size: 14px;
-  font-family: inherit;
+/* TABS */
+.tab-bar {
+  display: flex;
   background: var(--white);
-  color: var(--ink);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 56px;
+  z-index: 99;
 }
-.search-input:focus { outline: none; border-color: var(--blue); }
-
-.location-check-list {
-  padding: 0 16px;
+.tab-btn {
   flex: 1;
-  overflow-y: auto;
-  padding-bottom: 100px;
+  padding: 12px 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink-mute);
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  font-family: inherit;
+  transition: all .15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
-.location-check-item {
+.tab-btn.active { color: var(--blue); border-bottom-color: var(--blue); font-weight: 700; }
+.tab-badge {
+  background: var(--green);
+  color: #FFF;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 10px;
+  min-width: 20px;
+  text-align: center;
+}
+.tab-badge.red { background: var(--red); }
+
+/* TAB PANELS */
+.tab-panel { display: none; padding-bottom: 100px; }
+.tab-panel.active { display: block; }
+
+/* SECTION LABEL */
+.section-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  padding: 14px 16px 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.section-label.uncollected { color: var(--red); }
+.section-label.collected { color: var(--green); }
+.section-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+/* LOCATION ITEMS */
+.list-wrap { padding: 0 16px; }
+.location-item {
   display: flex;
   align-items: center;
   background: var(--white);
-  border: 1px solid var(--border);
+  border: 1.5px solid var(--border);
   border-radius: 10px;
-  padding: 14px 16px;
+  padding: 13px 16px;
   margin-bottom: 8px;
   cursor: pointer;
   transition: all .15s;
   gap: 12px;
 }
-.location-check-item.selected {
-  border-color: var(--blue);
-  background: var(--blue-light);
-}
-.location-check-item:active { transform: scale(.98); }
-.check-box {
-  width: 22px; height: 22px;
+.location-item:active { transform: scale(.98); }
+.location-item.collected { border-color: var(--green); background: var(--green-light); opacity: .75; }
+.check-circle {
+  width: 26px; height: 26px;
+  border-radius: 50%;
   border: 2px solid var(--border);
-  border-radius: 6px;
-  flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  font-size: 14px;
   transition: all .15s;
 }
-.location-check-item.selected .check-box {
-  background: var(--blue);
-  border-color: var(--blue);
-  color: #FFF;
-  font-size: 14px;
-}
-.location-check-name { font-size: 15px; font-weight: 500; flex: 1; }
-.selected-count {
-  font-size: 12px;
-  color: var(--blue);
-  font-weight: 700;
-  padding: 0 16px 8px;
-}
+.location-item.collected .check-circle { background: var(--green); border-color: var(--green); color: #FFF; }
+.location-name { font-size: 15px; font-weight: 500; flex: 1; }
+.location-item.collected .location-name { color: var(--ink-mute); text-decoration: line-through; }
+.location-tap-hint { font-size: 11px; color: var(--ink-mute); }
 
-/* ── STICKY BOTTOM ── */
+/* RESIDUAL */
+.residual-summary {
+  background: var(--blue);
+  color: #FFF;
+  margin: 12px 16px;
+  border-radius: 14px;
+  padding: 18px 20px;
+  text-align: center;
+}
+.residual-summary-label { font-size: 12px; opacity: .7; letter-spacing: .1em; margin-bottom: 6px; }
+.residual-summary-count { font-size: 52px; font-weight: 700; line-height: 1; margin-bottom: 4px; }
+.residual-summary-unit { font-size: 16px; opacity: .8; }
+
+.product-list { padding: 0 16px; }
+.product-input-card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 13px 16px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.product-input-card.tea { opacity: .65; background: #FAFAFA; }
+.product-input-name { font-size: 14px; flex: 1; color: var(--ink-soft); }
+.product-input-field {
+  width: 80px;
+  padding: 8px 10px;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  font-size: 16px;
+  text-align: right;
+  background: var(--cream);
+  color: var(--ink);
+  font-family: inherit;
+}
+.product-input-field:focus { outline: none; border-color: var(--blue); background: var(--white); }
+.product-input-unit { font-size: 12px; color: var(--ink-mute); width: 16px; }
+
+/* STICKY BOTTOM */
 .sticky-bottom {
   position: fixed;
   bottom: 0;
@@ -151,13 +203,14 @@ body {
   border-top: 1px solid var(--border);
   padding: 12px 16px;
   padding-bottom: calc(12px + var(--safe-bottom));
+  z-index: 100;
 }
 .btn-primary {
   display: block;
   width: 100%;
-  padding: 16px;
+  padding: 15px;
   background: var(--blue);
-  color: var(--white);
+  color: #FFF;
   border: none;
   border-radius: 12px;
   font-size: 16px;
@@ -167,70 +220,9 @@ body {
   transition: opacity .15s;
 }
 .btn-primary:active { opacity: .8; }
-.btn-primary:disabled { opacity: .4; cursor: not-allowed; }
-.btn-secondary {
-  display: block;
-  width: 100%;
-  padding: 14px;
-  background: transparent;
-  color: var(--ink-soft);
-  border: 1.5px solid var(--border);
-  border-radius: 12px;
-  font-size: 14px;
-  font-weight: 500;
-  font-family: inherit;
-  cursor: pointer;
-  margin-top: 8px;
-}
+.btn-primary:disabled { opacity: .35; cursor: not-allowed; }
 
-/* ── INPUT SCREEN ── */
-.input-sections { padding: 12px 16px 120px; }
-.location-section {
-  background: var(--white);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  overflow: hidden;
-  margin-bottom: 12px;
-}
-.location-section-header {
-  background: var(--blue);
-  color: var(--white);
-  padding: 10px 16px;
-  font-size: 14px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.location-section-header .total-badge {
-  background: rgba(255,255,255,.2);
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 10px;
-}
-.product-input-row {
-  display: flex;
-  align-items: center;
-  padding: 11px 16px;
-  border-bottom: 1px solid #F0EDE5;
-}
-.product-input-row:last-child { border-bottom: none; }
-.product-input-label { font-size: 13px; flex: 1; color: var(--ink-soft); }
-.product-input {
-  width: 90px;
-  padding: 7px 10px;
-  border: 1.5px solid var(--border);
-  border-radius: 8px;
-  font-size: 15px;
-  text-align: right;
-  background: var(--cream);
-  color: var(--ink);
-  font-family: inherit;
-}
-.product-input:focus { outline: none; border-color: var(--blue); background: var(--white); }
-.product-unit { font-size: 12px; color: var(--ink-mute); margin-left: 6px; width: 16px; }
-
-/* ── COMPLETE ── */
+/* COMPLETE */
 #screen-complete {
   background: var(--blue);
   align-items: center;
@@ -239,15 +231,16 @@ body {
   padding: 40px 24px;
 }
 .complete-icon { font-size: 64px; margin-bottom: 20px; }
-.complete-title { font-size: 24px; font-weight: 700; color: var(--white); margin-bottom: 8px; }
-.complete-sub { font-size: 14px; color: rgba(255,255,255,.75); margin-bottom: 32px; line-height: 1.6; }
-.complete-summary {
+.complete-title { font-size: 24px; font-weight: 700; color: #FFF; margin-bottom: 8px; }
+.complete-sub { font-size: 14px; color: rgba(255,255,255,.75); margin-bottom: 24px; line-height: 1.6; }
+.complete-card {
   background: rgba(255,255,255,.15);
   border-radius: 12px;
-  padding: 16px 20px;
+  padding: 14px 20px;
   width: 100%;
   max-width: 320px;
   text-align: left;
+  margin-bottom: 10px;
 }
 .complete-row {
   display: flex;
@@ -258,37 +251,18 @@ body {
   color: rgba(255,255,255,.85);
 }
 .complete-row:last-child { border-bottom: none; }
-.complete-row span:last-child { font-weight: 700; color: var(--white); }
+.complete-row span:last-child { font-weight: 700; color: #FFF; }
 .btn-restart {
-  margin-top: 24px;
-  padding: 14px 32px;
+  margin-top: 20px;
+  padding: 12px 28px;
   background: rgba(255,255,255,.2);
   color: #FFF;
   border: 1px solid rgba(255,255,255,.4);
   border-radius: 12px;
-  font-size: 15px;
+  font-size: 14px;
   font-family: inherit;
   cursor: pointer;
 }
-
-/* ── TOAST ── */
-.toast {
-  position: fixed;
-  bottom: calc(80px + var(--safe-bottom));
-  left: 50%;
-  transform: translateX(-50%) translateY(20px);
-  background: #333;
-  color: #FFF;
-  padding: 10px 20px;
-  border-radius: 20px;
-  font-size: 13px;
-  opacity: 0;
-  transition: all .3s;
-  pointer-events: none;
-  white-space: nowrap;
-  z-index: 300;
-}
-.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 </style>
 </head>
 <body>
@@ -297,44 +271,55 @@ body {
 <div id="screen-loading" class="screen active">
   <div class="loading-logo">
     <h1>🚚 ドライバー報告</h1>
-    <p>お江戸弁当 残数入力システム</p>
+    <p>お江戸弁当 回収・残数入力</p>
     <div class="loader"></div>
   </div>
 </div>
 
-<!-- LOCATION SELECT -->
-<div id="screen-location" class="screen">
+<!-- MAIN -->
+<div id="screen-main" class="screen">
   <div class="app-header">
     <div>
       <div class="header-title">🚚 ドライバー報告</div>
-      <div class="header-sub">回収した拠点を選択</div>
+      <div class="header-sub" id="main-date">--</div>
     </div>
     <div class="header-user" id="driver-name">--</div>
   </div>
-  <div class="section-label">回収拠点（複数選択可）</div>
-  <div class="search-wrap">
-    <input type="text" class="search-input" id="location-search" placeholder="拠点名で絞り込み..." oninput="filterLocations()">
-  </div>
-  <div class="selected-count" id="selected-count">0拠点選択中</div>
-  <div class="location-check-list" id="location-check-list"></div>
-  <div class="sticky-bottom">
-    <button class="btn-primary" id="btn-to-input" onclick="goToInput()" disabled>残数を入力する →</button>
-  </div>
-</div>
 
-<!-- INPUT -->
-<div id="screen-input" class="screen">
-  <div class="app-header">
-    <div>
-      <div class="header-title">残数入力</div>
-      <div class="header-sub" id="input-sub">0拠点</div>
-    </div>
-    <div class="header-user" id="input-driver-name">--</div>
+  <!-- TAB BAR -->
+  <div class="tab-bar">
+    <button class="tab-btn active" id="tab-btn-collection" onclick="switchTab('collection')">
+      🚚 回収チェック
+      <span class="tab-badge red" id="uncollected-badge">--</span>
+    </button>
+    <button class="tab-btn" id="tab-btn-residual" onclick="switchTab('residual')">
+      📦 残数入力
+    </button>
   </div>
-  <div class="input-sections" id="input-sections"></div>
-  <div class="sticky-bottom">
-    <button class="btn-primary" onclick="submitResidual()">報告を送信する</button>
-    <button class="btn-secondary" onclick="showScreen('location')">← 拠点選択に戻る</button>
+
+  <!-- 回収チェック -->
+  <div id="tab-collection" class="tab-panel active">
+    <div id="collection-list"></div>
+  </div>
+
+  <!-- 残数入力 -->
+  <div id="tab-residual" class="tab-panel">
+    <div class="residual-summary">
+      <div class="residual-summary-label">残数合計（お茶除く）</div>
+      <div class="residual-summary-count" id="residual-total">0</div>
+      <div class="residual-summary-unit">個</div>
+    </div>
+    <div class="product-list" id="product-list"></div>
+  </div>
+
+  <!-- STICKY BOTTOM -->
+  <div class="sticky-bottom" id="sticky-collection">
+    <button class="btn-primary" onclick="switchTab('residual')">
+      📦 残数入力へ切り替え
+    </button>
+  </div>
+  <div class="sticky-bottom" id="sticky-residual" style="display:none;">
+    <button class="btn-primary" onclick="submitReport()">報告を送信する</button>
   </div>
 </div>
 
@@ -343,12 +328,10 @@ body {
   <div class="complete-icon">✅</div>
   <div class="complete-title">報告完了</div>
   <div class="complete-sub">残数の報告が送信されました。<br>お疲れ様でした！</div>
-  <div class="complete-summary" id="complete-summary"></div>
+  <div id="complete-residual-card" class="complete-card"></div>
+  <div id="complete-collection-card" class="complete-card"></div>
   <button class="btn-restart" onclick="restart()">続けて報告する</button>
 </div>
-
-<!-- TOAST -->
-<div class="toast" id="toast"></div>
 
 <script>
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5AawPDc7aluPokONkYz6f2ikwl0S487JvhKdKh6QSp1xhEhA/exec';
@@ -358,192 +341,183 @@ const state = {
   userName: '',
   locations: [],
   products: [],
-  selectedIds: new Set(),
+  collectedIds: new Set(),
 };
 
-// ─────────────────────────────────────
-// INIT
-// ─────────────────────────────────────
 async function init() {
   try {
     await liff.init({ liffId: '2009637457-eprpSUWd' });
     if (!liff.isLoggedIn()) { liff.login(); return; }
-    const profile    = await liff.getProfile();
-    state.userId     = profile.userId;
-    state.userName   = profile.displayName;
-
-    const res = await fetch(`${GAS_URL}?action=getMaster`, { redirect: 'follow' });
+    const profile = await liff.getProfile();
+    state.userId   = profile.userId;
+    state.userName = profile.displayName;
+    const res  = await fetch(`${GAS_URL}?action=getMaster`, { redirect: 'follow' });
     const data = JSON.parse(await res.text());
     state.locations = data.locations || [];
     state.products  = data.products  || [];
 
-    document.getElementById('driver-name').textContent      = state.userName;
-    document.getElementById('input-driver-name').textContent = state.userName;
+    const now = new Date();
+    document.getElementById('driver-name').textContent = state.userName;
+    document.getElementById('main-date').textContent =
+      `${now.getMonth()+1}/${now.getDate()}（${['日','月','火','水','木','金','土'][now.getDay()]}）`;
 
-    renderLocationList();
-    showScreen('location');
+    renderCollectionList();
+    renderProductList();
+    showScreen('main');
   } catch (e) {
     document.getElementById('screen-loading').innerHTML =
       `<div style="color:#fff;padding:40px;font-size:13px;word-break:break-all;">
-        <p style="font-size:18px;margin-bottom:16px;">⚠️ エラー</p>
-        <p>${e.message}</p>
+        <p style="font-size:18px;margin-bottom:16px;">⚠️ エラー</p><p>${e.message}</p>
       </div>`;
   }
 }
 
-// ─────────────────────────────────────
-// LOCATION SELECT
-// ─────────────────────────────────────
-function renderLocationList(filter = '') {
-  const list = document.getElementById('location-check-list');
-  const filtered = state.locations.filter(l =>
-    !filter || l.name.includes(filter)
-  );
+// ── 回収チェック ──
+function renderCollectionList() {
+  const uncollected = state.locations.filter(l => !state.collectedIds.has(l.id));
+  const collected   = state.locations.filter(l =>  state.collectedIds.has(l.id));
 
-  list.innerHTML = filtered.map(loc => `
-    <div class="location-check-item ${state.selectedIds.has(loc.id) ? 'selected' : ''}"
-         onclick="toggleLocation('${loc.id}')">
-      <div class="check-box">${state.selectedIds.has(loc.id) ? '✓' : ''}</div>
-      <span class="location-check-name">${loc.name}</span>
-    </div>
-  `).join('');
-
-  updateSelectedCount();
-}
-
-function toggleLocation(id) {
-  if (state.selectedIds.has(id)) {
-    state.selectedIds.delete(id);
+  let html = '';
+  html += `<div class="section-label uncollected">未回収 <span style="background:var(--red);color:#FFF;font-size:11px;font-weight:700;padding:1px 8px;border-radius:10px;">${uncollected.length}</span></div>`;
+  html += '<div class="list-wrap">';
+  if (uncollected.length === 0) {
+    html += `<p style="text-align:center;color:var(--ink-mute);font-size:13px;padding:20px;">全拠点の回収が完了しました ✓</p>`;
   } else {
-    state.selectedIds.add(id);
+    html += uncollected.map(loc => `
+      <div class="location-item" onclick="toggleCollection('${loc.id}')">
+        <div class="check-circle"></div>
+        <span class="location-name">${loc.name}</span>
+        <span class="location-tap-hint">タップで回収済みに</span>
+      </div>`).join('');
   }
-  renderLocationList(document.getElementById('location-search').value);
+  html += '</div>';
+
+  if (collected.length > 0) {
+    html += `<div class="section-label collected" style="margin-top:4px;">回収済み <span style="background:var(--green);color:#FFF;font-size:11px;font-weight:700;padding:1px 8px;border-radius:10px;">${collected.length}</span></div>`;
+    html += '<div class="list-wrap">';
+    html += collected.map(loc => `
+      <div class="location-item collected" onclick="toggleCollection('${loc.id}')">
+        <div class="check-circle">✓</div>
+        <span class="location-name">${loc.name}</span>
+        <span class="location-tap-hint">タップで解除</span>
+      </div>`).join('');
+    html += '</div>';
+  }
+
+  document.getElementById('collection-list').innerHTML = html;
+  document.getElementById('uncollected-badge').textContent = uncollected.length;
+  document.getElementById('uncollected-badge').className =
+    `tab-badge ${uncollected.length > 0 ? 'red' : ''}`;
 }
 
-function updateSelectedCount() {
-  const count = state.selectedIds.size;
-  document.getElementById('selected-count').textContent = `${count}拠点選択中`;
-  document.getElementById('btn-to-input').disabled = count === 0;
+function toggleCollection(id) {
+  if (state.collectedIds.has(id)) {
+    state.collectedIds.delete(id);
+  } else {
+    state.collectedIds.add(id);
+  }
+  renderCollectionList();
 }
 
-function filterLocations() {
-  const q = document.getElementById('location-search').value;
-  renderLocationList(q);
+// ── 残数入力 ──
+function renderProductList() {
+  const teaIds = state.products.filter(p => p.name.includes('お茶')).map(p => p.id);
+  document.getElementById('product-list').innerHTML = state.products.map(p => {
+    const isTea = teaIds.includes(p.id);
+    return `
+      <div class="product-input-card ${isTea ? 'tea' : ''}">
+        <span class="product-input-name">${p.name}${isTea ? '&nbsp;<small style="color:var(--ink-mute);font-size:11px;">合計に含まれません</small>' : ''}</span>
+        <input type="number" class="product-input-field" id="res-${p.id}" value="0" min="0" inputmode="numeric" oninput="updateResidualTotal()">
+        <span class="product-input-unit">個</span>
+      </div>`;
+  }).join('');
 }
 
-// ─────────────────────────────────────
-// INPUT SCREEN
-// ─────────────────────────────────────
-function goToInput() {
-  const selected = state.locations.filter(l => state.selectedIds.has(l.id));
-  document.getElementById('input-sub').textContent = `${selected.length}拠点の残数を入力`;
-
-  document.getElementById('input-sections').innerHTML = selected.map(loc => `
-    <div class="location-section">
-      <div class="location-section-header">
-        <span>${loc.name}</span>
-        <span class="total-badge" id="total-${loc.id}">合計 0個</span>
-      </div>
-      ${state.products.map(p => `
-        <div class="product-input-row">
-          <span class="product-input-label">${p.name}</span>
-          <input type="number" class="product-input"
-            id="residual-${loc.id}-${p.id}"
-            value="0" min="0" inputmode="numeric"
-            oninput="updateTotal('${loc.id}')">
-          <span class="product-unit">個</span>
-        </div>
-      `).join('')}
-    </div>
-  `).join('');
-
-  // 初期合計を計算
-  selected.forEach(loc => updateTotal(loc.id));
-  showScreen('input');
+function updateResidualTotal() {
+  const teaIds = state.products.filter(p => p.name.includes('お茶')).map(p => p.id);
+  const total  = state.products
+    .filter(p => !teaIds.includes(p.id))
+    .reduce((sum, p) => sum + (parseInt(document.getElementById(`res-${p.id}`)?.value) || 0), 0);
+  document.getElementById('residual-total').textContent = total;
 }
 
-function updateTotal(locationId) {
-  const total = state.products.reduce((sum, p) => {
-    const val = parseInt(document.getElementById(`residual-${locationId}-${p.id}`)?.value) || 0;
-    return sum + val;
-  }, 0);
-  const badge = document.getElementById(`total-${locationId}`);
-  if (badge) badge.textContent = `合計 ${total}個`;
+// ── タブ切り替え ──
+function switchTab(tab) {
+  document.getElementById('tab-collection').classList.toggle('active', tab === 'collection');
+  document.getElementById('tab-residual').classList.toggle('active', tab === 'residual');
+  document.getElementById('tab-btn-collection').classList.toggle('active', tab === 'collection');
+  document.getElementById('tab-btn-residual').classList.toggle('active', tab === 'residual');
+  document.getElementById('sticky-collection').style.display = tab === 'collection' ? 'block' : 'none';
+  document.getElementById('sticky-residual').style.display   = tab === 'residual'   ? 'block' : 'none';
+  window.scrollTo(0, 0);
 }
 
-// ─────────────────────────────────────
-// SUBMIT
-// ─────────────────────────────────────
-async function submitResidual() {
-  const selected = state.locations.filter(l => state.selectedIds.has(l.id));
-  const reports  = selected.map(loc => {
-    const residualCount = {};
-    state.products.forEach(p => {
-      residualCount[p.id] = parseInt(document.getElementById(`residual-${loc.id}-${p.id}`)?.value) || 0;
-    });
-    const total = Object.values(residualCount).reduce((s, v) => s + v, 0);
-    return {
-      locationId:     loc.id,
-      locationName:   loc.name,
-      residualCount,
-      totalResidual:  total,
-    };
+// ── 送信 ──
+async function submitReport() {
+  const residualCount = {};
+  state.products.forEach(p => {
+    residualCount[p.id] = parseInt(document.getElementById(`res-${p.id}`)?.value) || 0;
   });
+  const teaIds     = state.products.filter(p => p.name.includes('お茶')).map(p => p.id);
+  const totalNoTea = state.products
+    .filter(p => !teaIds.includes(p.id))
+    .reduce((s, p) => s + (residualCount[p.id] || 0), 0);
+  const collectedLocations = state.locations.filter(l => state.collectedIds.has(l.id));
 
   const payload = {
-    action:    'submitResidual',
-    userId:    state.userId,
-    userName:  state.userName,
-    date:      new Date().toLocaleDateString('ja-JP'),
-    reports,
+    action:         'submitResidual',
+    userId:         state.userId,
+    userName:       state.userName,
+    date:           new Date().toLocaleDateString('ja-JP'),
+    collectedIds:   [...state.collectedIds],
+    collectedNames: collectedLocations.map(l => l.name),
+    residualCount,
+    totalResidual:  totalNoTea,
   };
-
   try {
-    await fetch(GAS_URL, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
-  } catch (e) {
-    console.error(e);
-  }
+    await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) });
+  } catch (e) { console.error(e); }
 
-  // 完了画面
-  document.getElementById('complete-summary').innerHTML = reports.map(r => `
-    <div class="complete-row">
-      <span>${r.locationName}</span>
-      <span>残 ${r.totalResidual}個</span>
+  document.getElementById('complete-residual-card').innerHTML = `
+    <div class="complete-row" style="border-bottom:1px solid rgba(255,255,255,.3);margin-bottom:4px;padding-bottom:8px;">
+      <span style="font-weight:700;color:#fff;">残数合計（お茶除く）</span>
+      <span style="font-size:20px;">${totalNoTea}個</span>
     </div>
-  `).join('');
+    ${state.products.map(p => {
+      const val = residualCount[p.id] || 0;
+      if (val === 0) return '';
+      return `<div class="complete-row"><span>${p.name}</span><span>${val}個</span></div>`;
+    }).join('')}`;
+
+  document.getElementById('complete-collection-card').innerHTML = `
+    <div class="complete-row" style="border-bottom:1px solid rgba(255,255,255,.3);margin-bottom:4px;padding-bottom:8px;">
+      <span style="font-weight:700;color:#fff;">回収拠点</span>
+      <span>${collectedLocations.length}拠点</span>
+    </div>
+    ${collectedLocations.map(l => `
+      <div class="complete-row"><span>${l.name}</span><span>✓</span></div>`).join('')}`;
 
   showScreen('complete');
 }
 
-// ─────────────────────────────────────
-// UTILS
-// ─────────────────────────────────────
 function showScreen(name) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(`screen-${name}`).classList.add('active');
   window.scrollTo(0, 0);
 }
 
-function showToast(msg) {
-  const toast = document.getElementById('toast');
-  toast.textContent = msg;
-  toast.classList.add('show');
-  setTimeout(() => toast.classList.remove('show'), 2000);
-}
-
 function restart() {
-  state.selectedIds.clear();
-  document.getElementById('location-search').value = '';
-  renderLocationList();
-  showScreen('location');
+  state.collectedIds.clear();
+  state.products.forEach(p => {
+    const el = document.getElementById(`res-${p.id}`);
+    if (el) el.value = 0;
+  });
+  updateResidualTotal();
+  renderCollectionList();
+  switchTab('collection');
+  showScreen('main');
 }
 
-// ─────────────────────────────────────
-// BOOT
-// ─────────────────────────────────────
 init();
 </script>
 </body>
