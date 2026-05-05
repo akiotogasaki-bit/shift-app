@@ -956,6 +956,24 @@ async function init() {
     document.getElementById('user-name-location').textContent = state.userName;
 
     await loadMasterData();
+
+    // 前回の途中データを確認
+    const restored = restoreState();
+    if (restored) {
+      const loc = state.location;
+      if (loc && confirm(`前回の販売データが見つかりました。\n\n拠点：${loc.name}\n販売数：${state.soldCount}個\n\n続きから再開しますか？`)) {
+        document.getElementById('start-location-name').textContent  = loc.name;
+        document.getElementById('start-user-name').textContent      = state.userName;
+        document.getElementById('reg-location-name').textContent    = loc.name;
+        document.getElementById('final-location-name').textContent  = loc.name;
+        renderProducts();
+        document.getElementById('reg-sales-count').textContent = `販売数: ${state.soldCount}個`;
+        showScreen('register');
+        return;
+      } else {
+        clearSavedState();
+      }
+    }
     showScreen('location');
   } catch (e) {
     document.getElementById('screen-loading').innerHTML =
@@ -1231,20 +1249,26 @@ function calcChange() {
 }
 
 function confirmCash() {
-  const total = cartTotal();
+  const total    = cartTotal();
+  const saleItems = [...state.cart];
   state.cashSales += total;
   recordSales('cash');
   closeCashModal();
   clearCart();
+  saveState();
+  sendIntermediateSale('cash', total, saleItems);
   showToast('現金会計が完了しました');
 }
 
 function processPayPay() {
-  const total = cartTotal();
+  const total     = cartTotal();
+  const saleItems = [...state.cart];
   state.paypayAmount += total;
   state.paypayCount++;
   recordSales('paypay');
   clearCart();
+  saveState();
+  sendIntermediateSale('paypay', total, saleItems);
   showToast('PayPay会計が完了しました');
 }
 
@@ -1268,6 +1292,81 @@ function clearCart() {
   document.getElementById('coupon-amount').style.display = 'none';
   document.getElementById('coupon-unit-label').style.display = 'none';
   renderCart();
+}
+
+// ─────────────────────────────────────
+// STATE PERSISTENCE & REALTIME SYNC
+// ─────────────────────────────────────
+function saveState() {
+  try {
+    const save = {
+      locationId:    state.location?.id,
+      locationName:  state.location?.name,
+      baseGigSalary: state.baseGigSalary,
+      registerStart: state.registerStart,
+      deliveryCount: state.deliveryCount,
+      cashSales:     state.cashSales,
+      paypayAmount:  state.paypayAmount,
+      paypayCount:   state.paypayCount,
+      soldCount:     state.soldCount,
+      teaSoldCount:  state.teaSoldCount || 0,
+      productSales:  state.productSales,
+      savedAt:       new Date().toISOString(),
+    };
+    localStorage.setItem('oedo_register_state', JSON.stringify(save));
+  } catch(e) { console.warn('saveState error:', e); }
+}
+
+function restoreState() {
+  try {
+    const raw = localStorage.getItem('oedo_register_state');
+    if (!raw) return false;
+    const save = JSON.parse(raw);
+    // 当日のデータのみ復元
+    const savedDate = new Date(save.savedAt).toLocaleDateString('ja-JP');
+    const today     = new Date().toLocaleDateString('ja-JP');
+    if (savedDate !== today) { localStorage.removeItem('oedo_register_state'); return false; }
+    // 拠点情報を復元
+    const loc = state.locations.find(l => l.id === save.locationId);
+    if (!loc) return false;
+    state.location      = loc;
+    state.baseGigSalary = save.baseGigSalary;
+    state.registerStart = save.registerStart;
+    state.deliveryCount = save.deliveryCount || {};
+    state.cashSales     = save.cashSales     || 0;
+    state.paypayAmount  = save.paypayAmount  || 0;
+    state.paypayCount   = save.paypayCount   || 0;
+    state.soldCount     = save.soldCount     || 0;
+    state.teaSoldCount  = save.teaSoldCount  || 0;
+    state.productSales  = save.productSales  || {};
+    return true;
+  } catch(e) { return false; }
+}
+
+function clearSavedState() {
+  localStorage.removeItem('oedo_register_state');
+}
+
+// 会計ごとにGASへ非同期送信（画面はブロックしない）
+function sendIntermediateSale(method, amount, items) {
+  const payload = {
+    action:       'submitIntermediateSale',
+    userId:       state.userId,
+    userName:     state.userName,
+    locationId:   state.location?.id,
+    locationName: state.location?.name,
+    method,
+    amount,
+    items:        items.map(i => ({ productId: i.product.id, productName: i.product.name, qty: i.qty })),
+    soldCount:    state.soldCount,
+    cashSales:    state.cashSales,
+    paypayAmount: state.paypayAmount,
+    productSales: state.productSales,
+    timestamp:    new Date().toISOString(),
+  };
+  // 非同期送信（待たない）
+  fetch(state.GAS_URL, { method: 'POST', body: JSON.stringify(payload) })
+    .catch(e => console.warn('intermediate sale sync error:', e));
 }
 
 // ─────────────────────────────────────
@@ -1331,6 +1430,7 @@ function recalcFinal() {
 }
 
 function submitFinal() {
+  clearSavedState();
   const diff = document.getElementById('res-diff').textContent;
   const hasDiff = diff.includes('差異');
   const comment = document.getElementById('diff-comment').value.trim();
