@@ -660,9 +660,10 @@ function renderDeliveryOrders(orders, date) {
 
   html += orders.map((o, i) => `
     <div style="background:var(--white);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:12px;">
-      <div style="background:var(--navy);color:#FFF;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;">
-        <span style="font-size:14px;font-weight:700;">${o.time ? o.time + '　' : ''}${o.address || o.detail || '配達先不明'}</span>
-        <span style="font-size:11px;opacity:.7;">${o.orderNo}</span>
+      <div style="background:var(--navy);color:#FFF;padding:10px 14px;">
+        <div style="font-size:13px;font-weight:700;margin-bottom:2px;">${o.time || '時間未定'}</div>
+        <div style="font-size:12px;opacity:.85;">${o.address || '住所未定'}</div>
+        <div style="font-size:10px;opacity:.6;margin-top:2px;">${o.orderNo}</div>
       </div>
       ${o.detail ? `<div style="padding:8px 14px;background:#F8F4EE;font-size:12px;color:var(--ink-soft);">📍 ${o.detail}</div>` : ''}
       <div style="padding:10px 14px;">
