@@ -442,6 +442,37 @@ body {
 .stats-table tr:last-child td { border-bottom: none; }
 .stats-table tr:nth-child(even) td { background: #FAFAF8; }
 .stats-table td:first-child { font-weight: 700; color: var(--ink); }
+
+/* ── CASH TABLE ── */
+.cash-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  font-size: 13px;
+}
+.cash-table th {
+  background: var(--ink);
+  color: #FFF;
+  padding: 10px 12px;
+  text-align: left;
+  font-weight: 500;
+  font-size: 12px;
+}
+.cash-table th.gold-header { background: var(--gold); }
+.cash-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #F0EDE5;
+}
+.cash-table tr:last-child td { border-bottom: none; }
+.cash-table tr:hover td { background: var(--cream); }
+.cash-table .total-row td {
+  background: var(--cream-dark);
+  font-weight: 700;
+  border-top: 2px solid var(--border);
+}
 </style>
 </head>
 <body>
@@ -464,6 +495,7 @@ body {
   <button class="tab-btn" onclick="switchTab('weekly')">週報</button>
   <button class="tab-btn" onclick="switchTab('monthly')">月報</button>
   <button class="tab-btn" onclick="switchTab('delivery')">配達</button>
+  <button class="tab-btn" onclick="switchTab('cash')">現金有高</button>
 </div>
 
 <!-- CONTENT -->
@@ -547,8 +579,6 @@ body {
     </div>
   </div>
 
-</div>
-
   <!-- DELIVERY TAB -->
   <div id="tab-delivery" class="tab-panel">
     <div class="loading-wrap" id="dv-loading" style="display:none;">
@@ -557,6 +587,29 @@ body {
     </div>
     <div id="dv-content"></div>
   </div>
+
+  <!-- CASH TAB -->
+  <div id="tab-cash" class="tab-panel">
+    <p style="font-size:12px;color:var(--ink-mute);margin-bottom:12px;">
+      現金有高 ＝ レジ最終金額 − 本日合計ギャラ
+    </p>
+    <table class="cash-table">
+      <thead>
+        <tr>
+          <th>拠点名</th>
+          <th>販売員名</th>
+          <th>レジ最終金額</th>
+          <th>本日ギャラ</th>
+          <th class="gold-header">現金有高</th>
+        </tr>
+      </thead>
+      <tbody id="cash-tbody">
+        <tr><td colspan="5" style="text-align:center;color:var(--ink-mute);padding:24px;">読み込み中...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
 
 <!-- DETAIL MODAL -->
 <div class="modal-bg" id="detail-modal">
@@ -582,7 +635,7 @@ let currentSort = 'rate_desc';
 // ─────────────────────────────────────
 let deliveryDates    = [];
 let selectedDelivery = '';
-const deliveryCache  = {};  // ローカルキャッシュ
+const deliveryCache  = {};
 
 async function initDelivery() {
   const loadingEl = document.getElementById('dv-loading');
@@ -624,7 +677,6 @@ async function selectDeliveryDate(date) {
   const sel = document.getElementById('delivery-date-selector');
   if (sel) sel.value = date;
 
-  // ローカルキャッシュがあれば即座に表示
   if (deliveryCache[date]) {
     renderDeliveryOrders(deliveryCache[date], date);
     return;
@@ -634,7 +686,7 @@ async function selectDeliveryDate(date) {
   try {
     const res    = await fetchJSON(`${GAS_URL}?action=getDeliveryOrders&date=${encodeURIComponent(date)}`);
     const orders = res.orders || [];
-    deliveryCache[date] = orders; // キャッシュに保存
+    deliveryCache[date] = orders;
     renderDeliveryOrders(orders, date);
   } catch(e) {
     document.getElementById('dv-content').innerHTML = `<p style="color:var(--red);">取得エラー：${e.message}</p>`;
@@ -665,7 +717,6 @@ function renderDeliveryOrders(orders, date) {
     var card = document.createElement('div');
     card.style.cssText = 'background:white;border:1px solid #D5D8DC;border-radius:12px;overflow:hidden;margin-bottom:12px;';
 
-    // ヘッダー
     var hdr = document.createElement('div');
     hdr.style.cssText = 'background:#1A3C5E;color:white;padding:10px 14px;';
     hdr.innerHTML = '<div style="font-size:13px;font-weight:bold;margin-bottom:2px;">' + (o.time || '時間未定') + '</div>'
@@ -673,7 +724,6 @@ function renderDeliveryOrders(orders, date) {
       + '<div style="font-size:10px;opacity:0.6;margin-top:2px;">' + (o.orderNo || '') + '</div>';
     card.appendChild(hdr);
 
-    // 配達場所詳細
     if (o.detail) {
       var det = document.createElement('div');
       det.style.cssText = 'padding:8px 14px;background:#F8F4EE;font-size:12px;color:#4A4A4A;';
@@ -681,7 +731,6 @@ function renderDeliveryOrders(orders, date) {
       card.appendChild(det);
     }
 
-    // 明細
     var body = document.createElement('div');
     body.style.cssText = 'padding:6px 14px;';
     var rows = [
@@ -712,7 +761,6 @@ function renderDeliveryOrders(orders, date) {
       body.appendChild(row);
     });
 
-    // 備考
     if (o.note) {
       var noteDiv = document.createElement('div');
       noteDiv.style.cssText = 'margin-top:6px;background:#FFF8DC;border-left:3px solid #B8860B;padding:8px 10px;border-radius:0 6px 6px 0;font-size:12px;color:#666;';
@@ -720,7 +768,6 @@ function renderDeliveryOrders(orders, date) {
       body.appendChild(noteDiv);
     }
 
-    // 回収
     if (o.collectYN || o.collect) {
       var colDiv = document.createElement('div');
       colDiv.style.cssText = 'margin-top:6px;background:#F0FAF4;border-left:3px solid #27AE60;padding:8px 10px;border-radius:0 6px 6px 0;font-size:12px;color:#1A7A42;';
@@ -736,23 +783,6 @@ function renderDeliveryOrders(orders, date) {
   document.getElementById('dv-content').innerHTML = html;
 }
 
-function row(label, value, isPhone) {
-  if (!value) return '';
-  let val;
-  if (isPhone) {
-    val = `<a href="tel:${value}" style="color:var(--blue);font-weight:700;">${value}</a>`;
-  } else if (label === '注文内容') {
-    const lines = value.split(/\n|\r\n|\r/).filter(l => l.trim());
-    val = `<div style="color:var(--ink);line-height:1.8;">${lines.map(l => `<div>${l.trim()}</div>`).join('')}</div>`;
-  } else {
-    val = `<span style="color:var(--ink);">${value}</span>`;
-  }
-  return `<div style="display:flex;gap:8px;padding:5px 0;border-bottom:1px solid #F5F0E8;font-size:13px;align-items:flex-start;">
-    <span style="color:var(--ink-mute);min-width:80px;flex-shrink:0;padding-top:2px;">${label}</span>
-    ${val}
-  </div>`;
-}
-
 // ─────────────────────────────────────
 // INIT
 // ─────────────────────────────────────
@@ -765,7 +795,6 @@ async function loadAll() {
       fetchJSON(`${GAS_URL}?action=getTodayIntermediate`),
     ]);
     masterData = master;
-    // 最終報告と販売中データをマージ（最終報告優先）
     const finalMap = {};
     (reports.data || []).forEach(r => { finalMap[r.locationId] = r; });
     const merged = [...(reports.data || [])];
@@ -774,6 +803,11 @@ async function loadAll() {
     });
     allData = merged;
     renderRealtime();
+
+    // 現金有高タブが開いていれば更新
+    if (document.getElementById('tab-cash').classList.contains('active')) {
+      renderCashTable();
+    }
   } catch (e) {
     document.getElementById('rt-loading').innerHTML =
       `<p style="color:var(--red);">データ取得エラー：${e.message}</p>`;
@@ -799,10 +833,9 @@ function renderRealtime() {
   document.getElementById('rt-loading').style.display = 'none';
   document.getElementById('rt-content').style.display = 'block';
 
-  const now     = new Date();
+  const now = new Date();
   const isAfter16 = now.getHours() >= 16;
 
-  // 天気（最新の報告から取得）
   const latestWithWeather = allData.find(r => r.weather);
   if (latestWithWeather) {
     document.getElementById('w-condition').textContent = latestWithWeather.weather;
@@ -810,7 +843,6 @@ function renderRealtime() {
     document.getElementById('w-wind').textContent      = latestWithWeather.windspeed;
   }
 
-  // KPI計算
   const reported   = allData.filter(r => r.reported);
   const totalLocs  = masterData.locations.length;
   const totalSold  = reported.reduce((s, r) => s + (r.soldCount || 0), 0);
@@ -839,18 +871,13 @@ function renderRealtime() {
     </div>
   `;
 
-  // 16時以降のまとめ
   if (isAfter16 && reported.length > 0) {
     renderDailySummary(reported);
   }
 
-  // ランキング
   renderRanking(reported);
-
-  // 全拠点テーブル
   renderLocationTable();
 
-  // 報告件数
   document.getElementById('reported-count').textContent = `${reported.length}/${totalLocs}拠点 報告済み`;
 }
 
@@ -858,10 +885,10 @@ function renderDailySummary(reported) {
   const wrap = document.getElementById('daily-summary-wrap');
   wrap.style.display = 'block';
 
-  const cashTotal    = reported.reduce((s, r) => s + (r.cashSales || 0), 0);
-  const paypayTotal  = reported.reduce((s, r) => s + (r.paypayAmount || 0), 0);
-  const couponTotal  = reported.reduce((s, r) => s + (r.couponCount || 0), 0);
-  const laborTotal   = reported.reduce((s, r) => s + (r.totalSalary || 0), 0);
+  const cashTotal   = reported.reduce((s, r) => s + (r.cashSales || 0), 0);
+  const paypayTotal = reported.reduce((s, r) => s + (r.paypayAmount || 0), 0);
+  const couponTotal = reported.reduce((s, r) => s + (r.couponCount || 0), 0);
+  const laborTotal  = reported.reduce((s, r) => s + (r.totalSalary || 0), 0);
 
   document.getElementById('daily-summary').innerHTML = `
     <div class="daily-summary-title">本日の最終集計</div>
@@ -935,7 +962,6 @@ function renderLocationTable() {
     return { loc, r };
   });
 
-  // ソート
   if (currentSort === 'rate_desc') {
     rows.sort((a, b) => ((b.r?.sellRate || -1) - (a.r?.sellRate || -1)));
   } else if (currentSort === 'rate_asc') {
@@ -988,13 +1014,52 @@ function renderLocationTable() {
 function sortLocations(type) {
   currentSort = type;
   ['best','worst','name'].forEach(k => {
-    document.getElementById(`sort-${k}`)?.classList.toggle('active', 
+    document.getElementById(`sort-${k}`)?.classList.toggle('active',
       (k === 'best' && type === 'rate_desc') ||
       (k === 'worst' && type === 'rate_asc') ||
       (k === 'name' && type === 'name')
     );
   });
   renderLocationTable();
+}
+
+// ─────────────────────────────────────
+// CASH TABLE
+// ─────────────────────────────────────
+function renderCashTable() {
+  const reported = allData.filter(r => r.reported);
+
+  if (reported.length === 0) {
+    document.getElementById('cash-tbody').innerHTML =
+      '<tr><td colspan="5" style="text-align:center;color:var(--ink-mute);padding:24px;">まだ報告がありません</td></tr>';
+    return;
+  }
+
+  const sorted = [...reported].sort((a, b) =>
+    a.locationName.localeCompare(b.locationName, 'ja')
+  );
+
+  const totalEnd   = sorted.reduce((s, r) => s + (r.registerEnd || 0), 0);
+  const totalGig   = sorted.reduce((s, r) => s + (r.totalSalary || 0), 0);
+  const totalNet   = totalEnd - totalGig;
+
+  document.getElementById('cash-tbody').innerHTML = sorted.map(r => {
+    const net = (r.registerEnd || 0) - (r.totalSalary || 0);
+    return `
+      <tr>
+        <td>${r.locationName}</td>
+        <td>${r.userName || '—'}</td>
+        <td>¥${(r.registerEnd || 0).toLocaleString()}</td>
+        <td style="color:var(--red);">−¥${(r.totalSalary || 0).toLocaleString()}</td>
+        <td style="font-weight:700;color:var(--gold);">¥${net.toLocaleString()}</td>
+      </tr>`;
+  }).join('') + `
+    <tr class="total-row">
+      <td colspan="2">合計</td>
+      <td>¥${totalEnd.toLocaleString()}</td>
+      <td style="color:var(--red);">−¥${totalGig.toLocaleString()}</td>
+      <td style="color:var(--gold);font-size:15px;">¥${totalNet.toLocaleString()}</td>
+    </tr>`;
 }
 
 // ─────────────────────────────────────
@@ -1080,15 +1145,12 @@ function renderWeeklyData(data) {
   const products = masterData.products || [];
   const teaIds   = products.filter(p => p.name.includes('お茶')).map(p => p.id);
 
-  // 商品別集計（全拠点合計）
   const productDelivery = {};
   const productSales    = {};
   products.forEach(p => { productDelivery[p.id] = 0; productSales[p.id] = 0; });
 
-  // 拠点別集計
   const byLocation = {};
   data.forEach(r => {
-    // 拠点別
     if (!byLocation[r.locationName]) {
       byLocation[r.locationName] = { sold: 0, soldNoTea: 0, sales: 0, count: 0, rates: [] };
     }
@@ -1097,7 +1159,6 @@ function renderWeeklyData(data) {
     byLocation[r.locationName].count++;
     if (r.sellRate) byLocation[r.locationName].rates.push(r.sellRate);
 
-    // 商品別（お茶除外の拠点別販売数）
     const delivery = JSON.parse(r.deliveryCountJson || '{}');
     const sales    = JSON.parse(r.productSalesJson  || '{}');
     let teaSold = 0;
@@ -1116,8 +1177,8 @@ function renderWeeklyData(data) {
       soldNoTea: d.soldNoTea,
       sales: d.sales,
       days: d.count,
-      avgRate:    d.rates.length > 0 ? Math.round(d.rates.reduce((a,b)=>a+b,0)/d.rates.length*10)/10 : 0,
-      avgPerDay:  d.count > 0 ? Math.round(d.soldNoTea / d.count) : 0,
+      avgRate:   d.rates.length > 0 ? Math.round(d.rates.reduce((a,b)=>a+b,0)/d.rates.length*10)/10 : 0,
+      avgPerDay: d.count > 0 ? Math.round(d.soldNoTea / d.count) : 0,
     }))
     .sort((a, b) => b.sales - a.sales);
 
@@ -1125,7 +1186,6 @@ function renderWeeklyData(data) {
   const totalSold  = rows.reduce((s, r) => s + r.sold, 0);
   const operDays   = new Set(data.map(r => r.date)).size;
 
-  // 商品別完売率テーブル
   const productRows = products.map(p => {
     const d    = productDelivery[p.id] || 0;
     const s    = productSales[p.id]    || 0;
@@ -1144,7 +1204,7 @@ function renderWeeklyData(data) {
     <table class="stats-table" style="margin-bottom:16px;">
       <thead><tr><th>商品名</th><th>納品数</th><th>販売数</th><th>完売率</th></tr></thead>
       <tbody>${productRows.map(p => {
-        const rateStr  = p.rate !== null ? `${p.rate}%` : '—';
+        const rateStr   = p.rate !== null ? `${p.rate}%` : '—';
         const rateColor = p.rate >= 80 ? 'var(--green)' : p.rate >= 50 ? 'var(--gold)' : 'var(--red)';
         return `<tr>
           <td>${p.name}</td>
@@ -1193,7 +1253,6 @@ function renderMonthlyData(data, yearMonth) {
     return;
   }
 
-  // 曜日別集計
   const byDay = { '月':{sold:0,count:0}, '火':{sold:0,count:0}, '水':{sold:0,count:0}, '木':{sold:0,count:0}, '金':{sold:0,count:0} };
   data.forEach(r => {
     if (byDay[r.dayOfWeek]) {
@@ -1202,7 +1261,6 @@ function renderMonthlyData(data, yearMonth) {
     }
   });
 
-  // 天気別集計
   const byWeather = {};
   data.forEach(r => {
     if (!r.weather) return;
@@ -1252,15 +1310,17 @@ function renderMonthlyData(data, yearMonth) {
 // TABS
 // ─────────────────────────────────────
 function switchTab(tab) {
+  const tabNames = ['realtime','weekly','monthly','delivery','cash'];
   document.querySelectorAll('.tab-btn').forEach((b, i) => {
-    b.classList.toggle('active', ['realtime','weekly','monthly','delivery'][i] === tab);
+    b.classList.toggle('active', tabNames[i] === tab);
   });
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.getElementById(`tab-${tab}`).classList.add('active');
 
-  if (tab === 'weekly')    initWeekSelector();
-  if (tab === 'monthly')   initMonthSelector();
-  if (tab === 'delivery')  initDelivery();
+  if (tab === 'weekly')   initWeekSelector();
+  if (tab === 'monthly')  initMonthSelector();
+  if (tab === 'delivery') initDelivery();
+  if (tab === 'cash')     renderCashTable();
 }
 
 function initWeekSelector() {
