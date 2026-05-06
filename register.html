@@ -1449,10 +1449,21 @@ function recordSales(method) {
       state.teaSoldCount = (state.teaSoldCount || 0) + item.qty;
     }
     state.soldCount += item.qty;
-    // 商品別販売数を記録
     state.productSales[item.product.id] = (state.productSales[item.product.id] || 0) + item.qty;
+
+    // ★ 販売数が納品数に達したら完売を自動ON
+    const delivery = state.deliveryCount[item.product.id] || 0;
+    const sold     = state.productSales[item.product.id] || 0;
+    if (delivery > 0 && sold >= delivery && !state.soldOutMap[item.product.id]) {
+      const now  = new Date();
+      const time = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+      state.soldOutMap[item.product.id] = time;
+      sendSoldOutEvent(item.product.id, time);
+      showToast(`🎉 ${item.product.name} 完売！`);
+    }
   });
   document.getElementById('reg-sales-count').textContent = `販売数: ${state.soldCount}個`;
+  renderProducts(); // ★ 完売バッジを即時反映
 }
 
 function clearCart() {
