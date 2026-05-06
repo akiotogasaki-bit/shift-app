@@ -809,14 +809,14 @@ body {
         <span style="font-size:13px;color:var(--ink-soft);margin-left:8px;" id="makanai-label">有り</span>
       </div>
     </div>
-  </div>
-  <div class="form-card">
-    <div class="form-card-title">遅刻</div>
-    <div class="form-row">
-      <span class="form-label">遅刻時間</span>
-      <input type="number" class="form-input" id="late-minutes" value="0" min="0" inputmode="numeric" style="width:80px;text-align:right;" oninput="updateLatePenalty()">
-      <span class="form-unit">分</span>
-      <span style="font-size:12px;color:var(--red);margin-left:8px;" id="late-penalty-preview"></span>
+    <div class="form-card">
+      <div class="form-card-title">遅刻</div>
+      <div class="form-row">
+        <span class="form-label">遅刻時間</span>
+        <input type="number" class="form-input" id="late-minutes" value="" placeholder="0" min="0" inputmode="numeric" style="width:80px;text-align:right;" oninput="updateLatePenalty()">
+        <span class="form-unit">分</span>
+        <span style="font-size:12px;color:var(--red);margin-left:8px;" id="late-penalty-preview"></span>
+      </div>
     </div>
   </div>
   <button class="btn-primary" id="btn-calc-final" onclick="calcFinal()">集計する</button>
@@ -1687,8 +1687,9 @@ function calcFinal() {
 }
 
 function calcLatePenalty(minutes) {
-  if (!minutes || minutes <= 0) return 0;
-  return Math.ceil(minutes / 15) * 300;
+  const m = parseInt(minutes) || 0;
+  if (m <= 0) return 0;
+  return Math.ceil(m / 15) * 300;
 }
 
 function updateLatePenalty() {
