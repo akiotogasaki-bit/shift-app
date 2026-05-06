@@ -1762,6 +1762,9 @@ function submitFinal() {
     baseGigSalary: state.baseGigSalary,
     diffComment: comment,
     memo: document.getElementById('final-memo').value.trim(),
+    makanai: state['makanaiあり'] ? '有り' : '無し',
+    lateMinutes: parseInt(document.getElementById('late-minutes')?.value) || 0,
+    latePenalty: calcLatePenalty(parseInt(document.getElementById('late-minutes')?.value) || 0),
   };
 
   fetch(state.GAS_URL, {
