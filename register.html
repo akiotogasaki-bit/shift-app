@@ -810,6 +810,15 @@ body {
       </div>
     </div>
   </div>
+  <div class="form-card">
+    <div class="form-card-title">遅刻</div>
+    <div class="form-row">
+      <span class="form-label">遅刻時間</span>
+      <input type="number" class="form-input" id="late-minutes" value="0" min="0" inputmode="numeric" style="width:80px;text-align:right;" oninput="updateLatePenalty()">
+      <span class="form-unit">分</span>
+      <span style="font-size:12px;color:var(--red);margin-left:8px;" id="late-penalty-preview"></span>
+    </div>
+  </div>
   <button class="btn-primary" id="btn-calc-final" onclick="calcFinal()">集計する</button>
 
   <div id="final-results" style="display:none;padding:16px;">
@@ -832,6 +841,14 @@ body {
       <div class="result-row"><span class="result-label">完売率</span><span class="result-value gold" id="res-rate">0%</span></div>
       <div class="result-row salary-row"><span class="result-label">インセンティブ</span><span class="result-value gold" id="res-incentive">¥0</span></div>
       <div class="result-row salary-row"><span class="result-label">基本ギャラ</span><span class="result-value" id="res-base">¥0</span></div>
+      <div class="result-row salary-row" id="res-late-row" style="display:none;">
+        <span class="result-label" style="color:var(--red);">遅刻ペナルティ</span>
+        <span class="result-value" id="res-late" style="color:var(--red);"></span>
+      </div>
+      <div class="result-row salary-row" id="res-makanai-row" style="display:none;">
+        <span class="result-label" style="color:var(--green);">賄いなし補填</span>
+        <span class="result-value" style="color:var(--green);">+¥300</span>
+      </div>
       <div class="result-row salary-row" style="background:#FFF8DC;">
         <span class="result-label" style="font-weight:700;">本日の合計</span>
         <span class="result-value big" id="res-total">¥0</span>
@@ -1606,17 +1623,19 @@ function calcFinal() {
     .reduce((sum, [, v]) => sum + v, 0);
   const nonTeaSold   = state.soldCount - (state.teaSoldCount || 0);
   const sellRate     = totalDelivery > 0 ? Math.round(nonTeaSold / totalDelivery * 1000) / 10 : 0;
-  const makanaiBonus = state['makanaiあり'] ? 0 : 300;
-  const role         = state.staffRole || '販売員';
-  let incentive      = 0;
-  let totalSalary    = 0;
+  const makanaiBonus  = state['makanaiあり'] ? 0 : 300;
+  const lateMinutes   = parseInt(document.getElementById('late-minutes').value) || 0;
+  const latePenalty   = calcLatePenalty(lateMinutes);
+  const role          = state.staffRole || '販売員';
+  let incentive       = 0;
+  let totalSalary     = 0;
   if (state.isSpot || role === '社員' || role === 'ドライバー') {
     totalSalary = 0;
   } else if (state.fixedSalary > 0) {
-    totalSalary = state.fixedSalary + makanaiBonus;
+    totalSalary = state.fixedSalary + makanaiBonus - latePenalty;
   } else {
     incentive   = Math.floor(nonTeaSold / state.incentiveUnit) * state.incentiveRate;
-    totalSalary = state.baseGigSalary + incentive + makanaiBonus;
+    totalSalary = state.baseGigSalary + incentive + makanaiBonus - latePenalty;
   }
 
   document.getElementById('res-cash').textContent    = `¥${state.cashSales.toLocaleString()}`;
@@ -1627,6 +1646,17 @@ function calcFinal() {
   document.getElementById('res-incentive').textContent = `¥${incentive.toLocaleString()}（${nonTeaSold}個）`;
   document.getElementById('res-base').textContent    = `¥${state.baseGigSalary.toLocaleString()}`;
   document.getElementById('res-total').textContent   = `¥${totalSalary.toLocaleString()}`;
+  // 遅刻ペナルティ行
+  const lateRow = document.getElementById('res-late-row');
+  if (lateMinutes > 0) {
+    document.getElementById('res-late').textContent = `-¥${latePenalty.toLocaleString()}（${lateMinutes}分）`;
+    lateRow.style.display = '';
+  } else {
+    lateRow.style.display = 'none';
+  }
+  // 賄いなし行
+  const makanaiRow = document.getElementById('res-makanai-row');
+  makanaiRow.style.display = state['makanaiあり'] ? 'none' : '';
 
   const diffEl = document.getElementById('res-diff');
   if (diff === 0) {
@@ -1654,6 +1684,35 @@ function calcFinal() {
   document.getElementById('comp-incentive').textContent = `¥${incentive.toLocaleString()}`;
   document.getElementById('comp-base').textContent      = `¥${state.baseGigSalary.toLocaleString()}`;
   document.getElementById('comp-total').textContent     = `¥${totalSalary.toLocaleString()}`;
+}
+
+function calcLatePenalty(minutes) {
+  if (!minutes || minutes <= 0) return 0;
+  return Math.ceil(minutes / 15) * 300;
+}
+
+function updateLatePenalty() {
+  const min = parseInt(document.getElementById('late-minutes').value) || 0;
+  const penalty = calcLatePenalty(min);
+  const preview = document.getElementById('late-penalty-preview');
+  preview.textContent = penalty > 0 ? `-¥${penalty.toLocaleString()}` : '';
+  preview.style.color = penalty > 0 ? 'var(--red)' : '';
+}
+
+function calcLatePenalty(minutes) {
+  if (!minutes || minutes <= 0) return 0;
+  return Math.ceil(minutes / 15) * 300;
+}
+
+function updateLatePenalty() {
+  const min = parseInt(document.getElementById('late-minutes').value) || 0;
+  const penalty = calcLatePenalty(min);
+  const preview = document.getElementById('late-penalty-preview');
+  if (penalty > 0) {
+    preview.textContent = `-¥${penalty.toLocaleString()}`;
+  } else {
+    preview.textContent = '';
+  }
 }
 
 function toggleMakanai() {
