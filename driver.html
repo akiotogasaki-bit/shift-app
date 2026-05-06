@@ -356,8 +356,23 @@ body {
 
   <!-- 残数入力 -->
   <div id="tab-residual" class="tab-panel">
+    <!-- 全ドライバー累積合計 -->
+    <div id="all-residual-box" style="background:#1A3C5E;border-radius:14px;padding:14px 16px;margin-bottom:12px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <div style="color:rgba(255,255,255,.7);font-size:11px;">全ドライバー残数合計</div>
+        <div style="color:rgba(255,255,255,.5);font-size:10px;" id="residual-updated-at">--:--更新</div>
+      </div>
+      <div onclick="openAllBreakdown()" style="cursor:pointer;text-align:center;padding:8px 0;background:rgba(255,255,255,.1);border-radius:10px;margin-bottom:10px;">
+        <span style="color:#FFF;font-size:36px;font-weight:700;" id="all-residual-total">—</span>
+        <span style="color:rgba(255,255,255,.7);font-size:14px;">個</span>
+        <div style="color:rgba(255,255,255,.5);font-size:10px;margin-top:2px;">タップで種別内訳</div>
+      </div>
+      <div id="driver-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+    </div>
+
+    <!-- 自分の残数入力 -->
     <div class="residual-summary" onclick="openBreakdown()" style="cursor:pointer;">
-      <div class="residual-summary-label">残数合計（お茶除く）</div>
+      <div class="residual-summary-label">自分の残数入力合計（お茶除く）</div>
       <div class="residual-summary-count" id="residual-total">0</div>
       <div class="residual-summary-unit">個</div>
       <div style="font-size:11px;opacity:.6;margin-top:6px;">タップで内訳を確認</div>
@@ -495,7 +510,64 @@ function updateResidualTotal() {
 }
 
 // ── タブ切り替え ──
+let residualSummaryTimer = null;
+
+async function loadResidualSummary() {
+  try {
+    const res  = await fetch(GAS_URL + '?action=getResidualSummary', { redirect: 'follow' });
+    const data = JSON.parse(await res.text());
+    document.getElementById('all-residual-total').textContent = data.total || 0;
+    const driverList = document.getElementById('driver-list');
+    if (data.drivers && data.drivers.length > 0) {
+      driverList.innerHTML = data.drivers.map(d => {
+        const logs = d.logs.map(l => l.time + ' +' + l.count).join(' / ');
+        return '<div style="display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,.08);border-radius:8px;padding:7px 10px;margin-bottom:4px;">'
+          + '<div><div style="color:#FFF;font-size:13px;font-weight:600;">' + d.name + '</div>'
+          + '<div style="color:rgba(255,255,255,.5);font-size:10px;margin-top:1px;">' + logs + '</div></div>'
+          + '<div style="color:#FFD700;font-size:16px;font-weight:700;">' + d.total + '個</div></div>';
+      }).join('');
+    } else {
+      driverList.innerHTML = '<div style="color:rgba(255,255,255,.4);font-size:12px;text-align:center;padding:8px 0;">まだ報告がありません</div>';
+    }
+    const now = new Date();
+    document.getElementById('residual-updated-at').textContent =
+      String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0') + '更新';
+    window._allResidualProducts = data.products || [];
+  } catch(e) { console.warn('loadResidualSummary error:', e); }
+}
+
+function openAllBreakdown() {
+  const products = window._allResidualProducts || [];
+  const list = document.getElementById('all-breakdown-list');
+  list.innerHTML = products.length === 0
+    ? '<p style="color:#999;font-size:13px;text-align:center;padding:20px 0;">データがありません</p>'
+    : products.map(p =>
+        '<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #F0EDE5;font-size:14px;">'
+        + '<span style="color:#4A4A4A;">' + p.productName + '</span>'
+        + '<span style="font-weight:700;color:#1A3C5E;">' + p.qty + '個</span></div>'
+      ).join('');
+  document.getElementById('all-breakdown-modal').style.display = 'flex';
+}
+
+function closeAllBreakdown() {
+  document.getElementById('all-breakdown-modal').style.display = 'none';
+}
+
+function startResidualSummaryTimer() {
+  loadResidualSummary();
+  if (residualSummaryTimer) clearInterval(residualSummaryTimer);
+  residualSummaryTimer = setInterval(loadResidualSummary, 30000);
+}
+
+function stopResidualSummaryTimer() {
+  if (residualSummaryTimer) { clearInterval(residualSummaryTimer); residualSummaryTimer = null; }
+}
+
 function switchTab(tab) {
+  if (tab === 'residual') startResidualSummaryTimer();
+  else stopResidualSummaryTimer();
+  if (tab === 'residual') startResidualSummaryTimer();
+  else stopResidualSummaryTimer();
   document.getElementById('tab-collection').classList.toggle('active', tab === 'collection');
   document.getElementById('tab-residual').classList.toggle('active', tab === 'residual');
   document.getElementById('tab-btn-collection').classList.toggle('active', tab === 'collection');
@@ -596,6 +668,17 @@ function closeBreakdown() {
 
 init();
 </script>
+<!-- ALL BREAKDOWN MODAL -->
+<div id="all-breakdown-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;align-items:flex-end;">
+  <div style="background:#FFF;border-radius:20px 20px 0 0;padding:20px 16px 32px;max-height:70vh;overflow-y:auto;width:100%;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <div style="font-size:15px;font-weight:700;color:#1A3C5E;">全ドライバー残数内訳</div>
+      <button onclick="closeAllBreakdown()" style="border:none;background:none;font-size:22px;cursor:pointer;">×</button>
+    </div>
+    <div id="all-breakdown-list"></div>
+  </div>
+</div>
+
 <!-- BREAKDOWN MODAL -->
 <div class="modal-bg" id="breakdown-modal" onclick="if(event.target===this)closeBreakdown()">
   <div class="modal-sheet">
@@ -604,5 +687,16 @@ init();
     <div id="breakdown-list"></div>
   </div>
 </div>
+<!-- ALL BREAKDOWN MODAL -->
+<div id="all-breakdown-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;align-items:flex-end;">
+  <div style="background:#FFF;border-radius:20px 20px 0 0;padding:20px 16px 32px;max-height:70vh;overflow-y:auto;width:100%;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <div style="font-size:15px;font-weight:700;color:#1A3C5E;">全ドライバー残数内訳</div>
+      <button onclick="closeAllBreakdown()" style="border:none;background:none;font-size:22px;cursor:pointer;">×</button>
+    </div>
+    <div id="all-breakdown-list"></div>
+  </div>
+</div>
+
 </body>
 </html>
