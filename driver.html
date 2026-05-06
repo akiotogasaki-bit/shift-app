@@ -360,12 +360,15 @@ body {
     <div id="all-residual-box" style="background:#1A3C5E;border-radius:14px;padding:14px 16px;margin-bottom:12px;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
         <div style="color:rgba(255,255,255,.7);font-size:11px;">全ドライバー残数合計</div>
-        <div style="color:rgba(255,255,255,.5);font-size:10px;" id="residual-updated-at">--:--更新</div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="color:rgba(255,255,255,.5);font-size:10px;" id="residual-updated-at">--:--更新</div>
+          <button onclick="loadResidualSummary()" style="background:rgba(255,255,255,.2);border:none;color:#FFF;font-size:11px;padding:3px 10px;border-radius:10px;cursor:pointer;font-family:inherit;">🔄 更新</button>
+        </div>
       </div>
-      <div onclick="openAllBreakdown()" style="cursor:pointer;text-align:center;padding:8px 0;background:rgba(255,255,255,.1);border-radius:10px;margin-bottom:10px;">
-        <span style="color:#FFF;font-size:36px;font-weight:700;" id="all-residual-total">—</span>
-        <span style="color:rgba(255,255,255,.7);font-size:14px;">個</span>
-        <div style="color:rgba(255,255,255,.5);font-size:10px;margin-top:2px;">タップで種別内訳</div>
+      <div onclick="openAllBreakdown()" style="cursor:pointer;text-align:center;padding:10px 0;background:rgba(255,255,255,.15);border-radius:10px;margin-bottom:10px;border:1px solid rgba(255,255,255,.3);">
+        <span style="color:#FFD700;font-size:44px;font-weight:700;text-shadow:0 0 20px rgba(255,215,0,.5);" id="all-residual-total">—</span>
+        <span style="color:#FFD700;font-size:16px;font-weight:700;">個</span>
+        <div style="color:rgba(255,255,255,.6);font-size:10px;margin-top:2px;">タップで種別内訳</div>
       </div>
       <div id="driver-list" style="display:flex;flex-direction:column;gap:6px;"></div>
     </div>
