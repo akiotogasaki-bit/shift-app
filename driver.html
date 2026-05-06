@@ -638,7 +638,7 @@ function restart() {
   state.collectedIds.clear();
   state.products.forEach(p => {
     const el = document.getElementById(`res-${p.id}`);
-    if (el) el.value = 0;
+    if (el) el.value = '';
   });
   updateResidualTotal();
   renderCollectionList();
