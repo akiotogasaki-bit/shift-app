@@ -1996,6 +1996,7 @@ function submitFinal() {
     paypayCount: state.paypayCount,
     soldCount: state.soldCount,
     soldOutMap: state.soldOutMap,
+    soldOutTimesJson: JSON.stringify(state.soldOutMap || {}),
     productSales: state.productSales,
     baseGigSalary: state.baseGigSalary,
     diffComment: comment,
