@@ -36,11 +36,9 @@ body {
   overflow-x: hidden;
 }
 
-/* ── SCREENS ── */
 .screen { display: none; min-height: 100vh; flex-direction: column; }
 .screen.active { display: flex; }
 
-/* ── HEADER ── */
 .app-header {
   background: var(--red);
   color: var(--white);
@@ -57,16 +55,8 @@ body {
 .header-sub { font-size: 11px; opacity: .8; margin-top: 2px; }
 .header-user { font-size: 12px; opacity: .85; text-align: right; }
 
-/* ── LOADING ── */
-#screen-loading {
-  align-items: center;
-  justify-content: center;
-  background: var(--red);
-}
-.loading-logo {
-  color: var(--white);
-  text-align: center;
-}
+#screen-loading { align-items: center; justify-content: center; background: var(--red); }
+.loading-logo { color: var(--white); text-align: center; }
 .loading-logo h1 { font-size: 28px; font-weight: 700; letter-spacing: .1em; margin-bottom: 8px; }
 .loading-logo p { font-size: 13px; opacity: .7; margin-bottom: 40px; }
 .loader {
@@ -79,7 +69,6 @@ body {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ── SELECT LOCATION ── */
 #screen-location { background: var(--cream); }
 .section-title {
   font-size: 13px;
@@ -89,29 +78,9 @@ body {
   padding: 20px 16px 10px;
   text-transform: uppercase;
 }
-.location-list { padding: 0 16px 100px; }
-.location-item {
-  background: var(--white);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 14px 16px;
-  margin-bottom: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  cursor: pointer;
-  transition: all .15s;
-}
-.location-item:active { background: var(--cream-dark); transform: scale(.98); }
-.location-name { font-size: 15px; font-weight: 500; }
-.location-arrow { color: var(--ink-mute); font-size: 18px; }
 
-/* ── START REPORT ── */
 #screen-start { background: var(--cream); }
-.form-section {
-  padding: 16px;
-  flex: 1;
-}
+.form-section { padding: 16px; flex: 1; }
 .form-card {
   background: var(--white);
   border: 1px solid var(--border);
@@ -150,44 +119,85 @@ body {
 .form-input:focus { outline: none; border-color: var(--red); background: var(--white); }
 .form-unit { font-size: 13px; color: var(--ink-mute); margin-left: 6px; width: 20px; }
 
-/* ── REGISTER ── */
+/* ═════════════ REGISTER（大改修版） ═════════════ */
 #screen-register { background: #1A1A1A; }
 #screen-register .app-header { background: #111; }
 
+/* ── カテゴリータブバー ── */
+.cat-tab-bar {
+  display: flex;
+  background: #1A1A1A;
+  border-bottom: 1px solid #2A2A2A;
+  position: sticky;
+  top: 56px;
+  z-index: 99;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.cat-tab-bar::-webkit-scrollbar { display: none; }
+.cat-tab-btn {
+  flex: 1;
+  min-width: max-content;
+  padding: 12px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #888;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  font-family: inherit;
+  transition: all .15s;
+  white-space: nowrap;
+}
+.cat-tab-btn.active { color: #F4C430; border-bottom-color: #F4C430; }
+
+/* ── 大型2列グリッド ── */
 .products-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
   padding: 12px;
 }
 .product-btn {
   background: #2A2A2A;
   border: 1.5px solid #333;
-  border-radius: 10px;
-  padding: 10px 6px;
+  border-left: 5px solid #555;
+  border-radius: 12px;
+  padding: 14px 12px;
   text-align: center;
   cursor: pointer;
   transition: all .12s;
   position: relative;
   overflow: hidden;
-}
-.product-btn:active { transform: scale(.93); background: #333; }
-.product-img {
-  width: 52px; height: 52px;
-  background: #333;
-  border-radius: 8px;
-  margin: 0 auto 6px;
+  min-height: 140px;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-  overflow: hidden;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: space-between;
 }
-.product-img img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; }
-.product-name { font-size: 11px; color: #CCC; margin-bottom: 3px; line-height: 1.3; }
-.product-price { font-size: 13px; color: #F4C430; font-weight: 700; }
+.product-btn:active { transform: scale(.95); background: #333; }
 
-/* Cart */
+/* カテゴリー別の左ライン色 */
+.product-btn.cat-noriben    { border-left-color: #E74C3C; }
+.product-btn.cat-manpuku    { border-left-color: #E67E22; }
+.product-btn.cat-tasha      { border-left-color: #3498DB; }
+.product-btn.cat-zenroku    { border-left-color: #27AE60; }
+.product-btn.cat-zen        { border-left-color: #F1C40F; }
+
+.product-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+}
+.product-name-small { font-size: 20px; color: #FFF; font-weight: 700; line-height: 1.3; letter-spacing: .02em; }
+.product-variant    { font-size: 20px; color: #FFF; font-weight: 700; line-height: 1.2; letter-spacing: .03em; }
+.product-name-large { font-size: 22px; color: #FFF; font-weight: 700; line-height: 1.3; }
+.product-price      { font-size: 17px; color: #F4C430; font-weight: 700; margin-top: 4px; letter-spacing: .03em; }
+
 .cart-area {
   background: #222;
   margin: 0 12px;
@@ -222,7 +232,6 @@ body {
 .cart-qty { font-size: 14px; color: #FFF; font-weight: 700; width: 20px; text-align: center; }
 .cart-subtotal { font-size: 13px; color: #F4C430; font-weight: 700; margin-left: 8px; width: 65px; text-align: right; }
 
-/* Coupon */
 .coupon-row {
   display: flex;
   align-items: center;
@@ -264,16 +273,29 @@ body {
 .coupon-input:focus { outline: none; border-color: var(--green); }
 .coupon-unit { font-size: 12px; color: #666; }
 
-/* Total & Pay */
+/* ── 固定下部エリア（合計＋支払いボタン） ── */
+.fixed-bottom {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 480px;
+  background: #0F0F0F;
+  border-top: 1px solid #333;
+  z-index: 50;
+  box-shadow: 0 -4px 16px rgba(0,0,0,.5);
+}
 .total-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 12px;
-  border-top: 1px solid #333;
+  padding: 14px 16px;
+  background: #1A1A1A;
+  border-bottom: 1px solid #333;
 }
-.total-label { font-size: 13px; color: #888; }
-.total-amount { font-size: 24px; color: #FFF; font-weight: 700; }
+.total-label { font-size: 14px; color: #AAA; }
+.total-amount { font-size: 30px; color: #FFF; font-weight: 700; letter-spacing: .03em; }
 
 .pay-btns {
   display: grid;
@@ -283,10 +305,10 @@ body {
   padding-bottom: calc(8px + var(--safe-bottom));
 }
 .pay-btn {
-  padding: 14px;
+  padding: 16px;
   border-radius: 10px;
   border: none;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
   font-family: inherit;
   cursor: pointer;
@@ -297,7 +319,66 @@ body {
 .pay-cash { background: var(--red); color: #FFF; }
 .pay-paypay { background: #EE3842; color: #FFF; }
 
-/* ── CHANGE MODAL ── */
+/* ── ヘッダー内のサブボタン ── */
+.header-action-btn {
+  background: rgba(255,255,255,.15);
+  color: #FFF;
+  border: 1px solid rgba(255,255,255,.3);
+  border-radius: 18px;
+  padding: 5px 12px;
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  margin-left: 6px;
+}
+.header-action-btn:active { opacity: .7; }
+
+/* ── 完売バッジ ── */
+.product-btn.soldout { opacity: .55; position: relative; }
+.product-btn.soldout::after {
+  content: '完売';
+  position: absolute;
+  top: 6px; right: 6px;
+  background: var(--red);
+  color: #FFF;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+.soldout-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding-top: 5px;
+  border-top: 1px solid #333;
+  width: 100%;
+}
+.soldout-label { font-size: 10px; color: #888; }
+.soldout-toggle {
+  width: 34px; height: 18px;
+  background: #444;
+  border-radius: 9px;
+  position: relative;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.soldout-toggle.on { background: var(--red); }
+.soldout-toggle::after {
+  content: '';
+  position: absolute;
+  width: 14px; height: 14px;
+  background: #FFF;
+  border-radius: 50%;
+  top: 2px; left: 2px;
+  transition: left .2s;
+}
+.soldout-toggle.on::after { left: 18px; }
+
+/* ═════════════ MODALS ═════════════ */
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -319,6 +400,8 @@ body {
   padding: 20px 16px calc(20px + var(--safe-bottom));
   transform: translateY(100%);
   transition: transform .25s cubic-bezier(.32,0,.15,1);
+  max-height: 85vh;
+  overflow-y: auto;
 }
 .modal-overlay.show .modal-sheet { transform: translateY(0); }
 .modal-handle {
@@ -376,7 +459,51 @@ body {
 }
 .modal-confirm-btn:active { opacity: .8; }
 
-/* ── FINAL REPORT ── */
+/* ── 履歴モーダル ── */
+.history-row {
+  background: #1A1A1A;
+  border: 1px solid #333;
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 8px;
+}
+.history-row.canceled { opacity: .5; }
+.history-row-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.history-time { color: #888; font-size: 12px; }
+.history-method { 
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.history-method.cash { background: rgba(192,57,43,.3); color: #FF6B6B; }
+.history-method.paypay { background: rgba(238,56,66,.3); color: #FF8585; }
+.history-method.canceled { background: #444; color: #999; }
+.history-items { color: #CCC; font-size: 13px; line-height: 1.5; margin-bottom: 6px; }
+.history-amount { font-size: 18px; color: #F4C430; font-weight: 700; margin-bottom: 8px; }
+.history-actions { display: flex; gap: 6px; }
+.history-action-btn {
+  flex: 1;
+  padding: 8px;
+  border: 1px solid #555;
+  background: transparent;
+  color: #DDD;
+  border-radius: 8px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.history-action-btn:active { background: #333; }
+.history-action-btn.cancel-btn { color: #EF5350; border-color: #5A2A2A; }
+.history-action-btn.edit-btn { color: #5DADE2; border-color: #2A4A5A; }
+.history-empty { color: #666; text-align: center; padding: 30px 0; font-size: 13px; }
+
+/* ═════════════ FINAL REPORT ═════════════ */
 #screen-final { background: var(--cream); }
 .result-card {
   background: var(--white);
@@ -431,7 +558,6 @@ body {
 }
 .comment-input:focus { outline: none; }
 
-/* ── BUTTONS ── */
 .btn-primary {
   display: block;
   width: calc(100% - 32px);
@@ -468,7 +594,6 @@ body {
 
 .bottom-pad { height: calc(24px + var(--safe-bottom)); }
 
-/* ── COMPLETE ── */
 #screen-complete {
   background: var(--red);
   align-items: center;
@@ -498,10 +623,9 @@ body {
 .complete-row:last-child { border-bottom: none; }
 .complete-row span:last-child { font-weight: 700; color: var(--white); }
 
-/* ── TOAST ── */
 .toast {
   position: fixed;
-  bottom: calc(80px + var(--safe-bottom));
+  bottom: calc(180px + var(--safe-bottom));
   left: 50%;
   transform: translateX(-50%) translateY(20px);
   background: #333;
@@ -516,82 +640,6 @@ body {
   z-index: 300;
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-
-/* ── NAV ── */
-/* ── SOLDOUT TOGGLE ── */
-.product-btn.soldout {
-  opacity: .55;
-  position: relative;
-}
-.product-btn.soldout::after {
-  content: '完売';
-  position: absolute;
-  top: 6px; right: 6px;
-  background: var(--red);
-  color: #FFF;
-  font-size: 10px;
-  font-weight: 700;
-  padding: 2px 6px;
-  border-radius: 6px;
-}
-.soldout-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  margin-top: 5px;
-  padding-top: 5px;
-  border-top: 1px solid #333;
-}
-.soldout-label {
-  font-size: 10px;
-  color: #888;
-}
-.soldout-toggle {
-  width: 34px; height: 18px;
-  background: #444;
-  border-radius: 9px;
-  position: relative;
-  cursor: pointer;
-  transition: background .2s;
-  flex-shrink: 0;
-}
-.soldout-toggle.on { background: var(--red); }
-.soldout-toggle::after {
-  content: '';
-  position: absolute;
-  width: 14px; height: 14px;
-  background: #FFF;
-  border-radius: 50%;
-  top: 2px; left: 2px;
-  transition: left .2s;
-}
-.soldout-toggle.on::after { left: 18px; }
-
-.bottom-nav {
-  position: fixed;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 100%;
-  max-width: 480px;
-  background: #111;
-  display: flex;
-  padding-bottom: var(--safe-bottom);
-  border-top: 1px solid #2A2A2A;
-  z-index: 100;
-}
-.nav-item {
-  flex: 1;
-  padding: 10px 4px 8px;
-  text-align: center;
-  cursor: pointer;
-  transition: opacity .15s;
-}
-.nav-item:active { opacity: .6; }
-.nav-icon { font-size: 20px; margin-bottom: 2px; }
-.nav-label { font-size: 10px; color: #666; letter-spacing: .05em; }
-.nav-item.active .nav-label { color: var(--red); }
 </style>
 </head>
 <body>
@@ -616,52 +664,23 @@ body {
   </div>
   <div class="section-title">担当拠点</div>
   <div style="padding:0 16px 8px;">
-    <button onclick="showSpotInput()" style="width:100%;padding:12px;background:transparent;color:var(--ink-soft);border:1.5px dashed var(--border);border-radius:12px;font-size:13px;font-family:inherit;cursor:pointer;">
-      📋 スポット（当日のみ）で入力する
-    </button>
+    <button onclick="showSpotInput()" style="width:100%;padding:12px;background:transparent;color:var(--ink-soft);border:1.5px dashed var(--border);border-radius:12px;font-size:13px;font-family:inherit;cursor:pointer;">📋 スポット（当日のみ）で入力する</button>
   </div>
   <div id="spot-input-area" style="display:none;padding:0 16px 12px;">
     <div class="form-card">
       <div class="form-card-title">お名前（スポット）</div>
       <div class="form-row">
-        <input type="text" id="spot-name" placeholder="例：田中 太郎" maxlength="20"
-          style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:15px;font-family:inherit;background:var(--cream);">
+        <input type="text" id="spot-name" placeholder="例：田中 太郎" maxlength="20" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:15px;font-family:inherit;background:var(--cream);">
       </div>
     </div>
     <button onclick="confirmSpot()" style="width:100%;padding:14px;background:var(--ink-soft);color:#FFF;border:none;border-radius:12px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;margin-bottom:8px;">スポットで続ける</button>
     <button onclick="cancelSpot()" style="width:100%;padding:10px;background:transparent;color:var(--ink-mute);border:1px solid var(--border);border-radius:12px;font-size:13px;font-family:inherit;cursor:pointer;">キャンセル</button>
   </div>
   <div style="padding:0 16px 24px;">
-    <select id="location-select" style="
-      width:100%;
-      padding:14px 16px;
-      font-size:16px;
-      font-family:inherit;
-      background:var(--white);
-      border:1.5px solid var(--border);
-      border-radius:12px;
-      color:var(--ink);
-      appearance:none;
-      -webkit-appearance:none;
-      background-image:url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2224%22 height=%2224%22 viewBox=%220 0 24 24%22><path fill=%22%239A9A9A%22 d=%22M7 10l5 5 5-5z%22/></svg>');
-      background-repeat:no-repeat;
-      background-position:right 12px center;
-    ">
+    <select id="location-select" style="width:100%;padding:14px 16px;font-size:16px;font-family:inherit;background:var(--white);border:1.5px solid var(--border);border-radius:12px;color:var(--ink);appearance:none;-webkit-appearance:none;background-image:url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2224%22 height=%2224%22 viewBox=%220 0 24 24%22><path fill=%22%239A9A9A%22 d=%22M7 10l5 5 5-5z%22/></svg>');background-repeat:no-repeat;background-position:right 12px center;">
       <option value="">拠点を選択してください</option>
     </select>
-    <button onclick="confirmLocation()" style="
-      width:100%;
-      margin-top:12px;
-      padding:16px;
-      background:var(--red);
-      color:#fff;
-      border:none;
-      border-radius:12px;
-      font-size:16px;
-      font-weight:700;
-      font-family:inherit;
-      cursor:pointer;
-    ">選択する</button>
+    <button onclick="confirmLocation()" style="width:100%;margin-top:12px;padding:16px;background:var(--red);color:#fff;border:none;border-radius:12px;font-size:16px;font-weight:700;font-family:inherit;cursor:pointer;">選択する</button>
   </div>
 </div>
 
@@ -677,9 +696,7 @@ body {
   <div class="form-section">
     <div class="form-card">
       <div class="form-card-title">納品数（種類別）</div>
-      <div id="delivery-inputs">
-        <!-- 商品ごとに動的生成 -->
-      </div>
+      <div id="delivery-inputs"></div>
     </div>
     <div class="form-card">
       <div class="form-card-title">レジ開始金額</div>
@@ -693,7 +710,6 @@ body {
   <button class="btn-primary" id="btn-start-submit">スタート最終確認をする</button>
   <div class="bottom-pad"></div>
 </div>
-
 
 <!-- CONFIRM START -->
 <div id="screen-confirm" class="screen">
@@ -729,53 +745,41 @@ body {
       <div class="header-title" id="reg-location-name">拠点名</div>
       <div class="header-sub" style="color:rgba(255,255,255,.6);">販売レジ</div>
     </div>
-    <div style="display:flex;align-items:center;gap:10px;">
-      <div class="header-user" id="reg-sales-count" style="color:#F4C430;">販売数: 0個</div>
-      <button onclick="showScreen('final')" style="
-        background:rgba(255,255,255,.15);
-        color:#FFF;
-        border:1px solid rgba(255,255,255,.3);
-        border-radius:20px;
-        padding:6px 12px;
-        font-size:12px;
-        font-family:inherit;
-        cursor:pointer;
-        white-space:nowrap;
-      ">締め →</button>
+    <div style="display:flex;align-items:center;gap:6px;">
+      <span class="header-user" id="reg-sales-count" style="color:#F4C430;">0個</span>
+      <button class="header-action-btn" onclick="openHistoryModal()">📋 履歴</button>
+      <button class="header-action-btn" onclick="showScreen('final')">締め →</button>
     </div>
   </div>
 
-  <div style="overflow-y:auto;flex:1;padding-bottom:160px;">
-    <div class="products-grid" id="products-grid">
-      <!-- 動的生成 -->
-    </div>
+  <!-- カテゴリータブ -->
+  <div class="cat-tab-bar" id="cat-tab-bar"></div>
+
+  <div style="overflow-y:auto;flex:1;padding-bottom:200px;">
+    <div class="products-grid" id="products-grid"></div>
 
     <div style="padding:0 12px;">
-      <!-- Cart -->
       <div class="cart-area" id="cart-area">
         <div class="cart-title">CART</div>
         <div class="cart-empty" id="cart-empty">商品を選択してください</div>
         <div id="cart-items"></div>
       </div>
 
-      <!-- Coupon -->
       <div class="coupon-row">
         <div class="coupon-toggle" id="coupon-toggle" onclick="toggleCoupon()"></div>
         <span class="coupon-label">クーポン</span>
         <input type="number" class="coupon-input" id="coupon-amount" value="300" inputmode="numeric" style="display:none;">
         <span class="coupon-unit" id="coupon-unit-label" style="display:none;">円引き</span>
       </div>
-
-      <!-- Total -->
-      <div class="total-bar">
-        <span class="total-label">合計</span>
-        <span class="total-amount" id="total-amount">¥0</span>
-      </div>
     </div>
   </div>
 
-  <!-- Pay Buttons -->
-  <div style="position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;background:#1A1A1A;border-top:1px solid #333;">
+  <!-- 固定下部：合計＋支払いボタン -->
+  <div class="fixed-bottom">
+    <div class="total-bar">
+      <span class="total-label">合計</span>
+      <span class="total-amount" id="total-amount">¥0</span>
+    </div>
     <div class="pay-btns">
       <button class="pay-btn pay-cash" id="btn-cash" onclick="openCashModal()" disabled>💴 現金</button>
       <button class="pay-btn pay-paypay" id="btn-paypay" onclick="processPayPay()" disabled>📱 PayPay</button>
@@ -858,13 +862,7 @@ body {
     <div class="result-card">
       <div class="result-card-header">申し送り</div>
       <div class="form-row">
-        <textarea id="final-memo" placeholder="特記事項・申し送りがあれば入力してください" style="
-          width:100%;padding:8px 10px;
-          border:1.5px solid var(--border);border-radius:8px;
-          font-size:14px;font-family:inherit;
-          background:var(--cream);color:var(--ink);
-          resize:none;height:80px;line-height:1.6;
-        "></textarea>
+        <textarea id="final-memo" placeholder="特記事項・申し送りがあれば入力してください" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;background:var(--cream);color:var(--ink);resize:none;height:80px;line-height:1.6;"></textarea>
       </div>
     </div>
 
@@ -880,19 +878,7 @@ body {
   <div class="complete-icon">✅</div>
   <div class="complete-title">報告完了</div>
   <div class="complete-sub">本日もお疲れ様でした！<br>報告内容が送信されました。</div>
-  <button onclick="goToEdit()" style="
-    background:rgba(255,255,255,.2);
-    color:#FFF;
-    border:1px solid rgba(255,255,255,.4);
-    border-radius:12px;
-    padding:12px 24px;
-    font-size:14px;
-    font-family:inherit;
-    cursor:pointer;
-    margin-bottom:16px;
-    width:100%;
-    max-width:320px;
-  ">📝 報告内容を確認・修正する</button>
+  <button onclick="goToEdit()" style="background:rgba(255,255,255,.2);color:#FFF;border:1px solid rgba(255,255,255,.4);border-radius:12px;padding:12px 24px;font-size:14px;font-family:inherit;cursor:pointer;margin-bottom:16px;width:100%;max-width:320px;">📝 報告内容を確認・修正する</button>
   <div class="complete-card">
     <div class="complete-row"><span>販売数</span><span id="comp-sold">0個</span></div>
     <div class="complete-row"><span>完売率</span><span id="comp-rate">0%</span></div>
@@ -904,7 +890,6 @@ body {
     </div>
   </div>
 </div>
-
 
 <!-- EDIT REPORT -->
 <div id="screen-edit" class="screen">
@@ -918,12 +903,10 @@ body {
     <div id="edit-deadline-alert" class="alert-card" style="display:none;">
       <p>⚠️ 編集期限（16:00）を過ぎているため、修正できません。</p>
     </div>
-
     <div class="form-card">
       <div class="form-card-title">納品数（種類別）</div>
       <div id="edit-delivery-inputs"></div>
     </div>
-
     <div class="form-card">
       <div class="form-card-title">レジ金額</div>
       <div class="form-row">
@@ -937,7 +920,6 @@ body {
         <span class="form-unit">円</span>
       </div>
     </div>
-
     <div class="form-card">
       <div class="form-card-title">売上</div>
       <div class="form-row">
@@ -951,34 +933,19 @@ body {
         <span class="form-unit">円</span>
       </div>
     </div>
-
     <div class="form-card">
       <div class="form-card-title">差異コメント</div>
       <div class="form-row">
-        <textarea id="edit-diff-comment" style="
-          width:100%;padding:8px 10px;
-          border:1.5px solid var(--border);border-radius:8px;
-          font-size:14px;font-family:inherit;
-          background:var(--cream);color:var(--ink);
-          resize:none;height:60px;line-height:1.6;
-        "></textarea>
+        <textarea id="edit-diff-comment" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;background:var(--cream);color:var(--ink);resize:none;height:60px;line-height:1.6;"></textarea>
       </div>
     </div>
-
     <div class="form-card">
       <div class="form-card-title">申し送り</div>
       <div class="form-row">
-        <textarea id="edit-memo" style="
-          width:100%;padding:8px 10px;
-          border:1.5px solid var(--border);border-radius:8px;
-          font-size:14px;font-family:inherit;
-          background:var(--cream);color:var(--ink);
-          resize:none;height:80px;line-height:1.6;
-        "></textarea>
+        <textarea id="edit-memo" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;background:var(--cream);color:var(--ink);resize:none;height:80px;line-height:1.6;"></textarea>
       </div>
     </div>
   </div>
-
   <button class="btn-primary" id="btn-edit-submit" onclick="submitEdit()">修正を保存する</button>
   <button class="btn-secondary" onclick="showScreen('complete')">戻る</button>
   <div class="bottom-pad"></div>
@@ -1005,43 +972,77 @@ body {
   </div>
 </div>
 
+<!-- HISTORY MODAL -->
+<div class="modal-overlay" id="history-modal" onclick="if(event.target===this)closeHistoryModal()">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">本日の会計履歴 <span id="history-count" style="color:#F4C430;font-size:14px;font-weight:700;"></span></div>
+    <div id="history-list"></div>
+    <button class="modal-confirm-btn" onclick="closeHistoryModal()" style="margin-top:14px;background:#444;">閉じる</button>
+  </div>
+</div>
+
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
 <script>
-// ─────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
 // STATE
-// ─────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
 const state = {
   userId: '',
   userName: '',
-  location: null,       // { id, name, baseGigSalary }
-  products: [],         // [{ id, name, price, photoUrl }]
-  deliveryCount: {},    // { productId: count }
+  location: null,
+  products: [],
+  deliveryCount: {},
   registerStart: 0,
-  cart: [],             // [{ product, qty }]
+  cart: [],
   cashSales: 0,
   paypayCount: 0,
   paypayAmount: 0,
   couponOn: false,
   couponAmount: 300,
   soldCount: 0,
-  productSales: {},     // { productId: qty }
-  soldOutMap: {},       // { productId: '14:32' } 初回完売時刻
-  makanaiあり: true,    // 賄い有無（デフォルト：有り）
-  fixedSalary: 0,       // 固定ギャラ（0=通常計算）
-  staffRole: '',        // 属性
-  isSpot: false,        // スポットバイト
+  productSales: {},
+  soldOutMap: {},
+  history: [],          // ★ NEW: 会計履歴
+  activeCategory: null, // ★ NEW: 現在のタブ
+  'makanaiあり': true,
+  fixedSalary: 0,
+  staffRole: '',
+  isSpot: false,
   incentiveUnit: 10,
   incentiveRate: 100,
   baseGigSalary: 0,
+  // ★テスト用GAS URL（本番反映時はProduction URLに変更）
   GAS_URL: 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5AawPDc7aluPokONkYz6f2ikwl0S487JvhKdKh6QSp1xhEhA/exec',
 };
 
-// ─────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
 // INIT
-// ─────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
 async function init() {
+  // ── テストモード（Safari等でLIFF経由せずに表示確認するため） ──
+  // URLに ?test=1 をつけるとLIFFをバイパス
+  const isTestMode = new URLSearchParams(location.search).get('test') === '1';
+  if (isTestMode) {
+    try {
+      state.userId   = 'TEST_USER';
+      state.userName = 'テストユーザー';
+      document.getElementById('user-name-location').textContent = state.userName;
+      await loadMasterData();
+      renderLocations();
+      showScreen('location');
+    } catch(e) {
+      document.getElementById('screen-loading').innerHTML =
+        `<div style="color:#fff;padding:40px;font-size:13px;">
+          <p style="font-size:18px;margin-bottom:16px;">テストモードエラー</p>
+          <p>${e.message}</p>
+        </div>`;
+    }
+    return;
+  }
+
   try {
     await liff.init({ liffId: '2009637457-O8NspH8f' });
     if (!liff.isLoggedIn()) { liff.login(); return; }
@@ -1049,15 +1050,12 @@ async function init() {
     const profile = await liff.getProfile();
     state.userId   = profile.userId;
     state.userName = profile.displayName;
-
     document.getElementById('user-name-location').textContent = state.userName;
 
     await loadMasterData();
 
-    // 当日の提出済み報告を確認
     const todayReport = await checkTodayReport();
     if (todayReport) {
-      const choices = ['修正する', '新規入力'];
       const msg = `本日すでに報告が提出されています。\n\n拠点：${todayReport.locationName}\n販売数：${todayReport.soldCount}個\n完売率：${todayReport.sellRate}%\n\n報告内容を修正しますか？`;
       if (confirm(msg)) {
         loadEditFromReport(todayReport);
@@ -1065,7 +1063,6 @@ async function init() {
       }
     }
 
-    // 前回の途中データを確認
     const restored = restoreState();
     if (restored) {
       const loc = state.location;
@@ -1074,8 +1071,9 @@ async function init() {
         document.getElementById('start-user-name').textContent      = state.userName;
         document.getElementById('reg-location-name').textContent    = loc.name;
         document.getElementById('final-location-name').textContent  = loc.name;
+        renderCategoryTabs();
         renderProducts();
-        document.getElementById('reg-sales-count').textContent = `販売数: ${state.soldCount}個`;
+        document.getElementById('reg-sales-count').textContent = `${state.soldCount}個`;
         showScreen('register');
         return;
       } else {
@@ -1093,17 +1091,10 @@ async function init() {
   }
 }
 
-// ─────────────────────────────────────
-// MASTER DATA FROM GAS
-// ─────────────────────────────────────
 async function loadMasterData() {
   try {
-    const res = await fetch(`${state.GAS_URL}?action=getMaster`, {
-      method: 'GET',
-      redirect: 'follow',
-    });
-    const text = await res.text();
-    const data = JSON.parse(text);
+    const res = await fetch(`${state.GAS_URL}?action=getMaster`, { method: 'GET', redirect: 'follow' });
+    const data = JSON.parse(await res.text());
     if (data && data.products && data.products.length > 0) {
       state.products      = data.products  || [];
       state.locations     = data.locations || [];
@@ -1126,42 +1117,30 @@ async function loadMasterData() {
 
 function loadDemoData() {
   state.products = [
-    { id: 'P001', name: 'のり弁当', price: 500, photoUrl: '' },
-    { id: 'P002', name: '幕の内弁当', price: 600, photoUrl: '' },
-    { id: 'P003', name: '唐揚げ弁当', price: 550, photoUrl: '' },
-    { id: 'P004', name: '焼き魚弁当', price: 580, photoUrl: '' },
-    { id: 'P005', name: '特製弁当', price: 800, photoUrl: '' },
+    { id: 'P001', name: 'のり弁当', price: 500, photoUrl: '', category: '海苔弁系' },
+    { id: 'P002', name: '幕の内弁当', price: 600, photoUrl: '', category: '海苔弁系' },
+    { id: 'P015', name: 'お茶', price: 100, photoUrl: '', category: '全' },
   ];
   state.locations = [
     { id: 'L001', name: '京橋', baseGigSalary: 3000 },
-    { id: 'L002', name: '大手町', baseGigSalary: 3500 },
-    { id: 'L003', name: '銀座', baseGigSalary: 3000 },
   ];
 }
 
-// ─────────────────────────────────────
-// SCREENS
-// ─────────────────────────────────────
 function showScreen(name) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(`screen-${name}`).classList.add('active');
   window.scrollTo(0, 0);
 }
 
-// ─────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
 // LOCATION SELECT
-// ─────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
 function renderLocations() {
   const select = document.getElementById('location-select');
   select.innerHTML = '<option value="">拠点を選択してください</option>' +
-    state.locations.map(loc =>
-      `<option value="${loc.id}">${loc.name}</option>`
-    ).join('');
+    (state.locations || []).map(loc => `<option value="${loc.id}">${loc.name}</option>`).join('');
 }
-
-function showSpotInput() {
-  document.getElementById('spot-input-area').style.display = 'block';
-}
+function showSpotInput() { document.getElementById('spot-input-area').style.display = 'block'; }
 function cancelSpot() {
   document.getElementById('spot-input-area').style.display = 'none';
   document.getElementById('spot-name').value = '';
@@ -1176,18 +1155,15 @@ function confirmSpot() {
   cancelSpot();
   selectLocation(select.value);
 }
-
 function confirmLocation() {
   const select = document.getElementById('location-select');
   const id = select.value;
   if (!id) { showToast('拠点を選択してください'); return; }
   selectLocation(id);
 }
-
 function selectLocation(id) {
   state.location = state.locations.find(l => l.id === id);
   state.baseGigSalary = state.location.baseGigSalary || 0;
-  // スタッフ設定から固定ギャラ・属性を取得
   const staffInfo = (state.staffList || []).find(s => s.userId === state.userId);
   state.fixedSalary = staffInfo ? (staffInfo.fixedSalary || 0) : 0;
   state.staffRole   = staffInfo ? (staffInfo.role || '販売員') : '販売員';
@@ -1201,9 +1177,9 @@ function selectLocation(id) {
   showScreen('start');
 }
 
-// ─────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
 // START REPORT
-// ─────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
 function renderDeliveryInputs() {
   const container = document.getElementById('delivery-inputs');
   container.innerHTML = state.products.map(p => `
@@ -1247,26 +1223,118 @@ function showConfirm() {
 }
 
 function goToRegisterFromConfirm() {
+  // ★ ここで開始報告をGASに送信（納品数を1度だけ送る）
+  sendStartReport();
+  renderCategoryTabs();
   renderProducts();
   showScreen('register');
 }
 
-// ─────────────────────────────────────
-// REGISTER
-// ─────────────────────────────────────
+function sendStartReport() {
+  const payload = {
+    action:        'submitStart',
+    userId:        state.userId,
+    userName:      state.userName,
+    locationId:    state.location?.id,
+    locationName:  state.location?.name,
+    registerStart: state.registerStart,
+    deliveryCount: state.deliveryCount,
+    timestamp:     new Date().toISOString(),
+  };
+  fetch(state.GAS_URL, { method: 'POST', body: JSON.stringify(payload) })
+    .catch(e => console.warn('start report error:', e));
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CATEGORY TABS（NEW）
+// ═══════════════════════════════════════════════════════════════
+function getCategories() {
+  const cats = [];
+  state.products.forEach(p => {
+    const c = (p.category || '').trim();
+    if (!c) return;
+    if (c === '全') return; // お茶等は全タブに表示するためここでは除外
+    if (!cats.includes(c)) cats.push(c);
+  });
+  return cats;
+}
+
+function renderCategoryTabs() {
+  const cats = getCategories();
+  if (!state.activeCategory && cats.length > 0) state.activeCategory = cats[0];
+  const bar = document.getElementById('cat-tab-bar');
+  bar.innerHTML = cats.map(c => `
+    <button class="cat-tab-btn ${c === state.activeCategory ? 'active' : ''}" onclick="switchCategory('${c}')">
+      ${c}
+    </button>
+  `).join('');
+}
+
+function switchCategory(cat) {
+  state.activeCategory = cat;
+  renderCategoryTabs();
+  renderProducts();
+}
+
+function getProductsForActiveTab() {
+  const cat = state.activeCategory;
+  if (!cat) return state.products;
+  // 該当カテゴリーの商品 + 「全」のお茶を末尾に
+  const inCat = state.products.filter(p => (p.category || '').trim() === cat);
+  const all   = state.products.filter(p => (p.category || '').trim() === '全');
+  return [...inCat, ...all];
+}
+
+// ═══════════════════════════════════════════════════════════════
+// REGISTER（商品グリッド）
+// ═══════════════════════════════════════════════════════════════
+function parseProductName(name, displayName) {
+  // 表示名（displayName）が設定されていればそれを使う
+  if (displayName) {
+    // 表示名内に「」があれば分離（任意対応）
+    let m = displayName.match(/^(.+?)「(.+?)」$/);
+    if (m) return { mainName: m[1].trim(), variant: m[2].trim() };
+    // 元の商品名からバリアント部分だけ取り出す
+    let origM = name.match(/^(.+?)「(.+?)」$/) || name.match(/^(.+?)『(.+?)』$/);
+    const variant = origM ? origM[2].trim() : null;
+    return { mainName: displayName.trim(), variant };
+  }
+  // 表示名なし → 元の商品名から「」『』で自動分離
+  let match = name.match(/^(.+?)「(.+?)」$/);
+  if (match) return { mainName: match[1].trim(), variant: match[2].trim() };
+  match = name.match(/^(.+?)『(.+?)』$/);
+  if (match) return { mainName: match[1].trim(), variant: match[2].trim() };
+  return { mainName: name.trim(), variant: null };
+}
+
+function getCategoryClass(category) {
+  const c = (category || '').trim();
+  if (c === '海苔弁系') return 'cat-noriben';
+  if (c === '満腹系')   return 'cat-manpuku';
+  if (c === '他社商品') return 'cat-tasha';
+  if (c === '全六')     return 'cat-zenroku';
+  if (c === '全')       return 'cat-zen';
+  return '';
+}
+
 function renderProducts() {
   const grid = document.getElementById('products-grid');
-  grid.innerHTML = state.products.map(p => {
-    const imgHtml = p.photoUrl
-      ? `<img src="${p.photoUrl}" alt="${p.name}" onerror="this.parentElement.innerHTML='🍱'">`
-      : '🍱';
-    const isSoldOut = !!state.soldOutMap[p.id];
+  const products = getProductsForActiveTab();
+  grid.innerHTML = products.map(p => {
+    const { mainName, variant } = parseProductName(p.name, p.displayName);
+    const isSoldOut   = !!state.soldOutMap[p.id];
     const soldOutTime = state.soldOutMap[p.id] || '';
+    const catClass    = getCategoryClass(p.category);
+    const nameHtml = variant
+      ? `<div class="product-name-small">${mainName}</div>
+         <div class="product-variant">${variant}</div>`
+      : `<div class="product-name-large">${mainName}</div>`;
     return `
-      <div class="product-btn ${isSoldOut ? 'soldout' : ''}" onclick="addToCart('${p.id}')">
-        <div class="product-img">${imgHtml}</div>
-        <div class="product-name">${p.name}</div>
-        <div class="product-price">¥${p.price.toLocaleString()}</div>
+      <div class="product-btn ${catClass} ${isSoldOut ? 'soldout' : ''}" onclick="addToCart('${p.id}')">
+        <div class="product-content">
+          ${nameHtml}
+          <div class="product-price">¥${p.price.toLocaleString()}</div>
+        </div>
         <div class="soldout-row" onclick="event.stopPropagation()">
           <span class="soldout-label">${isSoldOut ? `完売 ${soldOutTime}` : '完売'}</span>
           <div class="soldout-toggle ${isSoldOut ? 'on' : ''}" onclick="toggleSoldOut('${p.id}')"></div>
@@ -1278,14 +1346,11 @@ function renderProducts() {
 
 function toggleSoldOut(productId) {
   if (state.soldOutMap[productId]) {
-    // 解除
     delete state.soldOutMap[productId];
   } else {
-    // 初回完売時刻を記録
     const now = new Date();
     const time = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
     state.soldOutMap[productId] = time;
-    // 非同期でGASに送信
     sendSoldOutEvent(productId, time);
   }
   saveState();
@@ -1312,11 +1377,8 @@ function sendSoldOutEvent(productId, time) {
 function addToCart(productId) {
   const product = state.products.find(p => p.id === productId);
   const existing = state.cart.find(c => c.product.id === productId);
-  if (existing) {
-    existing.qty++;
-  } else {
-    state.cart.push({ product, qty: 1 });
-  }
+  if (existing) existing.qty++;
+  else state.cart.push({ product, qty: 1 });
   renderCart();
   showToast(`${product.name} を追加`);
 }
@@ -1325,9 +1387,7 @@ function updateQty(productId, delta) {
   const item = state.cart.find(c => c.product.id === productId);
   if (!item) return;
   item.qty += delta;
-  if (item.qty <= 0) {
-    state.cart = state.cart.filter(c => c.product.id !== productId);
-  }
+  if (item.qty <= 0) state.cart = state.cart.filter(c => c.product.id !== productId);
   renderCart();
 }
 
@@ -1362,17 +1422,14 @@ function renderCart() {
 function cartSubtotal() {
   return state.cart.reduce((sum, item) => sum + item.product.price * item.qty, 0);
 }
-
 function cartTotal() {
   const sub = cartSubtotal();
   const discount = state.couponOn ? (parseInt(document.getElementById('coupon-amount').value) || 0) : 0;
   return Math.max(0, sub - discount);
 }
-
 function updateTotal() {
   document.getElementById('total-amount').textContent = `¥${cartTotal().toLocaleString()}`;
 }
-
 function toggleCoupon() {
   state.couponOn = !state.couponOn;
   const toggle = document.getElementById('coupon-toggle');
@@ -1384,9 +1441,9 @@ function toggleCoupon() {
   updateTotal();
 }
 
-// ─────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
 // CASH MODAL
-// ─────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
 function openCashModal() {
   const total = cartTotal();
   document.getElementById('modal-total').textContent = `¥${total.toLocaleString()}`;
@@ -1395,11 +1452,7 @@ function openCashModal() {
   document.getElementById('cash-confirm-btn').disabled = false;
   document.getElementById('cash-modal').classList.add('show');
 }
-
-function closeCashModal() {
-  document.getElementById('cash-modal').classList.remove('show');
-}
-
+function closeCashModal() { document.getElementById('cash-modal').classList.remove('show'); }
 document.getElementById('cash-modal').addEventListener('click', function(e) {
   if (e.target === this) closeCashModal();
 });
@@ -1419,10 +1472,12 @@ function calcChange() {
 }
 
 function confirmCash() {
-  const total    = cartTotal();
+  const total     = cartTotal();
   const saleItems = [...state.cart];
   state.cashSales += total;
   recordSales('cash');
+  // ★ 履歴に追加
+  addToHistory({ method: 'cash', amount: total, items: saleItems, couponAmount: state.couponOn ? (parseInt(document.getElementById('coupon-amount').value) || 0) : 0 });
   closeCashModal();
   clearCart();
   saveState();
@@ -1436,6 +1491,8 @@ function processPayPay() {
   state.paypayAmount += total;
   state.paypayCount++;
   recordSales('paypay');
+  // ★ 履歴に追加
+  addToHistory({ method: 'paypay', amount: total, items: saleItems, couponAmount: state.couponOn ? (parseInt(document.getElementById('coupon-amount').value) || 0) : 0 });
   clearCart();
   saveState();
   sendIntermediateSale('paypay', total, saleItems);
@@ -1450,8 +1507,6 @@ function recordSales(method) {
     }
     state.soldCount += item.qty;
     state.productSales[item.product.id] = (state.productSales[item.product.id] || 0) + item.qty;
-
-    // ★ 販売数が納品数に達したら完売を自動ON
     const delivery = state.deliveryCount[item.product.id] || 0;
     const sold     = state.productSales[item.product.id] || 0;
     if (delivery > 0 && sold >= delivery && !state.soldOutMap[item.product.id]) {
@@ -1462,8 +1517,8 @@ function recordSales(method) {
       showToast(`🎉 ${item.product.name} 完売！`);
     }
   });
-  document.getElementById('reg-sales-count').textContent = `販売数: ${state.soldCount}個`;
-  renderProducts(); // ★ 完売バッジを即時反映
+  document.getElementById('reg-sales-count').textContent = `${state.soldCount}個`;
+  renderProducts();
 }
 
 function clearCart() {
@@ -1475,9 +1530,167 @@ function clearCart() {
   renderCart();
 }
 
-// ─────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+// HISTORY（NEW）
+// ═══════════════════════════════════════════════════════════════
+function addToHistory(entry) {
+  const now = new Date();
+  state.history.unshift({
+    id:           'sale_' + now.getTime() + '_' + Math.random().toString(36).slice(2,7),
+    timestamp:    `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`,
+    method:       entry.method,
+    amount:       entry.amount,
+    couponAmount: entry.couponAmount || 0,
+    items:        entry.items.map(i => ({ productId: i.product.id, productName: i.product.name, qty: i.qty, price: i.product.price })),
+    status:       'active',
+  });
+}
+
+function openHistoryModal() {
+  renderHistoryList();
+  document.getElementById('history-modal').classList.add('show');
+}
+function closeHistoryModal() { document.getElementById('history-modal').classList.remove('show'); }
+
+function renderHistoryList() {
+  const list = document.getElementById('history-list');
+  document.getElementById('history-count').textContent = `(${state.history.filter(h=>h.status==='active').length}件)`;
+  if (state.history.length === 0) {
+    list.innerHTML = '<div class="history-empty">まだ会計履歴がありません</div>';
+    return;
+  }
+  list.innerHTML = state.history.map(h => {
+    const isCanceled = h.status === 'canceled';
+    const itemsText = h.items.map(i => `${i.productName}×${i.qty}`).join(', ');
+    const methodLabel = isCanceled ? '取消済' : (h.method === 'cash' ? '現金' : 'PayPay');
+    const methodClass = isCanceled ? 'canceled' : h.method;
+    return `
+      <div class="history-row ${isCanceled ? 'canceled' : ''}">
+        <div class="history-row-header">
+          <span class="history-time">${h.timestamp}</span>
+          <span class="history-method ${methodClass}">${methodLabel}</span>
+        </div>
+        <div class="history-items">${itemsText}${h.couponAmount > 0 ? ` <span style="color:#27AE60;">（クーポン -¥${h.couponAmount}）</span>` : ''}</div>
+        <div class="history-amount">¥${h.amount.toLocaleString()}</div>
+        ${isCanceled ? '' : `
+          <div class="history-actions">
+            <button class="history-action-btn cancel-btn" onclick="cancelSale('${h.id}')">取消</button>
+            <button class="history-action-btn edit-btn" onclick="editSale('${h.id}')">修正</button>
+          </div>`}
+      </div>
+    `;
+  }).join('');
+}
+
+function cancelSale(saleId) {
+  const sale = state.history.find(s => s.id === saleId);
+  if (!sale || sale.status !== 'active') return;
+  if (!confirm(`この会計を取消しますか？\n\n${sale.timestamp}  ¥${sale.amount.toLocaleString()}`)) return;
+
+  // 集計から差し引く
+  if (sale.method === 'cash') state.cashSales -= sale.amount;
+  if (sale.method === 'paypay') {
+    state.paypayAmount -= sale.amount;
+    state.paypayCount = Math.max(0, state.paypayCount - 1);
+  }
+  // 商品別販売数から差し引く
+  const teaIds = state.products.filter(p => p.name.includes('お茶')).map(p => p.id);
+  sale.items.forEach(it => {
+    state.productSales[it.productId] = Math.max(0, (state.productSales[it.productId] || 0) - it.qty);
+    state.soldCount = Math.max(0, state.soldCount - it.qty);
+    if (teaIds.includes(it.productId)) {
+      state.teaSoldCount = Math.max(0, (state.teaSoldCount || 0) - it.qty);
+    }
+    // 完売解除（販売数が納品数より少なくなれば）
+    const delivery = state.deliveryCount[it.productId] || 0;
+    const sold     = state.productSales[it.productId] || 0;
+    if (sold < delivery && state.soldOutMap[it.productId]) {
+      delete state.soldOutMap[it.productId];
+    }
+  });
+
+  sale.status = 'canceled';
+  document.getElementById('reg-sales-count').textContent = `${state.soldCount}個`;
+
+  // GASに取消通知
+  sendCancellation(sale);
+
+  saveState();
+  renderHistoryList();
+  renderProducts();
+  showToast('会計を取消しました');
+}
+
+function editSale(saleId) {
+  const sale = state.history.find(s => s.id === saleId);
+  if (!sale || sale.status !== 'active') return;
+  if (!confirm(`この会計を修正しますか？\n\n取り消してカートに戻します。\n商品を変更して再度会計してください。\n\n${sale.timestamp}  ¥${sale.amount.toLocaleString()}`)) return;
+
+  // 一旦取消
+  cancelSaleInternal(sale, false);
+
+  // カートに戻す
+  state.cart = sale.items.map(it => ({
+    product: state.products.find(p => p.id === it.productId) || { id: it.productId, name: it.productName, price: it.price, photoUrl: '' },
+    qty: it.qty,
+  }));
+
+  saveState();
+  renderHistoryList();
+  renderProducts();
+  renderCart();
+  closeHistoryModal();
+  showToast('カートに戻しました。修正後に会計してください');
+}
+
+function cancelSaleInternal(sale, sendNotification = true) {
+  if (sale.method === 'cash') state.cashSales -= sale.amount;
+  if (sale.method === 'paypay') {
+    state.paypayAmount -= sale.amount;
+    state.paypayCount = Math.max(0, state.paypayCount - 1);
+  }
+  const teaIds = state.products.filter(p => p.name.includes('お茶')).map(p => p.id);
+  sale.items.forEach(it => {
+    state.productSales[it.productId] = Math.max(0, (state.productSales[it.productId] || 0) - it.qty);
+    state.soldCount = Math.max(0, state.soldCount - it.qty);
+    if (teaIds.includes(it.productId)) {
+      state.teaSoldCount = Math.max(0, (state.teaSoldCount || 0) - it.qty);
+    }
+    const delivery = state.deliveryCount[it.productId] || 0;
+    const sold     = state.productSales[it.productId] || 0;
+    if (sold < delivery && state.soldOutMap[it.productId]) {
+      delete state.soldOutMap[it.productId];
+    }
+  });
+  sale.status = 'canceled';
+  document.getElementById('reg-sales-count').textContent = `${state.soldCount}個`;
+  if (sendNotification) sendCancellation(sale);
+}
+
+function sendCancellation(sale) {
+  const payload = {
+    action:       'submitCancellation',
+    userId:       state.userId,
+    userName:     state.userName,
+    locationId:   state.location?.id,
+    locationName: state.location?.name,
+    saleId:       sale.id,
+    method:       sale.method,
+    amount:       sale.amount,
+    items:        sale.items,
+    soldCount:    state.soldCount,
+    cashSales:    state.cashSales,
+    paypayAmount: state.paypayAmount,
+    productSales: state.productSales,
+    timestamp:    new Date().toISOString(),
+  };
+  fetch(state.GAS_URL, { method: 'POST', body: JSON.stringify(payload) })
+    .catch(e => console.warn('cancel sync error:', e));
+}
+
+// ═══════════════════════════════════════════════════════════════
 // CHECK TODAY'S SUBMITTED REPORT
-// ─────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
 async function checkTodayReport() {
   try {
     const now   = new Date();
@@ -1485,25 +1698,17 @@ async function checkTodayReport() {
     const res   = await fetch(`${state.GAS_URL}?action=getReport&date=${encodeURIComponent(today)}&userId=${state.userId}`, { redirect: 'follow' });
     const data  = JSON.parse(await res.text());
     return data && data.locationId ? data : null;
-  } catch(e) {
-    return null;
-  }
+  } catch(e) { return null; }
 }
 
 function loadEditFromReport(report) {
-  // stateに報告データをセット
   const loc = state.locations.find(l => l.id === report.locationId);
   if (!loc) { showScreen('location'); return; }
-
   state.location      = loc;
   state.baseGigSalary = loc.baseGigSalary || 0;
-
-  // edit画面の各フィールドに値をセット
   document.getElementById('start-location-name').textContent  = loc.name;
   document.getElementById('reg-location-name').textContent    = loc.name;
   document.getElementById('final-location-name').textContent  = loc.name;
-
-  // edit画面の入力欄を生成してから値を入れる
   const container = document.getElementById('edit-delivery-inputs');
   container.innerHTML = state.products.map(p => `
     <div class="form-row">
@@ -1513,15 +1718,12 @@ function loadEditFromReport(report) {
       <span class="form-unit">個</span>
     </div>
   `).join('');
-
   document.getElementById('edit-register-start').value  = report.registerStart  || 0;
   document.getElementById('edit-register-end').value    = report.registerEnd    || 0;
   document.getElementById('edit-cash-sales').value      = report.cashSales      || 0;
   document.getElementById('edit-paypay-amount').value   = report.paypayAmount   || 0;
   document.getElementById('edit-diff-comment').value    = report.diffComment    || '';
   document.getElementById('edit-memo').value            = report.memo           || '';
-
-  // 編集期限チェック
   const now     = new Date();
   const canEdit = now.getHours() < 16;
   const alert   = document.getElementById('edit-deadline-alert');
@@ -1535,13 +1737,12 @@ function loadEditFromReport(report) {
     btn.disabled = false;
     btn.style.opacity = '1';
   }
-
   showScreen('edit');
 }
 
-// ─────────────────────────────────────
-// STATE PERSISTENCE & REALTIME SYNC
-// ─────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+// STATE PERSISTENCE
+// ═══════════════════════════════════════════════════════════════
 function saveState() {
   try {
     const save = {
@@ -1557,6 +1758,8 @@ function saveState() {
       teaSoldCount:  state.teaSoldCount || 0,
       productSales:  state.productSales,
       soldOutMap:    state.soldOutMap || {},
+      history:       state.history || [],
+      activeCategory: state.activeCategory,
       savedAt:       new Date().toISOString(),
     };
     localStorage.setItem('oedo_register_state', JSON.stringify(save));
@@ -1568,33 +1771,30 @@ function restoreState() {
     const raw = localStorage.getItem('oedo_register_state');
     if (!raw) return false;
     const save = JSON.parse(raw);
-    // 当日のデータのみ復元
     const savedDate = new Date(save.savedAt).toLocaleDateString('ja-JP');
     const today     = new Date().toLocaleDateString('ja-JP');
     if (savedDate !== today) { localStorage.removeItem('oedo_register_state'); return false; }
-    // 拠点情報を復元
     const loc = state.locations.find(l => l.id === save.locationId);
     if (!loc) return false;
-    state.location      = loc;
-    state.baseGigSalary = save.baseGigSalary;
-    state.registerStart = save.registerStart;
-    state.deliveryCount = save.deliveryCount || {};
-    state.cashSales     = save.cashSales     || 0;
-    state.paypayAmount  = save.paypayAmount  || 0;
-    state.paypayCount   = save.paypayCount   || 0;
-    state.soldCount     = save.soldCount     || 0;
-    state.teaSoldCount  = save.teaSoldCount  || 0;
-    state.productSales  = save.productSales  || {};
-    state.soldOutMap    = save.soldOutMap    || {};
+    state.location       = loc;
+    state.baseGigSalary  = save.baseGigSalary;
+    state.registerStart  = save.registerStart;
+    state.deliveryCount  = save.deliveryCount || {};
+    state.cashSales      = save.cashSales     || 0;
+    state.paypayAmount   = save.paypayAmount  || 0;
+    state.paypayCount    = save.paypayCount   || 0;
+    state.soldCount      = save.soldCount     || 0;
+    state.teaSoldCount   = save.teaSoldCount  || 0;
+    state.productSales   = save.productSales  || {};
+    state.soldOutMap     = save.soldOutMap    || {};
+    state.history        = save.history       || [];
+    state.activeCategory = save.activeCategory || null;
     return true;
   } catch(e) { return false; }
 }
 
-function clearSavedState() {
-  localStorage.removeItem('oedo_register_state');
-}
+function clearSavedState() { localStorage.removeItem('oedo_register_state'); }
 
-// 会計ごとにGASへ非同期送信（画面はブロックしない）
 function sendIntermediateSale(method, amount, items) {
   const payload = {
     action:       'submitIntermediateSale',
@@ -1602,8 +1802,7 @@ function sendIntermediateSale(method, amount, items) {
     userName:     state.userName,
     locationId:   state.location?.id,
     locationName: state.location?.name,
-    method,
-    amount,
+    method, amount,
     items:        items.map(i => ({ productId: i.product.id, productName: i.product.name, qty: i.qty })),
     soldCount:    state.soldCount,
     cashSales:    state.cashSales,
@@ -1611,35 +1810,29 @@ function sendIntermediateSale(method, amount, items) {
     productSales: state.productSales,
     timestamp:    new Date().toISOString(),
   };
-  // 非同期送信（待たない）
   fetch(state.GAS_URL, { method: 'POST', body: JSON.stringify(payload) })
     .catch(e => console.warn('intermediate sale sync error:', e));
 }
 
-// ─────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
 // FINAL REPORT
-// ─────────────────────────────────────
-function goToFinal() {
-  showScreen('final');
-}
-
+// ═══════════════════════════════════════════════════════════════
 function calcFinal() {
   const registerEnd  = parseInt(document.getElementById('register-end').value) || 0;
   const cashFromReg  = registerEnd - state.registerStart;
   const diff         = cashFromReg - state.cashSales;
-  // お茶を完売率の計算から除外
   const teaIds = state.products.filter(p => p.name.includes('お茶')).map(p => p.id);
   const totalDelivery = Object.entries(state.deliveryCount)
     .filter(([id]) => !teaIds.includes(id))
     .reduce((sum, [, v]) => sum + v, 0);
   const nonTeaSold   = state.soldCount - (state.teaSoldCount || 0);
   const sellRate     = totalDelivery > 0 ? Math.round(nonTeaSold / totalDelivery * 1000) / 10 : 0;
-  const makanaiBonus  = state['makanaiあり'] ? 0 : 300;
-  const lateMinutes   = parseInt(document.getElementById('late-minutes').value) || 0;
-  const latePenalty   = calcLatePenalty(lateMinutes);
-  const role          = state.staffRole || '販売員';
-  let incentive       = 0;
-  let totalSalary     = 0;
+  const makanaiBonus = state['makanaiあり'] ? 0 : 300;
+  const lateMinutes  = parseInt(document.getElementById('late-minutes').value) || 0;
+  const latePenalty  = calcLatePenalty(lateMinutes);
+  const role         = state.staffRole || '販売員';
+  let incentive      = 0;
+  let totalSalary    = 0;
   if (state.isSpot || role === '社員' || role === 'ドライバー') {
     totalSalary = 0;
   } else if (state.fixedSalary > 0) {
@@ -1649,15 +1842,15 @@ function calcFinal() {
     totalSalary = state.baseGigSalary + incentive + makanaiBonus - latePenalty;
   }
 
-  document.getElementById('res-cash').textContent    = `¥${state.cashSales.toLocaleString()}`;
-  document.getElementById('res-paypay').textContent  = `¥${state.paypayAmount.toLocaleString()}`;
+  document.getElementById('res-cash').textContent     = `¥${state.cashSales.toLocaleString()}`;
+  document.getElementById('res-paypay').textContent   = `¥${state.paypayAmount.toLocaleString()}`;
   document.getElementById('res-delivery').textContent = `${totalDelivery}個`;
-  document.getElementById('res-sold').textContent    = `${state.soldCount}個（お茶除く：${nonTeaSold}個）`;
-  document.getElementById('res-rate').textContent    = `${sellRate}%`;
+  document.getElementById('res-sold').textContent     = `${state.soldCount}個（お茶除く：${nonTeaSold}個）`;
+  document.getElementById('res-rate').textContent     = `${sellRate}%`;
   document.getElementById('res-incentive').textContent = `¥${incentive.toLocaleString()}（${nonTeaSold}個）`;
-  document.getElementById('res-base').textContent    = `¥${state.baseGigSalary.toLocaleString()}`;
-  document.getElementById('res-total').textContent   = `¥${totalSalary.toLocaleString()}`;
-  // 遅刻ペナルティ行
+  document.getElementById('res-base').textContent     = `¥${state.baseGigSalary.toLocaleString()}`;
+  document.getElementById('res-total').textContent    = `¥${totalSalary.toLocaleString()}`;
+
   const lateRow = document.getElementById('res-late-row');
   if (lateMinutes > 0) {
     document.getElementById('res-late').textContent = `-¥${latePenalty.toLocaleString()}（${lateMinutes}分）`;
@@ -1665,9 +1858,7 @@ function calcFinal() {
   } else {
     lateRow.style.display = 'none';
   }
-  // 賄いなし行
-  const makanaiRow = document.getElementById('res-makanai-row');
-  makanaiRow.style.display = state['makanaiあり'] ? 'none' : '';
+  document.getElementById('res-makanai-row').style.display = state['makanaiあり'] ? 'none' : '';
 
   const diffEl = document.getElementById('res-diff');
   if (diff === 0) {
@@ -1684,12 +1875,10 @@ function calcFinal() {
   document.getElementById('btn-calc-final').style.display = 'none';
   document.getElementById('btn-recalc').style.display = 'block';
 
-  // スポットはギャラ行を非表示
   document.querySelectorAll('.salary-row').forEach(el => {
     el.style.display = state.isSpot ? 'none' : '';
   });
 
-  // complete画面用
   document.getElementById('comp-sold').textContent      = `${state.soldCount}個（お茶除く：${nonTeaSold}個）`;
   document.getElementById('comp-rate').textContent      = `${sellRate}%`;
   document.getElementById('comp-incentive').textContent = `¥${incentive.toLocaleString()}`;
@@ -1711,28 +1900,10 @@ function updateLatePenalty() {
   preview.style.color = penalty > 0 ? 'var(--red)' : '';
 }
 
-function calcLatePenalty(minutes) {
-  if (!minutes || minutes <= 0) return 0;
-  return Math.ceil(minutes / 15) * 300;
-}
-
-function updateLatePenalty() {
-  const min = parseInt(document.getElementById('late-minutes').value) || 0;
-  const penalty = calcLatePenalty(min);
-  const preview = document.getElementById('late-penalty-preview');
-  if (penalty > 0) {
-    preview.textContent = `-¥${penalty.toLocaleString()}`;
-  } else {
-    preview.textContent = '';
-  }
-}
-
 function toggleMakanai() {
   state['makanaiあり'] = !state['makanaiあり'];
-  const toggle = document.getElementById('makanai-toggle');
-  const label  = document.getElementById('makanai-label');
-  toggle.style.background = state['makanaiあり'] ? 'var(--green)' : '#888';
-  label.textContent = state['makanaiあり'] ? '有り' : '無し';
+  document.getElementById('makanai-toggle').style.background = state['makanaiあり'] ? 'var(--green)' : '#888';
+  document.getElementById('makanai-label').textContent = state['makanaiあり'] ? '有り' : '無し';
 }
 
 function recalcFinal() {
@@ -1747,13 +1918,8 @@ function submitFinal() {
   const diff = document.getElementById('res-diff').textContent;
   const hasDiff = diff.includes('差異');
   const comment = document.getElementById('diff-comment').value.trim();
+  if (hasDiff && !comment) { showToast('差異の理由を入力してください'); return; }
 
-  if (hasDiff && !comment) {
-    showToast('差異の理由を入力してください');
-    return;
-  }
-
-  // GASへ送信
   const payload = {
     action: 'submitReport',
     userId: state.userId,
@@ -1777,37 +1943,16 @@ function submitFinal() {
     lateMinutes: parseInt(document.getElementById('late-minutes')?.value) || 0,
     latePenalty: calcLatePenalty(parseInt(document.getElementById('late-minutes')?.value) || 0),
   };
-
-  fetch(state.GAS_URL, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  }).catch(e => console.error(e));
-
+  fetch(state.GAS_URL, { method: 'POST', body: JSON.stringify(payload) }).catch(e => console.error(e));
   showScreen('complete');
 }
 
-// ─────────────────────────────────────
-// UTILS
-// ─────────────────────────────────────
-function showToast(msg) {
-  const toast = document.getElementById('toast');
-  toast.textContent = msg;
-  toast.classList.add('show');
-  setTimeout(() => toast.classList.remove('show'), 2000);
-}
-
-// 締めボタンはヘッダーに統合済み
-
-
-// ─────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
 // EDIT REPORT
-// ─────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
 function goToEdit() {
   const now  = new Date();
-  const hour = now.getHours();
-  const canEdit = hour < 16;
-
-  // 納品数入力欄を生成
+  const canEdit = now.getHours() < 16;
   const container = document.getElementById('edit-delivery-inputs');
   container.innerHTML = state.products.map(p => `
     <div class="form-row">
@@ -1817,15 +1962,12 @@ function goToEdit() {
       <span class="form-unit">個</span>
     </div>
   `).join('');
-
   document.getElementById('edit-register-start').value  = state.registerStart || 0;
   document.getElementById('edit-register-end').value    = parseInt(document.getElementById('register-end')?.value) || 0;
   document.getElementById('edit-cash-sales').value      = state.cashSales || 0;
   document.getElementById('edit-paypay-amount').value   = state.paypayAmount || 0;
   document.getElementById('edit-diff-comment').value    = document.getElementById('diff-comment')?.value || '';
   document.getElementById('edit-memo').value            = document.getElementById('final-memo')?.value || '';
-
-  // 編集期限チェック
   const alert = document.getElementById('edit-deadline-alert');
   const btn   = document.getElementById('btn-edit-submit');
   if (!canEdit) {
@@ -1839,7 +1981,6 @@ function goToEdit() {
     btn.disabled = false;
     btn.style.opacity = '1';
   }
-
   showScreen('edit');
 }
 
@@ -1848,7 +1989,6 @@ function submitEdit() {
   state.products.forEach(p => {
     deliveryCount[p.id] = parseInt(document.getElementById(`edit-delivery-${p.id}`)?.value) || 0;
   });
-
   const payload = {
     action:        'editReport',
     userId:        state.userId,
@@ -1861,24 +2001,24 @@ function submitEdit() {
     diffComment:   document.getElementById('edit-diff-comment').value.trim(),
     memo:          document.getElementById('edit-memo').value.trim(),
   };
-
-  fetch(state.GAS_URL, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  }).then(() => {
+  fetch(state.GAS_URL, { method: 'POST', body: JSON.stringify(payload) }).then(() => {
     showToast('修正を保存しました');
     setTimeout(() => showScreen('complete'), 1500);
-  }).catch(() => {
-    showToast('保存に失敗しました。再度お試しください。');
-  });
+  }).catch(() => { showToast('保存に失敗しました。再度お試しください。'); });
 }
 
-// ─────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+// UTILS
+// ═══════════════════════════════════════════════════════════════
+function showToast(msg) {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 2000);
+}
+
 // BOOT
-// ─────────────────────────────────────
-init().then(() => {
-  renderLocations();
-});
+init().then(() => { renderLocations(); });
 </script>
 </body>
 </html>
