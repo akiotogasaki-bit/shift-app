@@ -490,12 +490,12 @@ body {
   display: flex; gap: 4px; background: #f0f0f0;
   border-radius: 6px; padding: 3px;
 }
-.period-btn {
+.period-switch .period-btn {
   padding: 6px 14px; border: none; background: transparent;
   border-radius: 4px; cursor: pointer; font-size: 13px; color: #666;
   transition: all 0.15s;
 }
-.period-btn.active {
+.period-switch .period-btn.active {
   background: #fff; color: #333;
   box-shadow: 0 1px 2px rgba(0,0,0,0.1);
 }
@@ -575,6 +575,7 @@ body {
   <button class="tab-btn" onclick="switchTab('monthly')">月報</button>
   <button class="tab-btn" onclick="switchTab('delivery')">配達</button>
   <button class="tab-btn" onclick="switchTab('cash')">現金有高</button>
+  <button class="tab-btn" onclick="switchTab('heatmap')">ヒートマップ</button>
 </div>
 
 <!-- CONTENT -->
@@ -666,35 +667,7 @@ body {
     </div>
     <div id="dv-content"></div>
   </div>
-<!-- ===== 完売時刻ヒートマップ＋粗利ランキング ===== -->
-<section id="heatmap-section" class="dashboard-section">
-  <div class="section-header">
-    <h2>完売時刻ヒートマップ</h2>
-    <div class="period-switch">
-      <button class="period-btn active" data-period="1w">1週</button>
-      <button class="period-btn" data-period="2w">2週</button>
-      <button class="period-btn" data-period="4w">4週</button>
-      <button class="period-btn" data-period="month">月</button>
-    </div>
-  </div>
 
-  <div class="legend">
-    <span class="legend-item"><span class="legend-color" style="background:#E74C3C"></span>早すぎ (〜12:00)</span>
-    <span class="legend-item"><span class="legend-color" style="background:#F39C12"></span>早い (12:00〜12:10)</span>
-    <span class="legend-item"><span class="legend-color" style="background:#85C1E9"></span>合格 (12:10〜終業-20分)</span>
-    <span class="legend-item"><span class="legend-color" style="background:#27AE60"></span>理想 (終業-20分〜終業)</span>
-    <span class="legend-item"><span class="legend-color" style="background:#BDC3C7"></span>完売せず</span>
-  </div>
-
-  <div id="heatmap-container" class="heatmap-container">
-    <div class="dashboard-loading">読み込み中...</div>
-  </div>
-
-  <h3 class="ranking-title">粗利ランキング（全拠点）</h3>
-  <div id="ranking-container" class="ranking-container">
-    <div class="dashboard-loading">読み込み中...</div>
-  </div>
-</section>
   <!-- CASH TAB -->
   <div id="tab-cash" class="tab-panel">
     <p style="font-size:12px;color:var(--ink-mute);margin-bottom:12px;">
@@ -714,6 +687,38 @@ body {
         <tr><td colspan="5" style="text-align:center;color:var(--ink-mute);padding:24px;">読み込み中...</td></tr>
       </tbody>
     </table>
+  </div>
+
+  <!-- HEATMAP TAB -->
+  <div id="tab-heatmap" class="tab-panel">
+    <section id="heatmap-section" class="dashboard-section">
+      <div class="section-header">
+        <h2>ヒートマップ</h2>
+        <div class="period-switch">
+          <button class="period-btn active" data-period="1w">1週</button>
+          <button class="period-btn" data-period="2w">2週</button>
+          <button class="period-btn" data-period="4w">4週</button>
+          <button class="period-btn" data-period="month">月</button>
+        </div>
+      </div>
+
+      <div class="legend">
+        <span class="legend-item"><span class="legend-color" style="background:#E74C3C"></span>早すぎ (〜12:00)</span>
+        <span class="legend-item"><span class="legend-color" style="background:#F39C12"></span>早い (12:00〜12:10)</span>
+        <span class="legend-item"><span class="legend-color" style="background:#85C1E9"></span>合格 (12:10〜終業-20分)</span>
+        <span class="legend-item"><span class="legend-color" style="background:#27AE60"></span>理想 (終業-20分〜終業)</span>
+        <span class="legend-item"><span class="legend-color" style="background:#BDC3C7"></span>完売せず</span>
+      </div>
+
+      <div id="heatmap-container" class="heatmap-container">
+        <div class="dashboard-loading">読み込み中...</div>
+      </div>
+
+      <h3 class="ranking-title">粗利ランキング（全拠点）</h3>
+      <div id="ranking-container" class="ranking-container">
+        <div class="dashboard-loading">読み込み中...</div>
+      </div>
+    </section>
   </div>
 
 </div>
@@ -1312,7 +1317,7 @@ function renderWeeklyData(data) {
       <div class="kpi-card green"><div class="kpi-label">営業日数</div><div class="kpi-value">${operDays}<span> 日</span></div></div>
     </div>
 
-    <div class="section-title">商品別完売率（週間合計）</div>
+    <div class="section-title">商品別完売率(週間合計)</div>
     <table class="stats-table" style="margin-bottom:16px;">
       <thead><tr><th>商品名</th><th>納品数</th><th>販売数</th><th>完売率</th></tr></thead>
       <tbody>${productRows.map(p => {
@@ -1422,7 +1427,7 @@ function renderMonthlyData(data, yearMonth) {
 // TABS
 // ─────────────────────────────────────
 function switchTab(tab) {
-  const tabNames = ['realtime','weekly','monthly','delivery','cash'];
+  const tabNames = ['realtime','weekly','monthly','delivery','cash','heatmap'];
   document.querySelectorAll('.tab-btn').forEach((b, i) => {
     b.classList.toggle('active', tabNames[i] === tab);
   });
@@ -1433,6 +1438,7 @@ function switchTab(tab) {
   if (tab === 'monthly')  initMonthSelector();
   if (tab === 'delivery') initDelivery();
   if (tab === 'cash')     renderCashTable();
+  if (tab === 'heatmap')  loadHeatmapData();
 }
 
 function initWeekSelector() {
@@ -1487,7 +1493,8 @@ function selectMonth(val, btn) {
 // ─────────────────────────────────────
 loadAll();
 setInterval(loadAll, 5 * 60 * 1000);
-  // ===== ヒートマップ＋粗利ランキング =====
+
+// ===== ヒートマップ＋粗利ランキング =====
 const HEATMAP_GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5AawPDc7aluPokONkYz6f2ikwl0S487JvhKdKh6QSp1xhEhA/exec';
 const HEATMAP_BUCKET_LABELS = {
   too_early: '早すぎ', early: '早い', pass: '合格', ideal: '理想', not_sold: '完売せず'
@@ -1502,22 +1509,21 @@ document.addEventListener('DOMContentLoaded', () => {
   const heatmapSection = document.getElementById('heatmap-section');
   if (!heatmapSection) return;
 
-  // 期間切替ボタン
-  document.querySelectorAll('.period-btn').forEach(btn => {
+  // 期間切替ボタン（ヒートマップ内に限定）
+  heatmapSection.querySelectorAll('.period-switch .period-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+      heatmapSection.querySelectorAll('.period-switch .period-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       heatmapCurrentPeriod = btn.dataset.period;
       loadHeatmapData();
     });
   });
-
-  loadHeatmapData();
 });
 
 async function loadHeatmapData() {
   const heatmapEl = document.getElementById('heatmap-container');
   const rankingEl = document.getElementById('ranking-container');
+  if (!heatmapEl || !rankingEl) return;
   heatmapEl.innerHTML = '<div class="dashboard-loading">読み込み中...</div>';
   rankingEl.innerHTML = '<div class="dashboard-loading">読み込み中...</div>';
 
@@ -1531,7 +1537,7 @@ async function loadHeatmapData() {
       return;
     }
     renderHeatmap(data.heatmap);
-    renderRanking(data.profitRanking);
+    renderHeatmapRanking(data.profitRanking);
   } catch (e) {
     heatmapEl.innerHTML = `<div class="placeholder-msg">通信エラー: ${e.message}</div>`;
     rankingEl.innerHTML = '';
@@ -1552,7 +1558,7 @@ function renderHeatmap(heatmap) {
   html += '</tr></thead><tbody>';
 
   heatmap.locations.forEach(loc => {
-    html += `<tr><td class="location-cell"><div>${escapeHtml(loc.name)}</div><div class="location-meta">終業 ${loc.endTime} / 平均 ${loc.avgDelivery}個</div></td>`;
+    html += `<tr><td class="location-cell"><div>${escapeHmHtml(loc.name)}</div><div class="location-meta">終業 ${loc.endTime} / 平均 ${loc.avgDelivery}個</div></td>`;
     loc.cells.forEach(cell => {
       if (!cell.bucket) {
         html += '<td><div class="heat-cell empty"></div></td>';
@@ -1569,7 +1575,7 @@ function renderHeatmap(heatmap) {
   container.innerHTML = html;
 }
 
-function renderRanking(ranking) {
+function renderHeatmapRanking(ranking) {
   const container = document.getElementById('ranking-container');
   if (ranking.placeholder) {
     container.innerHTML = `<div class="placeholder-msg">${ranking.message}</div>`;
@@ -1582,13 +1588,13 @@ function renderRanking(ranking) {
   let html = '<table class="ranking-table"><thead><tr><th class="col-rank">順位</th><th>拠点名</th><th class="col-amount">粗利</th><th class="col-amount">平均納品数</th></tr></thead><tbody>';
   ranking.rows.forEach(row => {
     const profit = row.profit !== null ? `¥${row.profit.toLocaleString()}` : 'ー';
-    html += `<tr><td class="col-rank">${row.hasData ? row.rank : 'ー'}</td><td>${escapeHtml(row.name)}</td><td class="col-amount">${profit}</td><td class="col-amount">${row.avgDelivery}</td></tr>`;
+    html += `<tr><td class="col-rank">${row.hasData ? row.rank : 'ー'}</td><td>${escapeHmHtml(row.name)}</td><td class="col-amount">${profit}</td><td class="col-amount">${row.avgDelivery}</td></tr>`;
   });
   html += '</tbody></table>';
   container.innerHTML = html;
 }
 
-function escapeHtml(s) {
+function escapeHmHtml(s) {
   return String(s).replace(/[&<>"']/g, c =>
     ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])
   );
