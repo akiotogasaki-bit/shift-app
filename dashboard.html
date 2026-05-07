@@ -473,6 +473,85 @@ body {
   font-weight: 700;
   border-top: 2px solid var(--border);
 }
+  /* ===== ヒートマップ＋粗利ランキング ===== */
+.dashboard-section {
+  background: #fff;
+  border-radius: 8px;
+  padding: 20px;
+  margin: 20px 0;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+.section-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 16px; flex-wrap: wrap; gap: 12px;
+}
+.section-header h2 { font-size: 18px; margin: 0; color: #333; }
+.period-switch {
+  display: flex; gap: 4px; background: #f0f0f0;
+  border-radius: 6px; padding: 3px;
+}
+.period-btn {
+  padding: 6px 14px; border: none; background: transparent;
+  border-radius: 4px; cursor: pointer; font-size: 13px; color: #666;
+  transition: all 0.15s;
+}
+.period-btn.active {
+  background: #fff; color: #333;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+.legend {
+  display: flex; flex-wrap: wrap; gap: 14px;
+  margin-bottom: 16px; font-size: 12px; color: #666;
+}
+.legend-item { display: flex; align-items: center; gap: 6px; }
+.legend-color {
+  display: inline-block; width: 14px; height: 14px;
+  border-radius: 3px; flex-shrink: 0;
+}
+.heatmap-container { overflow-x: auto; margin-bottom: 24px; }
+.heatmap-table {
+  border-collapse: separate; border-spacing: 2px; font-size: 12px;
+}
+.heatmap-table th, .heatmap-table td {
+  padding: 6px 8px; text-align: center; white-space: nowrap;
+}
+.heatmap-table th {
+  background: #f8f9fa; font-weight: 500; color: #666;
+}
+.heatmap-table th.location-header { text-align: left; min-width: 180px; }
+.heatmap-table td.location-cell {
+  text-align: left; background: #f8f9fa; font-weight: 500;
+  padding: 8px 12px;
+}
+.heatmap-table .location-meta {
+  font-size: 10px; color: #999; font-weight: normal; margin-top: 2px;
+}
+.heatmap-table .heat-cell {
+  width: 36px; height: 36px; border-radius: 4px; cursor: default;
+}
+.heatmap-table .heat-cell.empty {
+  background: transparent; border: 1px dashed #ddd;
+}
+.ranking-title {
+  margin: 24px 0 12px; font-size: 16px; color: #333;
+}
+.ranking-container { overflow-x: auto; }
+.ranking-table {
+  width: 100%; border-collapse: collapse; font-size: 13px;
+}
+.ranking-table th, .ranking-table td {
+  padding: 8px 12px; text-align: left; border-bottom: 1px solid #eee;
+}
+.ranking-table th { background: #f8f9fa; font-weight: 500; color: #666; }
+.ranking-table .col-rank { width: 50px; text-align: center; }
+.ranking-table .col-amount { text-align: right; }
+.placeholder-msg {
+  padding: 40px; text-align: center; color: #999;
+  background: #f8f9fa; border-radius: 6px;
+}
+.dashboard-loading {
+  padding: 40px; text-align: center; color: #999;
+}
 </style>
 </head>
 <body>
@@ -587,7 +666,35 @@ body {
     </div>
     <div id="dv-content"></div>
   </div>
+<!-- ===== 完売時刻ヒートマップ＋粗利ランキング ===== -->
+<section id="heatmap-section" class="dashboard-section">
+  <div class="section-header">
+    <h2>完売時刻ヒートマップ</h2>
+    <div class="period-switch">
+      <button class="period-btn active" data-period="1w">1週</button>
+      <button class="period-btn" data-period="2w">2週</button>
+      <button class="period-btn" data-period="4w">4週</button>
+      <button class="period-btn" data-period="month">月</button>
+    </div>
+  </div>
 
+  <div class="legend">
+    <span class="legend-item"><span class="legend-color" style="background:#E74C3C"></span>早すぎ (〜12:00)</span>
+    <span class="legend-item"><span class="legend-color" style="background:#F39C12"></span>早い (12:00〜12:10)</span>
+    <span class="legend-item"><span class="legend-color" style="background:#85C1E9"></span>合格 (12:10〜終業-20分)</span>
+    <span class="legend-item"><span class="legend-color" style="background:#27AE60"></span>理想 (終業-20分〜終業)</span>
+    <span class="legend-item"><span class="legend-color" style="background:#BDC3C7"></span>完売せず</span>
+  </div>
+
+  <div id="heatmap-container" class="heatmap-container">
+    <div class="dashboard-loading">読み込み中...</div>
+  </div>
+
+  <h3 class="ranking-title">粗利ランキング（全拠点）</h3>
+  <div id="ranking-container" class="ranking-container">
+    <div class="dashboard-loading">読み込み中...</div>
+  </div>
+</section>
   <!-- CASH TAB -->
   <div id="tab-cash" class="tab-panel">
     <p style="font-size:12px;color:var(--ink-mute);margin-bottom:12px;">
@@ -1380,6 +1487,112 @@ function selectMonth(val, btn) {
 // ─────────────────────────────────────
 loadAll();
 setInterval(loadAll, 5 * 60 * 1000);
+  // ===== ヒートマップ＋粗利ランキング =====
+const HEATMAP_GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5AawPDc7aluPokONkYz6f2ikwl0S487JvhKdKh6QSp1xhEhA/exec';
+const HEATMAP_BUCKET_LABELS = {
+  too_early: '早すぎ', early: '早い', pass: '合格', ideal: '理想', not_sold: '完売せず'
+};
+const HEATMAP_BUCKET_COLORS = {
+  too_early: '#E74C3C', early: '#F39C12', pass: '#85C1E9',
+  ideal: '#27AE60', not_sold: '#BDC3C7'
+};
+let heatmapCurrentPeriod = '1w';
+
+document.addEventListener('DOMContentLoaded', () => {
+  const heatmapSection = document.getElementById('heatmap-section');
+  if (!heatmapSection) return;
+
+  // 期間切替ボタン
+  document.querySelectorAll('.period-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      heatmapCurrentPeriod = btn.dataset.period;
+      loadHeatmapData();
+    });
+  });
+
+  loadHeatmapData();
+});
+
+async function loadHeatmapData() {
+  const heatmapEl = document.getElementById('heatmap-container');
+  const rankingEl = document.getElementById('ranking-container');
+  heatmapEl.innerHTML = '<div class="dashboard-loading">読み込み中...</div>';
+  rankingEl.innerHTML = '<div class="dashboard-loading">読み込み中...</div>';
+
+  try {
+    const url = `${HEATMAP_GAS_URL}?action=getDashboardData&period=${heatmapCurrentPeriod}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (!data.success) {
+      heatmapEl.innerHTML = `<div class="placeholder-msg">エラー: ${data.error || '不明'}</div>`;
+      rankingEl.innerHTML = '';
+      return;
+    }
+    renderHeatmap(data.heatmap);
+    renderRanking(data.profitRanking);
+  } catch (e) {
+    heatmapEl.innerHTML = `<div class="placeholder-msg">通信エラー: ${e.message}</div>`;
+    rankingEl.innerHTML = '';
+  }
+}
+
+function renderHeatmap(heatmap) {
+  const container = document.getElementById('heatmap-container');
+  if (!heatmap.locations || heatmap.locations.length === 0) {
+    container.innerHTML = '<div class="placeholder-msg">この期間に売上のあった拠点がありません</div>';
+    return;
+  }
+  let html = '<table class="heatmap-table"><thead><tr><th class="location-header">拠点</th>';
+  heatmap.dateList.forEach(d => {
+    const dateLabel = d.date.slice(5).replace('-', '/');
+    html += `<th>${dateLabel}<br><span style="font-weight:normal;color:#999">${d.dayOfWeek}</span></th>`;
+  });
+  html += '</tr></thead><tbody>';
+
+  heatmap.locations.forEach(loc => {
+    html += `<tr><td class="location-cell"><div>${escapeHtml(loc.name)}</div><div class="location-meta">終業 ${loc.endTime} / 平均 ${loc.avgDelivery}個</div></td>`;
+    loc.cells.forEach(cell => {
+      if (!cell.bucket) {
+        html += '<td><div class="heat-cell empty"></div></td>';
+      } else {
+        const color = HEATMAP_BUCKET_COLORS[cell.bucket];
+        const label = HEATMAP_BUCKET_LABELS[cell.bucket];
+        const tooltip = cell.soldOutTime ? `${label} (完売 ${cell.soldOutTime})` : label;
+        html += `<td><div class="heat-cell" style="background:${color}" title="${tooltip}"></div></td>`;
+      }
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+function renderRanking(ranking) {
+  const container = document.getElementById('ranking-container');
+  if (ranking.placeholder) {
+    container.innerHTML = `<div class="placeholder-msg">${ranking.message}</div>`;
+    return;
+  }
+  if (!ranking.rows || ranking.rows.length === 0) {
+    container.innerHTML = '<div class="placeholder-msg">データがありません</div>';
+    return;
+  }
+  let html = '<table class="ranking-table"><thead><tr><th class="col-rank">順位</th><th>拠点名</th><th class="col-amount">粗利</th><th class="col-amount">平均納品数</th></tr></thead><tbody>';
+  ranking.rows.forEach(row => {
+    const profit = row.profit !== null ? `¥${row.profit.toLocaleString()}` : 'ー';
+    html += `<tr><td class="col-rank">${row.hasData ? row.rank : 'ー'}</td><td>${escapeHtml(row.name)}</td><td class="col-amount">${profit}</td><td class="col-amount">${row.avgDelivery}</td></tr>`;
+  });
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])
+  );
+}
 </script>
 </body>
 </html>
