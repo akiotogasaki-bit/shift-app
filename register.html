@@ -199,38 +199,38 @@ body {
 .product-price      { font-size: 17px; color: #F4C430; font-weight: 700; margin-top: 4px; letter-spacing: .03em; }
 
 .cart-area {
-  background: #222;
-  margin: 0 12px;
-  border-radius: 10px;
-  padding: 12px;
-  margin-bottom: 8px;
-  min-height: 80px;
+  background: #1A1A1A;
+  padding: 6px 12px;
+  max-height: 220px;
+  overflow-y: auto;
+  border-bottom: 1px solid #333;
+  -webkit-overflow-scrolling: touch;
 }
-.cart-title { font-size: 11px; color: #666; letter-spacing: .1em; margin-bottom: 8px; }
-.cart-empty { font-size: 13px; color: #444; text-align: center; padding: 12px 0; }
+.cart-area::-webkit-scrollbar { width: 4px; }
+.cart-area::-webkit-scrollbar-thumb { background: #444; border-radius: 2px; }
 .cart-item {
   display: flex;
   align-items: center;
-  padding: 5px 0;
-  border-bottom: 1px solid #333;
+  padding: 7px 0;
+  border-bottom: 1px solid #2a2a2a;
 }
 .cart-item:last-child { border-bottom: none; }
-.cart-item-name { flex: 1; font-size: 13px; color: #DDD; }
-.cart-qty-btns { display: flex; align-items: center; gap: 8px; }
+.cart-item-name { flex: 1; font-size: 14px; color: #FFF; }
+.cart-qty-btns { display: flex; align-items: center; gap: 6px; }
 .qty-btn {
-  width: 24px; height: 24px;
+  width: 30px; height: 30px;
   background: #333;
   border: none;
   border-radius: 50%;
   color: #FFF;
-  font-size: 16px;
+  font-size: 18px;
   line-height: 1;
   cursor: pointer;
   display: flex; align-items: center; justify-content: center;
 }
 .qty-btn:active { background: #555; }
-.cart-qty { font-size: 14px; color: #FFF; font-weight: 700; width: 20px; text-align: center; }
-.cart-subtotal { font-size: 13px; color: #F4C430; font-weight: 700; margin-left: 8px; width: 65px; text-align: right; }
+.cart-qty { font-size: 15px; color: #FFF; font-weight: 700; width: 24px; text-align: center; }
+.cart-subtotal { font-size: 13px; color: #F4C430; font-weight: 700; margin-left: 8px; width: 70px; text-align: right; }
 
 .coupon-row {
   display: flex;
@@ -755,16 +755,10 @@ body {
   <!-- カテゴリータブ -->
   <div class="cat-tab-bar" id="cat-tab-bar"></div>
 
-  <div style="overflow-y:auto;flex:1;padding-bottom:200px;">
+  <div style="overflow-y:auto;flex:1;padding-bottom:280px;">
     <div class="products-grid" id="products-grid"></div>
 
     <div style="padding:0 12px;">
-      <div class="cart-area" id="cart-area">
-        <div class="cart-title">CART</div>
-        <div class="cart-empty" id="cart-empty">商品を選択してください</div>
-        <div id="cart-items"></div>
-      </div>
-
       <div class="coupon-row">
         <div class="coupon-toggle" id="coupon-toggle" onclick="toggleCoupon()"></div>
         <span class="coupon-label">クーポン</span>
@@ -774,15 +768,19 @@ body {
     </div>
   </div>
 
-  <!-- 固定下部：合計＋支払いボタン -->
+  <!-- 固定下部：カート＋合計＋支払いボタン -->
   <div class="fixed-bottom">
+    <!-- カート（積み上げ式） -->
+    <div class="cart-area" id="cart-area" style="display:none;">
+      <div id="cart-items"></div>
+    </div>
     <div class="total-bar">
       <span class="total-label">合計</span>
       <span class="total-amount" id="total-amount">¥0</span>
     </div>
     <div class="pay-btns">
       <button class="pay-btn pay-cash" id="btn-cash" onclick="openCashModal()" disabled>💴 現金</button>
-      <button class="pay-btn pay-paypay" id="btn-paypay" onclick="processPayPay()" disabled>📱 PayPay</button>
+      <button class="pay-btn pay-paypay" id="btn-paypay" onclick="openPayPayModal()" disabled>📱 PayPay</button>
     </div>
   </div>
 </div>
@@ -878,7 +876,10 @@ body {
   <div class="complete-icon">✅</div>
   <div class="complete-title">報告完了</div>
   <div class="complete-sub">本日もお疲れ様でした！<br>報告内容が送信されました。</div>
-  <button onclick="goToEdit()" style="background:rgba(255,255,255,.2);color:#FFF;border:1px solid rgba(255,255,255,.4);border-radius:12px;padding:12px 24px;font-size:14px;font-family:inherit;cursor:pointer;margin-bottom:16px;width:100%;max-width:320px;">📝 報告内容を確認・修正する</button>
+  <div style="display:flex;flex-direction:column;gap:10px;width:100%;max-width:320px;margin-bottom:16px;">
+    <button onclick="resumeForAdditionalSales()" style="background:rgba(244,196,48,.25);color:#FFF;border:1px solid rgba(244,196,48,.7);border-radius:12px;padding:14px 24px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;">＋ 追加販売する</button>
+    <button onclick="goToEdit()" style="background:rgba(255,255,255,.2);color:#FFF;border:1px solid rgba(255,255,255,.4);border-radius:12px;padding:12px 24px;font-size:14px;font-family:inherit;cursor:pointer;">📝 報告内容を確認・修正する</button>
+  </div>
   <div class="complete-card">
     <div class="complete-row"><span>販売数</span><span id="comp-sold">0個</span></div>
     <div class="complete-row"><span>完売率</span><span id="comp-rate">0%</span></div>
@@ -969,6 +970,23 @@ body {
       <div class="change-amount" id="change-amount">¥ —</div>
     </div>
     <button class="modal-confirm-btn" id="cash-confirm-btn" onclick="confirmCash()" disabled>会計を確定する</button>
+  </div>
+</div>
+
+<!-- PAYPAY MODAL -->
+<div class="modal-overlay" id="paypay-modal" onclick="if(event.target===this)closePayPayModal()">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">PayPay会計</div>
+    <div class="modal-row">
+      <span class="modal-label">お会計</span>
+      <span class="modal-value accent" id="paypay-modal-total">¥0</span>
+    </div>
+    <p style="text-align:center;color:#aaa;margin:14px 0;font-size:13px;line-height:1.6;">
+      お客様にPayPayで決済してもらってください。<br>
+      <span style="color:#F4C430;font-weight:700;">決済完了を確認してから</span>下のボタンを押してください。
+    </p>
+    <button class="modal-confirm-btn" onclick="confirmPayPay()">会計を確定する</button>
   </div>
 </div>
 
@@ -1161,7 +1179,7 @@ function confirmLocation() {
   if (!id) { showToast('拠点を選択してください'); return; }
   selectLocation(id);
 }
-function selectLocation(id) {
+async function selectLocation(id) {
   state.location = state.locations.find(l => l.id === id);
   state.baseGigSalary = state.location.baseGigSalary || 0;
   const staffInfo = (state.staffList || []).find(s => s.userId === state.userId);
@@ -1173,6 +1191,38 @@ function selectLocation(id) {
   document.getElementById('reg-location-name').textContent  = state.location.name;
   document.getElementById('final-location-name').textContent = state.location.name;
 
+  // ★ 引き継ぎモード：本日この拠点で既に納品入力済みかチェック
+  try {
+    const url = `${state.GAS_URL}?action=getTodayStart&locationId=${encodeURIComponent(id)}`;
+    const res = await fetch(url, { redirect: 'follow' });
+    const data = await res.json();
+    if (data && data.userName && data.deliveryCount && Object.keys(data.deliveryCount).length > 0) {
+      const isSameUser = data.userId === state.userId;
+      const tsLabel = data.timestamp ? `（${data.timestamp}）` : '';
+      const msg = isSameUser
+        ? `すでにあなた自身が納品数を入力済みです${tsLabel}。\n\nOK : そのまま使う\nキャンセル : 入力し直す`
+        : `すでに ${data.userName} さんが納品数を入力済みです${tsLabel}。\n\n引き継いでレジを開始しますか？\n\nOK : 引き継いでレジ画面へ\nキャンセル : 自分で入力し直す`;
+      if (confirm(msg)) {
+        // 引き継ぎ：納品数を読み込んで直接レジ画面へ
+        state.deliveryCount = data.deliveryCount;
+        state.registerStart = data.registerStart || 0;
+        state.takeoverFromUserId   = data.userId;
+        state.takeoverFromUserName = data.userName;
+        document.getElementById('reg-sales-count').textContent = '0個';
+        renderCategoryTabs();
+        renderProducts();
+        renderCart();
+        saveState();
+        showScreen('register');
+        return;
+      }
+    }
+  } catch(e) {
+    console.warn('getTodayStart check failed:', e);
+    // エラー時は通常フローに進む
+  }
+
+  // 通常フロー（誰も入力していない場合 or キャンセル時）
   renderDeliveryInputs();
   showScreen('start');
 }
@@ -1322,22 +1372,16 @@ function renderProducts() {
   const products = getProductsForActiveTab();
   grid.innerHTML = products.map(p => {
     const { mainName, variant } = parseProductName(p.name, p.displayName);
-    const isSoldOut   = !!state.soldOutMap[p.id];
-    const soldOutTime = state.soldOutMap[p.id] || '';
-    const catClass    = getCategoryClass(p.category);
+    const catClass = getCategoryClass(p.category);
     const nameHtml = variant
       ? `<div class="product-name-small">${mainName}</div>
          <div class="product-variant">${variant}</div>`
       : `<div class="product-name-large">${mainName}</div>`;
     return `
-      <div class="product-btn ${catClass} ${isSoldOut ? 'soldout' : ''}" onclick="addToCart('${p.id}')">
+      <div class="product-btn ${catClass}" onclick="addToCart('${p.id}')">
         <div class="product-content">
           ${nameHtml}
           <div class="product-price">¥${p.price.toLocaleString()}</div>
-        </div>
-        <div class="soldout-row" onclick="event.stopPropagation()">
-          <span class="soldout-label">${isSoldOut ? `完売 ${soldOutTime}` : '完売'}</span>
-          <div class="soldout-toggle ${isSoldOut ? 'on' : ''}" onclick="toggleSoldOut('${p.id}')"></div>
         </div>
       </div>
     `;
@@ -1392,28 +1436,32 @@ function updateQty(productId, delta) {
 }
 
 function renderCart() {
-  const empty  = document.getElementById('cart-empty');
-  const items  = document.getElementById('cart-items');
+  const cartArea = document.getElementById('cart-area');
+  const items    = document.getElementById('cart-items');
   const cashBtn   = document.getElementById('btn-cash');
   const paypayBtn = document.getElementById('btn-paypay');
 
   if (state.cart.length === 0) {
-    empty.style.display = 'block';
+    cartArea.style.display = 'none';
     items.innerHTML = '';
     cashBtn.disabled = paypayBtn.disabled = true;
   } else {
-    empty.style.display = 'none';
-    items.innerHTML = state.cart.map(item => `
-      <div class="cart-item">
-        <span class="cart-item-name">${item.product.name}</span>
-        <div class="cart-qty-btns">
-          <button class="qty-btn" onclick="updateQty('${item.product.id}',-1)">−</button>
-          <span class="cart-qty">${item.qty}</span>
-          <button class="qty-btn" onclick="updateQty('${item.product.id}',1)">＋</button>
+    cartArea.style.display = 'block';
+    items.innerHTML = state.cart.map(item => {
+      const { mainName, variant } = parseProductName(item.product.name, item.product.displayName);
+      const label = variant ? `${mainName} ${variant}` : mainName;
+      return `
+        <div class="cart-item">
+          <span class="cart-item-name">${label}</span>
+          <div class="cart-qty-btns">
+            <button class="qty-btn" onclick="updateQty('${item.product.id}',-1)">−</button>
+            <span class="cart-qty">${item.qty}</span>
+            <button class="qty-btn" onclick="updateQty('${item.product.id}',1)">＋</button>
+          </div>
+          <span class="cart-subtotal">¥${(item.product.price * item.qty).toLocaleString()}</span>
         </div>
-        <span class="cart-subtotal">¥${(item.product.price * item.qty).toLocaleString()}</span>
-      </div>
-    `).join('');
+      `;
+    }).join('');
     cashBtn.disabled = paypayBtn.disabled = false;
   }
   updateTotal();
@@ -1483,6 +1531,19 @@ function confirmCash() {
   saveState();
   sendIntermediateSale('cash', total, saleItems);
   showToast('現金会計が完了しました');
+}
+
+function openPayPayModal() {
+  if (state.cart.length === 0) return;
+  document.getElementById('paypay-modal-total').textContent = `¥${cartTotal().toLocaleString()}`;
+  document.getElementById('paypay-modal').classList.add('show');
+}
+function closePayPayModal() {
+  document.getElementById('paypay-modal').classList.remove('show');
+}
+function confirmPayPay() {
+  closePayPayModal();
+  processPayPay();
 }
 
 function processPayPay() {
@@ -1914,7 +1975,7 @@ function recalcFinal() {
 }
 
 function submitFinal() {
-  clearSavedState();
+  // ★ 追加販売モード対応：clearSavedStateは呼ばない（再開時にstate保持）
   const diff = document.getElementById('res-diff').textContent;
   const hasDiff = diff.includes('差異');
   const comment = document.getElementById('diff-comment').value.trim();
@@ -1945,6 +2006,18 @@ function submitFinal() {
   };
   fetch(state.GAS_URL, { method: 'POST', body: JSON.stringify(payload) }).catch(e => console.error(e));
   showScreen('complete');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 追加販売モード（NEW）
+// ═══════════════════════════════════════════════════════════════
+function resumeForAdditionalSales() {
+  // state はメモリにそのまま残っている（submitFinalでclearSavedStateを呼ばないため）
+  // localStorageにも再保存（万が一のため）
+  saveState();
+  // レジ画面に戻る
+  showScreen('register');
+  showToast('追加販売モード：販売後、再度「締め →」で報告してください');
 }
 
 // ═══════════════════════════════════════════════════════════════
