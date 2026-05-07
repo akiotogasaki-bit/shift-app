@@ -1022,6 +1022,27 @@ const state = {
 // INIT
 // ═══════════════════════════════════════════════════════════════
 async function init() {
+  // ── テストモード（Safari等でLIFF経由せずに表示確認するため） ──
+  // URLに ?test=1 をつけるとLIFFをバイパス
+  const isTestMode = new URLSearchParams(location.search).get('test') === '1';
+  if (isTestMode) {
+    try {
+      state.userId   = 'TEST_USER';
+      state.userName = 'テストユーザー';
+      document.getElementById('user-name-location').textContent = state.userName;
+      await loadMasterData();
+      renderLocations();
+      showScreen('location');
+    } catch(e) {
+      document.getElementById('screen-loading').innerHTML =
+        `<div style="color:#fff;padding:40px;font-size:13px;">
+          <p style="font-size:18px;margin-bottom:16px;">テストモードエラー</p>
+          <p>${e.message}</p>
+        </div>`;
+    }
+    return;
+  }
+
   try {
     await liff.init({ liffId: '2009637457-O8NspH8f' });
     if (!liff.isLoggedIn()) { liff.login(); return; }
