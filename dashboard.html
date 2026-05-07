@@ -535,7 +535,7 @@ body {
         <div class="sort-btns">
           <button class="sort-btn active" onclick="sortLocations('rate_desc')" id="sort-best">ベスト順</button>
           <button class="sort-btn" onclick="sortLocations('rate_asc')" id="sort-worst">ワースト順</button>
-          <button class="sort-btn" onclick="sortLocations('name')" id="sort-name">拠点名順</button>
+          <button class="sort-btn" onclick="sortLocations('id')" id="sort-id">ID順</button>
         </div>
         <span style="font-size:12px;color:var(--ink-mute);" id="reported-count"></span>
       </div>
@@ -971,7 +971,7 @@ function renderLocationTable() {
       return (a.r.sellRate || 0) - (b.r.sellRate || 0);
     });
   } else {
-    rows.sort((a, b) => a.loc.name.localeCompare(b.loc.name, 'ja'));
+    rows.sort((a, b) => String(a.loc.id).localeCompare(String(b.loc.id)));
   }
 
   document.getElementById('location-tbody').innerHTML = rows.map(({ loc, r }) => {
@@ -1013,11 +1013,11 @@ function renderLocationTable() {
 
 function sortLocations(type) {
   currentSort = type;
-  ['best','worst','name'].forEach(k => {
+  ['best','worst','id'].forEach(k => {
     document.getElementById(`sort-${k}`)?.classList.toggle('active',
       (k === 'best' && type === 'rate_desc') ||
       (k === 'worst' && type === 'rate_asc') ||
-      (k === 'name' && type === 'name')
+      (k === 'id' && type === 'id')
     );
   });
   renderLocationTable();
@@ -1076,6 +1076,7 @@ function openModal(locationId) {
   const products = masterData.products || [];
   const delivery = JSON.parse(r.deliveryCountJson || '{}');
   const sales    = JSON.parse(r.productSalesJson  || '{}');
+  const soldOutTimes = JSON.parse(r.soldOutTimesJson || '{}');  // ★ 完売時刻
 
   let bodyHtml = `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
@@ -1093,9 +1094,13 @@ function openModal(locationId) {
     const rate = d > 0 ? Math.round(s / d * 100) : null;
     const rateStr = rate !== null ? `${rate}%` : '—';
     const barW    = rate !== null ? rate : 0;
+    const soldOutTime = soldOutTimes[p.id];  // ★ この商品の完売時刻
+    const soldOutBadge = soldOutTime
+      ? `<span style="display:inline-block;background:var(--red);color:#FFF;font-size:10px;font-weight:700;padding:2px 6px;border-radius:6px;margin-left:6px;white-space:nowrap;">完売 ${soldOutTime}</span>`
+      : '';
     bodyHtml += `
       <div class="product-row">
-        <div class="product-row-name">${p.name}</div>
+        <div class="product-row-name">${p.name}${soldOutBadge}</div>
         <div class="product-row-nums">${s}/${d}個</div>
         <div class="product-rate-bar"><div class="product-rate-fill" style="width:${barW}%"></div></div>
         <div class="product-row-rate" style="color:${barW >= 80 ? 'var(--green)' : barW > 0 ? 'var(--gold)' : 'var(--ink-mute)'}">${rateStr}</div>
