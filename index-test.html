@@ -1267,8 +1267,18 @@ function getProductsForActiveTab() {
 // ═══════════════════════════════════════════════════════════════
 // REGISTER（商品グリッド）
 // ═══════════════════════════════════════════════════════════════
-function parseProductName(name) {
-  // 「白米」「玄米」のような括弧付き表記を分離
+function parseProductName(name, displayName) {
+  // 表示名（displayName）が設定されていればそれを使う
+  if (displayName) {
+    // 表示名内に「」があれば分離（任意対応）
+    let m = displayName.match(/^(.+?)「(.+?)」$/);
+    if (m) return { mainName: m[1].trim(), variant: m[2].trim() };
+    // 元の商品名からバリアント部分だけ取り出す
+    let origM = name.match(/^(.+?)「(.+?)」$/) || name.match(/^(.+?)『(.+?)』$/);
+    const variant = origM ? origM[2].trim() : null;
+    return { mainName: displayName.trim(), variant };
+  }
+  // 表示名なし → 元の商品名から「」『』で自動分離
   let match = name.match(/^(.+?)「(.+?)」$/);
   if (match) return { mainName: match[1].trim(), variant: match[2].trim() };
   match = name.match(/^(.+?)『(.+?)』$/);
@@ -1290,7 +1300,7 @@ function renderProducts() {
   const grid = document.getElementById('products-grid');
   const products = getProductsForActiveTab();
   grid.innerHTML = products.map(p => {
-    const { mainName, variant } = parseProductName(p.name);
+    const { mainName, variant } = parseProductName(p.name, p.displayName);
     const isSoldOut   = !!state.soldOutMap[p.id];
     const soldOutTime = state.soldOutMap[p.id] || '';
     const catClass    = getCategoryClass(p.category);
