@@ -1143,7 +1143,10 @@ async function loadMasterData() {
       const dropped = rawProducts.filter(p => isNaN(Number(p.price)) || Number(p.price) < 0);
       if (dropped.length > 0) {
         console.warn(`[警告] 価格未設定の商品を除外: ${dropped.map(p => `${p.id}/${p.name}`).join(', ')}`);
-        alert(`【価格未設定の商品が除外されました】\n\n${dropped.map(p => `・${p.id} ${p.name}`).join('\n')}\n\n単価マスタ（C列）を確認してください。`);
+        const sample = rawProducts.slice(0, 3).map(p => 
+          `[${p.id || '?'}] ${p.name || '?'}\n  price値: "${p.price}" (型: ${typeof p.price})\n  キー一覧: ${Object.keys(p).join(', ')}`
+        ).join('\n\n');
+        alert(`【商品データ診断】\n\n商品総数: ${rawProducts.length}件\n除外: ${dropped.length}件\n\n=== 先頭3件 ===\n\n${sample}`);
       }
       state.products      = normalized;
       state.locations     = data.locations || [];
