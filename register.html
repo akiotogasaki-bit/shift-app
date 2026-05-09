@@ -747,6 +747,7 @@ body {
     </div>
     <div style="display:flex;align-items:center;gap:6px;">
       <span class="header-user" id="reg-sales-count" style="color:#F4C430;">0個</span>
+      <button class="header-action-btn" onclick="openStockModal()">📦 在庫</button>
       <button class="header-action-btn" onclick="openHistoryModal()">📋 履歴</button>
       <button class="header-action-btn" onclick="showScreen('final')">締め →</button>
     </div>
@@ -982,11 +983,29 @@ body {
       <span class="modal-label">お会計</span>
       <span class="modal-value accent" id="paypay-modal-total">¥0</span>
     </div>
-    <p style="text-align:center;color:#aaa;margin:14px 0;font-size:13px;line-height:1.6;">
+    <p style="text-align:center;color:#aaa;margin:10px 0 4px;font-size:12px;line-height:1.5;">
       お客様にPayPayで決済してもらってください。<br>
       <span style="color:#F4C430;font-weight:700;">決済完了を確認してから</span>下のボタンを押してください。
     </p>
+    <div style="padding:4px 0;">
+      <div style="font-size:12px;color:#888;margin-bottom:6px;">実際のPayPay受取金額（差額がある場合のみ入力）</div>
+      <input type="number" class="received-input" id="paypay-received-amount" placeholder="空欄＝お会計と同額" inputmode="numeric" oninput="calcPayPayDiff()">
+    </div>
+    <div class="change-display" id="paypay-diff-display" style="display:none;">
+      <div class="change-label" id="paypay-diff-label">現金で返金</div>
+      <div class="change-amount" id="paypay-diff-amount">¥ —</div>
+    </div>
     <button class="modal-confirm-btn" onclick="confirmPayPay()">会計を確定する</button>
+  </div>
+</div>
+
+<!-- STOCK MODAL -->
+<div class="modal-overlay" id="stock-modal" onclick="if(event.target===this)closeStockModal()">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">📦 在庫確認 <span id="stock-summary" style="color:#F4C430;font-size:13px;font-weight:700;"></span></div>
+    <div id="stock-list"></div>
+    <button class="modal-confirm-btn" onclick="closeStockModal()" style="margin-top:14px;background:#444;">閉じる</button>
   </div>
 </div>
 
@@ -1018,6 +1037,7 @@ const state = {
   cashSales: 0,
   paypayCount: 0,
   paypayAmount: 0,
+  paypayReceivedTotal: 0,  // PayPay実受取合計（お釣り含む）
   couponOn: false,
   couponAmount: 300,
   soldCount: 0,
@@ -1536,7 +1556,29 @@ function confirmCash() {
 function openPayPayModal() {
   if (state.cart.length === 0) return;
   document.getElementById('paypay-modal-total').textContent = `¥${cartTotal().toLocaleString()}`;
+  document.getElementById('paypay-received-amount').value = '';
+  document.getElementById('paypay-diff-display').style.display = 'none';
   document.getElementById('paypay-modal').classList.add('show');
+}
+
+function calcPayPayDiff() {
+  const total    = cartTotal();
+  const received = parseInt(document.getElementById('paypay-received-amount').value) || 0;
+  const display  = document.getElementById('paypay-diff-display');
+  const label    = document.getElementById('paypay-diff-label');
+  const amount   = document.getElementById('paypay-diff-amount');
+  if (!received || received === total) { display.style.display = 'none'; return; }
+  display.style.display = 'block';
+  const diff = received - total;
+  if (diff > 0) {
+    label.textContent = '⚠️ 現金で返金してください';
+    amount.textContent = `¥${diff.toLocaleString()}`;
+    amount.style.color = '#EF5350';
+  } else {
+    label.textContent = '⚠️ PayPay不足額';
+    amount.textContent = `¥${Math.abs(diff).toLocaleString()}`;
+    amount.style.color = '#F4C430';
+  }
 }
 function closePayPayModal() {
   document.getElementById('paypay-modal').classList.remove('show');
@@ -1549,15 +1591,24 @@ function confirmPayPay() {
 function processPayPay() {
   const total     = cartTotal();
   const saleItems = [...state.cart];
+  const received  = parseInt(document.getElementById('paypay-received-amount').value) || total;
+  const refund    = received - total;
   state.paypayAmount += total;
+  state.paypayReceivedTotal += received;
   state.paypayCount++;
   recordSales('paypay');
   // ★ 履歴に追加
-  addToHistory({ method: 'paypay', amount: total, items: saleItems, couponAmount: state.couponOn ? (parseInt(document.getElementById('coupon-amount').value) || 0) : 0 });
+  addToHistory({ method: 'paypay', amount: total, items: saleItems, couponAmount: state.couponOn ? (parseInt(document.getElementById('coupon-amount').value) || 0) : 0, paypayReceived: received });
   clearCart();
   saveState();
-  sendIntermediateSale('paypay', total, saleItems);
-  showToast('PayPay会計が完了しました');
+  sendIntermediateSale('paypay', total, saleItems, received);
+  if (refund > 0) {
+    showToast(`現金で ¥${refund.toLocaleString()} 返金してください`);
+  } else if (refund < 0) {
+    showToast(`PayPay不足 ¥${Math.abs(refund).toLocaleString()}（要確認）`);
+  } else {
+    showToast('PayPay会計が完了しました');
+  }
 }
 
 function recordSales(method) {
@@ -1597,14 +1648,59 @@ function clearCart() {
 function addToHistory(entry) {
   const now = new Date();
   state.history.unshift({
-    id:           'sale_' + now.getTime() + '_' + Math.random().toString(36).slice(2,7),
-    timestamp:    `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`,
-    method:       entry.method,
-    amount:       entry.amount,
-    couponAmount: entry.couponAmount || 0,
-    items:        entry.items.map(i => ({ productId: i.product.id, productName: i.product.name, qty: i.qty, price: i.product.price })),
-    status:       'active',
+    id:             'sale_' + now.getTime() + '_' + Math.random().toString(36).slice(2,7),
+    timestamp:      `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`,
+    method:         entry.method,
+    amount:         entry.amount,
+    paypayReceived: entry.paypayReceived || 0,  // PayPay実受取（お釣り含む）
+    couponAmount:   entry.couponAmount || 0,
+    items:          entry.items.map(i => ({ productId: i.product.id, productName: i.product.name, qty: i.qty, price: i.product.price })),
+    status:         'active',
   });
+}
+
+function openStockModal() {
+  renderStockList();
+  document.getElementById('stock-modal').classList.add('show');
+}
+function closeStockModal() { document.getElementById('stock-modal').classList.remove('show'); }
+
+function renderStockList() {
+  const list = document.getElementById('stock-list');
+  const teaIds = state.products.filter(p => p.name.includes('お茶')).map(p => p.id);
+  // 完売率計算（お茶除く）
+  const totalDelivery = Object.entries(state.deliveryCount)
+    .filter(([id]) => !teaIds.includes(id))
+    .reduce((sum, [, v]) => sum + v, 0);
+  const nonTeaSold = state.soldCount - (state.teaSoldCount || 0);
+  const sellRate = totalDelivery > 0 ? Math.round(nonTeaSold / totalDelivery * 1000) / 10 : 0;
+  document.getElementById('stock-summary').textContent = `(${nonTeaSold}/${totalDelivery}個 ${sellRate}%)`;
+
+  const products = state.products.filter(p => (state.deliveryCount[p.id] || 0) > 0);
+  if (products.length === 0) {
+    list.innerHTML = '<div class="history-empty">納品データがありません</div>';
+    return;
+  }
+  list.innerHTML = products.map(p => {
+    const delivery  = state.deliveryCount[p.id] || 0;
+    const sold      = state.productSales[p.id] || 0;
+    const remaining = delivery - sold;
+    const isSoldOut = !!state.soldOutMap[p.id];
+    const isTea     = teaIds.includes(p.id);
+    const remColor  = remaining <= 0 ? '#EF5350' : (remaining <= 2 ? '#F4C430' : '#FFF');
+    return `
+      <div style="background:#1A1A1A;border:1px solid #333;border-radius:10px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;gap:8px;">
+        <div style="flex:1;min-width:0;">
+          <div style="color:#FFF;font-size:13px;font-weight:600;">${p.name}${isTea ? ' <small style="color:#888;">(お茶)</small>' : ''}${isSoldOut ? ' <span style="background:var(--red);color:#FFF;font-size:10px;padding:1px 5px;border-radius:4px;margin-left:4px;">完売</span>' : ''}</div>
+        </div>
+        <div style="display:flex;gap:10px;font-size:12px;flex-shrink:0;">
+          <div style="text-align:center;"><div style="color:#888;font-size:10px;">納品</div><div style="color:#CCC;font-weight:700;">${delivery}</div></div>
+          <div style="text-align:center;"><div style="color:#888;font-size:10px;">販売</div><div style="color:#F4C430;font-weight:700;">${sold}</div></div>
+          <div style="text-align:center;min-width:32px;"><div style="color:#888;font-size:10px;">残</div><div style="color:${remColor};font-weight:700;font-size:15px;">${remaining}</div></div>
+        </div>
+      </div>
+    `;
+  }).join('');
 }
 
 function openHistoryModal() {
@@ -1652,6 +1748,7 @@ function cancelSale(saleId) {
   if (sale.method === 'cash') state.cashSales -= sale.amount;
   if (sale.method === 'paypay') {
     state.paypayAmount -= sale.amount;
+    state.paypayReceivedTotal = Math.max(0, state.paypayReceivedTotal - (sale.paypayReceived || sale.amount));
     state.paypayCount = Math.max(0, state.paypayCount - 1);
   }
   // 商品別販売数から差し引く
@@ -1708,6 +1805,7 @@ function cancelSaleInternal(sale, sendNotification = true) {
   if (sale.method === 'cash') state.cashSales -= sale.amount;
   if (sale.method === 'paypay') {
     state.paypayAmount -= sale.amount;
+    state.paypayReceivedTotal = Math.max(0, state.paypayReceivedTotal - (sale.paypayReceived || sale.amount));
     state.paypayCount = Math.max(0, state.paypayCount - 1);
   }
   const teaIds = state.products.filter(p => p.name.includes('お茶')).map(p => p.id);
@@ -1814,6 +1912,7 @@ function saveState() {
       deliveryCount: state.deliveryCount,
       cashSales:     state.cashSales,
       paypayAmount:  state.paypayAmount,
+      paypayReceivedTotal: state.paypayReceivedTotal || 0,
       paypayCount:   state.paypayCount,
       soldCount:     state.soldCount,
       teaSoldCount:  state.teaSoldCount || 0,
@@ -1843,6 +1942,7 @@ function restoreState() {
     state.deliveryCount  = save.deliveryCount || {};
     state.cashSales      = save.cashSales     || 0;
     state.paypayAmount   = save.paypayAmount  || 0;
+    state.paypayReceivedTotal = save.paypayReceivedTotal || 0;
     state.paypayCount    = save.paypayCount   || 0;
     state.soldCount      = save.soldCount     || 0;
     state.teaSoldCount   = save.teaSoldCount  || 0;
@@ -1856,7 +1956,7 @@ function restoreState() {
 
 function clearSavedState() { localStorage.removeItem('oedo_register_state'); }
 
-function sendIntermediateSale(method, amount, items) {
+function sendIntermediateSale(method, amount, items, paypayReceived) {
   const payload = {
     action:       'submitIntermediateSale',
     userId:       state.userId,
@@ -1864,10 +1964,12 @@ function sendIntermediateSale(method, amount, items) {
     locationId:   state.location?.id,
     locationName: state.location?.name,
     method, amount,
+    paypayReceived: paypayReceived || 0,  // PayPay実受取（method==='paypay'のときのみ有意）
     items:        items.map(i => ({ productId: i.product.id, productName: i.product.name, qty: i.qty })),
     soldCount:    state.soldCount,
     cashSales:    state.cashSales,
     paypayAmount: state.paypayAmount,
+    paypayReceivedTotal: state.paypayReceivedTotal || 0,
     productSales: state.productSales,
     timestamp:    new Date().toISOString(),
   };
@@ -1881,7 +1983,9 @@ function sendIntermediateSale(method, amount, items) {
 function calcFinal() {
   const registerEnd  = parseInt(document.getElementById('register-end').value) || 0;
   const cashFromReg  = registerEnd - state.registerStart;
-  const diff         = cashFromReg - state.cashSales;
+  // PayPayお釣りで現金返金した分を差し引く
+  const cashRefund   = Math.max(0, (state.paypayReceivedTotal || 0) - state.paypayAmount);
+  const diff         = cashFromReg - (state.cashSales - cashRefund);
   const teaIds = state.products.filter(p => p.name.includes('お茶')).map(p => p.id);
   const totalDelivery = Object.entries(state.deliveryCount)
     .filter(([id]) => !teaIds.includes(id))
@@ -1993,6 +2097,8 @@ function submitFinal() {
     registerEnd: parseInt(document.getElementById('register-end').value) || 0,
     cashSales: state.cashSales,
     paypayAmount: state.paypayAmount,
+    paypayReceivedTotal: state.paypayReceivedTotal || 0,
+    cashRefundFromPayPay: Math.max(0, (state.paypayReceivedTotal || 0) - state.paypayAmount),
     paypayCount: state.paypayCount,
     soldCount: state.soldCount,
     soldOutMap: state.soldOutMap,
