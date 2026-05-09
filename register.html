@@ -1038,6 +1038,7 @@ const state = {
   paypayCount: 0,
   paypayAmount: 0,
   paypayReceivedTotal: 0,  // PayPay実受取合計（お釣り含む）
+  stoppedProductIds: [],   // ★ NEW: 商品スイッチで停止中の商品ID（デバッグ用に保持）
   couponOn: false,
   couponAmount: 300,
   soldCount: 0,
@@ -1143,6 +1144,8 @@ async function loadMasterData() {
     } else {
       loadDemoData();
     }
+    // ★ NEW: 商品スイッチ（停止商品）のフィルタを適用
+    await applyProductSwitches();
   } catch (e) {
     document.getElementById('screen-loading').innerHTML =
       `<div style="color:#fff;padding:40px;font-size:13px;word-break:break-all;">
@@ -1162,6 +1165,30 @@ function loadDemoData() {
   state.locations = [
     { id: 'L001', name: '京橋', baseGigSalary: 3000 },
   ];
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 商品スイッチ（停止商品フィルタ）NEW v2026-05-09
+// 起動時に1回だけ呼出。当日付で「停止」中の商品IDをGASから取得し、
+// state.products からフィルタする（A案：朝の起動時情報のみ反映）
+// ─ GAS関数 getProductSwitches が未デプロイの場合はフィルタなしで継続
+// ═══════════════════════════════════════════════════════════════
+async function applyProductSwitches() {
+  try {
+    const res = await fetch(`${state.GAS_URL}?action=getProductSwitches`, { method: 'GET', redirect: 'follow' });
+    const stoppedIds = JSON.parse(await res.text());
+    if (Array.isArray(stoppedIds) && stoppedIds.length > 0) {
+      const before = state.products.length;
+      state.stoppedProductIds = stoppedIds;
+      state.products = state.products.filter(p => !stoppedIds.includes(p.id));
+      console.log(`[商品スイッチ] ${before - state.products.length}件の商品を停止中: ${stoppedIds.join(', ')}`);
+    } else {
+      state.stoppedProductIds = [];
+    }
+  } catch(e) {
+    console.warn('getProductSwitches error (フィルタなしで継続):', e);
+    state.stoppedProductIds = [];
+  }
 }
 
 function showScreen(name) {
