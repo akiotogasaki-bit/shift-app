@@ -1320,11 +1320,16 @@ function showConfirm() {
 }
 
 function goToRegisterFromConfirm() {
-  // ★ ここで開始報告をGASに送信（納品数を1度だけ送る）
-  sendStartReport();
-  renderCategoryTabs();
-  renderProducts();
-  showScreen('register');
+  try {
+    // ★ ここで開始報告をGASに送信（納品数を1度だけ送る）
+    sendStartReport();
+    renderCategoryTabs();
+    renderProducts();
+    showScreen('register');
+  } catch(e) {
+    alert(`【画面遷移エラー（デバッグ用）】\n\nメッセージ：${e.message}\n\nstack：\n${e.stack || '(なし)'}`);
+    console.error('goToRegisterFromConfirm error:', e);
+  }
 }
 
 function sendStartReport() {
