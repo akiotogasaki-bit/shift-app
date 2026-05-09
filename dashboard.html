@@ -552,6 +552,217 @@ body {
 .dashboard-loading {
   padding: 40px; text-align: center; color: #999;
 }
+
+/* ===== 商品管理タブ（NEW v2026-05-10） ===== */
+.pm-notice {
+  background: var(--gold-light);
+  border-left: 3px solid var(--gold);
+  padding: 10px 14px;
+  border-radius: 0 8px 8px 0;
+  font-size: 12px;
+  color: var(--ink-soft);
+  margin-bottom: 16px;
+}
+.pm-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.pm-summary-card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  text-align: center;
+}
+.pm-summary-label {
+  font-size: 10px;
+  color: var(--ink-mute);
+  letter-spacing: .08em;
+  margin-bottom: 6px;
+}
+.pm-summary-value {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+}
+.pm-summary-value.green { color: var(--green); }
+.pm-summary-value.red { color: var(--red); }
+.pm-summary-value span {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--ink-mute);
+  margin-left: 2px;
+}
+.pm-list {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.pm-row {
+  display: flex;
+  align-items: center;
+  padding: 14px 16px;
+  border-bottom: 1px solid #F0EDE5;
+  gap: 12px;
+  transition: background .1s;
+}
+.pm-row:last-child { border-bottom: none; }
+.pm-row.stopped { background: #FDF5F4; }
+.pm-row-id {
+  font-size: 11px;
+  color: var(--ink-mute);
+  font-weight: 500;
+  min-width: 44px;
+  font-family: 'SF Mono', Menlo, monospace;
+}
+.pm-row-name {
+  flex: 1;
+  font-size: 14px;
+  color: var(--ink);
+}
+.pm-row.stopped .pm-row-name {
+  color: var(--ink-mute);
+  text-decoration: line-through;
+}
+.pm-row-status {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+.pm-row-status.active { background: var(--green-light); color: #1A7A42; }
+.pm-row-status.stopped { background: #FDEDEC; color: var(--red-dark); }
+.pm-toggle {
+  position: relative;
+  width: 48px;
+  height: 26px;
+  border-radius: 13px;
+  background: var(--green);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background .2s;
+  border: none;
+  padding: 0;
+}
+.pm-toggle.off { background: #BDC3C7; }
+.pm-toggle::after {
+  content: '';
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 22px; height: 22px;
+  background: #FFF;
+  border-radius: 50%;
+  transition: transform .2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,.2);
+}
+.pm-toggle.off::after { transform: translateX(22px); }
+.pm-toggle:disabled { opacity: .5; cursor: wait; }
+
+/* 確認モーダル（中央表示） */
+.pm-confirm-bg {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.5);
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s;
+  padding: 20px;
+}
+.pm-confirm-bg.show { opacity: 1; pointer-events: all; }
+.pm-confirm-card {
+  background: var(--white);
+  border-radius: 16px;
+  width: 100%;
+  max-width: 380px;
+  overflow: hidden;
+  transform: scale(.9);
+  transition: transform .2s;
+}
+.pm-confirm-bg.show .pm-confirm-card { transform: scale(1); }
+.pm-confirm-header {
+  padding: 16px 20px;
+  color: #FFF;
+  font-size: 14px;
+  font-weight: 700;
+}
+.pm-confirm-header.stop { background: var(--red); }
+.pm-confirm-header.resume { background: var(--green); }
+.pm-confirm-body {
+  padding: 20px;
+  font-size: 14px;
+  color: var(--ink-soft);
+  line-height: 1.6;
+}
+.pm-confirm-product {
+  background: var(--cream);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin: 12px 0;
+  font-weight: 700;
+  color: var(--ink);
+  font-size: 13px;
+}
+.pm-confirm-buttons {
+  display: flex;
+  gap: 8px;
+  padding: 0 20px 20px;
+}
+.pm-confirm-btn {
+  flex: 1;
+  padding: 12px;
+  border-radius: 10px;
+  border: none;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  transition: opacity .15s;
+}
+.pm-confirm-btn.cancel {
+  background: #ECF0F1;
+  color: var(--ink-soft);
+}
+.pm-confirm-btn.confirm-stop {
+  background: var(--red);
+  color: #FFF;
+}
+.pm-confirm-btn.confirm-resume {
+  background: var(--green);
+  color: #FFF;
+}
+.pm-confirm-btn:disabled { opacity: .5; cursor: wait; }
+
+/* トースト通知 */
+.pm-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(100px);
+  background: var(--ink);
+  color: #FFF;
+  padding: 12px 20px;
+  border-radius: 24px;
+  font-size: 13px;
+  z-index: 400;
+  opacity: 0;
+  transition: all .3s;
+  box-shadow: 0 4px 12px rgba(0,0,0,.3);
+  pointer-events: none;
+}
+.pm-toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+.pm-toast.error { background: var(--red); }
+.pm-toast.success { background: var(--green); }
 </style>
 </head>
 <body>
@@ -576,6 +787,7 @@ body {
   <button class="tab-btn" onclick="switchTab('delivery')">配達</button>
   <button class="tab-btn" onclick="switchTab('cash')">現金有高</button>
   <button class="tab-btn" onclick="switchTab('heatmap')">ヒートマップ</button>
+  <button class="tab-btn" onclick="switchTab('products')">商品管理</button>
 </div>
 
 <!-- CONTENT -->
@@ -721,6 +933,33 @@ body {
     </section>
   </div>
 
+  <!-- PRODUCTS MANAGEMENT TAB（NEW v2026-05-10） -->
+  <div id="tab-products" class="tab-panel">
+    <div class="pm-notice">
+      ※毎日20時に自動リセットされます（停止中の商品が翌日には全て稼働状態に戻ります）
+    </div>
+    <div class="pm-summary-grid" id="pm-summary">
+      <div class="pm-summary-card">
+        <div class="pm-summary-label">全商品</div>
+        <div class="pm-summary-value">—<span>件</span></div>
+      </div>
+      <div class="pm-summary-card">
+        <div class="pm-summary-label">稼働中</div>
+        <div class="pm-summary-value green">—<span>件</span></div>
+      </div>
+      <div class="pm-summary-card">
+        <div class="pm-summary-label">停止中</div>
+        <div class="pm-summary-value red">—<span>件</span></div>
+      </div>
+    </div>
+    <div id="pm-list-wrap">
+      <div class="loading-wrap">
+        <div class="loader"></div>
+        <p>商品リストを読み込み中...</p>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <!-- DETAIL MODAL -->
@@ -734,6 +973,26 @@ body {
     <div class="modal-body" id="modal-body"></div>
   </div>
 </div>
+
+<!-- 商品管理 確認モーダル（NEW） -->
+<div class="pm-confirm-bg" id="pm-confirm-modal">
+  <div class="pm-confirm-card">
+    <div class="pm-confirm-header" id="pm-confirm-header">商品の停止</div>
+    <div class="pm-confirm-body" id="pm-confirm-body">
+      以下の商品を停止しますか？
+      <div class="pm-confirm-product" id="pm-confirm-product">—</div>
+      停止すると、レジアプリで販売できなくなります。<br>
+      <span style="font-size:11px;color:var(--ink-mute);">※20時に自動で稼働状態に戻ります</span>
+    </div>
+    <div class="pm-confirm-buttons">
+      <button class="pm-confirm-btn cancel" onclick="cancelProductMgmt()">キャンセル</button>
+      <button class="pm-confirm-btn confirm-stop" id="pm-confirm-action" onclick="confirmProductMgmt()">確定</button>
+    </div>
+  </div>
+</div>
+
+<!-- トースト通知（NEW） -->
+<div class="pm-toast" id="pm-toast"></div>
 
 <script>
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5AawPDc7aluPokONkYz6f2ikwl0S487JvhKdKh6QSp1xhEhA/exec';
@@ -1427,7 +1686,7 @@ function renderMonthlyData(data, yearMonth) {
 // TABS
 // ─────────────────────────────────────
 function switchTab(tab) {
-  const tabNames = ['realtime','weekly','monthly','delivery','cash','heatmap'];
+  const tabNames = ['realtime','weekly','monthly','delivery','cash','heatmap','products'];
   document.querySelectorAll('.tab-btn').forEach((b, i) => {
     b.classList.toggle('active', tabNames[i] === tab);
   });
@@ -1439,6 +1698,7 @@ function switchTab(tab) {
   if (tab === 'delivery') initDelivery();
   if (tab === 'cash')     renderCashTable();
   if (tab === 'heatmap')  loadHeatmapData();
+  if (tab === 'products') loadProductMgmt();
 }
 
 function initWeekSelector() {
@@ -1598,6 +1858,175 @@ function escapeHmHtml(s) {
   return String(s).replace(/[&<>"']/g, c =>
     ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])
   );
+}
+
+// ===== 商品管理タブ（NEW v2026-05-10） =====
+let _pmProducts = [];
+let _pmStoppedIds = new Set();
+let _pmPending = null;  // {id, name, willStop}
+let _pmLoaded = false;
+
+async function loadProductMgmt() {
+  const wrap = document.getElementById('pm-list-wrap');
+  if (!_pmLoaded) {
+    wrap.innerHTML = '<div class="loading-wrap"><div class="loader"></div><p>商品リストを読み込み中...</p></div>';
+  }
+  try {
+    const [products, stopped] = await Promise.all([
+      fetchJSON(`${GAS_URL}?action=getProducts`),
+      fetchJSON(`${GAS_URL}?action=getProductSwitches`)
+    ]);
+    _pmProducts = Array.isArray(products) ? products : [];
+    _pmStoppedIds = new Set(Array.isArray(stopped) ? stopped : []);
+    _pmLoaded = true;
+    renderProductMgmt();
+  } catch (e) {
+    wrap.innerHTML = `<p style="color:var(--red);font-size:13px;padding:20px;text-align:center;">取得エラー：${e.message}</p>`;
+  }
+}
+
+function renderProductMgmt() {
+  // サマリー
+  const total = _pmProducts.length;
+  const stopped = _pmStoppedIds.size;
+  const active = total - stopped;
+  document.getElementById('pm-summary').innerHTML = `
+    <div class="pm-summary-card">
+      <div class="pm-summary-label">全商品</div>
+      <div class="pm-summary-value">${total}<span>件</span></div>
+    </div>
+    <div class="pm-summary-card">
+      <div class="pm-summary-label">稼働中</div>
+      <div class="pm-summary-value green">${active}<span>件</span></div>
+    </div>
+    <div class="pm-summary-card">
+      <div class="pm-summary-label">停止中</div>
+      <div class="pm-summary-value red">${stopped}<span>件</span></div>
+    </div>
+  `;
+
+  // 商品リスト
+  const wrap = document.getElementById('pm-list-wrap');
+  if (_pmProducts.length === 0) {
+    wrap.innerHTML = '<p style="color:var(--ink-mute);font-size:13px;padding:20px;text-align:center;">商品データがありません</p>';
+    return;
+  }
+
+  const html = '<div class="pm-list">' + _pmProducts.map(p => {
+    const isStopped = _pmStoppedIds.has(p.id);
+    return `
+      <div class="pm-row ${isStopped ? 'stopped' : ''}" id="pm-row-${p.id}">
+        <div class="pm-row-id">${p.id}</div>
+        <div class="pm-row-name">${escapeHmHtml(p.name)}</div>
+        <span class="pm-row-status ${isStopped ? 'stopped' : 'active'}">${isStopped ? '停止中' : '稼働中'}</span>
+        <button class="pm-toggle ${isStopped ? 'off' : ''}" onclick="onProductToggle('${p.id}')" aria-label="トグル"></button>
+      </div>`;
+  }).join('') + '</div>';
+  wrap.innerHTML = html;
+}
+
+function onProductToggle(productId) {
+  const product = _pmProducts.find(p => p.id === productId);
+  if (!product) return;
+  const isStopped = _pmStoppedIds.has(productId);
+  const willStop = !isStopped;
+
+  _pmPending = { id: productId, name: product.name, willStop };
+
+  const header = document.getElementById('pm-confirm-header');
+  const body = document.getElementById('pm-confirm-body');
+  const product_box = document.getElementById('pm-confirm-product');
+  const action = document.getElementById('pm-confirm-action');
+
+  if (willStop) {
+    header.textContent = '商品の停止';
+    header.className = 'pm-confirm-header stop';
+    body.innerHTML = `
+      以下の商品を停止しますか？
+      <div class="pm-confirm-product" id="pm-confirm-product">${escapeHmHtml(product.name)}</div>
+      停止すると、レジアプリで販売できなくなります。<br>
+      <span style="font-size:11px;color:var(--ink-mute);">※20時に自動で稼働状態に戻ります</span>
+    `;
+    action.textContent = '停止する';
+    action.className = 'pm-confirm-btn confirm-stop';
+  } else {
+    header.textContent = '商品の再開';
+    header.className = 'pm-confirm-header resume';
+    body.innerHTML = `
+      以下の商品を再開しますか？
+      <div class="pm-confirm-product" id="pm-confirm-product">${escapeHmHtml(product.name)}</div>
+      再開すると、レジアプリで販売可能になります。
+    `;
+    action.textContent = '再開する';
+    action.className = 'pm-confirm-btn confirm-resume';
+  }
+
+  document.getElementById('pm-confirm-modal').classList.add('show');
+}
+
+function cancelProductMgmt() {
+  _pmPending = null;
+  document.getElementById('pm-confirm-modal').classList.remove('show');
+}
+
+async function confirmProductMgmt() {
+  if (!_pmPending) return;
+  const { id, name, willStop } = _pmPending;
+  const status = willStop ? '停止' : '稼働';
+
+  const actionBtn = document.getElementById('pm-confirm-action');
+  const cancelBtn = document.querySelector('.pm-confirm-btn.cancel');
+  actionBtn.disabled = true;
+  cancelBtn.disabled = true;
+  actionBtn.textContent = '処理中...';
+
+  try {
+    const params = new URLSearchParams();
+    params.append('action', 'setProductSwitch');
+    params.append('productId', id);
+    params.append('status', status);
+
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      body: params,
+      redirect: 'follow'
+    });
+
+    if (!res.ok) {
+      throw new Error('サーバーエラー: ' + res.status);
+    }
+
+    // 成功 → 状態更新
+    if (willStop) {
+      _pmStoppedIds.add(id);
+    } else {
+      _pmStoppedIds.delete(id);
+    }
+
+    document.getElementById('pm-confirm-modal').classList.remove('show');
+    _pmPending = null;
+    renderProductMgmt();
+    showPmToast(`「${name}」を${willStop ? '停止' : '再開'}しました`, 'success');
+  } catch (e) {
+    showPmToast('エラー：' + e.message, 'error');
+  } finally {
+    actionBtn.disabled = false;
+    cancelBtn.disabled = false;
+  }
+}
+
+// 確認モーダル：背景クリックで閉じる
+document.getElementById('pm-confirm-modal').addEventListener('click', function(e) {
+  if (e.target === this) cancelProductMgmt();
+});
+
+function showPmToast(message, type) {
+  const toast = document.getElementById('pm-toast');
+  toast.textContent = message;
+  toast.className = 'pm-toast show ' + (type || '');
+  setTimeout(() => {
+    toast.className = 'pm-toast';
+  }, 2800);
 }
 </script>
 </body>
