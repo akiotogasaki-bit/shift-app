@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>申し送り返信 - お江戸弁当</title>
+<script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<style>
+:root {
+  --red: #C0392B;
+  --red-dark: #922B21;
+  --gold: #B8860B;
+  --gold-light: #F9F0D0;
+  --ink: #1C1C1C;
+  --ink-soft: #4A4A4A;
+  --ink-mute: #8A8A8A;
+  --cream: #FDF8F0;
+  --border: #E0D5C5;
+  --green: #27AE60;
+  --green-dark: #1E8449;
+  --white: #FFFFFF;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', sans-serif;
+  background: var(--cream);
+  color: var(--ink);
+  min-height: 100vh;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* ── HEADER ── */
+.header {
+  background: var(--red);
+  color: var(--white);
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  box-shadow: 0 2px 8px rgba(0,0,0,.15);
+}
+.back-btn {
+  background: rgba(255,255,255,.2);
+  border: none;
+  color: #FFF;
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-family: inherit;
+}
+.header h1 { font-size: 16px; font-weight: 700; flex: 1; }
+
+.content { padding: 16px; max-width: 600px; margin: 0 auto; }
+
+/* ── 申し送り情報カード ── */
+.memo-card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+.memo-card-header {
+  background: var(--ink);
+  color: #FFF;
+  padding: 12px 16px;
+}
+.memo-card-header .meta {
+  font-size: 11px;
+  opacity: .7;
+  margin-bottom: 4px;
+}
+.memo-card-header .loc {
+  font-size: 16px;
+  font-weight: 700;
+}
+.memo-card-header .staff {
+  font-size: 12px;
+  opacity: .85;
+  margin-top: 2px;
+}
+.memo-content {
+  padding: 16px;
+  background: var(--gold-light);
+  border-left: 4px solid var(--gold);
+  font-size: 15px;
+  color: var(--ink-soft);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ── 返信履歴 ── */
+.reply-history {
+  margin-top: 16px;
+}
+.reply-history-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-mute);
+  letter-spacing: .08em;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.reply-history-title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+.reply-item {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+}
+.reply-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+.reply-item-name {
+  font-weight: 700;
+  color: var(--green-dark);
+}
+.reply-item-time {
+  color: var(--ink-mute);
+}
+.reply-item-content {
+  font-size: 14px;
+  color: var(--ink-soft);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ── 返信入力フォーム ── */
+.form-section {
+  margin-top: 24px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+}
+.form-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 12px;
+}
+.form-replier {
+  font-size: 12px;
+  color: var(--ink-mute);
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  background: var(--cream);
+  border-radius: 8px;
+}
+.form-replier strong {
+  color: var(--ink);
+  font-weight: 700;
+}
+textarea {
+  width: 100%;
+  min-height: 110px;
+  padding: 12px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.6;
+  resize: vertical;
+  background: #FAFAF8;
+  color: var(--ink);
+}
+textarea:focus {
+  outline: none;
+  border-color: var(--red);
+  background: #FFF;
+}
+
+/* ── ボタン ── */
+.btn-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 16px;
+}
+.btn {
+  padding: 14px;
+  border-radius: 10px;
+  border: none;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  transition: opacity .15s;
+}
+.btn:disabled { opacity: .5; cursor: wait; }
+.btn-primary {
+  background: var(--red);
+  color: #FFF;
+}
+.btn-success {
+  background: var(--green);
+  color: #FFF;
+}
+.btn-secondary {
+  background: #ECF0F1;
+  color: var(--ink-soft);
+}
+
+/* ── ローディング ── */
+.loading-wrap {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--ink-mute);
+}
+.loader {
+  width: 32px; height: 32px;
+  border: 3px solid var(--border);
+  border-top-color: var(--red);
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+  margin: 0 auto 16px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── エラー ── */
+.error-box {
+  background: #FDEDEC;
+  border: 1px solid #F1948A;
+  border-radius: 10px;
+  padding: 16px;
+  color: var(--red-dark);
+  font-size: 13px;
+  text-align: center;
+  margin: 20px 0;
+}
+
+/* ── トースト ── */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(100px);
+  background: var(--ink);
+  color: #FFF;
+  padding: 12px 20px;
+  border-radius: 24px;
+  font-size: 13px;
+  z-index: 100;
+  opacity: 0;
+  transition: all .3s;
+  box-shadow: 0 4px 12px rgba(0,0,0,.3);
+  pointer-events: none;
+  max-width: 90%;
+  text-align: center;
+}
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+.toast.error { background: var(--red); }
+.toast.success { background: var(--green); }
+
+/* ── 確認モーダル ── */
+.modal-bg {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.5);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s;
+}
+.modal-bg.show { opacity: 1; pointer-events: all; }
+.modal-card {
+  background: #FFF;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 360px;
+  overflow: hidden;
+  transform: scale(.9);
+  transition: transform .2s;
+}
+.modal-bg.show .modal-card { transform: scale(1); }
+.modal-header {
+  padding: 14px 18px;
+  background: var(--green);
+  color: #FFF;
+  font-size: 14px;
+  font-weight: 700;
+}
+.modal-body {
+  padding: 20px;
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+.modal-buttons {
+  display: flex;
+  gap: 8px;
+  padding: 0 18px 18px;
+}
+.modal-btn {
+  flex: 1;
+  padding: 12px;
+  border-radius: 10px;
+  border: none;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+}
+.modal-btn.cancel { background: #ECF0F1; color: var(--ink-soft); }
+.modal-btn.confirm { background: var(--green); color: #FFF; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <button class="back-btn" onclick="goBack()">←</button>
+  <h1>申し送り返信</h1>
+</div>
+
+<div class="content">
+  <!-- 初期ローディング -->
+  <div id="loading" class="loading-wrap">
+    <div class="loader"></div>
+    <p>読み込み中...</p>
+  </div>
+
+  <!-- エラー表示 -->
+  <div id="error-box" class="error-box" style="display:none;">
+    <p id="error-message"></p>
+  </div>
+
+  <!-- メインコンテンツ -->
+  <div id="main-content" style="display:none;">
+
+    <!-- 申し送り情報 -->
+    <div class="memo-card">
+      <div class="memo-card-header">
+        <div class="meta" id="memo-meta">—</div>
+        <div class="loc" id="memo-location">—</div>
+        <div class="staff" id="memo-staff">—</div>
+      </div>
+      <div class="memo-content" id="memo-content">—</div>
+    </div>
+
+    <!-- 返信履歴 -->
+    <div class="reply-history" id="reply-history" style="display:none;">
+      <div class="reply-history-title" id="reply-history-title">これまでの返信</div>
+      <div id="reply-list"></div>
+    </div>
+
+    <!-- 返信フォーム -->
+    <div class="form-section">
+      <div class="form-section-title">返信を入力</div>
+      <div class="form-replier">
+        返信者：<strong id="replier-name">—</strong>
+      </div>
+      <textarea id="reply-content" placeholder="返信内容を入力してください..."></textarea>
+      <div class="btn-group">
+        <button class="btn btn-primary" id="btn-submit" onclick="submitReply()">返信を送信</button>
+        <button class="btn btn-success" id="btn-complete" onclick="confirmComplete()">対応完了にする</button>
+        <button class="btn btn-secondary" onclick="goBack()">キャンセル</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- 対応完了 確認モーダル -->
+<div class="modal-bg" id="complete-modal">
+  <div class="modal-card">
+    <div class="modal-header">対応完了</div>
+    <div class="modal-body">
+      この申し送りを対応完了にしますか？<br>
+      <span style="font-size:11px;color:var(--ink-mute);">完了後は一覧から消えます（販売員への通知はされません）</span>
+    </div>
+    <div class="modal-buttons">
+      <button class="modal-btn cancel" onclick="cancelComplete()">キャンセル</button>
+      <button class="modal-btn confirm" id="modal-confirm-btn" onclick="executeComplete()">完了にする</button>
+    </div>
+  </div>
+</div>
+
+<!-- トースト -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ─────────────────────────────────────────
+// 設定
+// ─────────────────────────────────────────
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5AawPDc7aluPokONkYz6f2ikwl0S487JvhKdKh6QSp1xhEhA/exec';
+const LIFF_ID = '2009637457-gAFKfT6y';  // 社員ダッシュボード用LIFF（dashboard.htmlと同じ）
+
+// ─────────────────────────────────────────
+// 状態
+// ─────────────────────────────────────────
+let memoData = null;        // {targetDate, targetLocationId, targetLocationName, targetUserId, targetUserName, originalMemo, replies}
+let replierProfile = null;  // {userId, displayName, role}
+
+// ─────────────────────────────────────────
+// 起動
+// ─────────────────────────────────────────
+window.addEventListener('load', async function() {
+  try {
+    await liff.init({ liffId: LIFF_ID });
+
+    if (!liff.isLoggedIn()) {
+      liff.login({ redirectUri: window.location.href });
+      return;
+    }
+
+    const profile = await liff.getProfile();
+
+    // 属性チェック（社員のみ）
+    const roleRes = await fetchJSON(GAS_URL + '?action=getRole&userId=' + encodeURIComponent(profile.userId));
+    const role = (roleRes && roleRes.role) || '';
+
+    if (role !== '社員') {
+      showError('このページは社員専用です。\n（あなたの属性：' + (role || '未登録') + '）');
+      return;
+    }
+
+    replierProfile = {
+      userId:      profile.userId,
+      displayName: profile.displayName,
+      role:        role,
+    };
+
+    document.getElementById('replier-name').textContent = profile.displayName;
+
+    // URLパラメータから申し送りを特定
+    parseMemoFromURL();
+
+    if (!memoData) {
+      showError('申し送りの情報が不完全です。\n一覧画面から開き直してください。');
+      return;
+    }
+
+    // 申し送り詳細を取得（返信履歴含む）
+    await loadMemoDetail();
+
+  } catch(e) {
+    showError('起動エラー: ' + e.message);
+  }
+});
+
+// ─────────────────────────────────────────
+// URLパラメータ解析
+// ─────────────────────────────────────────
+function parseMemoFromURL() {
+  // LIFF経由の場合は liff.state または通常クエリのいずれかにパラメータがある
+  let params;
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  const queryParams = new URLSearchParams(window.location.search);
+
+  // liff.state パラメータをデコード
+  const liffState = queryParams.get('liff.state') || hashParams.get('liff.state');
+  if (liffState) {
+    const stateClean = liffState.startsWith('?') ? liffState.substring(1) : liffState;
+    params = new URLSearchParams(stateClean);
+  } else {
+    params = queryParams;
+  }
+
+  const date    = params.get('date');
+  const locId   = params.get('locId');
+  const locName = params.get('locName') || '';
+  const userId  = params.get('uid');
+  const userName = params.get('uname') || '';
+  const memo    = params.get('memo') || '';
+
+  if (!date || !locId || !userId) {
+    memoData = null;
+    return;
+  }
+
+  memoData = {
+    targetDate:         decodeURIComponent(date),
+    targetLocationId:   decodeURIComponent(locId),
+    targetLocationName: decodeURIComponent(locName),
+    targetUserId:       decodeURIComponent(userId),
+    targetUserName:     decodeURIComponent(userName),
+    originalMemo:       decodeURIComponent(memo),
+    replies:            [],
+  };
+}
+
+// ─────────────────────────────────────────
+// 申し送り詳細を取得（最新の返信履歴含む）
+// ─────────────────────────────────────────
+async function loadMemoDetail() {
+  try {
+    const res = await fetchJSON(GAS_URL + '?action=getMemoReports');
+    if (!res.success) {
+      showError('申し送り取得エラー: ' + (res.error || '不明'));
+      return;
+    }
+
+    const found = (res.memos || []).find(m =>
+      m.date === memoData.targetDate &&
+      m.locationId === memoData.targetLocationId &&
+      m.userId === memoData.targetUserId
+    );
+
+    if (found) {
+      // 最新情報で更新（メモ内容も最新を優先）
+      memoData.originalMemo = found.memo;
+      memoData.targetLocationName = found.locationName || memoData.targetLocationName;
+      memoData.targetUserName = found.userName || memoData.targetUserName;
+      memoData.replies = found.replies || [];
+    } else {
+      // 既に対応完了の可能性
+      showError('この申し送りは既に対応完了済みか、見つかりません。');
+      return;
+    }
+
+    renderMemo();
+
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('main-content').style.display = 'block';
+
+  } catch(e) {
+    showError('読み込みエラー: ' + e.message);
+  }
+}
+
+// ─────────────────────────────────────────
+// 表示
+// ─────────────────────────────────────────
+function renderMemo() {
+  document.getElementById('memo-meta').textContent = memoData.targetDate;
+  document.getElementById('memo-location').textContent = memoData.targetLocationName || '(拠点名なし)';
+  document.getElementById('memo-staff').textContent = '販売員：' + (memoData.targetUserName || '(名前なし)');
+  document.getElementById('memo-content').textContent = memoData.originalMemo || '(内容なし)';
+
+  // 返信履歴
+  const replies = memoData.replies || [];
+  if (replies.length > 0) {
+    document.getElementById('reply-history').style.display = 'block';
+    document.getElementById('reply-history-title').textContent =
+      'これまでの返信（' + replies.length + '件）';
+
+    const html = replies.map(r => `
+      <div class="reply-item">
+        <div class="reply-item-header">
+          <span class="reply-item-name">${escapeHtml(r.replierName || '—')}</span>
+          <span class="reply-item-time">${r.date} ${r.time}</span>
+        </div>
+        <div class="reply-item-content">${escapeHtml(r.content || '')}</div>
+      </div>
+    `).join('');
+    document.getElementById('reply-list').innerHTML = html;
+  } else {
+    document.getElementById('reply-history').style.display = 'none';
+  }
+}
+
+// ─────────────────────────────────────────
+// 返信送信
+// ─────────────────────────────────────────
+async function submitReply() {
+  const content = document.getElementById('reply-content').value.trim();
+  if (!content) {
+    showToast('返信内容を入力してください', 'error');
+    return;
+  }
+
+  const submitBtn = document.getElementById('btn-submit');
+  const completeBtn = document.getElementById('btn-complete');
+  submitBtn.disabled = true;
+  completeBtn.disabled = true;
+  submitBtn.textContent = '送信中...';
+
+  try {
+    const payload = {
+      action:               'submitMemoReply',
+      targetDate:           memoData.targetDate,
+      targetLocationId:     memoData.targetLocationId,
+      targetLocationName:   memoData.targetLocationName,
+      targetUserId:         memoData.targetUserId,
+      targetUserName:       memoData.targetUserName,
+      replierName:          replierProfile.displayName,
+      content:              content,
+      originalMemo:         memoData.originalMemo,
+    };
+
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload),
+      redirect: 'follow',
+    });
+
+    const result = await res.json();
+    if (!result.success) {
+      throw new Error(result.error || '不明なエラー');
+    }
+
+    showToast('返信を送信しました' + (result.notified ? '（LINE通知済み）' : '（LINE通知失敗）'), 'success');
+
+    // 返信欄クリア＋履歴更新
+    document.getElementById('reply-content').value = '';
+    setTimeout(async () => {
+      await loadMemoDetail();
+    }, 500);
+
+  } catch(e) {
+    showToast('送信エラー: ' + e.message, 'error');
+  } finally {
+    submitBtn.disabled = false;
+    completeBtn.disabled = false;
+    submitBtn.textContent = '返信を送信';
+  }
+}
+
+// ─────────────────────────────────────────
+// 対応完了
+// ─────────────────────────────────────────
+function confirmComplete() {
+  document.getElementById('complete-modal').classList.add('show');
+}
+function cancelComplete() {
+  document.getElementById('complete-modal').classList.remove('show');
+}
+
+async function executeComplete() {
+  const btn = document.getElementById('modal-confirm-btn');
+  btn.disabled = true;
+  btn.textContent = '処理中...';
+
+  try {
+    const payload = {
+      action:             'markMemoComplete',
+      targetDate:         memoData.targetDate,
+      targetLocationId:   memoData.targetLocationId,
+      targetLocationName: memoData.targetLocationName,
+      targetUserId:       memoData.targetUserId,
+      targetUserName:     memoData.targetUserName,
+      completerName:      replierProfile.displayName,
+    };
+
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload),
+      redirect: 'follow',
+    });
+
+    const result = await res.json();
+    if (!result.success) {
+      throw new Error(result.error || '不明なエラー');
+    }
+
+    showToast('対応完了にしました', 'success');
+    setTimeout(() => goBack(), 1000);
+
+  } catch(e) {
+    showToast('エラー: ' + e.message, 'error');
+    btn.disabled = false;
+    btn.textContent = '完了にする';
+  }
+}
+
+document.getElementById('complete-modal').addEventListener('click', function(e) {
+  if (e.target === this) cancelComplete();
+});
+
+// ─────────────────────────────────────────
+// 戻る
+// ─────────────────────────────────────────
+function goBack() {
+  // dashboard.htmlに戻る（同じLIFF内なので普通に遷移）
+  window.location.href = 'dashboard.html#tab=memos';
+}
+
+// ─────────────────────────────────────────
+// ユーティリティ
+// ─────────────────────────────────────────
+async function fetchJSON(url) {
+  const res = await fetch(url, { redirect: 'follow' });
+  return res.json();
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])
+  );
+}
+
+function showError(message) {
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('main-content').style.display = 'none';
+  document.getElementById('error-box').style.display = 'block';
+  document.getElementById('error-message').textContent = message;
+}
+
+function showToast(message, type) {
+  const toast = document.getElementById('toast');
+  toast.textContent = message;
+  toast.className = 'toast show ' + (type || '');
+  setTimeout(() => { toast.className = 'toast'; }, 2800);
+}
+</script>
+</body>
+</html>
