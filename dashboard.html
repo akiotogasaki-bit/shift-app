@@ -490,7 +490,8 @@ body {
   font-weight: 700;
   border-top: 2px solid var(--border);
 }
-  /* ===== ヒートマップ＋粗利ランキング ===== */
+
+/* ===== ヒートマップ＋粗利ランキング ===== */
 .dashboard-section {
   background: #fff;
   border-radius: 8px;
@@ -781,7 +782,7 @@ body {
 .pm-toast.error { background: var(--red); }
 .pm-toast.success { background: var(--green); }
 
-/* ===== 申し送り確認タブ ===== */
+/* ===== 申し送り確認タブ（基本） ===== */
 .memo-board {
   display: flex;
   flex-direction: column;
@@ -792,7 +793,8 @@ body {
   border: 1px solid var(--border);
   border-radius: 12px;
   overflow: hidden;
-  transition: box-shadow .15s;
+  transition: box-shadow .15s, background .15s, border-color .15s;
+  position: relative;
 }
 .memo-card-item:hover {
   box-shadow: 0 2px 8px rgba(0,0,0,.06);
@@ -801,6 +803,7 @@ body {
   background: var(--ink);
   color: #FFF;
   padding: 10px 14px;
+  padding-right: 44px;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -825,7 +828,7 @@ body {
   margin-top: 2px;
 }
 .memo-card-reply-count {
-  background: var(--gold);
+  background: var(--green);
   color: #FFF;
   font-size: 10px;
   font-weight: 700;
@@ -836,6 +839,7 @@ body {
 }
 .memo-card-reply-count.zero {
   background: rgba(255,255,255,.15);
+  color: rgba(255,255,255,.7);
 }
 .memo-card-body {
   padding: 14px;
@@ -927,53 +931,7 @@ body {
   font-size: 13px;
 }
 
-/* ===== 拒否画面 ===== */
-.access-denied {
-  display: none;
-  text-align: center;
-  padding: 60px 20px;
-  background: var(--cream);
-  min-height: 100vh;
-}
-.access-denied.show { display: block; }
-.access-denied-icon {
-  font-size: 64px;
-  margin-bottom: 20px;
-}
-.access-denied-title {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--ink);
-  margin-bottom: 12px;
-}
-.access-denied-message {
-  font-size: 14px;
-  color: var(--ink-soft);
-  line-height: 1.7;
-  margin-bottom: 24px;
-}
-.access-denied-message .role-tag {
-  display: inline-block;
-  background: var(--cream-dark);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 2px 10px;
-  margin-left: 4px;
-  font-size: 12px;
-  color: var(--ink-soft);
-}
-.access-denied-btn {
-  background: var(--red);
-  color: #FFF;
-  border: none;
-  padding: 12px 32px;
-  border-radius: 24px;
-  font-size: 14px;
-  font-weight: 700;
-  cursor: pointer;
-  font-family: inherit;
-}
-  /* ===== 申し送りタブ v2（一括完了対応） ===== */
+/* ===== 申し送りタブ v2（一括完了対応） ===== */
 
 /* 一括操作バー */
 .memo-batch-bar {
@@ -1032,10 +990,6 @@ body {
 }
 
 /* カード選択チェックボックス */
-.memo-card-item {
-  position: relative;
-  transition: background .15s, border-color .15s;
-}
 .memo-card-checkbox-wrap {
   position: absolute;
   top: 10px;
@@ -1077,19 +1031,125 @@ body {
   box-shadow: 0 0 0 2px rgba(39, 174, 96, .15);
 }
 
-/* 返信件数バッジ：返信ありは緑、なしは半透明（既存の上書き） */
-.memo-card-reply-count {
-  background: var(--green);
-  color: #FFF;
+/* ===== 申し送りタブ v3（履歴表示対応） ===== */
+
+/* 履歴項目（完了済み × 返信あり） */
+.memo-card-item.is-history {
+  opacity: 0.65;
+  background: #ECECE6;
 }
-.memo-card-reply-count.zero {
-  background: rgba(255,255,255,.15);
-  color: rgba(255,255,255,.7);
+.memo-card-item.is-history .memo-card-top {
+  background: #888;
+  padding-left: 80px;
+  padding-right: 14px;
+}
+.memo-card-item.is-history .memo-card-body {
+  background: #E5E5DD;
+  border-left-color: #999;
 }
 
-/* チェックボックスとカードヘッダーが重ならないよう右余白を確保 */
-.memo-card-top {
-  padding-right: 44px;
+/* 履歴マーク（左上） */
+.memo-history-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 10;
+  background: var(--green);
+  color: #FFF;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 履歴項目はチェックボックス非表示 */
+.memo-card-item.is-history .memo-card-checkbox-wrap {
+  display: none;
+}
+
+/* 完了情報フッター */
+.memo-history-footer {
+  background: #DDD;
+  padding: 8px 14px;
+  font-size: 11px;
+  color: #555;
+  border-top: 1px solid #CCC;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.memo-history-footer-icon {
+  color: var(--green);
+  font-weight: 700;
+}
+
+/* セクション区切り（未対応／履歴の境目） */
+.memo-section-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 16px 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-mute);
+  letter-spacing: .08em;
+}
+.memo-section-divider::before,
+.memo-section-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* ===== 拒否画面 ===== */
+.access-denied {
+  display: none;
+  text-align: center;
+  padding: 60px 20px;
+  background: var(--cream);
+  min-height: 100vh;
+}
+.access-denied.show { display: block; }
+.access-denied-icon {
+  font-size: 64px;
+  margin-bottom: 20px;
+}
+.access-denied-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 12px;
+}
+.access-denied-message {
+  font-size: 14px;
+  color: var(--ink-soft);
+  line-height: 1.7;
+  margin-bottom: 24px;
+}
+.access-denied-message .role-tag {
+  display: inline-block;
+  background: var(--cream-dark);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px 10px;
+  margin-left: 4px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.access-denied-btn {
+  background: var(--red);
+  color: #FFF;
+  border: none;
+  padding: 12px 32px;
+  border-radius: 24px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
 }
 </style>
 </head>
@@ -1309,10 +1369,10 @@ body {
       </div>
     </div>
 
-    <!-- MEMOS TAB（NEW）-->
+    <!-- MEMOS TAB -->
     <div id="tab-memos" class="tab-panel">
       <div class="pm-notice">
-        販売員からの申し送り（直近30日・対応未完了分）。返信するとLINEで通知されます。
+        販売員からの申し送り（直近7日分）。返信するとLINEで通知されます。完了済みでも返信があるものは履歴として表示されます。
       </div>
       <div id="memo-list-wrap">
         <div class="loading-wrap">
@@ -2282,7 +2342,7 @@ function renderHeatmapRanking(ranking) {
   container.innerHTML = html;
 }
 
-// 共通HTMLエスケープ（既存escapeHmHtmlを統合）
+// 共通HTMLエスケープ
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c =>
     ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])
@@ -2454,31 +2514,31 @@ function showPmToast(message, type) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// ═══════════════════════════════════════════════════════════════
-// ★ 申し送り確認タブ（v2 一括完了対応）
+// ★ 申し送り確認タブ（v3 履歴表示対応）
 // ═══════════════════════════════════════════════════════════════
 let _memoData     = [];
 let _memoExpanded = new Set();  // 展開中のkey
 let _memoSelected = new Set();  // 選択中のkey（一括完了用）
 
-// バッジ用の件数取得（タブ未選択でも実行）
+// バッジ用：未対応件数のみカウント（履歴は数えない）
 async function loadMemoBadge() {
   try {
     const res = await fetchJSON(GAS_URL + '?action=getMemoReports');
     if (!res.success) return;
-    const count = (res.memos || []).length;
+    const memos = res.memos || [];
+    const pendingCount = memos.filter(m => !m.isCompleted).length;
     const badge = document.getElementById('memo-badge');
-    if (count > 0) {
-      badge.textContent = count;
+    if (pendingCount > 0) {
+      badge.textContent = pendingCount;
       badge.style.display = 'inline-block';
     } else {
       badge.style.display = 'none';
     }
     // タブが既に開いている場合は中身も更新
     if (document.getElementById('tab-memos').classList.contains('active')) {
-      _memoData = res.memos || [];
+      _memoData = memos;
       // 既に消えた申し送りの選択を解除
-      const validKeys = new Set(_memoData.map(makeMemoKey));
+      const validKeys = new Set(_memoData.filter(m => !m.isCompleted).map(makeMemoKey));
       const toRemove = [];
       _memoSelected.forEach(k => { if (!validKeys.has(k)) toRemove.push(k); });
       toRemove.forEach(k => _memoSelected.delete(k));
@@ -2499,11 +2559,12 @@ async function loadMemos() {
       return;
     }
     _memoData = res.memos || [];
-    _memoSelected.clear();  // ★ 再読み込み時は選択をクリア
-    // バッジ更新
+    _memoSelected.clear();
+    // バッジ更新（未対応のみ）
+    const pendingCount = _memoData.filter(m => !m.isCompleted).length;
     const badge = document.getElementById('memo-badge');
-    if (_memoData.length > 0) {
-      badge.textContent = _memoData.length;
+    if (pendingCount > 0) {
+      badge.textContent = pendingCount;
       badge.style.display = 'inline-block';
     } else {
       badge.style.display = 'none';
@@ -2524,99 +2585,149 @@ function renderMemos() {
     wrap.innerHTML = `
       <div class="memo-empty">
         ✨ 未対応の申し送りはありません<br>
-        <span style="font-size:11px;">対応完了したものはここから消えます</span>
+        <span style="font-size:11px;">対応完了したものは7日経つと自動で消えます</span>
       </div>
     `;
     return;
   }
 
-  const allKeys = _memoData.map(makeMemoKey);
-  const allSelected   = allKeys.length > 0 && allKeys.every(k => _memoSelected.has(k));
-  const someSelected  = allKeys.some(k => _memoSelected.has(k));
+  // 未対応 / 履歴 に分割
+  const pendingMemos = _memoData.filter(m => !m.isCompleted);
+  const historyMemos = _memoData.filter(m => m.isCompleted);
+
+  const pendingKeys = pendingMemos.map(makeMemoKey);
+  const allSelected   = pendingKeys.length > 0 && pendingKeys.every(k => _memoSelected.has(k));
+  const someSelected  = pendingKeys.some(k => _memoSelected.has(k));
   const selectedCount = _memoSelected.size;
 
-  // 一括操作バー
-  const batchBar = `
-    <div class="memo-batch-bar">
-      <label class="memo-batch-checkbox-wrap">
-        <input type="checkbox"
-               class="memo-batch-checkbox"
-               id="memo-select-all"
-               ${allSelected ? 'checked' : ''}
-               onchange="toggleSelectAllMemos(this.checked)">
-        <span>全選択</span>
-      </label>
-      <span class="memo-batch-count">${selectedCount}件選択中</span>
-      <button class="memo-batch-btn"
-              ${selectedCount === 0 ? 'disabled' : ''}
-              onclick="confirmBatchComplete()">
-        選択した${selectedCount}件を完了
-      </button>
-    </div>
-  `;
+  let html = '';
 
-  // 申し送りカード
-  const cardsHtml = _memoData.map(m => {
-    const key         = makeMemoKey(m);
-    const isExpanded  = _memoExpanded.has(key);
-    const isSelected  = _memoSelected.has(key);
-    const replyCount  = (m.replies || []).length;
-    const hasReplies  = replyCount > 0;
-    const badgeText   = hasReplies ? `✅ 返信済(${replyCount}件)` : '返信 0';
-    const badgeClass  = hasReplies ? '' : 'zero';
-
-    let repliesHtml = '';
-    if (hasReplies) {
-      repliesHtml = '<div class="memo-card-replies ' + (isExpanded ? 'expanded' : '') + '" id="replies-' + escapeHtml(key) + '">' +
-        m.replies.map(r => `
-          <div class="memo-reply-row">
-            <div class="memo-reply-row-header">
-              <span class="memo-reply-row-name">${escapeHtml(r.replierName || '—')}</span>
-              <span class="memo-reply-row-time">${r.date} ${r.time}</span>
-            </div>
-            <div class="memo-reply-row-content">${escapeHtml(r.content || '')}</div>
-          </div>
-        `).join('') +
-      '</div>';
-    }
-
-    const toggleBtn = hasReplies
-      ? `<button class="memo-action-btn toggle" onclick="toggleMemoReplies('${escapeHtml(key)}')">${isExpanded ? '折りたたむ' : '返信を見る'}</button>`
-      : '';
-
-    return `
-      <div class="memo-card-item ${hasReplies ? 'has-replies' : ''} ${isSelected ? 'selected' : ''}">
-        <label class="memo-card-checkbox-wrap">
+  // ── 一括操作バー（未対応がある時のみ）──
+  if (pendingMemos.length > 0) {
+    html += `
+      <div class="memo-batch-bar">
+        <label class="memo-batch-checkbox-wrap">
           <input type="checkbox"
-                 class="memo-card-checkbox"
-                 ${isSelected ? 'checked' : ''}
-                 onchange="toggleMemoSelect('${escapeHtml(key)}', this.checked)">
+                 class="memo-batch-checkbox"
+                 id="memo-select-all"
+                 ${allSelected ? 'checked' : ''}
+                 onchange="toggleSelectAllMemos(this.checked)">
+          <span>全選択</span>
         </label>
-        <div class="memo-card-top">
-          <div class="memo-card-top-left">
-            <div class="memo-card-meta">${m.date} ${m.time}</div>
-            <div class="memo-card-loc">${escapeHtml(m.locationName || '(拠点名なし)')}</div>
-            <div class="memo-card-staff">販売員：${escapeHtml(m.userName || '(名前なし)')}</div>
-          </div>
-          <div class="memo-card-reply-count ${badgeClass}">${badgeText}</div>
-        </div>
-        <div class="memo-card-body">${escapeHtml(m.memo)}</div>
-        ${repliesHtml}
-        <div class="memo-card-actions">
-          ${toggleBtn}
-          <button class="memo-action-btn reply" onclick="openMemoReply('${escapeHtml(m.date)}','${escapeHtml(m.locationId)}','${escapeHtml(m.userId)}')">返信する</button>
-        </div>
+        <span class="memo-batch-count">${selectedCount}件選択中</span>
+        <button class="memo-batch-btn"
+                ${selectedCount === 0 ? 'disabled' : ''}
+                onclick="confirmBatchComplete()">
+          選択した${selectedCount}件を完了
+        </button>
       </div>
     `;
-  }).join('');
+  }
 
-  wrap.innerHTML = batchBar + '<div class="memo-board">' + cardsHtml + '</div>';
+  // ── 未対応セクション ──
+  if (pendingMemos.length > 0) {
+    html += `<div class="memo-section-divider">未対応 ${pendingMemos.length}件</div>`;
+    html += '<div class="memo-board">' + pendingMemos.map(m => renderMemoCard(m, false)).join('') + '</div>';
+  } else {
+    html += `
+      <div class="memo-empty">
+        ✨ 未対応の申し送りはありません
+      </div>
+    `;
+  }
+
+  // ── 履歴セクション ──
+  if (historyMemos.length > 0) {
+    html += `<div class="memo-section-divider">対応完了履歴 ${historyMemos.length}件（7日後に自動削除）</div>`;
+    html += '<div class="memo-board">' + historyMemos.map(m => renderMemoCard(m, true)).join('') + '</div>';
+  }
+
+  wrap.innerHTML = html;
 
   // 部分選択（インデターミネート）状態を反映
   const selectAllEl = document.getElementById('memo-select-all');
   if (selectAllEl) {
     selectAllEl.indeterminate = !allSelected && someSelected;
   }
+}
+
+function renderMemoCard(m, isHistory) {
+  const key         = makeMemoKey(m);
+  const isExpanded  = _memoExpanded.has(key);
+  const isSelected  = _memoSelected.has(key);
+  const replyCount  = (m.replies || []).length;
+  const hasReplies  = replyCount > 0;
+  const badgeText   = hasReplies ? `✅ 返信済(${replyCount}件)` : '返信 0';
+  const badgeClass  = hasReplies ? '' : 'zero';
+
+  // 履歴項目は最初から返信を展開表示（内容を見やすくするため）
+  const expandedClass = (isHistory || isExpanded) ? 'expanded' : '';
+
+  let repliesHtml = '';
+  if (hasReplies) {
+    repliesHtml = '<div class="memo-card-replies ' + expandedClass + '" id="replies-' + escapeHtml(key) + '">' +
+      m.replies.map(r => `
+        <div class="memo-reply-row">
+          <div class="memo-reply-row-header">
+            <span class="memo-reply-row-name">${escapeHtml(r.replierName || '—')}</span>
+            <span class="memo-reply-row-time">${r.date} ${r.time}</span>
+          </div>
+          <div class="memo-reply-row-content">${escapeHtml(r.content || '')}</div>
+        </div>
+      `).join('') +
+    '</div>';
+  }
+
+  // 履歴の場合：チェックボックス非表示、履歴マーク表示、完了情報フッター
+  const historyBadgeHtml = isHistory ? '<span class="memo-history-badge">✓ 履歴</span>' : '';
+  const checkboxHtml = isHistory ? '' : `
+    <label class="memo-card-checkbox-wrap">
+      <input type="checkbox"
+             class="memo-card-checkbox"
+             ${isSelected ? 'checked' : ''}
+             onchange="toggleMemoSelect('${escapeHtml(key)}', this.checked)">
+    </label>
+  `;
+
+  // 完了情報フッター（履歴のみ）
+  let historyFooterHtml = '';
+  if (isHistory && m.completedInfo) {
+    historyFooterHtml = `
+      <div class="memo-history-footer">
+        <span class="memo-history-footer-icon">✓</span>
+        <span>対応完了：${m.completedInfo.date} ${m.completedInfo.time}　完了者：${escapeHtml(m.completedInfo.completerName || '—')}</span>
+      </div>
+    `;
+  }
+
+  // トグルボタン（履歴は最初から展開なので不要）
+  const toggleBtn = (hasReplies && !isHistory)
+    ? `<button class="memo-action-btn toggle" onclick="toggleMemoReplies('${escapeHtml(key)}')">${isExpanded ? '折りたたむ' : '返信を見る'}</button>`
+    : '';
+
+  const itemClass = `memo-card-item ${hasReplies ? 'has-replies' : ''} ${isSelected ? 'selected' : ''} ${isHistory ? 'is-history' : ''}`;
+
+  return `
+    <div class="${itemClass}">
+      ${historyBadgeHtml}
+      ${checkboxHtml}
+      <div class="memo-card-top">
+        <div class="memo-card-top-left">
+          <div class="memo-card-meta">${m.date} ${m.time}</div>
+          <div class="memo-card-loc">${escapeHtml(m.locationName || '(拠点名なし)')}</div>
+          <div class="memo-card-staff">販売員：${escapeHtml(m.userName || '(名前なし)')}</div>
+        </div>
+        <div class="memo-card-reply-count ${badgeClass}">${badgeText}</div>
+      </div>
+      <div class="memo-card-body">${escapeHtml(m.memo)}</div>
+      ${repliesHtml}
+      ${historyFooterHtml}
+      <div class="memo-card-actions">
+        ${toggleBtn}
+        <button class="memo-action-btn reply" onclick="openMemoReply('${escapeHtml(m.date)}','${escapeHtml(m.locationId)}','${escapeHtml(m.userId)}')">返信する</button>
+      </div>
+    </div>
+  `;
 }
 
 function toggleMemoReplies(key) {
@@ -2638,8 +2749,10 @@ function toggleMemoSelect(key, checked) {
 }
 
 function toggleSelectAllMemos(checked) {
+  // 未対応のみを対象に
+  const pendingMemos = _memoData.filter(m => !m.isCompleted);
   if (checked) {
-    _memoData.forEach(m => _memoSelected.add(makeMemoKey(m)));
+    pendingMemos.forEach(m => _memoSelected.add(makeMemoKey(m)));
   } else {
     _memoSelected.clear();
   }
@@ -2671,7 +2784,8 @@ function confirmBatchComplete() {
   document.getElementById('memo-complete-body').innerHTML = `
     選択した <strong style="color:var(--ink);">${count}件</strong> の申し送りを対応完了にしますか？
     <div class="pm-confirm-product">
-      ${count}件の申し送りが一覧から消えます
+      返信なしの項目は一覧から消えます<br>
+      返信ありの項目は「履歴」として残ります
     </div>
     <span style="font-size:11px;color:var(--ink-mute);">※販売員への通知はされません</span>
   `;
