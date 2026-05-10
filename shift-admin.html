@@ -7,18 +7,24 @@
 <style>
 :root {
   --navy: #1A3C5E;
+  --navy-dark: #122B43;
   --blue: #2471A3;
+  --orange: #E67E22;
+  --green: #27AE60;
+  --red: #C0392B;
+  --pink-bg: #FDECEA;
+  --warn-bg: #FFF4E6;
   --ink: #1C1C1C;
   --ink-soft: #4A4A4A;
   --ink-mute: #9A9A9A;
   --cream: #F4F6F9;
   --white: #FFFFFF;
   --border: #D5D8DC;
-  --green: #27AE60;
-  --red: #C0392B;
+  --border-light: #ECEEF1;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
-* { margin: 0; padding: 0; box-sizing: border-box; }
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { overscroll-behavior: none; }
 body {
   font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', sans-serif;
   background: var(--cream);
@@ -26,10 +32,14 @@ body {
   min-height: 100vh;
   max-width: 480px;
   margin: 0 auto;
+  font-size: 14px;
+  line-height: 1.5;
 }
+button { font-family: inherit; cursor: pointer; border: none; background: none; }
+input { font-family: inherit; }
 
-/* ── PASSWORD SCREEN ── */
-#screen-password {
+/* ═══ パスワード画面 ═══ */
+#scr-pw {
   min-height: 100vh;
   display: flex;
   align-items: center;
@@ -39,10 +49,10 @@ body {
   flex-direction: column;
   text-align: center;
 }
-#screen-password h1 { font-size: 22px; font-weight: 700; color: #FFF; margin-bottom: 6px; }
-#screen-password p { font-size: 13px; color: rgba(255,255,255,.6); margin-bottom: 32px; }
+#scr-pw h1 { font-size: 22px; font-weight: 700; color: #FFF; margin-bottom: 6px; }
+#scr-pw .sub { font-size: 13px; color: rgba(255,255,255,.6); margin-bottom: 32px; }
 .pw-input {
-  width: 100%;
+  width: 100%; max-width: 280px;
   padding: 14px 16px;
   font-size: 18px;
   text-align: center;
@@ -51,285 +61,918 @@ body {
   border-radius: 12px;
   background: rgba(255,255,255,.1);
   color: #FFF;
-  font-family: inherit;
   margin-bottom: 12px;
 }
 .pw-input:focus { outline: none; border-color: rgba(255,255,255,.7); }
 .pw-input::placeholder { color: rgba(255,255,255,.3); letter-spacing: .05em; }
 .pw-btn {
-  width: 100%;
+  width: 100%; max-width: 280px;
   padding: 14px;
   background: #FFF;
   color: var(--navy);
-  border: none;
   border-radius: 12px;
   font-size: 16px;
   font-weight: 700;
-  font-family: inherit;
-  cursor: pointer;
 }
 .pw-btn:active { opacity: .85; }
-.pw-error {
-  color: #EF9A9A;
-  font-size: 13px;
-  margin-top: 10px;
-  min-height: 20px;
-}
+.pw-err { color: #EF9A9A; font-size: 13px; margin-top: 10px; min-height: 20px; }
 
-/* ── MAIN SCREEN ── */
-#screen-main { display: none; }
+/* ═══ メイン画面 ═══ */
+#scr-main { display: none; padding-bottom: calc(40px + var(--safe-bottom)); }
+
 .header {
   background: var(--navy);
   color: #FFF;
-  padding: 16px;
+  padding: 12px 16px;
   position: sticky;
   top: 0;
-  z-index: 100;
+  z-index: 50;
   box-shadow: 0 2px 8px rgba(0,0,0,.2);
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
-.header h1 { font-size: 17px; font-weight: 700; }
-.header p { font-size: 11px; opacity: .7; margin-top: 2px; }
-.logout-btn {
+.header h1 { font-size: 16px; font-weight: 700; }
+.header .week { font-size: 11px; opacity: .8; margin-top: 2px; }
+.logout {
   background: rgba(255,255,255,.15);
   border: 1px solid rgba(255,255,255,.3);
   color: #FFF;
   padding: 6px 12px;
   border-radius: 20px;
-  font-size: 12px;
-  font-family: inherit;
-  cursor: pointer;
+  font-size: 11px;
 }
 
-.content { padding: 16px; padding-bottom: calc(32px + var(--safe-bottom)); }
-
-.status-card {
-  background: var(--white);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 14px 16px;
-  margin-bottom: 20px;
-  font-size: 13px;
-  color: var(--ink-soft);
-  min-height: 50px;
+/* ═══ 操作バー ═══ */
+.actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  padding: 12px 16px 8px;
+}
+.act-btn {
+  position: relative;
+  padding: 12px 4px;
+  border-radius: 10px;
+  color: #FFF;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  transition: opacity .15s, transform .1s;
+}
+.act-btn:active { opacity: .8; transform: scale(.96); }
+.act-btn .ico { font-size: 20px; }
+.act-btn.assign { background: var(--navy); }
+.act-btn.diff   { background: var(--orange); }
+.act-btn.batch  { background: var(--green); }
+.badge {
+  position: absolute;
+  top: 4px; right: 4px;
+  background: var(--red);
+  color: #FFF;
+  font-size: 10px;
+  font-weight: 700;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: center;
+  padding: 0 5px;
 }
-.status-dot {
-  width: 10px; height: 10px;
-  border-radius: 50%;
-  background: var(--ink-mute);
-  flex-shrink: 0;
-}
-.status-dot.active { background: var(--blue); animation: pulse .8s infinite; }
-.status-dot.success { background: var(--green); }
-.status-dot.error { background: var(--red); }
-@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+.badge[hidden] { display: none; }
 
-.section-title {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--ink-mute);
-  letter-spacing: .1em;
-  margin-bottom: 10px;
+/* ═══ ステータスバー ═══ */
+.status {
+  margin: 0 16px 8px;
+  padding: 8px 12px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--ink-soft);
   display: flex;
   align-items: center;
   gap: 8px;
 }
-.section-title::after { content:''; flex:1; height:1px; background:var(--border); }
-
-.task-btn {
-  width: 100%;
-  padding: 16px;
-  border: none;
-  border-radius: 12px;
-  font-size: 15px;
-  font-weight: 700;
-  font-family: inherit;
-  cursor: pointer;
-  text-align: left;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin-bottom: 10px;
-  transition: opacity .15s, transform .1s;
-  color: #FFF;
+.status::before {
+  content: '';
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--ink-mute);
+  flex-shrink: 0;
 }
-.task-btn:active { opacity: .8; transform: scale(.98); }
-.task-btn .icon { font-size: 28px; flex-shrink: 0; }
-.task-btn .text-wrap .title { font-size: 15px; }
-.task-btn .text-wrap .desc { font-size: 11px; font-weight: 400; opacity: .75; margin-top: 3px; }
+.status.ok::before    { background: var(--green); }
+.status.err::before   { background: var(--red); }
+.status.busy::before  { background: var(--blue); animation: pulse .8s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 
-.btn-assign       { background: var(--navy); }
-.btn-view         { background: var(--blue); }
-.btn-notify-staff { background: #E67E22; }
-.btn-remind       { background: #8E44AD; }
-
-.weekly-flow {
+/* ═══ マトリクス ═══ */
+.matrix-wrap {
+  margin: 0 16px 16px;
   background: var(--white);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  overflow: hidden;
-  margin-bottom: 20px;
+  border-radius: 10px;
+  overflow: auto;
+  max-height: 70vh;
+  -webkit-overflow-scrolling: touch;
 }
-.flow-item {
+.matrix {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  font-size: 11px;
+}
+.matrix th, .matrix td {
+  padding: 8px 4px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-right: 1px solid var(--border-light);
+  border-bottom: 1px solid var(--border-light);
+}
+.matrix thead th {
+  background: var(--navy);
+  color: #FFF;
+  font-weight: 700;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  min-width: 70px;
+  height: 36px;
+}
+.matrix thead th.corner {
+  left: 0;
+  z-index: 4;
+  min-width: 88px;
+  width: 88px;
+}
+.matrix tbody th {
+  background: var(--cream);
+  color: var(--ink);
+  font-weight: 600;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  text-align: left;
+  padding-left: 8px;
+  min-width: 88px;
+  width: 88px;
+  font-size: 11px;
+}
+.matrix td {
+  background: var(--white);
+  cursor: pointer;
+  min-width: 70px;
+  height: 38px;
+  font-weight: 500;
+  user-select: none;
+}
+.matrix td:active { background: #E8F1F8; }
+.matrix td.unassigned {
+  background: var(--pink-bg);
+  color: var(--red);
+  font-weight: 700;
+}
+.matrix td.unassigned:active { background: #FAD3CE; }
+.matrix td.empty { color: var(--ink-mute); }
+
+.matrix-empty {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--ink-mute);
+  font-size: 13px;
+}
+.matrix-empty .em-ico { font-size: 32px; margin-bottom: 8px; }
+
+/* ═══ 凡例 ═══ */
+.legend {
+  margin: 0 16px 16px;
+  padding: 10px 12px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 11px;
+  color: var(--ink-soft);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+.legend-item { display: flex; align-items: center; gap: 4px; }
+.legend-dot {
+  width: 12px; height: 12px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+}
+.legend-dot.assigned { background: var(--white); }
+.legend-dot.unassigned { background: var(--pink-bg); border-color: var(--red); }
+
+/* ═══ 再読込ボタン ═══ */
+.reload-wrap { padding: 8px 16px 16px; text-align: center; }
+.reload-btn {
+  padding: 10px 20px;
+  border: 1px solid var(--border);
+  background: var(--white);
+  border-radius: 24px;
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+/* ═══ ボトムシート（セル編集） ═══ */
+.sheet-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.5);
+  z-index: 100;
+  display: none;
+  align-items: flex-end;
+  justify-content: center;
+}
+.sheet-overlay.show { display: flex; }
+.sheet {
+  width: 100%;
+  max-width: 480px;
+  background: var(--white);
+  border-radius: 16px 16px 0 0;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: var(--safe-bottom);
+  animation: slideUp .25s ease-out;
+}
+@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.sheet-handle {
+  width: 36px; height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  margin: 8px auto;
+  flex-shrink: 0;
+}
+.sheet-head {
+  padding: 4px 16px 12px;
+  border-bottom: 1px solid var(--border-light);
+  flex-shrink: 0;
+}
+.sheet-title { font-size: 16px; font-weight: 700; color: var(--ink); }
+.sheet-sub { font-size: 12px; color: var(--ink-mute); margin-top: 2px; }
+.sheet-current {
+  font-size: 12px;
+  color: var(--blue);
+  margin-top: 6px;
+  padding: 4px 8px;
+  background: #EBF3FA;
+  border-radius: 4px;
+  display: inline-block;
+}
+.sheet-search-wrap { padding: 10px 16px 4px; flex-shrink: 0; }
+.sheet-search {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 14px;
+  background: var(--cream);
+}
+.sheet-search:focus { outline: none; border-color: var(--blue); background: var(--white); }
+.sheet-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+  -webkit-overflow-scrolling: touch;
+}
+.tier-head {
+  font-size: 10px;
+  color: var(--ink-mute);
+  font-weight: 700;
+  letter-spacing: .1em;
+  padding: 8px 16px 4px;
+  background: var(--cream);
+}
+.seller-item {
   display: flex;
   align-items: center;
   padding: 12px 16px;
-  border-bottom: 1px solid #F0EDE5;
-  gap: 12px;
-  font-size: 13px;
+  border-bottom: 1px solid var(--border-light);
+  cursor: pointer;
+  gap: 8px;
 }
-.flow-item:last-child { border-bottom: none; }
-.flow-num {
-  width: 24px; height: 24px;
-  background: var(--navy);
-  color: #FFF;
-  border-radius: 50%;
-  font-size: 12px;
+.seller-item:active { background: var(--cream); }
+.seller-item.current { background: #EBF3FA; }
+.seller-item .name { flex: 1; font-size: 14px; font-weight: 500; }
+.seller-item .pref-tag {
+  font-size: 10px;
   font-weight: 700;
-  display: flex; align-items: center; justify-content: center;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--orange);
+  color: #FFF;
+}
+.seller-item .pref-tag.t2 { background: #F39C12; }
+.seller-item .pref-tag.t3 { background: #BDC3C7; color: var(--ink); }
+.seller-item .check { color: var(--green); font-weight: 700; font-size: 16px; }
+.sheet-foot {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-light);
   flex-shrink: 0;
 }
-.flow-day { font-size: 11px; color: var(--ink-mute); margin-left: auto; }
+.sheet-foot .btn {
+  padding: 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+}
+.btn-ghost { background: var(--cream); color: var(--ink-soft); border: 1px solid var(--border); }
+.btn-warn { background: var(--orange); color: #FFF; }
+
+/* ═══ 差分モーダル ═══ */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.5);
+  z-index: 110;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.modal-overlay.show { display: flex; }
+.modal {
+  width: 100%;
+  max-width: 420px;
+  background: var(--white);
+  border-radius: 16px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.modal-head {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-light);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.modal-head h2 { font-size: 15px; font-weight: 700; }
+.modal-close {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  background: var(--cream);
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+.modal-body { padding: 12px 16px; overflow-y: auto; flex: 1; }
+.diff-empty { text-align: center; padding: 24px 0; color: var(--ink-mute); font-size: 13px; }
+.diff-item {
+  padding: 10px 12px;
+  background: var(--warn-bg);
+  border-left: 3px solid var(--orange);
+  border-radius: 6px;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+.diff-item .meta { color: var(--ink-mute); margin-bottom: 4px; }
+.diff-item .change {
+  display: flex; align-items: center; gap: 6px;
+  font-weight: 600;
+}
+.diff-item .from { color: var(--red); text-decoration: line-through; }
+.diff-item .arrow { color: var(--ink-mute); }
+.diff-item .to { color: var(--green); }
+
+/* ═══ トースト ═══ */
+.toast {
+  position: fixed;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%) translateY(100px);
+  background: rgba(0,0,0,.85);
+  color: #FFF;
+  padding: 10px 16px;
+  border-radius: 24px;
+  font-size: 13px;
+  z-index: 200;
+  opacity: 0;
+  transition: all .25s;
+  max-width: 90%;
+  text-align: center;
+}
+.toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+.toast.ok  { background: rgba(39, 174, 96, .95); }
+.toast.err { background: rgba(192, 57, 43, .95); }
+
+/* ═══ ローディングオーバーレイ ═══ */
+.loading {
+  position: fixed;
+  inset: 0;
+  background: rgba(255,255,255,.7);
+  z-index: 150;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 12px;
+}
+.loading.show { display: flex; }
+.spinner {
+  width: 36px; height: 36px;
+  border: 3px solid var(--border);
+  border-top-color: var(--navy);
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-text { font-size: 13px; color: var(--ink-soft); font-weight: 600; }
 </style>
 </head>
 <body>
 
-<!-- パスワード画面 -->
-<div id="screen-password">
+<!-- ═══ パスワード画面 ═══ -->
+<div id="scr-pw">
   <h1>📋 シフト管理</h1>
-  <p>管理者専用ページです</p>
-  <input type="password" class="pw-input" id="pw-input" placeholder="パスワードを入力" onkeydown="if(event.key==='Enter')checkPassword()">
-  <button class="pw-btn" onclick="checkPassword()">ログイン</button>
-  <div class="pw-error" id="pw-error"></div>
+  <div class="sub">管理者専用ページ</div>
+  <input type="password" class="pw-input" id="pwInput" placeholder="パスワード" inputmode="numeric"
+    onkeydown="if(event.key==='Enter')login()">
+  <button class="pw-btn" onclick="login()">ログイン</button>
+  <div class="pw-err" id="pwErr"></div>
 </div>
 
-<!-- メイン画面 -->
-<div id="screen-main">
-  <div class="header">
+<!-- ═══ メイン画面 ═══ -->
+<div id="scr-main">
+
+  <header class="header">
     <div>
       <h1>📋 シフト管理</h1>
-      <p>お江戸弁当 管理者専用</p>
+      <div class="week" id="weekInfo">読み込み中...</div>
     </div>
-    <button class="logout-btn" onclick="logout()">ログアウト</button>
+    <button class="logout" onclick="logout()">ログアウト</button>
+  </header>
+
+  <div class="actions">
+    <button class="act-btn assign" onclick="confirmAssign()">
+      <span class="ico">🔄</span>
+      <span>自動割振</span>
+    </button>
+    <button class="act-btn diff" onclick="showDiffs()">
+      <span class="ico">🔍</span>
+      <span>差分確認</span>
+      <span class="badge" id="diffBadge" hidden>0</span>
+    </button>
+    <button class="act-btn batch" onclick="confirmBatch()">
+      <span class="ico">📣</span>
+      <span>一括送信</span>
+    </button>
   </div>
 
-  <div class="content">
+  <div class="status" id="status">準備中...</div>
 
-    <div class="status-card" id="status-card">
-      <div class="status-dot" id="status-dot"></div>
-      <span id="status-text">ボタンをタップして操作してください</span>
+  <div class="matrix-wrap" id="matrixWrap">
+    <div class="matrix-empty">
+      <div class="em-ico">📋</div>
+      <div>マトリクスを読み込み中...</div>
     </div>
-
-    <div class="section-title">週次フロー</div>
-    <div class="weekly-flow">
-      <div class="flow-item">
-        <div class="flow-num">1</div>
-        <span>シフト割り振り</span>
-        <span class="flow-day">日曜</span>
-      </div>
-      <div class="flow-item">
-        <div class="flow-num">2</div>
-        <span>シフト表を作成</span>
-        <span class="flow-day">日曜</span>
-      </div>
-      <div class="flow-item">
-        <div class="flow-num">3</div>
-        <span>スタッフにシフト通知を送信</span>
-        <span class="flow-day">日曜</span>
-      </div>
-    </div>
-
-    <div class="section-title">操作</div>
-
-    <button class="task-btn btn-assign" onclick="runTask('assign')">
-      <span class="icon">📋</span>
-      <div class="text-wrap">
-        <div class="title">シフト割り振り</div>
-        <div class="desc">回答をもとにシフトを自動割り振り</div>
-      </div>
-    </button>
-
-    <button class="task-btn btn-view" onclick="runTask('view')">
-      <span class="icon">📊</span>
-      <div class="text-wrap">
-        <div class="title">シフト表を作成</div>
-        <div class="desc">見やすい版のシフト表を生成</div>
-      </div>
-    </button>
-
-    <button class="task-btn btn-notify-staff" onclick="runTask('notify')">
-      <span class="icon">📣</span>
-      <div class="text-wrap">
-        <div class="title">スタッフにシフト通知を送信</div>
-        <div class="desc">確定シフトをLINEで販売員全員に送る</div>
-      </div>
-    </button>
-
-
-
   </div>
+
+  <div class="legend">
+    <span class="legend-item"><span class="legend-dot assigned"></span>割当済</span>
+    <span class="legend-item"><span class="legend-dot unassigned"></span>未割当</span>
+    <span style="color: var(--ink-mute); margin-left: auto;">セルをタップして編集</span>
+  </div>
+
+  <div class="reload-wrap">
+    <button class="reload-btn" onclick="loadAll()">🔄 再読み込み</button>
+  </div>
+
+</div>
+
+<!-- ═══ ボトムシート（セル編集） ═══ -->
+<div class="sheet-overlay" id="sheetOverlay" onclick="if(event.target===this)closeSheet()">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-head">
+      <div class="sheet-title" id="sheetTitle">—</div>
+      <div class="sheet-sub" id="sheetSub">—</div>
+      <div class="sheet-current" id="sheetCurrent" style="display:none">現在: —</div>
+    </div>
+    <div class="sheet-search-wrap">
+      <input type="text" class="sheet-search" id="sheetSearch" placeholder="🔍 名前で絞り込み"
+        oninput="renderSellers()">
+    </div>
+    <div class="sheet-body" id="sheetBody"></div>
+    <div class="sheet-foot">
+      <button class="btn btn-ghost" onclick="closeSheet()">閉じる</button>
+      <button class="btn btn-warn" onclick="removeCurrent()">未割当に戻す</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ 差分モーダル ═══ -->
+<div class="modal-overlay" id="diffModal" onclick="if(event.target===this)closeDiff()">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>🔍 通知後の変更</h2>
+      <button class="modal-close" onclick="closeDiff()">✕</button>
+    </div>
+    <div class="modal-body" id="diffBody"></div>
+  </div>
+</div>
+
+<!-- ═══ トースト・ローディング ═══ -->
+<div class="toast" id="toast"></div>
+<div class="loading" id="loading">
+  <div class="spinner"></div>
+  <div class="loading-text" id="loadingText">処理中...</div>
 </div>
 
 <script>
+'use strict';
+
+// ═══ 設定 ═══
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5AawPDc7aluPokONkYz6f2ikwl0S487JvhKdKh6QSp1xhEhA/exec';
 const PASSWORD = '1115';
 
-function checkPassword() {
-  const val = document.getElementById('pw-input').value;
-  if (val === PASSWORD) {
-    document.getElementById('screen-password').style.display = 'none';
-    document.getElementById('screen-main').style.display = 'block';
+// ═══ 状態 ═══
+const state = {
+  weekTarget: null,
+  bases: [],
+  sellers: [],
+  dates: [],
+  matrix: {},
+  diffs: [],
+  selected: null,  // { date, base, current }
+};
+
+// ═══ パスワード ═══
+function login() {
+  const v = document.getElementById('pwInput').value;
+  if (v === PASSWORD) {
     sessionStorage.setItem('shift_admin_auth', '1');
+    showMain();
   } else {
-    document.getElementById('pw-error').textContent = 'パスワードが違います';
-    document.getElementById('pw-input').value = '';
+    document.getElementById('pwErr').textContent = 'パスワードが違います';
+    document.getElementById('pwInput').value = '';
   }
 }
-
 function logout() {
   sessionStorage.removeItem('shift_admin_auth');
-  document.getElementById('screen-main').style.display = 'none';
-  document.getElementById('screen-password').style.display = 'flex';
-  document.getElementById('pw-input').value = '';
-  document.getElementById('pw-error').textContent = '';
+  document.getElementById('scr-main').style.display = 'none';
+  document.getElementById('scr-pw').style.display = 'flex';
+  document.getElementById('pwInput').value = '';
+  document.getElementById('pwErr').textContent = '';
+}
+function showMain() {
+  document.getElementById('scr-pw').style.display = 'none';
+  document.getElementById('scr-main').style.display = 'block';
+  loadAll();
 }
 
-async function runTask(task) {
-  const dot  = document.getElementById('status-dot');
-  const text = document.getElementById('status-text');
-  const labels = {
-    assign: 'シフト割り振り中...',
-    view:   'シフト表を作成中...',
-    notify: 'スタッフに通知送信中...',
+// ═══ API ═══
+async function apiGet(action, params = {}) {
+  const qs = new URLSearchParams({ action, ...params }).toString();
+  const res = await fetch(`${GAS_URL}?${qs}`, { redirect: 'follow' });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return await res.json();
+}
+async function apiPost(action, payload = {}) {
+  const res = await fetch(GAS_URL, {
+    method: 'POST',
+    redirect: 'follow',
+    body: JSON.stringify({ action, ...payload }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return await res.json();
+}
 
-  };
-  dot.className    = 'status-dot active';
-  text.textContent = labels[task] || '処理中...';
+// ═══ データ読込 ═══
+async function loadAll() {
+  setStatus('busy', 'マトリクスを読み込み中...');
   try {
-    const res  = await fetch(`${GAS_URL}?action=admin&task=${task}`, { redirect: 'follow' });
-    const data = JSON.parse(await res.text());
-    if (data.status === 'ok') {
-      dot.className    = 'status-dot success';
-      text.textContent = '✅ ' + data.message;
-    } else {
-      dot.className    = 'status-dot error';
-      text.textContent = '❌ エラー：' + data.message;
-    }
+    const data = await apiGet('getShiftMatrix');
+    if (!data.success) throw new Error(data.error || 'API失敗');
+    state.weekTarget = data.weekTarget;
+    state.bases = data.bases || [];
+    state.sellers = data.sellers || [];
+    state.dates = data.dates || [];
+    state.matrix = data.matrix || {};
+    updateWeekInfo();
+    renderMatrix();
+    setStatus('ok', `読み込み完了：${state.bases.length}拠点 × ${state.dates.length}日`);
+    loadDiffs();
   } catch (e) {
-    dot.className    = 'status-dot error';
-    text.textContent = '❌ 通信エラー：' + e.message;
+    setStatus('err', `エラー: ${e.message}`);
+    toast(`読み込み失敗: ${e.message}`, 'err');
+  }
+}
+async function loadDiffs() {
+  if (!state.weekTarget) return;
+  try {
+    const data = await apiGet('getNotifiedDiff', { weekTarget: state.weekTarget });
+    if (!data.success) return;
+    state.diffs = data.diffs || [];
+    updateDiffBadge();
+  } catch (e) {
+    console.warn('diff load failed:', e);
   }
 }
 
-// セッション維持
+// ═══ 表示更新 ═══
+function updateWeekInfo() {
+  const wt = state.weekTarget || '—';
+  const dateRange = state.dates.length > 0 
+    ? `${state.dates[0]} 〜 ${state.dates[state.dates.length - 1]}` 
+    : '日付データなし';
+  document.getElementById('weekInfo').textContent = `${wt} ・ ${dateRange}`;
+}
+
+function renderMatrix() {
+  const wrap = document.getElementById('matrixWrap');
+  if (state.dates.length === 0 || state.bases.length === 0) {
+    wrap.innerHTML = `
+      <div class="matrix-empty">
+        <div class="em-ico">📭</div>
+        <div>シフトデータがありません</div>
+        <div style="margin-top:8px;font-size:11px">「自動割振」を実行してください</div>
+      </div>`;
+    return;
+  }
+
+  let html = '<table class="matrix"><thead><tr>';
+  html += '<th class="corner">拠点</th>';
+  state.dates.forEach(d => { html += `<th>${escapeHtml(d)}</th>`; });
+  html += '</tr></thead><tbody>';
+
+  state.bases.forEach(b => {
+    html += `<tr><th>${escapeHtml(b.name)}</th>`;
+    state.dates.forEach(d => {
+      const name = (state.matrix[d] && state.matrix[d][b.name]) || '';
+      const isUn = !name || name === '【未割当】';
+      const cls = isUn ? 'unassigned' : '';
+      const display = isUn ? '未割当' : name;
+      html += `<td class="${cls}" data-date="${escapeAttr(d)}" data-base="${escapeAttr(b.name)}" 
+        onclick="openSheet(this.dataset.date, this.dataset.base)">${escapeHtml(display)}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
+function updateDiffBadge() {
+  const badge = document.getElementById('diffBadge');
+  const n = state.diffs.length;
+  if (n > 0) {
+    badge.textContent = n;
+    badge.hidden = false;
+  } else {
+    badge.hidden = true;
+  }
+}
+
+// ═══ セル編集（ボトムシート） ═══
+function openSheet(date, base) {
+  const current = (state.matrix[date] && state.matrix[date][base]) || '';
+  const isUn = !current || current === '【未割当】';
+  state.selected = { date, base, current: isUn ? '' : current };
+
+  document.getElementById('sheetTitle').textContent = base;
+  document.getElementById('sheetSub').textContent = date;
+  const curEl = document.getElementById('sheetCurrent');
+  if (isUn) {
+    curEl.style.display = 'none';
+  } else {
+    curEl.style.display = 'inline-block';
+    curEl.textContent = `現在: ${current}`;
+  }
+  document.getElementById('sheetSearch').value = '';
+  renderSellers();
+  document.getElementById('sheetOverlay').classList.add('show');
+}
+function closeSheet() {
+  document.getElementById('sheetOverlay').classList.remove('show');
+  state.selected = null;
+}
+
+function renderSellers() {
+  if (!state.selected) return;
+  const { base, current } = state.selected;
+  const q = document.getElementById('sheetSearch').value.trim().toLowerCase();
+
+  // 階層分類
+  const tiers = [[], [], [], []]; // pref1 / pref2 / pref3 / その他
+  state.sellers.forEach(s => {
+    const name = s.name;
+    if (q && !name.toLowerCase().includes(q)) return;
+    if (s.pref1 === base) tiers[0].push({ ...s, tier: 1 });
+    else if (s.pref2 === base) tiers[1].push({ ...s, tier: 2 });
+    else if (s.pref3 === base) tiers[2].push({ ...s, tier: 3 });
+    else tiers[3].push({ ...s, tier: 4 });
+  });
+
+  const labels = ['第1希望', '第2希望', '第3希望', '全販売員'];
+  let html = '';
+  tiers.forEach((arr, i) => {
+    if (arr.length === 0) return;
+    html += `<div class="tier-head">${labels[i]}（${arr.length}名）</div>`;
+    arr.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+    arr.forEach(s => {
+      const isCur = s.name === current;
+      const tag = s.tier === 1 ? '<span class="pref-tag">1</span>'
+                : s.tier === 2 ? '<span class="pref-tag t2">2</span>'
+                : s.tier === 3 ? '<span class="pref-tag t3">3</span>'
+                : '';
+      html += `<div class="seller-item ${isCur ? 'current' : ''}" 
+        onclick="selectSeller('${escapeAttr(s.name)}')">
+        <span class="name">${escapeHtml(s.name)}</span>
+        ${tag}
+        ${isCur ? '<span class="check">✓</span>' : ''}
+      </div>`;
+    });
+  });
+
+  if (!html) html = '<div class="diff-empty">該当する販売員がいません</div>';
+  document.getElementById('sheetBody').innerHTML = html;
+}
+
+async function selectSeller(name) {
+  if (!state.selected) return;
+  const { date, base } = state.selected;
+  showLoading('割当を更新中...');
+  try {
+    const data = await apiPost('setAssignment', { date, base, name });
+    if (!data.success) throw new Error(data.error || '更新失敗');
+    // ローカル状態を即時更新
+    if (!state.matrix[date]) state.matrix[date] = {};
+    state.matrix[date][base] = name;
+    renderMatrix();
+    closeSheet();
+    toast(`${base} → ${name}`, 'ok');
+    loadDiffs();
+  } catch (e) {
+    toast(`更新失敗: ${e.message}`, 'err');
+  } finally {
+    hideLoading();
+  }
+}
+
+async function removeCurrent() {
+  if (!state.selected) return;
+  const { date, base } = state.selected;
+  showLoading('未割当に戻しています...');
+  try {
+    const data = await apiPost('removeAssignment', { date, base });
+    if (!data.success) throw new Error(data.error || '更新失敗');
+    if (!state.matrix[date]) state.matrix[date] = {};
+    state.matrix[date][base] = '【未割当】';
+    renderMatrix();
+    closeSheet();
+    toast(`${base} を未割当に戻しました`, 'ok');
+    loadDiffs();
+  } catch (e) {
+    toast(`更新失敗: ${e.message}`, 'err');
+  } finally {
+    hideLoading();
+  }
+}
+
+// ═══ 自動割振 ═══
+async function confirmAssign() {
+  const ok = confirm('自動割振を実行します。\n\n現在のシフト表は上書きされます。\nよろしいですか？');
+  if (!ok) return;
+  showLoading('自動割振中（10〜30秒かかります）...');
+  setStatus('busy', '自動割振中...');
+  try {
+    const data = await apiGet('admin', { task: 'assign' });
+    if (data.status !== 'ok') throw new Error(data.message || '失敗');
+    toast('自動割振完了', 'ok');
+    setStatus('ok', '自動割振完了。マトリクスを再読み込みします');
+    await loadAll();
+  } catch (e) {
+    toast(`失敗: ${e.message}`, 'err');
+    setStatus('err', `自動割振失敗: ${e.message}`);
+  } finally {
+    hideLoading();
+  }
+}
+
+// ═══ 一括送信 ═══
+async function confirmBatch() {
+  // 送信対象人数を計算
+  const recipients = new Set();
+  let unassignedCount = 0;
+  Object.values(state.matrix).forEach(row => {
+    Object.values(row).forEach(name => {
+      if (!name || name === '【未割当】') unassignedCount++;
+      else recipients.add(name);
+    });
+  });
+
+  let msg = `${recipients.size}名の販売員にLINE通知を送信します。\n`;
+  msg += `対象週: ${state.weekTarget || '—'}\n\n`;
+  if (unassignedCount > 0) {
+    msg += `⚠ 未割当のセルが ${unassignedCount} 件あります。\nこのまま送信してよろしいですか？`;
+  } else {
+    msg += `送信してよろしいですか？`;
+  }
+
+  const ok = confirm(msg);
+  if (!ok) return;
+
+  showLoading('LINE通知を送信中...');
+  setStatus('busy', 'LINE通知送信中...');
+  try {
+    const data = await apiPost('sendShiftBatch', { 
+      weekTarget: state.weekTarget, 
+      source: 'manual' 
+    });
+    if (!data.success) throw new Error(data.error || '送信失敗');
+    const txt = `送信: ${data.sent}名 / スキップ: ${data.skipped}名`;
+    toast(txt, 'ok');
+    setStatus('ok', `一括送信完了（${txt}）`);
+    loadDiffs();
+  } catch (e) {
+    toast(`送信失敗: ${e.message}`, 'err');
+    setStatus('err', `一括送信失敗: ${e.message}`);
+  } finally {
+    hideLoading();
+  }
+}
+
+// ═══ 差分確認 ═══
+function showDiffs() {
+  const body = document.getElementById('diffBody');
+  if (state.diffs.length === 0) {
+    body.innerHTML = `
+      <div class="diff-empty">
+        <div style="font-size:32px;margin-bottom:8px">✅</div>
+        <div>通知後の変更はありません</div>
+        <div style="margin-top:6px;font-size:11px;color:var(--ink-mute)">
+          まだ一括送信していない場合も「変更なし」と表示されます
+        </div>
+      </div>`;
+  } else {
+    let html = `<div style="font-size:12px;color:var(--ink-soft);margin-bottom:10px">
+      ${state.diffs.length}件の変更を検出</div>`;
+    state.diffs.forEach(d => {
+      html += `<div class="diff-item">
+        <div class="meta">${escapeHtml(d.date)} / ${escapeHtml(d.base)}</div>
+        <div class="change">
+          <span class="from">${escapeHtml(d.notifiedName)}</span>
+          <span class="arrow">→</span>
+          <span class="to">${escapeHtml(d.currentName)}</span>
+        </div>
+      </div>`;
+    });
+    body.innerHTML = html;
+  }
+  document.getElementById('diffModal').classList.add('show');
+}
+function closeDiff() {
+  document.getElementById('diffModal').classList.remove('show');
+}
+
+// ═══ UI ヘルパー ═══
+function setStatus(type, msg) {
+  const el = document.getElementById('status');
+  el.className = `status ${type}`;
+  el.textContent = msg;
+}
+function toast(msg, type = 'ok') {
+  const el = document.getElementById('toast');
+  el.className = `toast ${type} show`;
+  el.textContent = msg;
+  setTimeout(() => el.classList.remove('show'), 2400);
+}
+function showLoading(msg = '処理中...') {
+  document.getElementById('loadingText').textContent = msg;
+  document.getElementById('loading').classList.add('show');
+}
+function hideLoading() {
+  document.getElementById('loading').classList.remove('show');
+}
+
+function escapeHtml(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+function escapeAttr(s) {
+  return String(s ?? '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
+
+// ═══ 初期化 ═══
 if (sessionStorage.getItem('shift_admin_auth') === '1') {
-  document.getElementById('screen-password').style.display = 'none';
-  document.getElementById('screen-main').style.display = 'block';
+  showMain();
 }
 </script>
 </body>
