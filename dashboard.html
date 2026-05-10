@@ -973,6 +973,124 @@ body {
   cursor: pointer;
   font-family: inherit;
 }
+  /* ===== 申し送りタブ v2（一括完了対応） ===== */
+
+/* 一括操作バー */
+.memo-batch-bar {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.04);
+}
+.memo-batch-checkbox-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  user-select: none;
+}
+.memo-batch-checkbox {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--green);
+  margin: 0;
+}
+.memo-batch-count {
+  font-size: 12px;
+  color: var(--ink-mute);
+  margin-left: auto;
+  white-space: nowrap;
+}
+.memo-batch-btn {
+  background: var(--green);
+  color: #FFF;
+  border: none;
+  padding: 9px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  transition: opacity .15s;
+  white-space: nowrap;
+}
+.memo-batch-btn:hover:not(:disabled) {
+  opacity: .85;
+}
+.memo-batch-btn:disabled {
+  opacity: .4;
+  cursor: not-allowed;
+}
+
+/* カード選択チェックボックス */
+.memo-card-item {
+  position: relative;
+  transition: background .15s, border-color .15s;
+}
+.memo-card-checkbox-wrap {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 10;
+  background: rgba(0,0,0,.25);
+  padding: 4px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.memo-card-checkbox {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: var(--green);
+  margin: 0;
+  display: block;
+}
+
+/* 返信済みカード（薄いグレー背景） */
+.memo-card-item.has-replies {
+  background: #F5F5F0;
+}
+.memo-card-item.has-replies .memo-card-top {
+  background: #5A5A5A;
+}
+.memo-card-item.has-replies .memo-card-body {
+  background: #EFEFE8;
+  border-left-color: #999;
+  color: var(--ink-mute);
+}
+
+/* 選択中カード（緑のアウトライン） */
+.memo-card-item.selected {
+  border-color: var(--green);
+  box-shadow: 0 0 0 2px rgba(39, 174, 96, .15);
+}
+
+/* 返信件数バッジ：返信ありは緑、なしは半透明（既存の上書き） */
+.memo-card-reply-count {
+  background: var(--green);
+  color: #FFF;
+}
+.memo-card-reply-count.zero {
+  background: rgba(255,255,255,.15);
+  color: rgba(255,255,255,.7);
+}
+
+/* チェックボックスとカードヘッダーが重ならないよう右余白を確保 */
+.memo-card-top {
+  padding-right: 44px;
+}
 </style>
 </head>
 <body>
@@ -2336,11 +2454,12 @@ function showPmToast(message, type) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// ★ 申し送り確認タブ（NEW）
 // ═══════════════════════════════════════════════════════════════
-let _memoData = [];
+// ★ 申し送り確認タブ（v2 一括完了対応）
+// ═══════════════════════════════════════════════════════════════
+let _memoData     = [];
 let _memoExpanded = new Set();  // 展開中のkey
-let _memoCompletePending = null;
+let _memoSelected = new Set();  // 選択中のkey（一括完了用）
 
 // バッジ用の件数取得（タブ未選択でも実行）
 async function loadMemoBadge() {
@@ -2358,6 +2477,11 @@ async function loadMemoBadge() {
     // タブが既に開いている場合は中身も更新
     if (document.getElementById('tab-memos').classList.contains('active')) {
       _memoData = res.memos || [];
+      // 既に消えた申し送りの選択を解除
+      const validKeys = new Set(_memoData.map(makeMemoKey));
+      const toRemove = [];
+      _memoSelected.forEach(k => { if (!validKeys.has(k)) toRemove.push(k); });
+      toRemove.forEach(k => _memoSelected.delete(k));
       renderMemos();
     }
   } catch(e) {
@@ -2375,6 +2499,7 @@ async function loadMemos() {
       return;
     }
     _memoData = res.memos || [];
+    _memoSelected.clear();  // ★ 再読み込み時は選択をクリア
     // バッジ更新
     const badge = document.getElementById('memo-badge');
     if (_memoData.length > 0) {
@@ -2405,14 +2530,43 @@ function renderMemos() {
     return;
   }
 
-  const html = '<div class="memo-board">' + _memoData.map(m => {
-    const key = makeMemoKey(m);
-    const isExpanded = _memoExpanded.has(key);
-    const replyCount = (m.replies || []).length;
-    const replyBadgeClass = replyCount > 0 ? '' : 'zero';
+  const allKeys = _memoData.map(makeMemoKey);
+  const allSelected   = allKeys.length > 0 && allKeys.every(k => _memoSelected.has(k));
+  const someSelected  = allKeys.some(k => _memoSelected.has(k));
+  const selectedCount = _memoSelected.size;
+
+  // 一括操作バー
+  const batchBar = `
+    <div class="memo-batch-bar">
+      <label class="memo-batch-checkbox-wrap">
+        <input type="checkbox"
+               class="memo-batch-checkbox"
+               id="memo-select-all"
+               ${allSelected ? 'checked' : ''}
+               onchange="toggleSelectAllMemos(this.checked)">
+        <span>全選択</span>
+      </label>
+      <span class="memo-batch-count">${selectedCount}件選択中</span>
+      <button class="memo-batch-btn"
+              ${selectedCount === 0 ? 'disabled' : ''}
+              onclick="confirmBatchComplete()">
+        選択した${selectedCount}件を完了
+      </button>
+    </div>
+  `;
+
+  // 申し送りカード
+  const cardsHtml = _memoData.map(m => {
+    const key         = makeMemoKey(m);
+    const isExpanded  = _memoExpanded.has(key);
+    const isSelected  = _memoSelected.has(key);
+    const replyCount  = (m.replies || []).length;
+    const hasReplies  = replyCount > 0;
+    const badgeText   = hasReplies ? `✅ 返信済(${replyCount}件)` : '返信 0';
+    const badgeClass  = hasReplies ? '' : 'zero';
 
     let repliesHtml = '';
-    if (replyCount > 0) {
+    if (hasReplies) {
       repliesHtml = '<div class="memo-card-replies ' + (isExpanded ? 'expanded' : '') + '" id="replies-' + escapeHtml(key) + '">' +
         m.replies.map(r => `
           <div class="memo-reply-row">
@@ -2426,32 +2580,43 @@ function renderMemos() {
       '</div>';
     }
 
-    const toggleBtn = replyCount > 0
+    const toggleBtn = hasReplies
       ? `<button class="memo-action-btn toggle" onclick="toggleMemoReplies('${escapeHtml(key)}')">${isExpanded ? '折りたたむ' : '返信を見る'}</button>`
       : '';
 
     return `
-      <div class="memo-card-item">
+      <div class="memo-card-item ${hasReplies ? 'has-replies' : ''} ${isSelected ? 'selected' : ''}">
+        <label class="memo-card-checkbox-wrap">
+          <input type="checkbox"
+                 class="memo-card-checkbox"
+                 ${isSelected ? 'checked' : ''}
+                 onchange="toggleMemoSelect('${escapeHtml(key)}', this.checked)">
+        </label>
         <div class="memo-card-top">
           <div class="memo-card-top-left">
             <div class="memo-card-meta">${m.date} ${m.time}</div>
             <div class="memo-card-loc">${escapeHtml(m.locationName || '(拠点名なし)')}</div>
             <div class="memo-card-staff">販売員：${escapeHtml(m.userName || '(名前なし)')}</div>
           </div>
-          <div class="memo-card-reply-count ${replyBadgeClass}">返信 ${replyCount}</div>
+          <div class="memo-card-reply-count ${badgeClass}">${badgeText}</div>
         </div>
         <div class="memo-card-body">${escapeHtml(m.memo)}</div>
         ${repliesHtml}
         <div class="memo-card-actions">
           ${toggleBtn}
           <button class="memo-action-btn reply" onclick="openMemoReply('${escapeHtml(m.date)}','${escapeHtml(m.locationId)}','${escapeHtml(m.userId)}')">返信する</button>
-          <button class="memo-action-btn complete" onclick="confirmMemoComplete('${escapeHtml(makeMemoKey(m))}')">対応完了</button>
         </div>
       </div>
     `;
-  }).join('') + '</div>';
+  }).join('');
 
-  wrap.innerHTML = html;
+  wrap.innerHTML = batchBar + '<div class="memo-board">' + cardsHtml + '</div>';
+
+  // 部分選択（インデターミネート）状態を反映
+  const selectAllEl = document.getElementById('memo-select-all');
+  if (selectAllEl) {
+    selectAllEl.indeterminate = !allSelected && someSelected;
+  }
 }
 
 function toggleMemoReplies(key) {
@@ -2459,6 +2624,24 @@ function toggleMemoReplies(key) {
     _memoExpanded.delete(key);
   } else {
     _memoExpanded.add(key);
+  }
+  renderMemos();
+}
+
+function toggleMemoSelect(key, checked) {
+  if (checked) {
+    _memoSelected.add(key);
+  } else {
+    _memoSelected.delete(key);
+  }
+  renderMemos();
+}
+
+function toggleSelectAllMemos(checked) {
+  if (checked) {
+    _memoData.forEach(m => _memoSelected.add(makeMemoKey(m)));
+  } else {
+    _memoSelected.clear();
   }
   renderMemos();
 }
@@ -2480,46 +2663,51 @@ function openMemoReply(date, locId, userId) {
   window.location.href = 'memo-reply.html?' + params.toString();
 }
 
-// 対応完了 確認モーダル
-function confirmMemoComplete(key) {
-  const m = _memoData.find(x => makeMemoKey(x) === key);
-  if (!m) return;
-  _memoCompletePending = m;
+// 一括対応完了 確認モーダル
+function confirmBatchComplete() {
+  const count = _memoSelected.size;
+  if (count === 0) return;
+
   document.getElementById('memo-complete-body').innerHTML = `
-    以下の申し送りを対応完了にしますか？
+    選択した <strong style="color:var(--ink);">${count}件</strong> の申し送りを対応完了にしますか？
     <div class="pm-confirm-product">
-      ${escapeHtml(m.locationName)} / ${escapeHtml(m.userName)}<br>
-      <span style="font-size:11px;font-weight:normal;color:var(--ink-mute);">${m.date}</span>
+      ${count}件の申し送りが一覧から消えます
     </div>
-    完了後は一覧から消えます。<br>
     <span style="font-size:11px;color:var(--ink-mute);">※販売員への通知はされません</span>
   `;
+  document.getElementById('memo-complete-action').textContent = `${count}件を完了にする`;
   document.getElementById('memo-complete-modal').classList.add('show');
 }
 
 function cancelMemoComplete() {
-  _memoCompletePending = null;
   document.getElementById('memo-complete-modal').classList.remove('show');
 }
 
 async function executeMemoComplete() {
-  if (!_memoCompletePending) return;
-  const m = _memoCompletePending;
-  const btn = document.getElementById('memo-complete-action');
+  if (_memoSelected.size === 0) return;
+
+  const items = _memoData
+    .filter(m => _memoSelected.has(makeMemoKey(m)))
+    .map(m => ({
+      targetDate:         m.date,
+      targetLocationId:   m.locationId,
+      targetLocationName: m.locationName,
+      targetUserId:       m.userId,
+      targetUserName:     m.userName,
+    }));
+
+  const btn       = document.getElementById('memo-complete-action');
   const cancelBtn = document.querySelector('#memo-complete-modal .pm-confirm-btn.cancel');
+  const originalText = btn.textContent;
   btn.disabled = true;
   cancelBtn.disabled = true;
   btn.textContent = '処理中...';
 
   try {
     const payload = {
-      action:             'markMemoComplete',
-      targetDate:         m.date,
-      targetLocationId:   m.locationId,
-      targetLocationName: m.locationName,
-      targetUserId:       m.userId,
-      targetUserName:     m.userName,
-      completerName:      userProfile.displayName,
+      action:        'markMemosCompleteBatch',
+      items:         items,
+      completerName: userProfile.displayName,
     };
 
     const res = await fetch(GAS_URL, {
@@ -2534,9 +2722,13 @@ async function executeMemoComplete() {
       throw new Error(result.error || '不明なエラー');
     }
 
-    showPmToast('対応完了にしました', 'success');
+    const msg = result.skipped > 0
+      ? `${result.added}件を完了にしました（${result.skipped}件はスキップ）`
+      : `${result.added}件を完了にしました`;
+    showPmToast(msg, 'success');
+
     document.getElementById('memo-complete-modal').classList.remove('show');
-    _memoCompletePending = null;
+    _memoSelected.clear();
     setTimeout(() => loadMemos(), 500);
 
   } catch(e) {
@@ -2544,7 +2736,7 @@ async function executeMemoComplete() {
   } finally {
     btn.disabled = false;
     cancelBtn.disabled = false;
-    btn.textContent = '完了にする';
+    btn.textContent = originalText;
   }
 }
 
