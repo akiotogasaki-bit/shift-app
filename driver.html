@@ -18,6 +18,8 @@
   --green: #27AE60;
   --green-light: #D5F5E3;
   --red: #C0392B;
+  --gold: #FFD700;
+  --orange: #E67E22;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -171,7 +173,83 @@ body {
   white-space: nowrap;
 }
 
-/* ── リマインド確認モーダル ── */
+/* ── 休止拠点表示（A2 NEW） ── */
+.location-item.inactive {
+  background: #F5F5F5;
+  border-color: var(--border);
+  opacity: .85;
+}
+.location-item.inactive .location-name {
+  color: var(--ink-mute);
+}
+.location-item.inactive .check-circle {
+  background: var(--ink-mute);
+  border-color: var(--ink-mute);
+  color: #FFF;
+}
+.inactive-badge {
+  background: var(--ink-mute);
+  color: #FFF;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+.inactive-icon-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  background: var(--white);
+  color: var(--ink-mute);
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-family: inherit;
+  padding: 0;
+  transition: all .15s;
+}
+.inactive-icon-btn:active {
+  transform: scale(.9);
+  background: #F5F5F5;
+}
+
+/* ── トースト通知（A1/A2 NEW） ── */
+.app-toast {
+  position: fixed;
+  bottom: calc(100px + var(--safe-bottom));
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--ink);
+  color: #FFF;
+  padding: 12px 20px;
+  border-radius: 24px;
+  font-size: 13px;
+  font-weight: 500;
+  opacity: 0;
+  transition: all .25s;
+  z-index: 300;
+  max-width: 90%;
+  text-align: center;
+  box-shadow: 0 4px 16px rgba(0,0,0,.2);
+  pointer-events: none;
+}
+.app-toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+.app-toast.error {
+  background: var(--red);
+}
+.app-toast.success {
+  background: var(--green);
+}
+
+/* ── リマインド・休止確認モーダル ── */
 .reminder-modal-bg {
   position: fixed;
   inset: 0;
@@ -235,7 +313,10 @@ body {
 }
 .reminder-modal-btn.cancel { background: #EAEAEA; color: var(--ink); }
 .reminder-modal-btn.send { background: var(--red); color: #FFF; }
+.reminder-modal-btn.send.inactive-action { background: var(--ink-soft); }
+.reminder-modal-btn.send.inactive-action.unset { background: var(--blue); }
 .reminder-modal-btn:active { opacity: .8; }
+.reminder-modal-btn:disabled { opacity: .5; cursor: not-allowed; }
 
 .residual-summary {
   background: var(--blue);
@@ -483,8 +564,9 @@ body {
 <script>
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5AawPDc7aluPokONkYz6f2ikwl0S487JvhKdKh6QSp1xhEhA/exec';
 
-const STORAGE_KEY_COLLECTED = 'oedo_driver_collected';
 const STORAGE_KEY_REMINDERS = 'oedo_driver_reminders';
+const SELF_ACTION_GRACE_MS = 5000;       // 自操作後5秒はサーバー同期を抑制（A3）
+const DRIVER_STATE_POLL_MS = 30000;      // 30秒間隔ポーリング（A3）
 
 const state = {
   userId: '',
@@ -492,41 +574,17 @@ const state = {
   locations: [],
   products: [],
   collectedIds: new Set(),
-  reportsByLoc: {},     // { locationId: { status, registerEnd, totalSalary, ... } }
-  remindersSent: {},    // { locationId: 'HH:MM' }
+  inactiveIds: new Set(),               // ★ NEW（A2/A3）
+  reportsByLoc: {},
+  remindersSent: {},
   pendingReminderId: null,
+  pendingInactiveId: null,              // ★ NEW（A2）
+  lastUserActionAt: 0,                  // ★ NEW（A3）
 };
 
-// ── localStorage 永続化（バグ修正：当日内は回収済みを保持） ──
-function saveCollectedIds() {
-  try {
-    const today = new Date().toLocaleDateString('ja-JP');
-    localStorage.setItem(STORAGE_KEY_COLLECTED, JSON.stringify({
-      date: today,
-      ids:  [...state.collectedIds],
-    }));
-  } catch(e) { console.warn('saveCollectedIds error:', e); }
-}
-
-function restoreCollectedIds() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_COLLECTED);
-    if (!raw) return;
-    const data  = JSON.parse(raw);
-    const today = new Date().toLocaleDateString('ja-JP');
-    if (data && data.date === today && Array.isArray(data.ids)) {
-      state.collectedIds = new Set(data.ids);
-    } else {
-      // 別日なら破棄
-      localStorage.removeItem(STORAGE_KEY_COLLECTED);
-    }
-  } catch(e) {
-    console.warn('restoreCollectedIds error:', e);
-    localStorage.removeItem(STORAGE_KEY_COLLECTED);
-  }
-}
-
-// ── リマインド送信状態の永続化 ──
+// ═══════════════════════════════════════════════════════════════
+// localStorage（リマインド送信履歴のみ。回収状態はサーバーが正の状態源 A1）
+// ═══════════════════════════════════════════════════════════════
 function saveReminders() {
   try {
     const today = new Date().toLocaleDateString('ja-JP');
@@ -554,6 +612,29 @@ function restoreReminders() {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════
+// トースト通知（A1/A2 NEW）
+// ═══════════════════════════════════════════════════════════════
+function showToast(message, type = 'success') {
+  const existing = document.getElementById('app-toast');
+  if (existing) existing.remove();
+
+  const toast = document.createElement('div');
+  toast.id = 'app-toast';
+  toast.className = 'app-toast ' + type;
+  toast.textContent = message;
+  document.body.appendChild(toast);
+
+  requestAnimationFrame(() => toast.classList.add('show'));
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 300);
+  }, 2800);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 初期化
+// ═══════════════════════════════════════════════════════════════
 async function init() {
   try {
     await liff.init({ liffId: '2009637457-eprpSUWd' });
@@ -562,11 +643,12 @@ async function init() {
     state.userId   = profile.userId;
     state.userName = profile.displayName;
 
-    // 並列取得：マスタ + 当日レポート + 当日中間販売
-    const [masterRes, reportsRes, intermediateRes] = await Promise.all([
-      fetch(`${GAS_URL}?action=getMaster`, { redirect: 'follow' }).then(r => r.json()),
-      fetch(`${GAS_URL}?action=getTodayReports`, { redirect: 'follow' }).then(r => r.json()).catch(() => ({ data: [] })),
-      fetch(`${GAS_URL}?action=getTodayIntermediate`, { redirect: 'follow' }).then(r => r.json()).catch(() => ({ data: [] })),
+    // 並列取得：マスタ + 当日レポート + 当日中間販売 + ドライバー状態（A3）
+    const [masterRes, reportsRes, intermediateRes, driverStateRes] = await Promise.all([
+      fetch(`${GAS_URL}?action=getMaster`,             { redirect: 'follow' }).then(r => r.json()),
+      fetch(`${GAS_URL}?action=getTodayReports`,        { redirect: 'follow' }).then(r => r.json()).catch(() => ({ data: [] })),
+      fetch(`${GAS_URL}?action=getTodayIntermediate`,   { redirect: 'follow' }).then(r => r.json()).catch(() => ({ data: [] })),
+      fetch(`${GAS_URL}?action=getDriverState`,         { redirect: 'follow' }).then(r => r.json()).catch(() => ({ collected: [], inactive: [] })),
     ]);
     state.locations = masterRes.locations || [];
     state.products  = masterRes.products  || [];
@@ -582,9 +664,11 @@ async function init() {
       }
     });
 
-    // ★ 回収済み拠点を localStorage から復元（バグ修正）
-    restoreCollectedIds();
-    // ★ 当日のリマインド送信履歴を復元
+    // ★ A1/A3：サーバーから回収状態と休止状態を初期同期
+    state.collectedIds = new Set((driverStateRes.collected || []).map(c => c.locationId));
+    state.inactiveIds  = new Set((driverStateRes.inactive  || []).map(i => i.locationId));
+
+    // 当日のリマインド送信履歴を復元
     restoreReminders();
 
     const now = new Date();
@@ -595,6 +679,10 @@ async function init() {
     renderCollectionList();
     renderProductList();
     showScreen('main');
+
+    // ★ A3：ドライバー状態の常時ポーリング開始（30秒）
+    startDriverStateTimer();
+
   } catch (e) {
     document.getElementById('screen-loading').innerHTML =
       `<div style="color:#fff;padding:40px;font-size:13px;word-break:break-all;">
@@ -603,21 +691,78 @@ async function init() {
   }
 }
 
-// ── 回収チェック ──
+// ═══════════════════════════════════════════════════════════════
+// A3：ドライバー状態の常時ポーリング
+// ═══════════════════════════════════════════════════════════════
+let driverStateTimer = null;
+
+async function syncDriverState() {
+  // 自操作後5秒はサーバー値で上書きしない
+  if (Date.now() - state.lastUserActionAt < SELF_ACTION_GRACE_MS) return;
+
+  try {
+    const res  = await fetch(GAS_URL + '?action=getDriverState', { redirect: 'follow' });
+    const data = await res.json();
+    const newCollected = new Set((data.collected || []).map(c => c.locationId));
+    const newInactive  = new Set((data.inactive  || []).map(i => i.locationId));
+
+    let changed = false;
+    if (!setsEqual(newCollected, state.collectedIds)) {
+      state.collectedIds = newCollected;
+      changed = true;
+    }
+    if (!setsEqual(newInactive, state.inactiveIds)) {
+      state.inactiveIds = newInactive;
+      changed = true;
+    }
+    if (changed) renderCollectionList();
+  } catch(e) {
+    console.warn('syncDriverState error:', e);
+  }
+}
+
+function setsEqual(a, b) {
+  if (a.size !== b.size) return false;
+  for (const v of a) if (!b.has(v)) return false;
+  return true;
+}
+
+function startDriverStateTimer() {
+  if (driverStateTimer) clearInterval(driverStateTimer);
+  driverStateTimer = setInterval(syncDriverState, DRIVER_STATE_POLL_MS);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 回収チェック表示
+// ═══════════════════════════════════════════════════════════════
 function renderCollectionList() {
-  const uncollected = state.locations.filter(l => !state.collectedIds.has(l.id));
-  const collected   = state.locations.filter(l =>  state.collectedIds.has(l.id));
+  // 休止中とそれ以外で分割
+  const activeLocations   = state.locations.filter(l => !state.inactiveIds.has(l.id));
+  const inactiveLocations = state.locations.filter(l =>  state.inactiveIds.has(l.id));
+
+  const uncollected = activeLocations.filter(l => !state.collectedIds.has(l.id));
+  const collected   = activeLocations.filter(l =>  state.collectedIds.has(l.id));
 
   let html = '';
-  html += `<div class="section-label uncollected">未回収 <span style="background:var(--red);color:#FFF;font-size:11px;font-weight:700;padding:1px 8px;border-radius:10px;">${uncollected.length}</span></div>`;
+
+  // 未回収セクション（休止中も末尾に含める）
+  const sectionCount = uncollected.length;
+  const inactiveLabel = inactiveLocations.length > 0
+    ? `<span style="background:var(--ink-mute);color:#FFF;font-size:11px;font-weight:700;padding:1px 8px;border-radius:10px;margin-left:6px;">休止 ${inactiveLocations.length}</span>`
+    : '';
+  html += `<div class="section-label uncollected">未回収 <span style="background:var(--red);color:#FFF;font-size:11px;font-weight:700;padding:1px 8px;border-radius:10px;">${sectionCount}</span>${inactiveLabel}</div>`;
   html += '<div class="list-wrap">';
-  if (uncollected.length === 0) {
+
+  if (uncollected.length === 0 && inactiveLocations.length === 0) {
     html += `<p style="text-align:center;color:var(--ink-mute);font-size:13px;padding:20px;">全拠点の回収が完了しました ✓</p>`;
   } else {
     html += uncollected.map(loc => renderLocationItem(loc, false)).join('');
+    // 休止中を末尾
+    html += inactiveLocations.map(loc => renderInactiveItem(loc)).join('');
   }
   html += '</div>';
 
+  // 回収済みセクション
   if (collected.length > 0) {
     html += `<div class="section-label collected" style="margin-top:4px;">回収済み <span style="background:var(--green);color:#FFF;font-size:11px;font-weight:700;padding:1px 8px;border-radius:10px;">${collected.length}</span></div>`;
     html += '<div class="list-wrap">';
@@ -631,19 +776,29 @@ function renderCollectionList() {
     `tab-badge ${uncollected.length > 0 ? 'red' : ''}`;
 }
 
+// 休止中拠点の専用レンダリング
+function renderInactiveItem(loc) {
+  return `
+    <div class="location-item inactive" onclick="openInactiveModal('${loc.id}')">
+      <div class="check-circle">⏸</div>
+      <span class="location-name">${loc.name}</span>
+      <span class="inactive-badge">休止中</span>
+    </div>`;
+}
+
 function renderLocationItem(loc, isCollected) {
   const r = state.reportsByLoc[loc.id];
   const reminderTime = state.remindersSent[loc.id];
 
   // 状態判定
-  let status = 'unreported'; // 未報告
+  let status = 'unreported';
   let amountHtml = '';
   let extraClass = '';
   let onclickAction = '';
   let hint = '';
+  let showInactiveIcon = !isCollected;  // 回収済みには⏸アイコン表示しない
 
   if (isCollected) {
-    // 回収済み：従来表示
     extraClass = 'collected';
     onclickAction = `toggleCollection('${loc.id}')`;
     hint = 'タップで解除';
@@ -652,20 +807,17 @@ function renderLocationItem(loc, isCollected) {
       amountHtml = `<span class="location-amount">¥${net.toLocaleString()}</span>`;
     }
   } else if (r && r.status === 'final') {
-    // 最終報告完了：金額表示
     status = 'reported';
     onclickAction = `toggleCollection('${loc.id}')`;
     hint = 'タップで回収済みに';
     const net = (r.registerEnd || 0) - (r.totalSalary || 0);
     amountHtml = `<span class="location-amount">¥${net.toLocaleString()}</span>`;
   } else if (r && r.status === 'intermediate') {
-    // 中間報告のみ：販売中
     status = 'intermediate';
     onclickAction = `handleUnreportedTap('${loc.id}')`;
     hint = '';
     amountHtml = `<span class="location-amount intermediate">販売中</span>`;
   } else {
-    // 完全未報告
     status = 'unreported';
     extraClass = 'unreported';
     onclickAction = `handleUnreportedTap('${loc.id}')`;
@@ -673,7 +825,6 @@ function renderLocationItem(loc, isCollected) {
     amountHtml = `<span class="location-amount unreported">未報告</span>`;
   }
 
-  // リマインド送信済みステータス
   let reminderHtml = '';
   if (reminderTime && status !== 'reported') {
     reminderHtml = `<span class="reminder-status">送信済 ${reminderTime}</span>`;
@@ -681,6 +832,9 @@ function renderLocationItem(loc, isCollected) {
 
   const checkContent = isCollected ? '✓' : '';
   const hintHtml = hint ? `<span class="location-tap-hint">${hint}</span>` : '';
+  const inactiveIconHtml = showInactiveIcon
+    ? `<button class="inactive-icon-btn" onclick="event.stopPropagation();openInactiveModal('${loc.id}')" aria-label="休止トグル">⏸</button>`
+    : '';
 
   return `
     <div class="location-item ${extraClass}" onclick="${onclickAction}">
@@ -689,10 +843,144 @@ function renderLocationItem(loc, isCollected) {
       ${reminderHtml}
       ${amountHtml}
       ${hintHtml}
+      ${inactiveIconHtml}
     </div>`;
 }
 
-// ── 未報告拠点タップ時の処理 ──
+// ═══════════════════════════════════════════════════════════════
+// A1：回収チェックのサーバー連携（楽観的UI）
+// ═══════════════════════════════════════════════════════════════
+async function toggleCollection(id) {
+  const loc = state.locations.find(l => l.id === id);
+  if (!loc) return;
+  if (state.inactiveIds.has(id)) return; // 休止中は何もしない
+
+  const wasCollected = state.collectedIds.has(id);
+
+  // 楽観的UI更新
+  if (wasCollected) {
+    state.collectedIds.delete(id);
+  } else {
+    state.collectedIds.add(id);
+  }
+  state.lastUserActionAt = Date.now();
+  renderCollectionList();
+
+  // サーバー送信
+  try {
+    const action = wasCollected ? 'unsetCollected' : 'setCollected';
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        action,
+        locationId:   id,
+        locationName: loc.name,
+        userId:       state.userId,
+        userName:     state.userName,
+      }),
+      redirect: 'follow',
+    });
+    const result = await res.json();
+    if (!result || result.success === false) {
+      throw new Error((result && result.error) || 'サーバーエラー');
+    }
+  } catch(e) {
+    // ロールバック
+    if (wasCollected) {
+      state.collectedIds.add(id);
+    } else {
+      state.collectedIds.delete(id);
+    }
+    renderCollectionList();
+    showToast('回収状態の更新に失敗しました', 'error');
+    console.warn('toggleCollection error:', e);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// A2：休止トグル（モーダル経由）
+// ═══════════════════════════════════════════════════════════════
+function openInactiveModal(locationId) {
+  const loc = state.locations.find(l => l.id === locationId);
+  if (!loc) return;
+  state.pendingInactiveId = locationId;
+
+  const isInactive = state.inactiveIds.has(locationId);
+  document.getElementById('inactive-modal-header').textContent = isInactive ? '⏸ 休止解除' : '⏸ 拠点を休止';
+  document.getElementById('inactive-loc-name').textContent = loc.name;
+  document.getElementById('inactive-modal-question').textContent = isInactive
+    ? 'この拠点を休止解除しますか？'
+    : 'この拠点を本日休止扱いにしますか？';
+
+  const sendBtn = document.getElementById('inactive-send-btn');
+  sendBtn.textContent = isInactive ? '解除する' : '休止にする';
+  sendBtn.classList.toggle('unset', isInactive);
+  sendBtn.disabled = false;
+
+  document.getElementById('inactive-modal-bg').classList.add('show');
+}
+
+function closeInactiveModal() {
+  document.getElementById('inactive-modal-bg').classList.remove('show');
+  state.pendingInactiveId = null;
+}
+
+async function confirmToggleInactive() {
+  const locationId = state.pendingInactiveId;
+  if (!locationId) return;
+  const loc = state.locations.find(l => l.id === locationId);
+  if (!loc) { closeInactiveModal(); return; }
+
+  const sendBtn = document.getElementById('inactive-send-btn');
+  sendBtn.disabled = true;
+
+  const wasInactive = state.inactiveIds.has(locationId);
+
+  // 楽観的UI更新
+  if (wasInactive) {
+    state.inactiveIds.delete(locationId);
+  } else {
+    state.inactiveIds.add(locationId);
+  }
+  state.lastUserActionAt = Date.now();
+  renderCollectionList();
+  closeInactiveModal();
+
+  // サーバー送信
+  try {
+    const action = wasInactive ? 'unsetInactive' : 'setInactive';
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        action,
+        locationId,
+        locationName: loc.name,
+        userId:       state.userId,
+        userName:     state.userName,
+      }),
+      redirect: 'follow',
+    });
+    const result = await res.json();
+    if (!result || result.success === false) {
+      throw new Error((result && result.error) || 'サーバーエラー');
+    }
+    showToast(wasInactive ? `${loc.name} の休止を解除しました` : `${loc.name} を休止にしました`, 'success');
+  } catch(e) {
+    // ロールバック
+    if (wasInactive) {
+      state.inactiveIds.add(locationId);
+    } else {
+      state.inactiveIds.delete(locationId);
+    }
+    renderCollectionList();
+    showToast('休止状態の更新に失敗しました', 'error');
+    console.warn('confirmToggleInactive error:', e);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 未報告拠点タップ時の処理
+// ═══════════════════════════════════════════════════════════════
 function handleUnreportedTap(locationId) {
   const loc = state.locations.find(l => l.id === locationId);
   if (!loc) return;
@@ -705,6 +993,7 @@ function handleUnreportedTap(locationId) {
     document.getElementById('reminder-prev-time').textContent = prevTime;
   }
   document.getElementById('reminder-send-btn').textContent = prevTime ? '再送信する' : '送信する';
+  document.getElementById('reminder-send-btn').disabled = false;
   document.getElementById('reminder-modal-bg').classList.add('show');
 }
 
@@ -718,7 +1007,6 @@ async function confirmSendReminder() {
   if (!locationId) return;
   const loc = state.locations.find(l => l.id === locationId);
 
-  // ボタン無効化
   const sendBtn = document.getElementById('reminder-send-btn');
   sendBtn.disabled = true;
   sendBtn.textContent = '送信中...';
@@ -743,28 +1031,20 @@ async function confirmSendReminder() {
     renderCollectionList();
 
     if (result && result.sentCount > 0) {
-      alert(`✓ リマインドを${result.sentCount}名に送信しました`);
+      showToast(`✓ リマインドを${result.sentCount}名に送信しました`, 'success');
     } else {
-      alert('⚠️ 送信先が見つかりませんでした。直接ご連絡ください。');
+      showToast('⚠️ 送信先が見つかりませんでした', 'error');
     }
   } catch(e) {
-    alert('送信エラー: ' + e.message);
+    showToast('送信エラー: ' + e.message, 'error');
     sendBtn.disabled = false;
     sendBtn.textContent = '送信する';
   }
 }
 
-function toggleCollection(id) {
-  if (state.collectedIds.has(id)) {
-    state.collectedIds.delete(id);
-  } else {
-    state.collectedIds.add(id);
-  }
-  saveCollectedIds(); // ★ チェック変更のたびに即保存
-  renderCollectionList();
-}
-
-// ── 残数入力 ──
+// ═══════════════════════════════════════════════════════════════
+// 残数入力
+// ═══════════════════════════════════════════════════════════════
 function renderProductList() {
   const teaIds = state.products.filter(p => p.name.includes('お茶')).map(p => p.id);
   document.getElementById('product-list').innerHTML = state.products.map(p => {
@@ -786,7 +1066,9 @@ function updateResidualTotal() {
   document.getElementById('residual-total').textContent = total;
 }
 
-// ── タブ切り替え ──
+// ═══════════════════════════════════════════════════════════════
+// 残数サマリ
+// ═══════════════════════════════════════════════════════════════
 let residualSummaryTimer = null;
 
 async function loadResidualSummary() {
@@ -841,7 +1123,6 @@ function stopResidualSummaryTimer() {
 }
 
 function switchTab(tab) {
-  // タイマー制御（重複コードを統合）
   if (tab === 'residual') startResidualSummaryTimer();
   else stopResidualSummaryTimer();
 
@@ -854,7 +1135,9 @@ function switchTab(tab) {
   window.scrollTo(0, 0);
 }
 
-// ── 送信 ──
+// ═══════════════════════════════════════════════════════════════
+// 残数報告送信
+// ═══════════════════════════════════════════════════════════════
 async function submitReport() {
   const residualCount = {};
   state.products.forEach(p => {
@@ -908,10 +1191,8 @@ function showScreen(name) {
   window.scrollTo(0, 0);
 }
 
-// ★ バグ修正：collectedIds はクリアしない（当日内は回収済みを保持）
-//   残数入力欄だけクリアして、回収チェックは継続
+// ★ 当日内は回収済みを保持（サーバーが正の状態源）
 function restart() {
-  // state.collectedIds.clear(); ← 削除（バグ原因）
   state.products.forEach(p => {
     const el = document.getElementById(`res-${p.id}`);
     if (el) el.value = '';
@@ -922,7 +1203,9 @@ function restart() {
   showScreen('main');
 }
 
-// ── 内訳モーダル ──
+// ═══════════════════════════════════════════════════════════════
+// 内訳モーダル
+// ═══════════════════════════════════════════════════════════════
 function openBreakdown() {
   const teaIds = state.products.filter(p => p.name.includes('お茶')).map(p => p.id);
   const rows = state.products.map(p => {
@@ -983,6 +1266,22 @@ init();
     <div class="reminder-modal-btns">
       <button class="reminder-modal-btn cancel" onclick="closeReminderModal()">キャンセル</button>
       <button class="reminder-modal-btn send" id="reminder-send-btn" onclick="confirmSendReminder()">送信する</button>
+    </div>
+  </div>
+</div>
+
+<!-- INACTIVE TOGGLE MODAL（A2 NEW） -->
+<div id="inactive-modal-bg" class="reminder-modal-bg">
+  <div class="reminder-modal">
+    <div class="reminder-modal-header" id="inactive-modal-header" style="background:var(--ink-soft);">⏸ 拠点を休止</div>
+    <div class="reminder-modal-body">
+      <div class="modal-loc-name" id="inactive-loc-name" style="color:var(--ink);">拠点名</div>
+      <p id="inactive-modal-question">この拠点を本日休止扱いにしますか？</p>
+      <p style="font-size:12px;color:var(--ink-mute);">※ 休止中は回収チェックができません。他のドライバーの画面にも反映されます。</p>
+    </div>
+    <div class="reminder-modal-btns">
+      <button class="reminder-modal-btn cancel" onclick="closeInactiveModal()">キャンセル</button>
+      <button class="reminder-modal-btn send inactive-action" id="inactive-send-btn" onclick="confirmToggleInactive()">休止にする</button>
     </div>
   </div>
 </div>
