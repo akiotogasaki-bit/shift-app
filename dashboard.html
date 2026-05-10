@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>お江戸弁当 社員ダッシュボード</title>
+<script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
 :root {
   --red: #C0392B;
@@ -84,8 +85,24 @@ body {
   border-bottom: 3px solid transparent;
   font-family: inherit;
   transition: all .15s;
+  position: relative;
 }
 .tab-btn.active { color: var(--red); border-bottom-color: var(--red); font-weight: 700; }
+.tab-btn .badge {
+  display: inline-block;
+  background: var(--red);
+  color: #FFF;
+  font-size: 10px;
+  font-weight: 700;
+  min-width: 18px;
+  height: 18px;
+  line-height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.tab-btn.active .badge { background: var(--gold); }
 
 /* ── CONTENT ── */
 .content { padding: 16px; max-width: 900px; margin: 0 auto; }
@@ -553,7 +570,7 @@ body {
   padding: 40px; text-align: center; color: #999;
 }
 
-/* ===== 商品管理タブ（NEW v2026-05-10） ===== */
+/* ===== 商品管理タブ ===== */
 .pm-notice {
   background: var(--gold-light);
   border-left: 3px solid var(--gold);
@@ -763,201 +780,430 @@ body {
 }
 .pm-toast.error { background: var(--red); }
 .pm-toast.success { background: var(--green); }
+
+/* ===== 申し送り確認タブ ===== */
+.memo-board {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.memo-card-item {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: box-shadow .15s;
+}
+.memo-card-item:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,.06);
+}
+.memo-card-top {
+  background: var(--ink);
+  color: #FFF;
+  padding: 10px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+.memo-card-top-left {
+  flex: 1;
+  min-width: 0;
+}
+.memo-card-meta {
+  font-size: 10px;
+  opacity: .65;
+  margin-bottom: 3px;
+}
+.memo-card-loc {
+  font-size: 14px;
+  font-weight: 700;
+}
+.memo-card-staff {
+  font-size: 11px;
+  opacity: .8;
+  margin-top: 2px;
+}
+.memo-card-reply-count {
+  background: var(--gold);
+  color: #FFF;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.memo-card-reply-count.zero {
+  background: rgba(255,255,255,.15);
+}
+.memo-card-body {
+  padding: 14px;
+  background: var(--gold-light);
+  border-left: 4px solid var(--gold);
+  font-size: 14px;
+  color: var(--ink-soft);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.memo-card-replies {
+  background: #FAFAF8;
+  padding: 0 14px;
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height .3s, padding .3s;
+}
+.memo-card-replies.expanded {
+  max-height: 1500px;
+  padding: 12px 14px;
+}
+.memo-reply-row {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+.memo-reply-row:last-child { margin-bottom: 0; }
+.memo-reply-row-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+.memo-reply-row-name {
+  font-weight: 700;
+  color: var(--green);
+}
+.memo-reply-row-time {
+  color: var(--ink-mute);
+}
+.memo-reply-row-content {
+  color: var(--ink-soft);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.memo-card-actions {
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+}
+.memo-action-btn {
+  flex: 1;
+  padding: 9px;
+  border-radius: 8px;
+  border: none;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  transition: opacity .15s;
+}
+.memo-action-btn.reply {
+  background: var(--red);
+  color: #FFF;
+}
+.memo-action-btn.complete {
+  background: var(--green);
+  color: #FFF;
+}
+.memo-action-btn.toggle {
+  background: #ECF0F1;
+  color: var(--ink-soft);
+  flex: 0 0 auto;
+  padding: 9px 14px;
+}
+.memo-action-btn:disabled { opacity: .5; cursor: wait; }
+
+.memo-empty {
+  background: var(--white);
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--ink-mute);
+  font-size: 13px;
+}
+
+/* ===== 拒否画面 ===== */
+.access-denied {
+  display: none;
+  text-align: center;
+  padding: 60px 20px;
+  background: var(--cream);
+  min-height: 100vh;
+}
+.access-denied.show { display: block; }
+.access-denied-icon {
+  font-size: 64px;
+  margin-bottom: 20px;
+}
+.access-denied-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 12px;
+}
+.access-denied-message {
+  font-size: 14px;
+  color: var(--ink-soft);
+  line-height: 1.7;
+  margin-bottom: 24px;
+}
+.access-denied-message .role-tag {
+  display: inline-block;
+  background: var(--cream-dark);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px 10px;
+  margin-left: 4px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.access-denied-btn {
+  background: var(--red);
+  color: #FFF;
+  border: none;
+  padding: 12px 32px;
+  border-radius: 24px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+}
 </style>
 </head>
 <body>
 
-<!-- HEADER -->
-<div class="header">
-  <div class="header-left">
-    <h1>🍱 お江戸弁当</h1>
-    <p>社員ダッシュボード</p>
-  </div>
-  <div class="header-right">
-    <span class="update-time" id="update-time">--:--</span>
-    <button class="refresh-btn" onclick="loadAll()">🔄 更新</button>
-  </div>
+<!-- ─── 起動時LIFFローディング ─── -->
+<div id="liff-loading" class="loading-wrap" style="min-height:100vh;">
+  <div class="loader"></div>
+  <p>認証中...</p>
 </div>
 
-<!-- NAV TABS -->
-<div class="nav-tabs">
-  <button class="tab-btn active" onclick="switchTab('realtime')">リアルタイム</button>
-  <button class="tab-btn" onclick="switchTab('weekly')">週報</button>
-  <button class="tab-btn" onclick="switchTab('monthly')">月報</button>
-  <button class="tab-btn" onclick="switchTab('delivery')">配達</button>
-  <button class="tab-btn" onclick="switchTab('cash')">現金有高</button>
-  <button class="tab-btn" onclick="switchTab('heatmap')">ヒートマップ</button>
-  <button class="tab-btn" onclick="switchTab('products')">商品管理</button>
+<!-- ─── アクセス拒否画面（社員以外） ─── -->
+<div id="access-denied" class="access-denied">
+  <div class="access-denied-icon">🚫</div>
+  <div class="access-denied-title">このページは社員専用です</div>
+  <div class="access-denied-message">
+    社員ダッシュボードへのアクセス権がありません。<br>
+    あなたの属性：<span class="role-tag" id="user-role-tag">—</span>
+  </div>
+  <button class="access-denied-btn" onclick="closeApp()">LINEに戻る</button>
 </div>
 
-<!-- CONTENT -->
-<div class="content">
+<!-- ─── メインアプリ（社員のみ表示） ─── -->
+<div id="app-main" style="display:none;">
 
-  <!-- REALTIME TAB -->
-  <div id="tab-realtime" class="tab-panel active">
-    <div class="loading-wrap" id="rt-loading">
-      <div class="loader"></div>
-      <p>データを読み込み中...</p>
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-left">
+      <h1>🍱 お江戸弁当</h1>
+      <p>社員ダッシュボード</p>
     </div>
-    <div id="rt-content" style="display:none;">
+    <div class="header-right">
+      <span class="update-time" id="update-time">--:--</span>
+      <button class="refresh-btn" onclick="loadAll()">🔄 更新</button>
+    </div>
+  </div>
 
-      <!-- 天気 -->
-      <div class="weather-bar" id="weather-bar">
-        <span>🌤</span>
-        <span class="weather-item" id="w-condition">--</span>
-        <span class="weather-item">🌡 <span id="w-temp">--</span>℃</span>
-        <span class="weather-item">💨 <span id="w-wind">--</span>m/s</span>
+  <!-- NAV TABS -->
+  <div class="nav-tabs">
+    <button class="tab-btn active" onclick="switchTab('realtime')">リアルタイム</button>
+    <button class="tab-btn" onclick="switchTab('weekly')">週報</button>
+    <button class="tab-btn" onclick="switchTab('monthly')">月報</button>
+    <button class="tab-btn" onclick="switchTab('delivery')">配達</button>
+    <button class="tab-btn" onclick="switchTab('cash')">現金有高</button>
+    <button class="tab-btn" onclick="switchTab('heatmap')">ヒートマップ</button>
+    <button class="tab-btn" onclick="switchTab('products')">商品管理</button>
+    <button class="tab-btn" onclick="switchTab('memos')">申し送り<span class="badge" id="memo-badge" style="display:none;">0</span></button>
+  </div>
+
+  <!-- CONTENT -->
+  <div class="content">
+
+    <!-- REALTIME TAB -->
+    <div id="tab-realtime" class="tab-panel active">
+      <div class="loading-wrap" id="rt-loading">
+        <div class="loader"></div>
+        <p>データを読み込み中...</p>
       </div>
+      <div id="rt-content" style="display:none;">
 
-      <!-- KPI -->
-      <div class="kpi-grid" id="kpi-grid"></div>
-
-      <!-- 16時以降のまとめ -->
-      <div id="daily-summary-wrap" style="display:none;">
-        <div class="daily-summary" id="daily-summary"></div>
-      </div>
-
-      <!-- ベスト・ワースト -->
-      <div class="section-title">完売率ランキング</div>
-      <div class="rank-grid" id="rank-grid"></div>
-
-      <!-- 全拠点一覧 -->
-      <div class="section-title">全拠点一覧</div>
-      <div class="list-controls">
-        <div class="sort-btns">
-          <button class="sort-btn active" onclick="sortLocations('rate_desc')" id="sort-best">ベスト順</button>
-          <button class="sort-btn" onclick="sortLocations('rate_asc')" id="sort-worst">ワースト順</button>
-          <button class="sort-btn" onclick="sortLocations('id')" id="sort-id">ID順</button>
+        <!-- 天気 -->
+        <div class="weather-bar" id="weather-bar">
+          <span>🌤</span>
+          <span class="weather-item" id="w-condition">--</span>
+          <span class="weather-item">🌡 <span id="w-temp">--</span>℃</span>
+          <span class="weather-item">💨 <span id="w-wind">--</span>m/s</span>
         </div>
-        <span style="font-size:12px;color:var(--ink-mute);" id="reported-count"></span>
+
+        <!-- KPI -->
+        <div class="kpi-grid" id="kpi-grid"></div>
+
+        <!-- 16時以降のまとめ -->
+        <div id="daily-summary-wrap" style="display:none;">
+          <div class="daily-summary" id="daily-summary"></div>
+        </div>
+
+        <!-- ベスト・ワースト -->
+        <div class="section-title">完売率ランキング</div>
+        <div class="rank-grid" id="rank-grid"></div>
+
+        <!-- 全拠点一覧 -->
+        <div class="section-title">全拠点一覧</div>
+        <div class="list-controls">
+          <div class="sort-btns">
+            <button class="sort-btn active" onclick="sortLocations('rate_desc')" id="sort-best">ベスト順</button>
+            <button class="sort-btn" onclick="sortLocations('rate_asc')" id="sort-worst">ワースト順</button>
+            <button class="sort-btn" onclick="sortLocations('id')" id="sort-id">ID順</button>
+          </div>
+          <span style="font-size:12px;color:var(--ink-mute);" id="reported-count"></span>
+        </div>
+        <table class="location-table" id="location-table">
+          <thead>
+            <tr>
+              <th>拠点名</th>
+              <th>担当者</th>
+              <th>販売数</th>
+              <th>完売率</th>
+              <th>売上</th>
+              <th>状況</th>
+            </tr>
+          </thead>
+          <tbody id="location-tbody"></tbody>
+        </table>
       </div>
-      <table class="location-table" id="location-table">
+    </div>
+
+    <!-- WEEKLY TAB -->
+    <div id="tab-weekly" class="tab-panel">
+      <div class="loading-wrap" id="wk-loading" style="display:none;">
+        <div class="loader"></div>
+        <p>集計中...</p>
+      </div>
+      <div id="wk-content">
+        <div class="period-selector" id="week-selector"></div>
+        <div id="weekly-data"></div>
+      </div>
+    </div>
+
+    <!-- MONTHLY TAB -->
+    <div id="tab-monthly" class="tab-panel">
+      <div class="loading-wrap" id="mo-loading" style="display:none;">
+        <div class="loader"></div>
+        <p>集計中...</p>
+      </div>
+      <div id="mo-content">
+        <div class="period-selector" id="month-selector"></div>
+        <div id="monthly-data"></div>
+      </div>
+    </div>
+
+    <!-- DELIVERY TAB -->
+    <div id="tab-delivery" class="tab-panel">
+      <div class="loading-wrap" id="dv-loading" style="display:none;">
+        <div class="loader"></div>
+        <p>読み込み中...</p>
+      </div>
+      <div id="dv-content"></div>
+    </div>
+
+    <!-- CASH TAB -->
+    <div id="tab-cash" class="tab-panel">
+      <p style="font-size:12px;color:var(--ink-mute);margin-bottom:12px;">
+        現金有高 ＝ レジ最終金額 − 本日合計ギャラ
+      </p>
+      <table class="cash-table">
         <thead>
           <tr>
             <th>拠点名</th>
-            <th>担当者</th>
-            <th>販売数</th>
-            <th>完売率</th>
-            <th>売上</th>
-            <th>状況</th>
+            <th>販売員名</th>
+            <th>レジ最終金額</th>
+            <th>本日ギャラ</th>
+            <th class="gold-header">現金有高</th>
           </tr>
         </thead>
-        <tbody id="location-tbody"></tbody>
+        <tbody id="cash-tbody">
+          <tr><td colspan="5" style="text-align:center;color:var(--ink-mute);padding:24px;">読み込み中...</td></tr>
+        </tbody>
       </table>
     </div>
-  </div>
 
-  <!-- WEEKLY TAB -->
-  <div id="tab-weekly" class="tab-panel">
-    <div class="loading-wrap" id="wk-loading" style="display:none;">
-      <div class="loader"></div>
-      <p>集計中...</p>
-    </div>
-    <div id="wk-content">
-      <div class="period-selector" id="week-selector"></div>
-      <div id="weekly-data"></div>
-    </div>
-  </div>
+    <!-- HEATMAP TAB -->
+    <div id="tab-heatmap" class="tab-panel">
+      <section id="heatmap-section" class="dashboard-section">
+        <div class="section-header">
+          <h2>ヒートマップ</h2>
+          <div class="period-switch">
+            <button class="period-btn active" data-period="1w">1週</button>
+            <button class="period-btn" data-period="2w">2週</button>
+            <button class="period-btn" data-period="4w">4週</button>
+            <button class="period-btn" data-period="month">月</button>
+          </div>
+        </div>
 
-  <!-- MONTHLY TAB -->
-  <div id="tab-monthly" class="tab-panel">
-    <div class="loading-wrap" id="mo-loading" style="display:none;">
-      <div class="loader"></div>
-      <p>集計中...</p>
-    </div>
-    <div id="mo-content">
-      <div class="period-selector" id="month-selector"></div>
-      <div id="monthly-data"></div>
-    </div>
-  </div>
+        <div class="legend">
+          <span class="legend-item"><span class="legend-color" style="background:#E74C3C"></span>早すぎ (〜12:00)</span>
+          <span class="legend-item"><span class="legend-color" style="background:#F39C12"></span>早い (12:00〜12:10)</span>
+          <span class="legend-item"><span class="legend-color" style="background:#85C1E9"></span>合格 (12:10〜終業-20分)</span>
+          <span class="legend-item"><span class="legend-color" style="background:#27AE60"></span>理想 (終業-20分〜終業)</span>
+          <span class="legend-item"><span class="legend-color" style="background:#BDC3C7"></span>完売せず</span>
+        </div>
 
-  <!-- DELIVERY TAB -->
-  <div id="tab-delivery" class="tab-panel">
-    <div class="loading-wrap" id="dv-loading" style="display:none;">
-      <div class="loader"></div>
-      <p>読み込み中...</p>
+        <div id="heatmap-container" class="heatmap-container">
+          <div class="dashboard-loading">読み込み中...</div>
+        </div>
+
+        <h3 class="ranking-title">粗利ランキング（全拠点）</h3>
+        <div id="ranking-container" class="ranking-container">
+          <div class="dashboard-loading">読み込み中...</div>
+        </div>
+      </section>
     </div>
-    <div id="dv-content"></div>
-  </div>
 
-  <!-- CASH TAB -->
-  <div id="tab-cash" class="tab-panel">
-    <p style="font-size:12px;color:var(--ink-mute);margin-bottom:12px;">
-      現金有高 ＝ レジ最終金額 − 本日合計ギャラ
-    </p>
-    <table class="cash-table">
-      <thead>
-        <tr>
-          <th>拠点名</th>
-          <th>販売員名</th>
-          <th>レジ最終金額</th>
-          <th>本日ギャラ</th>
-          <th class="gold-header">現金有高</th>
-        </tr>
-      </thead>
-      <tbody id="cash-tbody">
-        <tr><td colspan="5" style="text-align:center;color:var(--ink-mute);padding:24px;">読み込み中...</td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <!-- HEATMAP TAB -->
-  <div id="tab-heatmap" class="tab-panel">
-    <section id="heatmap-section" class="dashboard-section">
-      <div class="section-header">
-        <h2>ヒートマップ</h2>
-        <div class="period-switch">
-          <button class="period-btn active" data-period="1w">1週</button>
-          <button class="period-btn" data-period="2w">2週</button>
-          <button class="period-btn" data-period="4w">4週</button>
-          <button class="period-btn" data-period="month">月</button>
+    <!-- PRODUCTS MANAGEMENT TAB -->
+    <div id="tab-products" class="tab-panel">
+      <div class="pm-notice">
+        ※毎日20時に自動リセットされます（停止中の商品が翌日には全て稼働状態に戻ります）
+      </div>
+      <div class="pm-summary-grid" id="pm-summary">
+        <div class="pm-summary-card">
+          <div class="pm-summary-label">全商品</div>
+          <div class="pm-summary-value">—<span>件</span></div>
+        </div>
+        <div class="pm-summary-card">
+          <div class="pm-summary-label">稼働中</div>
+          <div class="pm-summary-value green">—<span>件</span></div>
+        </div>
+        <div class="pm-summary-card">
+          <div class="pm-summary-label">停止中</div>
+          <div class="pm-summary-value red">—<span>件</span></div>
         </div>
       </div>
-
-      <div class="legend">
-        <span class="legend-item"><span class="legend-color" style="background:#E74C3C"></span>早すぎ (〜12:00)</span>
-        <span class="legend-item"><span class="legend-color" style="background:#F39C12"></span>早い (12:00〜12:10)</span>
-        <span class="legend-item"><span class="legend-color" style="background:#85C1E9"></span>合格 (12:10〜終業-20分)</span>
-        <span class="legend-item"><span class="legend-color" style="background:#27AE60"></span>理想 (終業-20分〜終業)</span>
-        <span class="legend-item"><span class="legend-color" style="background:#BDC3C7"></span>完売せず</span>
-      </div>
-
-      <div id="heatmap-container" class="heatmap-container">
-        <div class="dashboard-loading">読み込み中...</div>
-      </div>
-
-      <h3 class="ranking-title">粗利ランキング（全拠点）</h3>
-      <div id="ranking-container" class="ranking-container">
-        <div class="dashboard-loading">読み込み中...</div>
-      </div>
-    </section>
-  </div>
-
-  <!-- PRODUCTS MANAGEMENT TAB（NEW v2026-05-10） -->
-  <div id="tab-products" class="tab-panel">
-    <div class="pm-notice">
-      ※毎日20時に自動リセットされます（停止中の商品が翌日には全て稼働状態に戻ります）
-    </div>
-    <div class="pm-summary-grid" id="pm-summary">
-      <div class="pm-summary-card">
-        <div class="pm-summary-label">全商品</div>
-        <div class="pm-summary-value">—<span>件</span></div>
-      </div>
-      <div class="pm-summary-card">
-        <div class="pm-summary-label">稼働中</div>
-        <div class="pm-summary-value green">—<span>件</span></div>
-      </div>
-      <div class="pm-summary-card">
-        <div class="pm-summary-label">停止中</div>
-        <div class="pm-summary-value red">—<span>件</span></div>
+      <div id="pm-list-wrap">
+        <div class="loading-wrap">
+          <div class="loader"></div>
+          <p>商品リストを読み込み中...</p>
+        </div>
       </div>
     </div>
-    <div id="pm-list-wrap">
-      <div class="loading-wrap">
-        <div class="loader"></div>
-        <p>商品リストを読み込み中...</p>
+
+    <!-- MEMOS TAB（NEW）-->
+    <div id="tab-memos" class="tab-panel">
+      <div class="pm-notice">
+        販売員からの申し送り（直近30日・対応未完了分）。返信するとLINEで通知されます。
+      </div>
+      <div id="memo-list-wrap">
+        <div class="loading-wrap">
+          <div class="loader"></div>
+          <p>申し送りを読み込み中...</p>
+        </div>
       </div>
     </div>
+
   </div>
 
 </div>
@@ -974,16 +1220,11 @@ body {
   </div>
 </div>
 
-<!-- 商品管理 確認モーダル（NEW） -->
+<!-- 商品管理 確認モーダル -->
 <div class="pm-confirm-bg" id="pm-confirm-modal">
   <div class="pm-confirm-card">
     <div class="pm-confirm-header" id="pm-confirm-header">商品の停止</div>
-    <div class="pm-confirm-body" id="pm-confirm-body">
-      以下の商品を停止しますか？
-      <div class="pm-confirm-product" id="pm-confirm-product">—</div>
-      停止すると、レジアプリで販売できなくなります。<br>
-      <span style="font-size:11px;color:var(--ink-mute);">※20時に自動で稼働状態に戻ります</span>
-    </div>
+    <div class="pm-confirm-body" id="pm-confirm-body">—</div>
     <div class="pm-confirm-buttons">
       <button class="pm-confirm-btn cancel" onclick="cancelProductMgmt()">キャンセル</button>
       <button class="pm-confirm-btn confirm-stop" id="pm-confirm-action" onclick="confirmProductMgmt()">確定</button>
@@ -991,15 +1232,91 @@ body {
   </div>
 </div>
 
-<!-- トースト通知（NEW） -->
+<!-- 申し送り対応完了 確認モーダル -->
+<div class="pm-confirm-bg" id="memo-complete-modal">
+  <div class="pm-confirm-card">
+    <div class="pm-confirm-header resume">対応完了</div>
+    <div class="pm-confirm-body" id="memo-complete-body">—</div>
+    <div class="pm-confirm-buttons">
+      <button class="pm-confirm-btn cancel" onclick="cancelMemoComplete()">キャンセル</button>
+      <button class="pm-confirm-btn confirm-resume" id="memo-complete-action" onclick="executeMemoComplete()">完了にする</button>
+    </div>
+  </div>
+</div>
+
+<!-- トースト通知 -->
 <div class="pm-toast" id="pm-toast"></div>
 
 <script>
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5AawPDc7aluPokONkYz6f2ikwl0S487JvhKdKh6QSp1xhEhA/exec';
+const LIFF_ID_DASHBOARD = '2009637457-gAFKfT6y';
 
 let allData     = [];
 let masterData  = { locations: [], products: [] };
 let currentSort = 'rate_desc';
+
+// ─────────────────────────────────────
+// LIFF初期化＋権限チェック
+// ─────────────────────────────────────
+let userProfile = null;  // {userId, displayName, role}
+
+window.addEventListener('load', async function() {
+  try {
+    await liff.init({ liffId: LIFF_ID_DASHBOARD });
+
+    if (!liff.isLoggedIn()) {
+      liff.login({ redirectUri: window.location.href });
+      return;
+    }
+
+    const profile = await liff.getProfile();
+    const roleRes = await fetchJSON(GAS_URL + '?action=getRole&userId=' + encodeURIComponent(profile.userId));
+    const role = (roleRes && roleRes.role) || '';
+
+    userProfile = {
+      userId:      profile.userId,
+      displayName: profile.displayName,
+      role:        role,
+    };
+
+    if (role !== '社員') {
+      // アクセス拒否画面
+      document.getElementById('liff-loading').style.display = 'none';
+      document.getElementById('user-role-tag').textContent = role || '未登録';
+      document.getElementById('access-denied').classList.add('show');
+      return;
+    }
+
+    // 社員：メインアプリ表示
+    document.getElementById('liff-loading').style.display = 'none';
+    document.getElementById('app-main').style.display = 'block';
+
+    // URLハッシュからタブ初期値を判定
+    const hash = window.location.hash;
+    if (hash === '#tab=memos') {
+      switchTab('memos');
+    }
+
+    loadAll();
+    loadMemoBadge();  // 申し送り未対応件数を取得（バッジ表示用）
+
+    // 5分ごとに更新
+    setInterval(loadAll, 5 * 60 * 1000);
+    setInterval(loadMemoBadge, 5 * 60 * 1000);
+
+  } catch(e) {
+    document.getElementById('liff-loading').innerHTML =
+      '<p style="color:var(--red);">起動エラー：' + e.message + '</p>';
+  }
+});
+
+function closeApp() {
+  if (liff.isInClient && liff.isInClient()) {
+    liff.closeWindow();
+  } else {
+    window.location.href = 'https://line.me/';
+  }
+}
 
 // ─────────────────────────────────────
 // DELIVERY
@@ -1175,7 +1492,6 @@ async function loadAll() {
     allData = merged;
     renderRealtime();
 
-    // 現金有高タブが開いていれば更新
     if (document.getElementById('tab-cash').classList.contains('active')) {
       renderCashTable();
     }
@@ -1447,7 +1763,7 @@ function openModal(locationId) {
   const products = masterData.products || [];
   const delivery = JSON.parse(r.deliveryCountJson || '{}');
   const sales    = JSON.parse(r.productSalesJson  || '{}');
-  const soldOutTimes = JSON.parse(r.soldOutTimesJson || '{}');  // ★ 完売時刻
+  const soldOutTimes = JSON.parse(r.soldOutTimesJson || '{}');
 
   let bodyHtml = `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
@@ -1465,7 +1781,7 @@ function openModal(locationId) {
     const rate = d > 0 ? Math.round(s / d * 100) : null;
     const rateStr = rate !== null ? `${rate}%` : '—';
     const barW    = rate !== null ? rate : 0;
-    const soldOutTime = soldOutTimes[p.id];  // ★ この商品の完売時刻
+    const soldOutTime = soldOutTimes[p.id];
     const soldOutBadge = soldOutTime
       ? `<span style="display:inline-block;background:var(--red);color:#FFF;font-size:10px;font-weight:700;padding:2px 6px;border-radius:6px;margin-left:6px;white-space:nowrap;">完売 ${soldOutTime}</span>`
       : '';
@@ -1482,7 +1798,7 @@ function openModal(locationId) {
     bodyHtml += `
       <div style="margin-top:16px;background:var(--gold-light);border-left:3px solid var(--gold);padding:10px 14px;border-radius:0 8px 8px 0;font-size:13px;color:var(--ink-soft);">
         <div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:4px;">申し送り</div>
-        ${r.memo}
+        ${escapeHtml(r.memo)}
       </div>`;
   }
 
@@ -1686,7 +2002,7 @@ function renderMonthlyData(data, yearMonth) {
 // TABS
 // ─────────────────────────────────────
 function switchTab(tab) {
-  const tabNames = ['realtime','weekly','monthly','delivery','cash','heatmap','products'];
+  const tabNames = ['realtime','weekly','monthly','delivery','cash','heatmap','products','memos'];
   document.querySelectorAll('.tab-btn').forEach((b, i) => {
     b.classList.toggle('active', tabNames[i] === tab);
   });
@@ -1699,6 +2015,7 @@ function switchTab(tab) {
   if (tab === 'cash')     renderCashTable();
   if (tab === 'heatmap')  loadHeatmapData();
   if (tab === 'products') loadProductMgmt();
+  if (tab === 'memos')    loadMemos();
 }
 
 function initWeekSelector() {
@@ -1748,14 +2065,8 @@ function selectMonth(val, btn) {
   loadMonthly(val);
 }
 
-// ─────────────────────────────────────
-// AUTO REFRESH (5分ごと)
-// ─────────────────────────────────────
-loadAll();
-setInterval(loadAll, 5 * 60 * 1000);
-
 // ===== ヒートマップ＋粗利ランキング =====
-const HEATMAP_GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5AawPDc7aluPokONkYz6f2ikwl0S487JvhKdKh6QSp1xhEhA/exec';
+const HEATMAP_GAS_URL = GAS_URL;
 const HEATMAP_BUCKET_LABELS = {
   too_early: '早すぎ', early: '早い', pass: '合格', ideal: '理想', not_sold: '完売せず'
 };
@@ -1769,7 +2080,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const heatmapSection = document.getElementById('heatmap-section');
   if (!heatmapSection) return;
 
-  // 期間切替ボタン（ヒートマップ内に限定）
   heatmapSection.querySelectorAll('.period-switch .period-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       heatmapSection.querySelectorAll('.period-switch .period-btn').forEach(b => b.classList.remove('active'));
@@ -1818,7 +2128,7 @@ function renderHeatmap(heatmap) {
   html += '</tr></thead><tbody>';
 
   heatmap.locations.forEach(loc => {
-    html += `<tr><td class="location-cell"><div>${escapeHmHtml(loc.name)}</div><div class="location-meta">終業 ${loc.endTime} / 平均 ${loc.avgDelivery}個</div></td>`;
+    html += `<tr><td class="location-cell"><div>${escapeHtml(loc.name)}</div><div class="location-meta">終業 ${loc.endTime} / 平均 ${loc.avgDelivery}個</div></td>`;
     loc.cells.forEach(cell => {
       if (!cell.bucket) {
         html += '<td><div class="heat-cell empty"></div></td>';
@@ -1848,22 +2158,23 @@ function renderHeatmapRanking(ranking) {
   let html = '<table class="ranking-table"><thead><tr><th class="col-rank">順位</th><th>拠点名</th><th class="col-amount">粗利</th><th class="col-amount">平均納品数</th></tr></thead><tbody>';
   ranking.rows.forEach(row => {
     const profit = row.profit !== null ? `¥${row.profit.toLocaleString()}` : 'ー';
-    html += `<tr><td class="col-rank">${row.hasData ? row.rank : 'ー'}</td><td>${escapeHmHtml(row.name)}</td><td class="col-amount">${profit}</td><td class="col-amount">${row.avgDelivery}</td></tr>`;
+    html += `<tr><td class="col-rank">${row.hasData ? row.rank : 'ー'}</td><td>${escapeHtml(row.name)}</td><td class="col-amount">${profit}</td><td class="col-amount">${row.avgDelivery}</td></tr>`;
   });
   html += '</tbody></table>';
   container.innerHTML = html;
 }
 
-function escapeHmHtml(s) {
+// 共通HTMLエスケープ（既存escapeHmHtmlを統合）
+function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c =>
     ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])
   );
 }
 
-// ===== 商品管理タブ（NEW v2026-05-10） =====
+// ===== 商品管理タブ =====
 let _pmProducts = [];
 let _pmStoppedIds = new Set();
-let _pmPending = null;  // {id, name, willStop}
+let _pmPending = null;
 let _pmLoaded = false;
 
 async function loadProductMgmt() {
@@ -1886,7 +2197,6 @@ async function loadProductMgmt() {
 }
 
 function renderProductMgmt() {
-  // サマリー
   const total = _pmProducts.length;
   const stopped = _pmStoppedIds.size;
   const active = total - stopped;
@@ -1905,7 +2215,6 @@ function renderProductMgmt() {
     </div>
   `;
 
-  // 商品リスト
   const wrap = document.getElementById('pm-list-wrap');
   if (_pmProducts.length === 0) {
     wrap.innerHTML = '<p style="color:var(--ink-mute);font-size:13px;padding:20px;text-align:center;">商品データがありません</p>';
@@ -1917,7 +2226,7 @@ function renderProductMgmt() {
     return `
       <div class="pm-row ${isStopped ? 'stopped' : ''}" id="pm-row-${p.id}">
         <div class="pm-row-id">${p.id}</div>
-        <div class="pm-row-name">${escapeHmHtml(p.name)}</div>
+        <div class="pm-row-name">${escapeHtml(p.name)}</div>
         <span class="pm-row-status ${isStopped ? 'stopped' : 'active'}">${isStopped ? '停止中' : '稼働中'}</span>
         <button class="pm-toggle ${isStopped ? 'off' : ''}" onclick="onProductToggle('${p.id}')" aria-label="トグル"></button>
       </div>`;
@@ -1935,7 +2244,6 @@ function onProductToggle(productId) {
 
   const header = document.getElementById('pm-confirm-header');
   const body = document.getElementById('pm-confirm-body');
-  const product_box = document.getElementById('pm-confirm-product');
   const action = document.getElementById('pm-confirm-action');
 
   if (willStop) {
@@ -1943,7 +2251,7 @@ function onProductToggle(productId) {
     header.className = 'pm-confirm-header stop';
     body.innerHTML = `
       以下の商品を停止しますか？
-      <div class="pm-confirm-product" id="pm-confirm-product">${escapeHmHtml(product.name)}</div>
+      <div class="pm-confirm-product">${escapeHtml(product.name)}</div>
       停止すると、レジアプリで販売できなくなります。<br>
       <span style="font-size:11px;color:var(--ink-mute);">※20時に自動で稼働状態に戻ります</span>
     `;
@@ -1954,7 +2262,7 @@ function onProductToggle(productId) {
     header.className = 'pm-confirm-header resume';
     body.innerHTML = `
       以下の商品を再開しますか？
-      <div class="pm-confirm-product" id="pm-confirm-product">${escapeHmHtml(product.name)}</div>
+      <div class="pm-confirm-product">${escapeHtml(product.name)}</div>
       再開すると、レジアプリで販売可能になります。
     `;
     action.textContent = '再開する';
@@ -1975,7 +2283,7 @@ async function confirmProductMgmt() {
   const status = willStop ? '停止' : '稼働';
 
   const actionBtn = document.getElementById('pm-confirm-action');
-  const cancelBtn = document.querySelector('.pm-confirm-btn.cancel');
+  const cancelBtn = document.querySelector('#pm-confirm-modal .pm-confirm-btn.cancel');
   actionBtn.disabled = true;
   cancelBtn.disabled = true;
   actionBtn.textContent = '処理中...';
@@ -1996,7 +2304,6 @@ async function confirmProductMgmt() {
       throw new Error('サーバーエラー: ' + res.status);
     }
 
-    // 成功 → 状態更新
     if (willStop) {
       _pmStoppedIds.add(id);
     } else {
@@ -2015,7 +2322,6 @@ async function confirmProductMgmt() {
   }
 }
 
-// 確認モーダル：背景クリックで閉じる
 document.getElementById('pm-confirm-modal').addEventListener('click', function(e) {
   if (e.target === this) cancelProductMgmt();
 });
@@ -2028,6 +2334,223 @@ function showPmToast(message, type) {
     toast.className = 'pm-toast';
   }, 2800);
 }
+
+// ═══════════════════════════════════════════════════════════════
+// ★ 申し送り確認タブ（NEW）
+// ═══════════════════════════════════════════════════════════════
+let _memoData = [];
+let _memoExpanded = new Set();  // 展開中のkey
+let _memoCompletePending = null;
+
+// バッジ用の件数取得（タブ未選択でも実行）
+async function loadMemoBadge() {
+  try {
+    const res = await fetchJSON(GAS_URL + '?action=getMemoReports');
+    if (!res.success) return;
+    const count = (res.memos || []).length;
+    const badge = document.getElementById('memo-badge');
+    if (count > 0) {
+      badge.textContent = count;
+      badge.style.display = 'inline-block';
+    } else {
+      badge.style.display = 'none';
+    }
+    // タブが既に開いている場合は中身も更新
+    if (document.getElementById('tab-memos').classList.contains('active')) {
+      _memoData = res.memos || [];
+      renderMemos();
+    }
+  } catch(e) {
+    // バッジ更新失敗は無視
+  }
+}
+
+async function loadMemos() {
+  const wrap = document.getElementById('memo-list-wrap');
+  wrap.innerHTML = '<div class="loading-wrap"><div class="loader"></div><p>申し送りを読み込み中...</p></div>';
+  try {
+    const res = await fetchJSON(GAS_URL + '?action=getMemoReports');
+    if (!res.success) {
+      wrap.innerHTML = `<p style="color:var(--red);font-size:13px;padding:20px;text-align:center;">取得エラー：${res.error || '不明'}</p>`;
+      return;
+    }
+    _memoData = res.memos || [];
+    // バッジ更新
+    const badge = document.getElementById('memo-badge');
+    if (_memoData.length > 0) {
+      badge.textContent = _memoData.length;
+      badge.style.display = 'inline-block';
+    } else {
+      badge.style.display = 'none';
+    }
+    renderMemos();
+  } catch(e) {
+    wrap.innerHTML = `<p style="color:var(--red);font-size:13px;padding:20px;text-align:center;">通信エラー：${e.message}</p>`;
+  }
+}
+
+function makeMemoKey(m) {
+  return [m.date, m.locationId, m.userId].join('|');
+}
+
+function renderMemos() {
+  const wrap = document.getElementById('memo-list-wrap');
+  if (_memoData.length === 0) {
+    wrap.innerHTML = `
+      <div class="memo-empty">
+        ✨ 未対応の申し送りはありません<br>
+        <span style="font-size:11px;">対応完了したものはここから消えます</span>
+      </div>
+    `;
+    return;
+  }
+
+  const html = '<div class="memo-board">' + _memoData.map(m => {
+    const key = makeMemoKey(m);
+    const isExpanded = _memoExpanded.has(key);
+    const replyCount = (m.replies || []).length;
+    const replyBadgeClass = replyCount > 0 ? '' : 'zero';
+
+    let repliesHtml = '';
+    if (replyCount > 0) {
+      repliesHtml = '<div class="memo-card-replies ' + (isExpanded ? 'expanded' : '') + '" id="replies-' + escapeHtml(key) + '">' +
+        m.replies.map(r => `
+          <div class="memo-reply-row">
+            <div class="memo-reply-row-header">
+              <span class="memo-reply-row-name">${escapeHtml(r.replierName || '—')}</span>
+              <span class="memo-reply-row-time">${r.date} ${r.time}</span>
+            </div>
+            <div class="memo-reply-row-content">${escapeHtml(r.content || '')}</div>
+          </div>
+        `).join('') +
+      '</div>';
+    }
+
+    const toggleBtn = replyCount > 0
+      ? `<button class="memo-action-btn toggle" onclick="toggleMemoReplies('${escapeHtml(key)}')">${isExpanded ? '折りたたむ' : '返信を見る'}</button>`
+      : '';
+
+    return `
+      <div class="memo-card-item">
+        <div class="memo-card-top">
+          <div class="memo-card-top-left">
+            <div class="memo-card-meta">${m.date} ${m.time}</div>
+            <div class="memo-card-loc">${escapeHtml(m.locationName || '(拠点名なし)')}</div>
+            <div class="memo-card-staff">販売員：${escapeHtml(m.userName || '(名前なし)')}</div>
+          </div>
+          <div class="memo-card-reply-count ${replyBadgeClass}">返信 ${replyCount}</div>
+        </div>
+        <div class="memo-card-body">${escapeHtml(m.memo)}</div>
+        ${repliesHtml}
+        <div class="memo-card-actions">
+          ${toggleBtn}
+          <button class="memo-action-btn reply" onclick="openMemoReply('${escapeHtml(m.date)}','${escapeHtml(m.locationId)}','${escapeHtml(m.userId)}')">返信する</button>
+          <button class="memo-action-btn complete" onclick="confirmMemoComplete('${escapeHtml(makeMemoKey(m))}')">対応完了</button>
+        </div>
+      </div>
+    `;
+  }).join('') + '</div>';
+
+  wrap.innerHTML = html;
+}
+
+function toggleMemoReplies(key) {
+  if (_memoExpanded.has(key)) {
+    _memoExpanded.delete(key);
+  } else {
+    _memoExpanded.add(key);
+  }
+  renderMemos();
+}
+
+function openMemoReply(date, locId, userId) {
+  const m = _memoData.find(x => x.date === date && x.locationId === locId && x.userId === userId);
+  if (!m) {
+    showPmToast('申し送りが見つかりません', 'error');
+    return;
+  }
+  // memo-reply.htmlに遷移（URLパラメータで申し送りを特定）
+  const params = new URLSearchParams();
+  params.append('date',    m.date);
+  params.append('locId',   m.locationId);
+  params.append('locName', m.locationName);
+  params.append('uid',     m.userId);
+  params.append('uname',   m.userName);
+  params.append('memo',    m.memo);
+  window.location.href = 'memo-reply.html?' + params.toString();
+}
+
+// 対応完了 確認モーダル
+function confirmMemoComplete(key) {
+  const m = _memoData.find(x => makeMemoKey(x) === key);
+  if (!m) return;
+  _memoCompletePending = m;
+  document.getElementById('memo-complete-body').innerHTML = `
+    以下の申し送りを対応完了にしますか？
+    <div class="pm-confirm-product">
+      ${escapeHtml(m.locationName)} / ${escapeHtml(m.userName)}<br>
+      <span style="font-size:11px;font-weight:normal;color:var(--ink-mute);">${m.date}</span>
+    </div>
+    完了後は一覧から消えます。<br>
+    <span style="font-size:11px;color:var(--ink-mute);">※販売員への通知はされません</span>
+  `;
+  document.getElementById('memo-complete-modal').classList.add('show');
+}
+
+function cancelMemoComplete() {
+  _memoCompletePending = null;
+  document.getElementById('memo-complete-modal').classList.remove('show');
+}
+
+async function executeMemoComplete() {
+  if (!_memoCompletePending) return;
+  const m = _memoCompletePending;
+  const btn = document.getElementById('memo-complete-action');
+  const cancelBtn = document.querySelector('#memo-complete-modal .pm-confirm-btn.cancel');
+  btn.disabled = true;
+  cancelBtn.disabled = true;
+  btn.textContent = '処理中...';
+
+  try {
+    const payload = {
+      action:             'markMemoComplete',
+      targetDate:         m.date,
+      targetLocationId:   m.locationId,
+      targetLocationName: m.locationName,
+      targetUserId:       m.userId,
+      targetUserName:     m.userName,
+      completerName:      userProfile.displayName,
+    };
+
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload),
+      redirect: 'follow',
+    });
+
+    const result = await res.json();
+    if (!result.success) {
+      throw new Error(result.error || '不明なエラー');
+    }
+
+    showPmToast('対応完了にしました', 'success');
+    document.getElementById('memo-complete-modal').classList.remove('show');
+    _memoCompletePending = null;
+    setTimeout(() => loadMemos(), 500);
+
+  } catch(e) {
+    showPmToast('エラー：' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    cancelBtn.disabled = false;
+    btn.textContent = '完了にする';
+  }
+}
+
+document.getElementById('memo-complete-modal').addEventListener('click', function(e) {
+  if (e.target === this) cancelMemoComplete();
+});
 </script>
 </body>
 </html>
