@@ -620,6 +620,238 @@ input { font-family: inherit; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 .loading-text { font-size: 13px; color: var(--ink-soft); font-weight: 600; }
+
+/* ═══ タブバー ═══ */
+.tab-bar {
+  display: flex;
+  background: var(--white);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 52px;
+  z-index: 40;
+  box-shadow: 0 1px 0 rgba(0,0,0,.04);
+}
+.tab-btn {
+  flex: 1;
+  padding: 12px 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-mute);
+  background: var(--white);
+  border-bottom: 2px solid transparent;
+  transition: color .15s, border-color .15s;
+  position: relative;
+}
+.tab-btn:active { background: var(--cream); }
+.tab-btn.active {
+  color: var(--navy);
+  border-bottom-color: var(--navy);
+}
+.tab-btn .badge-tab {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: var(--orange);
+  color: #FFF;
+  font-size: 10px;
+  font-weight: 700;
+  min-width: 18px;
+  height: 18px;
+  line-height: 18px;
+  vertical-align: middle;
+}
+.tab-btn .badge-tab[hidden] { display: none; }
+
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* ═══ スタッフ管理タブ ═══ */
+.staff-section { margin: 0 16px 12px; }
+.staff-section .sec-title { margin-left: 0; margin-right: 0; }
+
+.orphan-card {
+  background: var(--warn-bg);
+  border: 1px solid var(--orange);
+  border-left-width: 4px;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+.orphan-card .head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.orphan-card .name { font-weight: 700; color: var(--orange); font-size: 14px; flex: 1; min-width: 0; }
+.orphan-card .meta { font-size: 11px; color: var(--ink-soft); }
+.orphan-card .actions { display: flex; gap: 6px; }
+.orphan-card .actions button {
+  flex: 1;
+  padding: 8px 6px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.orphan-card .btn-add { background: var(--green); color: #FFF; }
+.orphan-card .btn-add:active { background: #1E8449; }
+.orphan-card .btn-ignore { background: var(--white); color: var(--ink-soft); border: 1px solid var(--border); }
+.orphan-card .btn-ignore:active { background: var(--cream); }
+
+.collapse-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+.collapse-head:active { background: var(--cream); }
+.collapse-head .caret { font-size: 11px; color: var(--ink-mute); transition: transform .2s; }
+.collapse.open .collapse-head { border-radius: 8px 8px 0 0; }
+.collapse.open .collapse-head .caret { transform: rotate(90deg); }
+.collapse-body {
+  display: none;
+  padding: 4px 12px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+}
+.collapse.open .collapse-body { display: block; }
+.ignored-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-light);
+  font-size: 13px;
+}
+.ignored-item:last-child { border-bottom: none; }
+.ignored-item button {
+  padding: 6px 12px;
+  border-radius: 6px;
+  background: var(--blue);
+  color: #FFF;
+  font-size: 11px;
+  font-weight: 700;
+}
+.ignored-item button:active { background: #1F618D; }
+
+.add-staff-btn {
+  width: 100%;
+  padding: 12px;
+  margin-bottom: 10px;
+  background: var(--green);
+  color: #FFF;
+  font-size: 14px;
+  font-weight: 700;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.add-staff-btn:active { background: #1E8449; transform: scale(.98); }
+
+.staff-card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 6px;
+  overflow: hidden;
+  transition: box-shadow .15s, border-color .15s;
+}
+.staff-card.expanded { border-color: var(--blue); box-shadow: 0 2px 8px rgba(36,113,163,.12); }
+.staff-card.spot { background: var(--warn-bg); border-color: #F5CBA7; }
+.staff-card-head {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  cursor: pointer;
+  gap: 8px;
+  user-select: none;
+}
+.staff-card-head:active { background: var(--cream); }
+.staff-card.spot .staff-card-head:active { background: var(--orange-light); }
+.staff-card .name { flex: 1; font-size: 14px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.staff-card.spot .name { color: var(--orange); }
+.staff-card .prefs-mini {
+  font-size: 10px;
+  color: var(--ink-mute);
+  max-width: 50%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.staff-card .caret { font-size: 12px; color: var(--ink-mute); transition: transform .2s; flex-shrink: 0; }
+.staff-card.expanded .caret { transform: rotate(90deg); }
+.staff-card-body {
+  display: none;
+  padding: 12px;
+  border-top: 1px solid var(--border-light);
+  background: var(--cream);
+}
+.staff-card.expanded .staff-card-body { display: block; }
+
+.form-row { margin-bottom: 10px; }
+.form-row label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-mute);
+  margin-bottom: 4px;
+  letter-spacing: .05em;
+}
+.form-row select,
+.form-row input {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--white);
+  color: var(--ink);
+}
+.form-row select:focus,
+.form-row input:focus { outline: none; border-color: var(--blue); }
+
+.form-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+  margin-top: 14px;
+}
+.form-actions button {
+  padding: 10px 4px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.btn-save { background: var(--green); color: #FFF; }
+.btn-save:active { background: #1E8449; }
+.btn-rename { background: var(--blue); color: #FFF; }
+.btn-rename:active { background: #1F618D; }
+.btn-delete { background: var(--red); color: #FFF; }
+.btn-delete:active { background: #922B21; }
+
+.warn-note {
+  font-size: 11px;
+  color: var(--ink-soft);
+  background: var(--warn-bg);
+  padding: 10px 12px;
+  border-radius: 6px;
+  border-left: 3px solid var(--orange);
+  line-height: 1.6;
+  margin-top: 8px;
+}
 </style>
 </head>
 <body>
@@ -642,6 +874,13 @@ input { font-family: inherit; }
     </div>
     <button class="logout" onclick="logout()">ログアウト</button>
   </header>
+
+  <div class="tab-bar">
+    <button class="tab-btn active" id="tab-shift" onclick="switchTab('shift')">📋 シフト管理</button>
+    <button class="tab-btn" id="tab-staff" onclick="switchTab('staff')">👥 スタッフ管理<span class="badge-tab" id="orphanBadge" hidden>0</span></button>
+  </div>
+
+  <div class="tab-panel active" id="panel-shift">
 
   <div class="actions">
     <button class="act-btn assign" onclick="confirmAssign()">
@@ -685,6 +924,41 @@ input { font-family: inherit; }
     <button class="reload-btn" onclick="loadAll()">🔄 再読み込み</button>
   </div>
 
+  </div><!-- /panel-shift -->
+
+  <div class="tab-panel" id="panel-staff">
+
+    <div class="staff-section" id="orphanSection" style="display:none">
+      <div class="sec-title">⚠️ 未登録の名前 <span id="orphanCount" style="margin-left:auto;font-weight:500;color:var(--orange);font-size:11px;letter-spacing:0"></span></div>
+      <div id="orphanList"></div>
+    </div>
+
+    <div class="staff-section" id="ignoredSection" style="display:none">
+      <div class="collapse" id="ignoredCollapse">
+        <div class="collapse-head" onclick="toggleCollapse('ignoredCollapse')">
+          <span>🚫 無視リスト <span id="ignoredCount" style="color:var(--ink-mute);font-weight:500;margin-left:4px"></span></span>
+          <span class="caret">▶</span>
+        </div>
+        <div class="collapse-body" id="ignoredList"></div>
+      </div>
+    </div>
+
+    <div class="staff-section">
+      <div class="sec-title">📋 販売員一覧 <span id="staffTotalCount" style="margin-left:auto;font-weight:500;color:var(--ink-mute);font-size:11px;letter-spacing:0"></span></div>
+      <button class="add-staff-btn" onclick="openAddStaffSheet()">
+        <span style="font-size:18px;line-height:1">＋</span> 新規追加
+      </button>
+      <div id="staffList">
+        <div class="pool-empty">読み込み中...</div>
+      </div>
+    </div>
+
+    <div class="reload-wrap">
+      <button class="reload-btn" onclick="loadStaffTab()">🔄 再読み込み</button>
+    </div>
+
+  </div><!-- /panel-staff -->
+
 </div>
 
 <div class="sheet-overlay" id="sheetOverlay" onclick="if(event.target===this)closeSheet()">
@@ -727,6 +1001,69 @@ input { font-family: inherit; }
   </div>
 </div>
 
+<div class="sheet-overlay" id="staffEditOverlay" onclick="if(event.target===this)closeStaffEdit()">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-head">
+      <div class="sheet-title" id="staffEditTitle">＋ 新規追加</div>
+      <div class="sheet-sub" id="staffEditSub">販売員情報を入力</div>
+    </div>
+    <div class="sheet-body" style="padding:16px">
+      <div class="form-row" id="staffEditNameRow">
+        <label>名前 <span style="color:var(--red)">*</span></label>
+        <input type="text" id="staffEditName" placeholder="例: 山田太郎">
+      </div>
+      <div class="form-row">
+        <label>第1希望拠点</label>
+        <select id="staffEditPref1"></select>
+      </div>
+      <div class="form-row">
+        <label>第2希望拠点</label>
+        <select id="staffEditPref2"></select>
+      </div>
+      <div class="form-row">
+        <label>第3希望拠点</label>
+        <select id="staffEditPref3"></select>
+      </div>
+      <div class="form-row">
+        <label>特別ギャラ（円）</label>
+        <input type="number" id="staffEditSalary" placeholder="0" inputmode="numeric">
+      </div>
+      <div class="form-row">
+        <label>備考</label>
+        <input type="text" id="staffEditNote" placeholder="任意">
+      </div>
+    </div>
+    <div class="sheet-foot">
+      <button class="btn btn-ghost" onclick="closeStaffEdit()">キャンセル</button>
+      <button class="btn btn-warn" id="staffEditSaveBtn" onclick="submitStaffEdit()">追加</button>
+    </div>
+  </div>
+</div>
+
+<div class="sheet-overlay" id="renameOverlay" onclick="if(event.target===this)closeRename()">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-head">
+      <div class="sheet-title">✏️ 名前変更</div>
+      <div class="sheet-sub" id="renameSub">—</div>
+    </div>
+    <div class="sheet-body" style="padding:16px">
+      <div class="form-row">
+        <label>新しい名前 <span style="color:var(--red)">*</span></label>
+        <input type="text" id="renameInput" placeholder="新しい名前を入力">
+      </div>
+      <div class="warn-note">
+        ⚠️ 名前を変更すると、シフト表・回答シート・通知履歴の該当データもすべて連動更新されます。
+      </div>
+    </div>
+    <div class="sheet-foot">
+      <button class="btn btn-ghost" onclick="closeRename()">キャンセル</button>
+      <button class="btn btn-warn" onclick="submitRename()">変更する</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 <div class="loading" id="loading">
   <div class="spinner"></div>
@@ -749,6 +1086,13 @@ const state = {
   diffs: [],
   selected: null,
   selectedStaff: null,
+  activeTab: 'shift',
+  salesStaff: [],
+  orphans: [],
+  ignored: [],
+  staffTabLoaded: false,
+  editingIndex: -1,
+  editMode: null,
 };
 
 function login() {
@@ -1276,6 +1620,397 @@ function escapeHtml(s) {
 }
 function escapeAttr(s) {
   return String(s ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
+
+/* ═══ スタッフ管理タブ ═══ */
+
+function switchTab(tab) {
+  state.activeTab = tab;
+  document.getElementById('tab-shift').classList.toggle('active', tab === 'shift');
+  document.getElementById('tab-staff').classList.toggle('active', tab === 'staff');
+  document.getElementById('panel-shift').classList.toggle('active', tab === 'shift');
+  document.getElementById('panel-staff').classList.toggle('active', tab === 'staff');
+
+  if (tab === 'staff' && !state.staffTabLoaded) {
+    loadStaffTab();
+  }
+}
+
+async function loadStaffTab() {
+  setStatus('busy', 'スタッフ情報を読み込み中...');
+  try {
+    const [listResp, orphResp] = await Promise.all([
+      apiGet('getSalesStaffList'),
+      apiGet('getOrphanNames'),
+    ]);
+    if (!listResp.success) throw new Error(listResp.error || 'スタッフ取得失敗');
+    if (!orphResp.success) throw new Error(orphResp.error || '孤児名取得失敗');
+
+    state.salesStaff = listResp.staff || [];
+    state.orphans = orphResp.orphans || [];
+    state.ignored = orphResp.ignored || [];
+    state.staffTabLoaded = true;
+
+    renderOrphans();
+    renderIgnored();
+    renderStaffList();
+    updateOrphanBadge();
+    setStatus('ok', `販売員 ${state.salesStaff.length}名 / 未登録名 ${state.orphans.length}件`);
+  } catch (e) {
+    setStatus('err', `エラー: ${e.message}`);
+    toast(`読込失敗: ${e.message}`, 'err');
+  }
+}
+
+function updateOrphanBadge() {
+  const badge = document.getElementById('orphanBadge');
+  const n = state.orphans.length;
+  if (n > 0) { badge.textContent = n; badge.hidden = false; }
+  else { badge.hidden = true; }
+}
+
+function renderOrphans() {
+  const sec = document.getElementById('orphanSection');
+  const list = document.getElementById('orphanList');
+  const countEl = document.getElementById('orphanCount');
+
+  if (state.orphans.length === 0) {
+    sec.style.display = 'none';
+    return;
+  }
+  sec.style.display = 'block';
+  countEl.textContent = `${state.orphans.length}件`;
+
+  let html = '';
+  state.orphans.forEach((o, i) => {
+    const sources = (o.sources || []).join('+');
+    html += `<div class="orphan-card">
+      <div class="head">
+        <span class="name">${escapeHtml(o.name)}</span>
+        <span class="meta">${escapeHtml(sources)} / ${o.count}件</span>
+      </div>
+      <div class="actions">
+        <button class="btn-add" onclick="addOrphanAsStaff(${i})">＋ 一覧に追加</button>
+        <button class="btn-ignore" onclick="ignoreOrphanAction(${i})">🚫 無視</button>
+      </div>
+    </div>`;
+  });
+  list.innerHTML = html;
+}
+
+function renderIgnored() {
+  const sec = document.getElementById('ignoredSection');
+  const list = document.getElementById('ignoredList');
+  const countEl = document.getElementById('ignoredCount');
+
+  if (state.ignored.length === 0) {
+    sec.style.display = 'none';
+    return;
+  }
+  sec.style.display = 'block';
+  countEl.textContent = `(${state.ignored.length}件)`;
+
+  let html = '';
+  state.ignored.forEach((name, i) => {
+    html += `<div class="ignored-item">
+      <span>${escapeHtml(name)}</span>
+      <button onclick="unignoreOrphanAction(${i})">元に戻す</button>
+    </div>`;
+  });
+  list.innerHTML = html;
+}
+
+function toggleCollapse(id) {
+  document.getElementById(id).classList.toggle('open');
+}
+
+function renderStaffList() {
+  const wrap = document.getElementById('staffList');
+  const countEl = document.getElementById('staffTotalCount');
+  countEl.textContent = `${state.salesStaff.length}名`;
+
+  if (state.salesStaff.length === 0) {
+    wrap.innerHTML = '<div class="pool-empty">販売員が登録されていません</div>';
+    return;
+  }
+
+  let html = '';
+  state.salesStaff.forEach((s, idx) => {
+    const spotClass = s.isSpot ? 'spot' : '';
+    let prefsMini;
+    if (s.isSpot) {
+      prefsMini = 'スポット枠';
+    } else {
+      const prefs = [s.pref1, s.pref2, s.pref3].filter(x => x);
+      prefsMini = prefs.length > 0 ? prefs.join(' / ') : '希望なし';
+    }
+    html += `<div class="staff-card ${spotClass}" id="staffCard_${idx}">
+      <div class="staff-card-head" onclick="toggleStaffCard(${idx})">
+        <span class="name">${escapeHtml(s.name)}</span>
+        <span class="prefs-mini">${escapeHtml(prefsMini)}</span>
+        <span class="caret">▶</span>
+      </div>`;
+
+    if (!s.isSpot) {
+      html += `<div class="staff-card-body">
+        <div class="form-row">
+          <label>第1希望拠点</label>
+          <select id="pref1_${idx}"></select>
+        </div>
+        <div class="form-row">
+          <label>第2希望拠点</label>
+          <select id="pref2_${idx}"></select>
+        </div>
+        <div class="form-row">
+          <label>第3希望拠点</label>
+          <select id="pref3_${idx}"></select>
+        </div>
+        <div class="form-row">
+          <label>特別ギャラ（円）</label>
+          <input type="number" id="salary_${idx}" value="${Number(s.specialSalary) || 0}" inputmode="numeric">
+        </div>
+        <div class="form-row">
+          <label>備考</label>
+          <input type="text" id="note_${idx}" value="${escapeHtml(s.note || '')}">
+        </div>
+        <div class="form-actions">
+          <button class="btn-save" onclick="saveStaffCard(${idx})">💾 保存</button>
+          <button class="btn-rename" onclick="openRenameSheet(${idx})">✏️ 名前変更</button>
+          <button class="btn-delete" onclick="deleteStaffAction(${idx})">🗑 削除</button>
+        </div>
+      </div>`;
+    }
+
+    html += `</div>`;
+  });
+  wrap.innerHTML = html;
+}
+
+function toggleStaffCard(idx) {
+  const card = document.getElementById(`staffCard_${idx}`);
+  if (!card) return;
+  const wasExpanded = card.classList.contains('expanded');
+
+  document.querySelectorAll('.staff-card.expanded').forEach(c => c.classList.remove('expanded'));
+
+  if (!wasExpanded) {
+    card.classList.add('expanded');
+    const seller = state.salesStaff[idx];
+    if (seller && !seller.isSpot) {
+      ['pref1', 'pref2', 'pref3'].forEach(p => {
+        const sel = document.getElementById(`${p}_${idx}`);
+        if (sel) populateBaseSelect(sel, seller[p]);
+      });
+    }
+  }
+}
+
+function populateBaseSelect(selectEl, currentValue) {
+  let opts = '<option value="">— 選択なし —</option>';
+  state.bases.forEach(b => {
+    const selected = b.name === currentValue ? 'selected' : '';
+    opts += `<option value="${escapeHtml(b.name)}" ${selected}>${escapeHtml(b.name)}</option>`;
+  });
+  selectEl.innerHTML = opts;
+}
+
+async function saveStaffCard(idx) {
+  const seller = state.salesStaff[idx];
+  if (!seller) return;
+  const pref1 = document.getElementById(`pref1_${idx}`).value;
+  const pref2 = document.getElementById(`pref2_${idx}`).value;
+  const pref3 = document.getElementById(`pref3_${idx}`).value;
+  const salary = document.getElementById(`salary_${idx}`).value;
+  const note = document.getElementById(`note_${idx}`).value;
+
+  showLoading(`${seller.name} を保存中...`);
+  try {
+    const data = await apiPost('updateSalesStaff', {
+      originalName: seller.name,
+      pref1, pref2, pref3,
+      specialSalary: Number(salary) || 0,
+      note,
+    });
+    if (!data.success) throw new Error(data.error || '保存失敗');
+    toast(`${seller.name} を保存しました`, 'ok');
+    state.salesStaff[idx] = {
+      ...seller, pref1, pref2, pref3,
+      specialSalary: Number(salary) || 0,
+      note,
+    };
+    renderStaffList();
+  } catch (e) {
+    toast(`保存失敗: ${e.message}`, 'err');
+  } finally {
+    hideLoading();
+  }
+}
+
+async function deleteStaffAction(idx) {
+  const seller = state.salesStaff[idx];
+  if (!seller) return;
+  if (!confirm(`「${seller.name}」を削除します。よろしいですか？\n\n※シフト表や回答シートの該当データは残ります。`)) return;
+  showLoading('削除中...');
+  try {
+    const data = await apiPost('deleteSalesStaff', { name: seller.name });
+    if (!data.success) throw new Error(data.error || '削除失敗');
+    toast(`${seller.name} を削除しました`, 'ok');
+    await loadStaffTab();
+  } catch (e) {
+    toast(`削除失敗: ${e.message}`, 'err');
+  } finally {
+    hideLoading();
+  }
+}
+
+function openAddStaffSheet() {
+  state.editingIndex = -1;
+  state.editMode = 'add';
+  document.getElementById('staffEditTitle').textContent = '＋ 新規追加';
+  document.getElementById('staffEditSub').textContent = '販売員情報を入力してください';
+  document.getElementById('staffEditNameRow').style.display = 'block';
+  document.getElementById('staffEditName').value = '';
+  populateBaseSelect(document.getElementById('staffEditPref1'), '');
+  populateBaseSelect(document.getElementById('staffEditPref2'), '');
+  populateBaseSelect(document.getElementById('staffEditPref3'), '');
+  document.getElementById('staffEditSalary').value = '0';
+  document.getElementById('staffEditNote').value = '';
+  document.getElementById('staffEditSaveBtn').textContent = '追加';
+  document.getElementById('staffEditOverlay').classList.add('show');
+}
+
+function closeStaffEdit() {
+  document.getElementById('staffEditOverlay').classList.remove('show');
+}
+
+async function submitStaffEdit() {
+  const isAdd = state.editMode === 'add';
+  let name;
+  if (isAdd) {
+    name = document.getElementById('staffEditName').value.trim();
+    if (!name) { toast('名前を入力してください', 'err'); return; }
+  } else {
+    const seller = state.salesStaff[state.editingIndex];
+    if (!seller) { toast('対象が見つかりません', 'err'); return; }
+    name = seller.name;
+  }
+
+  const payload = {
+    pref1: document.getElementById('staffEditPref1').value,
+    pref2: document.getElementById('staffEditPref2').value,
+    pref3: document.getElementById('staffEditPref3').value,
+    specialSalary: Number(document.getElementById('staffEditSalary').value) || 0,
+    note: document.getElementById('staffEditNote').value,
+  };
+
+  showLoading(isAdd ? '追加中...' : '保存中...');
+  try {
+    const data = isAdd
+      ? await apiPost('addSalesStaff', { ...payload, name })
+      : await apiPost('updateSalesStaff', { ...payload, originalName: name });
+    if (!data.success) throw new Error(data.error || '失敗');
+    closeStaffEdit();
+    toast(data.message || '完了しました', 'ok');
+    await loadStaffTab();
+  } catch (e) {
+    toast(`失敗: ${e.message}`, 'err');
+  } finally {
+    hideLoading();
+  }
+}
+
+function openRenameSheet(idx) {
+  const seller = state.salesStaff[idx];
+  if (!seller) return;
+  state.editingIndex = idx;
+  document.getElementById('renameSub').textContent = `現在: ${seller.name}`;
+  document.getElementById('renameInput').value = seller.name;
+  document.getElementById('renameOverlay').classList.add('show');
+}
+
+function closeRename() {
+  document.getElementById('renameOverlay').classList.remove('show');
+}
+
+async function submitRename() {
+  const seller = state.salesStaff[state.editingIndex];
+  if (!seller) { toast('対象が見つかりません', 'err'); return; }
+  const oldName = seller.name;
+  const newName = document.getElementById('renameInput').value.trim();
+  if (!newName) { toast('新しい名前を入力してください', 'err'); return; }
+  if (oldName === newName) { toast('名前が同じです', 'err'); return; }
+  if (!confirm(`${oldName} → ${newName} に変更します。\n\nシフト表・回答シート・通知履歴も連動更新されます。\nよろしいですか？`)) return;
+
+  showLoading('名前を変更中...');
+  try {
+    const data = await apiPost('renameSalesStaff', { oldName, newName });
+    if (!data.success) throw new Error(data.error || '失敗');
+    closeRename();
+    const c = data.counts || {};
+    toast(`変更完了（シフト表:${c.shift || 0} / 回答:${c.answer || 0} / 通知:${c.notify || 0}）`, 'ok');
+    await loadStaffTab();
+    if (state.activeTab === 'shift') {
+      await loadAll();
+    } else {
+      // シフト管理タブ側のstateも次回読み込みのためクリアしておく
+      state.sellers = [];
+    }
+  } catch (e) {
+    toast(`失敗: ${e.message}`, 'err');
+  } finally {
+    hideLoading();
+  }
+}
+
+async function addOrphanAsStaff(i) {
+  const o = state.orphans[i];
+  if (!o) return;
+  if (!confirm(`「${o.name}」を販売員一覧に追加します。\n希望拠点は後から編集できます。`)) return;
+  showLoading('追加中...');
+  try {
+    const data = await apiPost('addSalesStaff', {
+      name: o.name, pref1: '', pref2: '', pref3: '', specialSalary: 0, note: '',
+    });
+    if (!data.success) throw new Error(data.error || '失敗');
+    toast(`${o.name} を販売員一覧に追加`, 'ok');
+    await loadStaffTab();
+  } catch (e) {
+    toast(`失敗: ${e.message}`, 'err');
+  } finally {
+    hideLoading();
+  }
+}
+
+async function ignoreOrphanAction(i) {
+  const o = state.orphans[i];
+  if (!o) return;
+  showLoading('無視リストに追加中...');
+  try {
+    const data = await apiPost('ignoreOrphan', { name: o.name });
+    if (!data.success) throw new Error(data.error || '失敗');
+    toast(`${o.name} を無視リストへ`, 'ok');
+    await loadStaffTab();
+  } catch (e) {
+    toast(`失敗: ${e.message}`, 'err');
+  } finally {
+    hideLoading();
+  }
+}
+
+async function unignoreOrphanAction(i) {
+  const name = state.ignored[i];
+  if (!name) return;
+  showLoading('無視リストから削除中...');
+  try {
+    const data = await apiPost('unignoreOrphan', { name });
+    if (!data.success) throw new Error(data.error || '失敗');
+    toast(`${name} を無視リストから削除`, 'ok');
+    await loadStaffTab();
+  } catch (e) {
+    toast(`失敗: ${e.message}`, 'err');
+  } finally {
+    hideLoading();
+  }
 }
 
 if (sessionStorage.getItem('shift_admin_auth') === '1') {
