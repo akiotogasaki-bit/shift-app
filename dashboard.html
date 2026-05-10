@@ -703,6 +703,9 @@ body {
   overflow: hidden;
   transform: scale(.9);
   transition: transform .2s;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
 }
 .pm-confirm-bg.show .pm-confirm-card { transform: scale(1); }
 .pm-confirm-header {
@@ -710,6 +713,7 @@ body {
   color: #FFF;
   font-size: 14px;
   font-weight: 700;
+  flex-shrink: 0;
 }
 .pm-confirm-header.stop { background: var(--red); }
 .pm-confirm-header.resume { background: var(--green); }
@@ -718,6 +722,8 @@ body {
   font-size: 14px;
   color: var(--ink-soft);
   line-height: 1.6;
+  overflow-y: auto;
+  flex: 1;
 }
 .pm-confirm-product {
   background: var(--cream);
@@ -728,10 +734,26 @@ body {
   color: var(--ink);
   font-size: 13px;
 }
+.pm-confirm-product-list {
+  background: var(--cream);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin: 12px 0;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.pm-confirm-product-list-item {
+  padding: 4px 0;
+  font-size: 13px;
+  color: var(--ink);
+  border-bottom: 1px dashed var(--border);
+}
+.pm-confirm-product-list-item:last-child { border-bottom: none; }
 .pm-confirm-buttons {
   display: flex;
   gap: 8px;
   padding: 0 20px 20px;
+  flex-shrink: 0;
 }
 .pm-confirm-btn {
   flex: 1;
@@ -781,6 +803,85 @@ body {
 }
 .pm-toast.error { background: var(--red); }
 .pm-toast.success { background: var(--green); }
+
+/* ===== 商品管理タブ 一括選択対応（v2026-05-11 NEW） ===== */
+.pm-batch-bar {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  box-shadow: 0 1px 3px rgba(0,0,0,.04);
+}
+.pm-batch-checkbox-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  user-select: none;
+}
+.pm-batch-checkbox {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--red);
+  margin: 0;
+}
+.pm-batch-count {
+  font-size: 12px;
+  color: var(--ink-mute);
+  margin-left: auto;
+  white-space: nowrap;
+}
+.pm-batch-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.pm-batch-btn {
+  border: none;
+  padding: 9px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  color: #FFF;
+  transition: opacity .15s;
+}
+.pm-batch-btn.stop { background: var(--red); }
+.pm-batch-btn.resume { background: var(--green); }
+.pm-batch-btn:hover:not(:disabled) { opacity: .85; }
+.pm-batch-btn:disabled { opacity: .4; cursor: not-allowed; }
+.pm-row-checkbox-wrap {
+  display: flex;
+  align-items: center;
+  margin-right: 4px;
+  cursor: pointer;
+  padding: 4px;
+}
+.pm-row-checkbox {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--red);
+  margin: 0;
+}
+.pm-row.selected {
+  background: #FFF8F0;
+  box-shadow: inset 3px 0 0 var(--red);
+}
+.pm-row.selected.stopped {
+  background: #FDF0EE;
+}
 
 /* ===== 申し送り確認タブ（基本） ===== */
 .memo-board {
@@ -933,7 +1034,6 @@ body {
 
 /* ===== 申し送りタブ v2（一括完了対応） ===== */
 
-/* 一括操作バー */
 .memo-batch-bar {
   background: var(--white);
   border: 1px solid var(--border);
@@ -989,7 +1089,6 @@ body {
   cursor: not-allowed;
 }
 
-/* カード選択チェックボックス */
 .memo-card-checkbox-wrap {
   position: absolute;
   top: 10px;
@@ -1012,7 +1111,6 @@ body {
   display: block;
 }
 
-/* 返信済みカード（薄いグレー背景） */
 .memo-card-item.has-replies {
   background: #F5F5F0;
 }
@@ -1025,15 +1123,12 @@ body {
   color: var(--ink-mute);
 }
 
-/* 選択中カード（緑のアウトライン） */
 .memo-card-item.selected {
   border-color: var(--green);
   box-shadow: 0 0 0 2px rgba(39, 174, 96, .15);
 }
 
 /* ===== 申し送りタブ v3（履歴表示対応） ===== */
-
-/* 履歴項目（完了済み × 返信あり） */
 .memo-card-item.is-history {
   opacity: 0.65;
   background: #ECECE6;
@@ -1047,8 +1142,6 @@ body {
   background: #E5E5DD;
   border-left-color: #999;
 }
-
-/* 履歴マーク（左上） */
 .memo-history-badge {
   position: absolute;
   top: 10px;
@@ -1064,13 +1157,9 @@ body {
   align-items: center;
   gap: 4px;
 }
-
-/* 履歴項目はチェックボックス非表示 */
 .memo-card-item.is-history .memo-card-checkbox-wrap {
   display: none;
 }
-
-/* 完了情報フッター */
 .memo-history-footer {
   background: #DDD;
   padding: 8px 14px;
@@ -1085,8 +1174,6 @@ body {
   color: var(--green);
   font-weight: 700;
 }
-
-/* セクション区切り（未対応／履歴の境目） */
 .memo-section-divider {
   display: flex;
   align-items: center;
@@ -1345,7 +1432,8 @@ body {
     <!-- PRODUCTS MANAGEMENT TAB -->
     <div id="tab-products" class="tab-panel">
       <div class="pm-notice">
-        ※毎日20時に自動リセットされます（停止中の商品が翌日には全て稼働状態に戻ります）
+        ※毎日20時に自動リセットされます（停止中の商品が翌日には全て稼働状態に戻ります）<br>
+        <strong>複数まとめて停止／再開する場合は左のチェックボックスで選択してください。</strong>
       </div>
       <div class="pm-summary-grid" id="pm-summary">
         <div class="pm-summary-card">
@@ -1405,7 +1493,7 @@ body {
     <div class="pm-confirm-body" id="pm-confirm-body">—</div>
     <div class="pm-confirm-buttons">
       <button class="pm-confirm-btn cancel" onclick="cancelProductMgmt()">キャンセル</button>
-      <button class="pm-confirm-btn confirm-stop" id="pm-confirm-action" onclick="confirmProductMgmt()">確定</button>
+      <button class="pm-confirm-btn confirm-stop" id="pm-confirm-action" onclick="executePmConfirm()">確定</button>
     </div>
   </div>
 </div>
@@ -2349,10 +2437,14 @@ function escapeHtml(s) {
   );
 }
 
-// ===== 商品管理タブ =====
+// ═══════════════════════════════════════════════════════════════
+// ★ 商品管理タブ（v2026-05-11 一括選択対応）
+// ═══════════════════════════════════════════════════════════════
 let _pmProducts = [];
 let _pmStoppedIds = new Set();
-let _pmPending = null;
+let _pmPending = null;          // 単発操作用 {id, name, willStop}
+let _pmBatchPending = null;     // 一括操作用 {action: 'stop'|'resume', items: [...]}
+let _pmSelected = new Set();    // チェック済み商品ID
 let _pmLoaded = false;
 
 async function loadProductMgmt() {
@@ -2375,6 +2467,7 @@ async function loadProductMgmt() {
 }
 
 function renderProductMgmt() {
+  // サマリー
   const total = _pmProducts.length;
   const stopped = _pmStoppedIds.size;
   const active = total - stopped;
@@ -2399,19 +2492,88 @@ function renderProductMgmt() {
     return;
   }
 
-  const html = '<div class="pm-list">' + _pmProducts.map(p => {
+  // 既に消えた商品IDを選択リストから除外
+  const validIds = new Set(_pmProducts.map(p => p.id));
+  Array.from(_pmSelected).forEach(id => {
+    if (!validIds.has(id)) _pmSelected.delete(id);
+  });
+
+  // 選択中の集計
+  const selectedActive = [];
+  const selectedStopped = [];
+  _pmSelected.forEach(id => {
+    if (_pmStoppedIds.has(id)) selectedStopped.push(id);
+    else selectedActive.push(id);
+  });
+  const selectedCount = _pmSelected.size;
+  const allSelected = total > 0 && selectedCount === total;
+  const someSelected = selectedCount > 0 && !allSelected;
+
+  // 一括操作バー
+  const stopBtn = selectedActive.length > 0
+    ? `<button class="pm-batch-btn stop" onclick="confirmBatchProductMgmt('stop')">稼働中${selectedActive.length}件を停止</button>`
+    : '';
+  const resumeBtn = selectedStopped.length > 0
+    ? `<button class="pm-batch-btn resume" onclick="confirmBatchProductMgmt('resume')">停止中${selectedStopped.length}件を再開</button>`
+    : '';
+
+  const batchBarHtml = `
+    <div class="pm-batch-bar">
+      <label class="pm-batch-checkbox-wrap">
+        <input type="checkbox"
+               class="pm-batch-checkbox"
+               id="pm-select-all"
+               ${allSelected ? 'checked' : ''}
+               onchange="toggleSelectAllProducts(this.checked)">
+        <span>全選択</span>
+      </label>
+      <span class="pm-batch-count">${selectedCount}件選択中</span>
+      <div class="pm-batch-actions">${stopBtn}${resumeBtn}</div>
+    </div>
+  `;
+
+  // 商品リスト
+  const listHtml = '<div class="pm-list">' + _pmProducts.map(p => {
     const isStopped = _pmStoppedIds.has(p.id);
+    const isSelected = _pmSelected.has(p.id);
+    const rowClass = `pm-row ${isStopped ? 'stopped' : ''} ${isSelected ? 'selected' : ''}`;
     return `
-      <div class="pm-row ${isStopped ? 'stopped' : ''}" id="pm-row-${p.id}">
+      <div class="${rowClass}" id="pm-row-${p.id}">
+        <label class="pm-row-checkbox-wrap">
+          <input type="checkbox"
+                 class="pm-row-checkbox"
+                 ${isSelected ? 'checked' : ''}
+                 onchange="toggleProductSelect('${p.id}', this.checked)">
+        </label>
         <div class="pm-row-id">${p.id}</div>
         <div class="pm-row-name">${escapeHtml(p.name)}</div>
         <span class="pm-row-status ${isStopped ? 'stopped' : 'active'}">${isStopped ? '停止中' : '稼働中'}</span>
         <button class="pm-toggle ${isStopped ? 'off' : ''}" onclick="onProductToggle('${p.id}')" aria-label="トグル"></button>
       </div>`;
   }).join('') + '</div>';
-  wrap.innerHTML = html;
+
+  wrap.innerHTML = batchBarHtml + listHtml;
+
+  // インデターミネート状態を反映
+  const selectAllEl = document.getElementById('pm-select-all');
+  if (selectAllEl) {
+    selectAllEl.indeterminate = someSelected;
+  }
 }
 
+function toggleProductSelect(productId, checked) {
+  if (checked) _pmSelected.add(productId);
+  else _pmSelected.delete(productId);
+  renderProductMgmt();
+}
+
+function toggleSelectAllProducts(checked) {
+  if (checked) _pmProducts.forEach(p => _pmSelected.add(p.id));
+  else _pmSelected.clear();
+  renderProductMgmt();
+}
+
+// 単発操作
 function onProductToggle(productId) {
   const product = _pmProducts.find(p => p.id === productId);
   if (!product) return;
@@ -2419,6 +2581,7 @@ function onProductToggle(productId) {
   const willStop = !isStopped;
 
   _pmPending = { id: productId, name: product.name, willStop };
+  _pmBatchPending = null;  // 単発モードに切替
 
   const header = document.getElementById('pm-confirm-header');
   const body = document.getElementById('pm-confirm-body');
@@ -2450,11 +2613,70 @@ function onProductToggle(productId) {
   document.getElementById('pm-confirm-modal').classList.add('show');
 }
 
+// 一括操作の確認
+function confirmBatchProductMgmt(action) {
+  // action: 'stop' or 'resume'
+  const selectedIds = Array.from(_pmSelected);
+  const targetIds = selectedIds.filter(id =>
+    action === 'stop' ? !_pmStoppedIds.has(id) : _pmStoppedIds.has(id)
+  );
+  if (targetIds.length === 0) return;
+
+  const targetProducts = targetIds.map(id => _pmProducts.find(p => p.id === id)).filter(Boolean);
+  _pmBatchPending = { action, items: targetProducts };
+  _pmPending = null;  // 一括モードに切替
+
+  const header = document.getElementById('pm-confirm-header');
+  const body = document.getElementById('pm-confirm-body');
+  const actionBtn = document.getElementById('pm-confirm-action');
+
+  const isStop = action === 'stop';
+  const productListHtml = '<div class="pm-confirm-product-list">' +
+    targetProducts.map(p => `<div class="pm-confirm-product-list-item">${escapeHtml(p.name)}</div>`).join('') +
+    '</div>';
+
+  if (isStop) {
+    header.textContent = `${targetProducts.length}件の商品を停止`;
+    header.className = 'pm-confirm-header stop';
+    body.innerHTML = `
+      以下の${targetProducts.length}件を停止しますか？
+      ${productListHtml}
+      停止すると、レジアプリで販売できなくなります。<br>
+      <span style="font-size:11px;color:var(--ink-mute);">※20時に自動で稼働状態に戻ります</span>
+    `;
+    actionBtn.textContent = `${targetProducts.length}件を停止する`;
+    actionBtn.className = 'pm-confirm-btn confirm-stop';
+  } else {
+    header.textContent = `${targetProducts.length}件の商品を再開`;
+    header.className = 'pm-confirm-header resume';
+    body.innerHTML = `
+      以下の${targetProducts.length}件を再開しますか？
+      ${productListHtml}
+      再開すると、レジアプリで販売可能になります。
+    `;
+    actionBtn.textContent = `${targetProducts.length}件を再開する`;
+    actionBtn.className = 'pm-confirm-btn confirm-resume';
+  }
+
+  document.getElementById('pm-confirm-modal').classList.add('show');
+}
+
+// 確認ボタン共通ディスパッチャー（HTMLのonclickから呼ばれる）
+async function executePmConfirm() {
+  if (_pmBatchPending) {
+    await executeBatchProductMgmt();
+  } else if (_pmPending) {
+    await confirmProductMgmt();
+  }
+}
+
 function cancelProductMgmt() {
   _pmPending = null;
+  _pmBatchPending = null;
   document.getElementById('pm-confirm-modal').classList.remove('show');
 }
 
+// 単発実行（既存）
 async function confirmProductMgmt() {
   if (!_pmPending) return;
   const { id, name, willStop } = _pmPending;
@@ -2500,6 +2722,79 @@ async function confirmProductMgmt() {
   }
 }
 
+// 一括実行
+async function executeBatchProductMgmt() {
+  if (!_pmBatchPending) return;
+  const { action, items } = _pmBatchPending;
+  const isStop = action === 'stop';
+  const status = isStop ? '停止' : '稼働';
+
+  const actionBtn = document.getElementById('pm-confirm-action');
+  const cancelBtn = document.querySelector('#pm-confirm-modal .pm-confirm-btn.cancel');
+  const originalText = actionBtn.textContent;
+  actionBtn.disabled = true;
+  cancelBtn.disabled = true;
+
+  let completed = 0;
+  let succeeded = 0;
+  const failed = [];
+
+  const updateProgress = () => {
+    actionBtn.textContent = `処理中... (${completed}/${items.length})`;
+  };
+  updateProgress();
+
+  // 1件ずつ送信する関数
+  const sendOne = async (product) => {
+    try {
+      const params = new URLSearchParams();
+      params.append('action', 'setProductSwitch');
+      params.append('productId', product.id);
+      params.append('status', status);
+      const res = await fetch(GAS_URL, {
+        method: 'POST',
+        body: params,
+        redirect: 'follow'
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      // ローカル状態を更新（GAS側書き込み成功と仮定）
+      if (isStop) _pmStoppedIds.add(product.id);
+      else _pmStoppedIds.delete(product.id);
+      succeeded++;
+    } catch (e) {
+      failed.push({ product, error: e.message });
+    } finally {
+      completed++;
+      updateProgress();
+    }
+  };
+
+  // 並列実行（5件ずつバッチ）
+  const BATCH_SIZE = 5;
+  for (let i = 0; i < items.length; i += BATCH_SIZE) {
+    const batch = items.slice(i, i + BATCH_SIZE);
+    await Promise.all(batch.map(sendOne));
+  }
+
+  // 結果反映
+  document.getElementById('pm-confirm-modal').classList.remove('show');
+  _pmBatchPending = null;
+  _pmSelected.clear();
+  renderProductMgmt();
+
+  if (failed.length === 0) {
+    showPmToast(`${succeeded}件を${isStop ? '停止' : '再開'}しました`, 'success');
+  } else if (succeeded > 0) {
+    showPmToast(`${succeeded}件成功 / ${failed.length}件失敗`, 'error');
+  } else {
+    showPmToast(`全件失敗：${failed[0]?.error || '不明なエラー'}`, 'error');
+  }
+
+  actionBtn.disabled = false;
+  cancelBtn.disabled = false;
+  actionBtn.textContent = originalText;
+}
+
 document.getElementById('pm-confirm-modal').addEventListener('click', function(e) {
   if (e.target === this) cancelProductMgmt();
 });
@@ -2514,38 +2809,26 @@ function showPmToast(message, type) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// ★ 申し送り確認タブ（v3 履歴表示対応）
+// 申し送りタブ
 // ═══════════════════════════════════════════════════════════════
-let _memoData     = [];
-let _memoExpanded = new Set();  // 展開中のkey
-let _memoSelected = new Set();  // 選択中のkey（一括完了用）
+let _memoData = { pending: [], history: [] };
+let _memoExpanded = new Set();
+let _memoSelected = new Set();
+let _memoCompletePending = null;  // {ids: [...]}
 
-// バッジ用：未対応件数のみカウント（履歴は数えない）
 async function loadMemoBadge() {
   try {
-    const res = await fetchJSON(GAS_URL + '?action=getMemoReports');
-    if (!res.success) return;
-    const memos = res.memos || [];
-    const pendingCount = memos.filter(m => !m.isCompleted).length;
+    const res = await fetchJSON(`${GAS_URL}?action=getPendingMemoCount`);
+    const count = res.count || 0;
     const badge = document.getElementById('memo-badge');
-    if (pendingCount > 0) {
-      badge.textContent = pendingCount;
-      badge.style.display = 'inline-block';
+    if (count > 0) {
+      badge.textContent = count;
+      badge.style.display = '';
     } else {
       badge.style.display = 'none';
     }
-    // タブが既に開いている場合は中身も更新
-    if (document.getElementById('tab-memos').classList.contains('active')) {
-      _memoData = memos;
-      // 既に消えた申し送りの選択を解除
-      const validKeys = new Set(_memoData.filter(m => !m.isCompleted).map(makeMemoKey));
-      const toRemove = [];
-      _memoSelected.forEach(k => { if (!validKeys.has(k)) toRemove.push(k); });
-      toRemove.forEach(k => _memoSelected.delete(k));
-      renderMemos();
-    }
-  } catch(e) {
-    // バッジ更新失敗は無視
+  } catch (e) {
+    console.warn('memo badge fetch failed', e);
   }
 }
 
@@ -2553,58 +2836,48 @@ async function loadMemos() {
   const wrap = document.getElementById('memo-list-wrap');
   wrap.innerHTML = '<div class="loading-wrap"><div class="loader"></div><p>申し送りを読み込み中...</p></div>';
   try {
-    const res = await fetchJSON(GAS_URL + '?action=getMemoReports');
-    if (!res.success) {
-      wrap.innerHTML = `<p style="color:var(--red);font-size:13px;padding:20px;text-align:center;">取得エラー：${res.error || '不明'}</p>`;
-      return;
-    }
-    _memoData = res.memos || [];
-    _memoSelected.clear();
-    // バッジ更新（未対応のみ）
-    const pendingCount = _memoData.filter(m => !m.isCompleted).length;
-    const badge = document.getElementById('memo-badge');
-    if (pendingCount > 0) {
-      badge.textContent = pendingCount;
-      badge.style.display = 'inline-block';
-    } else {
-      badge.style.display = 'none';
-    }
+    const res = await fetchJSON(`${GAS_URL}?action=getMemosForDashboard`);
+    _memoData = {
+      pending: res.pending || [],
+      history: res.history || []
+    };
     renderMemos();
-  } catch(e) {
-    wrap.innerHTML = `<p style="color:var(--red);font-size:13px;padding:20px;text-align:center;">通信エラー：${e.message}</p>`;
+    loadMemoBadge();
+  } catch (e) {
+    wrap.innerHTML = `<p style="color:var(--red);font-size:13px;padding:20px;text-align:center;">取得エラー：${e.message}</p>`;
   }
 }
 
-function makeMemoKey(m) {
-  return [m.date, m.locationId, m.userId].join('|');
+function makeMemoKey(memo) {
+  return `${memo.locationId}_${memo.date}_${memo.timestamp || ''}`;
 }
 
 function renderMemos() {
   const wrap = document.getElementById('memo-list-wrap');
-  if (_memoData.length === 0) {
-    wrap.innerHTML = `
-      <div class="memo-empty">
-        ✨ 未対応の申し送りはありません<br>
-        <span style="font-size:11px;">対応完了したものは7日経つと自動で消えます</span>
-      </div>
-    `;
+  const pending = _memoData.pending || [];
+  const history = _memoData.history || [];
+
+  if (pending.length === 0 && history.length === 0) {
+    wrap.innerHTML = '<div class="memo-empty">📝 直近7日間に申し送りはありません</div>';
     return;
   }
 
-  // 未対応 / 履歴 に分割
-  const pendingMemos = _memoData.filter(m => !m.isCompleted);
-  const historyMemos = _memoData.filter(m => m.isCompleted);
-
-  const pendingKeys = pendingMemos.map(makeMemoKey);
-  const allSelected   = pendingKeys.length > 0 && pendingKeys.every(k => _memoSelected.has(k));
-  const someSelected  = pendingKeys.some(k => _memoSelected.has(k));
-  const selectedCount = _memoSelected.size;
+  // 既に消えた申し送りを選択リストから除外
+  const validKeys = new Set(pending.map(m => makeMemoKey(m)));
+  Array.from(_memoSelected).forEach(k => {
+    if (!validKeys.has(k)) _memoSelected.delete(k);
+  });
 
   let html = '';
 
-  // ── 一括操作バー（未対応がある時のみ）──
-  if (pendingMemos.length > 0) {
+  // ── 未対応セクション ──
+  if (pending.length > 0) {
+    const selectedCount = _memoSelected.size;
+    const allSelected = selectedCount === pending.length;
+    const someSelected = selectedCount > 0 && !allSelected;
+
     html += `
+      <div class="memo-section-divider">未対応 (${pending.length}件)</div>
       <div class="memo-batch-bar">
         <label class="memo-batch-checkbox-wrap">
           <input type="checkbox"
@@ -2615,248 +2888,244 @@ function renderMemos() {
           <span>全選択</span>
         </label>
         <span class="memo-batch-count">${selectedCount}件選択中</span>
-        <button class="memo-batch-btn"
-                ${selectedCount === 0 ? 'disabled' : ''}
-                onclick="confirmBatchComplete()">
-          選択した${selectedCount}件を完了
-        </button>
+        ${selectedCount > 0
+          ? `<button class="memo-batch-btn" onclick="confirmBatchComplete()">選択した${selectedCount}件を完了</button>`
+          : ''}
       </div>
-    `;
-  }
-
-  // ── 未対応セクション ──
-  if (pendingMemos.length > 0) {
-    html += `<div class="memo-section-divider">未対応 ${pendingMemos.length}件</div>`;
-    html += '<div class="memo-board">' + pendingMemos.map(m => renderMemoCard(m, false)).join('') + '</div>';
-  } else {
-    html += `
-      <div class="memo-empty">
-        ✨ 未対応の申し送りはありません
+      <div class="memo-board">
+        ${pending.map(m => renderMemoCard(m, false)).join('')}
       </div>
     `;
   }
 
   // ── 履歴セクション ──
-  if (historyMemos.length > 0) {
-    html += `<div class="memo-section-divider">対応完了履歴 ${historyMemos.length}件（7日後に自動削除）</div>`;
-    html += '<div class="memo-board">' + historyMemos.map(m => renderMemoCard(m, true)).join('') + '</div>';
-  }
-
-  wrap.innerHTML = html;
-
-  // 部分選択（インデターミネート）状態を反映
-  const selectAllEl = document.getElementById('memo-select-all');
-  if (selectAllEl) {
-    selectAllEl.indeterminate = !allSelected && someSelected;
-  }
-}
-
-function renderMemoCard(m, isHistory) {
-  const key         = makeMemoKey(m);
-  const isExpanded  = _memoExpanded.has(key);
-  const isSelected  = _memoSelected.has(key);
-  const replyCount  = (m.replies || []).length;
-  const hasReplies  = replyCount > 0;
-  const badgeText   = hasReplies ? `✅ 返信済(${replyCount}件)` : '返信 0';
-  const badgeClass  = hasReplies ? '' : 'zero';
-
-  // 履歴項目は最初から返信を展開表示（内容を見やすくするため）
-  const expandedClass = (isHistory || isExpanded) ? 'expanded' : '';
-
-  let repliesHtml = '';
-  if (hasReplies) {
-    repliesHtml = '<div class="memo-card-replies ' + expandedClass + '" id="replies-' + escapeHtml(key) + '">' +
-      m.replies.map(r => `
-        <div class="memo-reply-row">
-          <div class="memo-reply-row-header">
-            <span class="memo-reply-row-name">${escapeHtml(r.replierName || '—')}</span>
-            <span class="memo-reply-row-time">${r.date} ${r.time}</span>
-          </div>
-          <div class="memo-reply-row-content">${escapeHtml(r.content || '')}</div>
-        </div>
-      `).join('') +
-    '</div>';
-  }
-
-  // 履歴の場合：チェックボックス非表示、履歴マーク表示、完了情報フッター
-  const historyBadgeHtml = isHistory ? '<span class="memo-history-badge">✓ 履歴</span>' : '';
-  const checkboxHtml = isHistory ? '' : `
-    <label class="memo-card-checkbox-wrap">
-      <input type="checkbox"
-             class="memo-card-checkbox"
-             ${isSelected ? 'checked' : ''}
-             onchange="toggleMemoSelect('${escapeHtml(key)}', this.checked)">
-    </label>
-  `;
-
-  // 完了情報フッター（履歴のみ）
-  let historyFooterHtml = '';
-  if (isHistory && m.completedInfo) {
-    historyFooterHtml = `
-      <div class="memo-history-footer">
-        <span class="memo-history-footer-icon">✓</span>
-        <span>対応完了：${m.completedInfo.date} ${m.completedInfo.time}　完了者：${escapeHtml(m.completedInfo.completerName || '—')}</span>
+  if (history.length > 0) {
+    html += `
+      <div class="memo-section-divider">対応済み履歴 (${history.length}件)</div>
+      <div class="memo-board">
+        ${history.map(m => renderMemoCard(m, true)).join('')}
       </div>
     `;
   }
 
-  // トグルボタン（履歴は最初から展開なので不要）
-  const toggleBtn = (hasReplies && !isHistory)
-    ? `<button class="memo-action-btn toggle" onclick="toggleMemoReplies('${escapeHtml(key)}')">${isExpanded ? '折りたたむ' : '返信を見る'}</button>`
-    : '';
+  wrap.innerHTML = html;
 
-  const itemClass = `memo-card-item ${hasReplies ? 'has-replies' : ''} ${isSelected ? 'selected' : ''} ${isHistory ? 'is-history' : ''}`;
+  const selectAllEl = document.getElementById('memo-select-all');
+  if (selectAllEl) {
+    const pCount = pending.length;
+    const sCount = _memoSelected.size;
+    selectAllEl.indeterminate = sCount > 0 && sCount < pCount;
+  }
+}
+
+function renderMemoCard(memo, isHistory) {
+  const key = makeMemoKey(memo);
+  const replies = memo.replies || [];
+  const replyCount = replies.length;
+  const isExpanded = _memoExpanded.has(key);
+  const isSelected = _memoSelected.has(key);
+
+  const bodyHtml = escapeHtml(memo.memo || '').replace(/\n/g, '<br>');
+
+  const repliesHtml = replies.map(r => `
+    <div class="memo-reply-row">
+      <div class="memo-reply-row-header">
+        <span class="memo-reply-row-name">${escapeHtml(r.userName || '社員')}</span>
+        <span class="memo-reply-row-time">${escapeHtml(r.timestamp || '')}</span>
+      </div>
+      <div class="memo-reply-row-content">${escapeHtml(r.content || '').replace(/\n/g, '<br>')}</div>
+    </div>
+  `).join('');
+
+  const cardClasses = ['memo-card-item'];
+  if (replyCount > 0) cardClasses.push('has-replies');
+  if (isHistory) cardClasses.push('is-history');
+  if (isSelected) cardClasses.push('selected');
+
+  const checkboxHtml = isHistory ? '' : `
+    <div class="memo-card-checkbox-wrap" onclick="event.stopPropagation();">
+      <input type="checkbox"
+             class="memo-card-checkbox"
+             ${isSelected ? 'checked' : ''}
+             onchange="toggleMemoSelect('${key}', this.checked)">
+    </div>
+  `;
+
+  const historyBadge = isHistory ? '<div class="memo-history-badge">✓ 完了</div>' : '';
+
+  const replyCountClass = replyCount > 0 ? '' : 'zero';
+  const replyCountHtml = replyCount > 0
+    ? `<span class="memo-card-reply-count" onclick="event.stopPropagation(); toggleMemoReplies('${key}')">💬 ${replyCount}</span>`
+    : `<span class="memo-card-reply-count zero">💬 0</span>`;
+
+  // 履歴の場合のフッター
+  const historyFooter = isHistory && memo.completedBy ? `
+    <div class="memo-history-footer">
+      <span class="memo-history-footer-icon">✓</span>
+      ${escapeHtml(memo.completedBy)}が${escapeHtml(memo.completedAt || '')}に完了
+    </div>
+  ` : '';
+
+  // アクションボタン（履歴では非表示）
+  const actionsHtml = isHistory ? '' : `
+    <div class="memo-card-actions">
+      ${replyCount > 0 ? `<button class="memo-action-btn toggle" onclick="toggleMemoReplies('${key}')">${isExpanded ? '返信を閉じる' : `返信を見る(${replyCount})`}</button>` : ''}
+      <button class="memo-action-btn reply" onclick="openMemoReply('${memo.locationId}', '${memo.date}')">返信する</button>
+    </div>
+  `;
 
   return `
-    <div class="${itemClass}">
-      ${historyBadgeHtml}
+    <div class="${cardClasses.join(' ')}" data-key="${key}">
+      ${historyBadge}
       ${checkboxHtml}
       <div class="memo-card-top">
         <div class="memo-card-top-left">
-          <div class="memo-card-meta">${m.date} ${m.time}</div>
-          <div class="memo-card-loc">${escapeHtml(m.locationName || '(拠点名なし)')}</div>
-          <div class="memo-card-staff">販売員：${escapeHtml(m.userName || '(名前なし)')}</div>
+          <div class="memo-card-meta">${escapeHtml(memo.date || '')}</div>
+          <div class="memo-card-loc">${escapeHtml(memo.locationName || '—')}</div>
+          <div class="memo-card-staff">${escapeHtml(memo.userName || '—')}</div>
         </div>
-        <div class="memo-card-reply-count ${badgeClass}">${badgeText}</div>
+        ${replyCountHtml}
       </div>
-      <div class="memo-card-body">${escapeHtml(m.memo)}</div>
-      ${repliesHtml}
-      ${historyFooterHtml}
-      <div class="memo-card-actions">
-        ${toggleBtn}
-        <button class="memo-action-btn reply" onclick="openMemoReply('${escapeHtml(m.date)}','${escapeHtml(m.locationId)}','${escapeHtml(m.userId)}')">返信する</button>
-      </div>
+      <div class="memo-card-body">${bodyHtml}</div>
+      ${replyCount > 0 ? `<div class="memo-card-replies ${isExpanded ? 'expanded' : ''}" id="replies-${key}">${repliesHtml}</div>` : ''}
+      ${historyFooter}
+      ${actionsHtml}
     </div>
   `;
 }
 
 function toggleMemoReplies(key) {
-  if (_memoExpanded.has(key)) {
-    _memoExpanded.delete(key);
-  } else {
-    _memoExpanded.add(key);
-  }
+  if (_memoExpanded.has(key)) _memoExpanded.delete(key);
+  else _memoExpanded.add(key);
   renderMemos();
 }
 
 function toggleMemoSelect(key, checked) {
-  if (checked) {
-    _memoSelected.add(key);
-  } else {
-    _memoSelected.delete(key);
-  }
+  if (checked) _memoSelected.add(key);
+  else _memoSelected.delete(key);
   renderMemos();
 }
 
 function toggleSelectAllMemos(checked) {
-  // 未対応のみを対象に
-  const pendingMemos = _memoData.filter(m => !m.isCompleted);
-  if (checked) {
-    pendingMemos.forEach(m => _memoSelected.add(makeMemoKey(m)));
-  } else {
-    _memoSelected.clear();
-  }
+  const pending = _memoData.pending || [];
+  if (checked) pending.forEach(m => _memoSelected.add(makeMemoKey(m)));
+  else _memoSelected.clear();
   renderMemos();
 }
 
-function openMemoReply(date, locId, userId) {
-  const m = _memoData.find(x => x.date === date && x.locationId === locId && x.userId === userId);
-  if (!m) {
-    showPmToast('申し送りが見つかりません', 'error');
-    return;
-  }
-  // memo-reply.htmlに遷移（URLパラメータで申し送りを特定）
-  const params = new URLSearchParams();
-  params.append('date',    m.date);
-  params.append('locId',   m.locationId);
-  params.append('locName', m.locationName);
-  params.append('uid',     m.userId);
-  params.append('uname',   m.userName);
-  params.append('memo',    m.memo);
-  window.location.href = 'memo-reply.html?' + params.toString();
+function openMemoReply(locationId, date) {
+  // memo-reply.htmlへ遷移（クエリパラメータ付き）
+  const url = `memo-reply.html?locationId=${encodeURIComponent(locationId)}&date=${encodeURIComponent(date)}`;
+  window.location.href = url;
 }
 
-// 一括対応完了 確認モーダル
 function confirmBatchComplete() {
-  const count = _memoSelected.size;
-  if (count === 0) return;
+  const selectedKeys = Array.from(_memoSelected);
+  if (selectedKeys.length === 0) return;
 
-  document.getElementById('memo-complete-body').innerHTML = `
-    選択した <strong style="color:var(--ink);">${count}件</strong> の申し送りを対応完了にしますか？
-    <div class="pm-confirm-product">
-      返信なしの項目は一覧から消えます<br>
-      返信ありの項目は「履歴」として残ります
-    </div>
-    <span style="font-size:11px;color:var(--ink-mute);">※販売員への通知はされません</span>
+  const targets = (_memoData.pending || []).filter(m => selectedKeys.includes(makeMemoKey(m)));
+  if (targets.length === 0) return;
+
+  _memoCompletePending = { items: targets };
+
+  const body = document.getElementById('memo-complete-body');
+  const actionBtn = document.getElementById('memo-complete-action');
+
+  const listHtml = '<div class="pm-confirm-product-list">' +
+    targets.map(m => `<div class="pm-confirm-product-list-item">${escapeHtml(m.locationName)} (${escapeHtml(m.date)})</div>`).join('') +
+    '</div>';
+
+  body.innerHTML = `
+    以下の${targets.length}件の申し送りを「対応完了」にしますか？
+    ${listHtml}
+    対応完了にすると、未対応リストから外れます（履歴には残ります）。
   `;
-  document.getElementById('memo-complete-action').textContent = `${count}件を完了にする`;
+  actionBtn.textContent = `${targets.length}件を完了にする`;
   document.getElementById('memo-complete-modal').classList.add('show');
 }
 
 function cancelMemoComplete() {
+  _memoCompletePending = null;
   document.getElementById('memo-complete-modal').classList.remove('show');
 }
 
 async function executeMemoComplete() {
-  if (_memoSelected.size === 0) return;
+  if (!_memoCompletePending) return;
+  const { items } = _memoCompletePending;
 
-  const items = _memoData
-    .filter(m => _memoSelected.has(makeMemoKey(m)))
-    .map(m => ({
-      targetDate:         m.date,
-      targetLocationId:   m.locationId,
-      targetLocationName: m.locationName,
-      targetUserId:       m.userId,
-      targetUserName:     m.userName,
-    }));
-
-  const btn       = document.getElementById('memo-complete-action');
+  const actionBtn = document.getElementById('memo-complete-action');
   const cancelBtn = document.querySelector('#memo-complete-modal .pm-confirm-btn.cancel');
-  const originalText = btn.textContent;
-  btn.disabled = true;
+  const originalText = actionBtn.textContent;
+  actionBtn.disabled = true;
   cancelBtn.disabled = true;
-  btn.textContent = '処理中...';
 
-  try {
-    const payload = {
-      action:        'markMemosCompleteBatch',
-      items:         items,
-      completerName: userProfile.displayName,
-    };
+  let completed = 0;
+  let succeeded = 0;
+  const failed = [];
 
-    const res = await fetch(GAS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(payload),
-      redirect: 'follow',
-    });
+  const updateProgress = () => {
+    actionBtn.textContent = `処理中... (${completed}/${items.length})`;
+  };
+  updateProgress();
 
-    const result = await res.json();
-    if (!result.success) {
-      throw new Error(result.error || '不明なエラー');
+  const userId = userProfile?.userId || '';
+  const userName = userProfile?.displayName || '社員';
+
+  const sendOne = async (memo) => {
+    try {
+      const params = new URLSearchParams();
+      params.append('action', 'completeMemo');
+      params.append('locationId', memo.locationId);
+      params.append('date', memo.date);
+      params.append('userId', userId);
+      params.append('userName', userName);
+      const res = await fetch(GAS_URL, {
+        method: 'POST',
+        body: params,
+        redirect: 'follow'
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      succeeded++;
+    } catch (e) {
+      failed.push({ memo, error: e.message });
+    } finally {
+      completed++;
+      updateProgress();
     }
+  };
 
-    const msg = result.skipped > 0
-      ? `${result.added}件を完了にしました（${result.skipped}件はスキップ）`
-      : `${result.added}件を完了にしました`;
-    showPmToast(msg, 'success');
-
-    document.getElementById('memo-complete-modal').classList.remove('show');
-    _memoSelected.clear();
-    setTimeout(() => loadMemos(), 500);
-
-  } catch(e) {
-    showPmToast('エラー：' + e.message, 'error');
-  } finally {
-    btn.disabled = false;
-    cancelBtn.disabled = false;
-    btn.textContent = originalText;
+  // 並列実行（5件ずつバッチ）
+  const BATCH_SIZE = 5;
+  for (let i = 0; i < items.length; i += BATCH_SIZE) {
+    const batch = items.slice(i, i + BATCH_SIZE);
+    await Promise.all(batch.map(sendOne));
   }
+
+  // 結果反映
+  document.getElementById('memo-complete-modal').classList.remove('show');
+  _memoCompletePending = null;
+  _memoSelected.clear();
+
+  if (failed.length === 0) {
+    showPmToast(`${succeeded}件を完了にしました`, 'success');
+  } else if (succeeded > 0) {
+    showPmToast(`${succeeded}件成功 / ${failed.length}件失敗`, 'error');
+  } else {
+    showPmToast(`全件失敗：${failed[0]?.error || '不明なエラー'}`, 'error');
+  }
+
+  actionBtn.disabled = false;
+  cancelBtn.disabled = false;
+  actionBtn.textContent = originalText;
+
+  // 再読込
+  await loadMemos();
 }
 
 document.getElementById('memo-complete-modal').addEventListener('click', function(e) {
   if (e.target === this) cancelMemoComplete();
 });
+
 </script>
 </body>
 </html>
