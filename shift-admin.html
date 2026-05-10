@@ -7,9 +7,9 @@
 <style>
 :root {
   --navy: #1A3C5E;
-  --navy-dark: #122B43;
   --blue: #2471A3;
   --orange: #E67E22;
+  --orange-light: #FAD7A0;
   --green: #27AE60;
   --red: #C0392B;
   --pink-bg: #FDECEA;
@@ -103,7 +103,6 @@ input { font-family: inherit; }
   font-size: 11px;
 }
 
-/* ═══ 操作バー ═══ */
 .actions {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
@@ -145,7 +144,6 @@ input { font-family: inherit; }
 }
 .badge[hidden] { display: none; }
 
-/* ═══ ステータスバー ═══ */
 .status {
   margin: 0 16px 8px;
   padding: 8px 12px;
@@ -170,14 +168,25 @@ input { font-family: inherit; }
 .status.busy::before  { background: var(--blue); animation: pulse .8s infinite; }
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 
-/* ═══ マトリクス ═══ */
+.sec-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-mute);
+  letter-spacing: .1em;
+  margin: 16px 16px 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sec-title::after { content:''; flex:1; height:1px; background:var(--border); }
+
 .matrix-wrap {
-  margin: 0 16px 16px;
+  margin: 0 16px 8px;
   background: var(--white);
   border: 1px solid var(--border);
   border-radius: 10px;
   overflow: auto;
-  max-height: 70vh;
+  max-height: 60vh;
   -webkit-overflow-scrolling: touch;
 }
 .matrix {
@@ -239,7 +248,11 @@ input { font-family: inherit; }
   font-weight: 700;
 }
 .matrix td.unassigned:active { background: #FAD3CE; }
-.matrix td.empty { color: var(--ink-mute); }
+.matrix td.spot {
+  background: var(--warn-bg);
+  color: var(--orange);
+  font-weight: 700;
+}
 
 .matrix-empty {
   padding: 32px 16px;
@@ -249,18 +262,17 @@ input { font-family: inherit; }
 }
 .matrix-empty .em-ico { font-size: 32px; margin-bottom: 8px; }
 
-/* ═══ 凡例 ═══ */
 .legend {
-  margin: 0 16px 16px;
-  padding: 10px 12px;
+  margin: 0 16px 8px;
+  padding: 8px 12px;
   background: var(--white);
   border: 1px solid var(--border);
   border-radius: 8px;
-  font-size: 11px;
+  font-size: 10px;
   color: var(--ink-soft);
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 10px;
   align-items: center;
 }
 .legend-item { display: flex; align-items: center; gap: 4px; }
@@ -271,8 +283,74 @@ input { font-family: inherit; }
 }
 .legend-dot.assigned { background: var(--white); }
 .legend-dot.unassigned { background: var(--pink-bg); border-color: var(--red); }
+.legend-dot.spot { background: var(--warn-bg); border-color: var(--orange); }
 
-/* ═══ 再読込ボタン ═══ */
+.pool-wrap {
+  margin: 0 16px 16px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.pool-empty {
+  padding: 20px 16px;
+  text-align: center;
+  color: var(--ink-mute);
+  font-size: 12px;
+}
+.date-group { border-bottom: 1px solid var(--border-light); }
+.date-group:last-child { border-bottom: none; }
+.date-head {
+  padding: 8px 12px 6px;
+  background: var(--cream);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--navy);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.date-head .count {
+  background: var(--white);
+  color: var(--ink-soft);
+  border: 1px solid var(--border);
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+}
+.chip-row {
+  padding: 8px 12px 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chip {
+  padding: 6px 10px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  cursor: pointer;
+  user-select: none;
+  transition: all .1s;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.chip:active { transform: scale(.95); background: var(--cream); }
+.chip.normal { background: #EBF3FA; border-color: #C7DCE9; color: var(--navy); }
+.chip.normal:active { background: #D7E6F0; }
+.chip.spot {
+  background: var(--orange);
+  border-color: var(--orange);
+  color: #FFF;
+}
+.chip.spot:active { background: #D35400; }
+.chip .ico { font-size: 11px; }
+
 .reload-wrap { padding: 8px 16px 16px; text-align: center; }
 .reload-btn {
   padding: 10px 20px;
@@ -283,7 +361,6 @@ input { font-family: inherit; }
   font-size: 12px;
 }
 
-/* ═══ ボトムシート（セル編集） ═══ */
 .sheet-overlay {
   position: fixed;
   inset: 0;
@@ -352,6 +429,13 @@ input { font-family: inherit; }
   letter-spacing: .1em;
   padding: 8px 16px 4px;
   background: var(--cream);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tier-head.pool {
+  background: var(--warn-bg);
+  color: var(--orange);
 }
 .seller-item {
   display: flex;
@@ -363,7 +447,10 @@ input { font-family: inherit; }
 }
 .seller-item:active { background: var(--cream); }
 .seller-item.current { background: #EBF3FA; }
+.seller-item.spot-item { background: #FFFAF0; }
+.seller-item.spot-item:active { background: var(--warn-bg); }
 .seller-item .name { flex: 1; font-size: 14px; font-weight: 500; }
+.seller-item .name.spot { color: var(--orange); font-weight: 700; }
 .seller-item .pref-tag {
   font-size: 10px;
   font-weight: 700;
@@ -374,6 +461,14 @@ input { font-family: inherit; }
 }
 .seller-item .pref-tag.t2 { background: #F39C12; }
 .seller-item .pref-tag.t3 { background: #BDC3C7; color: var(--ink); }
+.seller-item .pool-tag {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--green);
+  color: #FFF;
+}
 .seller-item .check { color: var(--green); font-weight: 700; font-size: 16px; }
 .sheet-foot {
   display: grid;
@@ -392,7 +487,6 @@ input { font-family: inherit; }
 .btn-ghost { background: var(--cream); color: var(--ink-soft); border: 1px solid var(--border); }
 .btn-warn { background: var(--orange); color: #FFF; }
 
-/* ═══ 差分モーダル ═══ */
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -421,7 +515,9 @@ input { font-family: inherit; }
   justify-content: space-between;
   align-items: center;
 }
-.modal-head h2 { font-size: 15px; font-weight: 700; }
+.modal-head h2 { font-size: 14px; font-weight: 700; }
+.modal-head h2 .staff-name { color: var(--blue); }
+.modal-head h2 .staff-name.spot { color: var(--orange); }
 .modal-close {
   width: 32px; height: 32px;
   border-radius: 50%;
@@ -430,6 +526,41 @@ input { font-family: inherit; }
   color: var(--ink-soft);
 }
 .modal-body { padding: 12px 16px; overflow-y: auto; flex: 1; }
+
+.base-tier-head {
+  font-size: 10px;
+  color: var(--ink-mute);
+  font-weight: 700;
+  letter-spacing: .1em;
+  padding: 8px 0 4px;
+}
+.base-option {
+  padding: 12px;
+  margin-bottom: 6px;
+  background: var(--cream);
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border-light);
+}
+.base-option:active { background: var(--border-light); }
+.base-option.preferred {
+  background: #EBF3FA;
+  border-color: #C7DCE9;
+}
+.base-option.preferred:active { background: #D7E6F0; }
+.base-option .name { flex: 1; font-size: 14px; font-weight: 600; }
+.base-option .pref-tag {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--orange);
+  color: #FFF;
+}
+
 .diff-empty { text-align: center; padding: 24px 0; color: var(--ink-mute); font-size: 13px; }
 .diff-item {
   padding: 10px 12px;
@@ -448,7 +579,6 @@ input { font-family: inherit; }
 .diff-item .arrow { color: var(--ink-mute); }
 .diff-item .to { color: var(--green); }
 
-/* ═══ トースト ═══ */
 .toast {
   position: fixed;
   bottom: 32px;
@@ -469,7 +599,6 @@ input { font-family: inherit; }
 .toast.ok  { background: rgba(39, 174, 96, .95); }
 .toast.err { background: rgba(192, 57, 43, .95); }
 
-/* ═══ ローディングオーバーレイ ═══ */
 .loading {
   position: fixed;
   inset: 0;
@@ -495,7 +624,6 @@ input { font-family: inherit; }
 </head>
 <body>
 
-<!-- ═══ パスワード画面 ═══ -->
 <div id="scr-pw">
   <h1>📋 シフト管理</h1>
   <div class="sub">管理者専用ページ</div>
@@ -505,7 +633,6 @@ input { font-family: inherit; }
   <div class="pw-err" id="pwErr"></div>
 </div>
 
-<!-- ═══ メイン画面 ═══ -->
 <div id="scr-main">
 
   <header class="header">
@@ -534,6 +661,7 @@ input { font-family: inherit; }
 
   <div class="status" id="status">準備中...</div>
 
+  <div class="sec-title">📊 シフト割当</div>
   <div class="matrix-wrap" id="matrixWrap">
     <div class="matrix-empty">
       <div class="em-ico">📋</div>
@@ -544,7 +672,13 @@ input { font-family: inherit; }
   <div class="legend">
     <span class="legend-item"><span class="legend-dot assigned"></span>割当済</span>
     <span class="legend-item"><span class="legend-dot unassigned"></span>未割当</span>
-    <span style="color: var(--ink-mute); margin-left: auto;">セルをタップして編集</span>
+    <span class="legend-item"><span class="legend-dot spot"></span>スポット</span>
+    <span style="color: var(--ink-mute); margin-left: auto; font-size:10px;">セルをタップで編集</span>
+  </div>
+
+  <div class="sec-title">⚠️ 未割当スタッフ <span id="poolTotalCount" style="margin-left:auto;font-weight:500;color:var(--ink-mute);font-size:10px;letter-spacing:0;"></span></div>
+  <div class="pool-wrap" id="poolWrap">
+    <div class="pool-empty">読み込み中...</div>
   </div>
 
   <div class="reload-wrap">
@@ -553,7 +687,6 @@ input { font-family: inherit; }
 
 </div>
 
-<!-- ═══ ボトムシート（セル編集） ═══ -->
 <div class="sheet-overlay" id="sheetOverlay" onclick="if(event.target===this)closeSheet()">
   <div class="sheet">
     <div class="sheet-handle"></div>
@@ -574,7 +707,16 @@ input { font-family: inherit; }
   </div>
 </div>
 
-<!-- ═══ 差分モーダル ═══ -->
+<div class="modal-overlay" id="staffModal" onclick="if(event.target===this)closeStaffModal()">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="staffModalTitle">割り当て先を選択</h2>
+      <button class="modal-close" onclick="closeStaffModal()">✕</button>
+    </div>
+    <div class="modal-body" id="staffModalBody"></div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="diffModal" onclick="if(event.target===this)closeDiff()">
   <div class="modal">
     <div class="modal-head">
@@ -585,7 +727,6 @@ input { font-family: inherit; }
   </div>
 </div>
 
-<!-- ═══ トースト・ローディング ═══ -->
 <div class="toast" id="toast"></div>
 <div class="loading" id="loading">
   <div class="spinner"></div>
@@ -595,22 +736,21 @@ input { font-family: inherit; }
 <script>
 'use strict';
 
-// ═══ 設定 ═══
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5AawPDc7aluPokONkYz6f2ikwl0S487JvhKdKh6QSp1xhEhA/exec';
 const PASSWORD = '1115';
 
-// ═══ 状態 ═══
 const state = {
   weekTarget: null,
   bases: [],
   sellers: [],
   dates: [],
   matrix: {},
+  unassignedPool: {},
   diffs: [],
-  selected: null,  // { date, base, current }
+  selected: null,
+  selectedStaff: null,
 };
 
-// ═══ パスワード ═══
 function login() {
   const v = document.getElementById('pwInput').value;
   if (v === PASSWORD) {
@@ -634,7 +774,6 @@ function showMain() {
   loadAll();
 }
 
-// ═══ API ═══
 async function apiGet(action, params = {}) {
   const qs = new URLSearchParams({ action, ...params }).toString();
   const res = await fetch(`${GAS_URL}?${qs}`, { redirect: 'follow' });
@@ -651,7 +790,6 @@ async function apiPost(action, payload = {}) {
   return await res.json();
 }
 
-// ═══ データ読込 ═══
 async function loadAll() {
   setStatus('busy', 'マトリクスを読み込み中...');
   try {
@@ -662,13 +800,15 @@ async function loadAll() {
     state.sellers = data.sellers || [];
     state.dates = data.dates || [];
     state.matrix = data.matrix || {};
+    state.unassignedPool = data.unassignedPool || {};
     updateWeekInfo();
     renderMatrix();
-    setStatus('ok', `読み込み完了：${state.bases.length}拠点 × ${state.dates.length}日`);
+    renderPool();
+    setStatus('ok', `読込完了：${state.bases.length}拠点 × ${state.dates.length}日`);
     loadDiffs();
   } catch (e) {
     setStatus('err', `エラー: ${e.message}`);
-    toast(`読み込み失敗: ${e.message}`, 'err');
+    toast(`読込失敗: ${e.message}`, 'err');
   }
 }
 async function loadDiffs() {
@@ -683,13 +823,16 @@ async function loadDiffs() {
   }
 }
 
-// ═══ 表示更新 ═══
 function updateWeekInfo() {
   const wt = state.weekTarget || '—';
-  const dateRange = state.dates.length > 0 
-    ? `${state.dates[0]} 〜 ${state.dates[state.dates.length - 1]}` 
+  const dateRange = state.dates.length > 0
+    ? `${state.dates[0]} 〜 ${state.dates[state.dates.length - 1]}`
     : '日付データなし';
   document.getElementById('weekInfo').textContent = `${wt} ・ ${dateRange}`;
+}
+
+function isSpotName(name) {
+  return /^スポットバイト/.test(String(name || '').trim());
 }
 
 function renderMatrix() {
@@ -714,14 +857,66 @@ function renderMatrix() {
     state.dates.forEach(d => {
       const name = (state.matrix[d] && state.matrix[d][b.name]) || '';
       const isUn = !name || name === '【未割当】';
-      const cls = isUn ? 'unassigned' : '';
-      const display = isUn ? '未割当' : name;
-      html += `<td class="${cls}" data-date="${escapeAttr(d)}" data-base="${escapeAttr(b.name)}" 
+      const isSpot = isSpotName(name);
+      let cls = '';
+      let display = '';
+      if (isUn) { cls = 'unassigned'; display = '未割当'; }
+      else if (isSpot) { cls = 'spot'; display = name; }
+      else { display = name; }
+      html += `<td class="${cls}" data-date="${escapeAttr(d)}" data-base="${escapeAttr(b.name)}"
         onclick="openSheet(this.dataset.date, this.dataset.base)">${escapeHtml(display)}</td>`;
     });
     html += '</tr>';
   });
   html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
+function renderPool() {
+  const wrap = document.getElementById('poolWrap');
+  const countEl = document.getElementById('poolTotalCount');
+
+  let normalCount = 0, spotCount = 0;
+  Object.values(state.unassignedPool || {}).forEach(pool => {
+    pool.forEach(item => {
+      if (item.type === 'spot') spotCount++;
+      else normalCount++;
+    });
+  });
+  countEl.textContent = `希望者${normalCount} / スポット${spotCount}`;
+
+  if (state.dates.length === 0) {
+    wrap.innerHTML = '<div class="pool-empty">日付データがありません</div>';
+    return;
+  }
+
+  let html = '';
+  state.dates.forEach(date => {
+    const pool = state.unassignedPool[date] || [];
+    if (pool.length === 0) return;
+    const normalNum = pool.filter(p => p.type === 'normal').length;
+    const spotNum   = pool.filter(p => p.type === 'spot').length;
+    html += `<div class="date-group">`;
+    html += `<div class="date-head">
+      <span>${escapeHtml(date)}</span>
+      <span class="count">希望者${normalNum} / スポット${spotNum}</span>
+    </div>`;
+    html += `<div class="chip-row">`;
+    pool.forEach(item => {
+      const cls = item.type === 'spot' ? 'spot' : 'normal';
+      const ico = item.type === 'spot' ? '★' : '👤';
+      html += `<div class="chip ${cls}"
+        onclick="openStaffModal('${escapeAttr(item.name)}','${item.type}','${escapeAttr(date)}')">
+        <span class="ico">${ico}</span>
+        <span>${escapeHtml(item.name)}</span>
+      </div>`;
+    });
+    html += `</div></div>`;
+  });
+
+  if (!html) {
+    html = '<div class="pool-empty">✅ 未割当スタッフはいません</div>';
+  }
   wrap.innerHTML = html;
 }
 
@@ -736,7 +931,6 @@ function updateDiffBadge() {
   }
 }
 
-// ═══ セル編集（ボトムシート） ═══
 function openSheet(date, base) {
   const current = (state.matrix[date] && state.matrix[date][base]) || '';
   const isUn = !current || current === '【未割当】';
@@ -762,22 +956,60 @@ function closeSheet() {
 
 function renderSellers() {
   if (!state.selected) return;
-  const { base, current } = state.selected;
+  const { base, current, date } = state.selected;
   const q = document.getElementById('sheetSearch').value.trim().toLowerCase();
 
-  // 階層分類
-  const tiers = [[], [], [], []]; // pref1 / pref2 / pref3 / その他
+  const pool = state.unassignedPool[date] || [];
+  const poolNames = new Set(pool.map(p => p.name));
+
+  const poolNormal = [], poolSpot = [];
+  const tiers = [[], [], [], []];
   state.sellers.forEach(s => {
     const name = s.name;
     if (q && !name.toLowerCase().includes(q)) return;
+
+    if (poolNames.has(name)) {
+      if (s.isSpot) poolSpot.push({ ...s });
+      else poolNormal.push({ ...s });
+      return;
+    }
+    if (s.isSpot) return;
     if (s.pref1 === base) tiers[0].push({ ...s, tier: 1 });
     else if (s.pref2 === base) tiers[1].push({ ...s, tier: 2 });
     else if (s.pref3 === base) tiers[2].push({ ...s, tier: 3 });
     else tiers[3].push({ ...s, tier: 4 });
   });
 
-  const labels = ['第1希望', '第2希望', '第3希望', '全販売員'];
   let html = '';
+
+  if (poolNormal.length > 0 || poolSpot.length > 0) {
+    html += `<div class="tier-head pool">⚠️ この日の未割当（${poolNormal.length + poolSpot.length}名）</div>`;
+    poolNormal.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+    poolNormal.forEach(s => {
+      const isCur = s.name === current;
+      const prefTag = s.pref1 === base ? '<span class="pref-tag">1</span>'
+                    : s.pref2 === base ? '<span class="pref-tag t2">2</span>'
+                    : s.pref3 === base ? '<span class="pref-tag t3">3</span>'
+                    : '';
+      html += `<div class="seller-item ${isCur ? 'current' : ''}"
+        onclick="selectSeller('${escapeAttr(s.name)}')">
+        <span class="name">${escapeHtml(s.name)}</span>
+        <span class="pool-tag">未割当</span>
+        ${prefTag}
+        ${isCur ? '<span class="check">✓</span>' : ''}
+      </div>`;
+    });
+    poolSpot.forEach(s => {
+      const isCur = s.name === current;
+      html += `<div class="seller-item spot-item ${isCur ? 'current' : ''}"
+        onclick="selectSeller('${escapeAttr(s.name)}')">
+        <span class="name spot">${escapeHtml(s.name)}</span>
+        ${isCur ? '<span class="check">✓</span>' : ''}
+      </div>`;
+    });
+  }
+
+  const labels = ['第1希望', '第2希望', '第3希望', 'その他'];
   tiers.forEach((arr, i) => {
     if (arr.length === 0) return;
     html += `<div class="tier-head">${labels[i]}（${arr.length}名）</div>`;
@@ -788,7 +1020,7 @@ function renderSellers() {
                 : s.tier === 2 ? '<span class="pref-tag t2">2</span>'
                 : s.tier === 3 ? '<span class="pref-tag t3">3</span>'
                 : '';
-      html += `<div class="seller-item ${isCur ? 'current' : ''}" 
+      html += `<div class="seller-item ${isCur ? 'current' : ''}"
         onclick="selectSeller('${escapeAttr(s.name)}')">
         <span class="name">${escapeHtml(s.name)}</span>
         ${tag}
@@ -808,13 +1040,9 @@ async function selectSeller(name) {
   try {
     const data = await apiPost('setAssignment', { date, base, name });
     if (!data.success) throw new Error(data.error || '更新失敗');
-    // ローカル状態を即時更新
-    if (!state.matrix[date]) state.matrix[date] = {};
-    state.matrix[date][base] = name;
-    renderMatrix();
     closeSheet();
     toast(`${base} → ${name}`, 'ok');
-    loadDiffs();
+    await loadAll();
   } catch (e) {
     toast(`更新失敗: ${e.message}`, 'err');
   } finally {
@@ -829,12 +1057,9 @@ async function removeCurrent() {
   try {
     const data = await apiPost('removeAssignment', { date, base });
     if (!data.success) throw new Error(data.error || '更新失敗');
-    if (!state.matrix[date]) state.matrix[date] = {};
-    state.matrix[date][base] = '【未割当】';
-    renderMatrix();
     closeSheet();
     toast(`${base} を未割当に戻しました`, 'ok');
-    loadDiffs();
+    await loadAll();
   } catch (e) {
     toast(`更新失敗: ${e.message}`, 'err');
   } finally {
@@ -842,17 +1067,99 @@ async function removeCurrent() {
   }
 }
 
-// ═══ 自動割振 ═══
+function openStaffModal(name, type, date) {
+  state.selectedStaff = { name, type, date };
+  const isSpot = type === 'spot';
+  document.getElementById('staffModalTitle').innerHTML =
+    `<span class="staff-name ${isSpot ? 'spot' : ''}">${escapeHtml(name)}</span> を ${escapeHtml(date)} のどこに？`;
+  renderBaseOptions();
+  document.getElementById('staffModal').classList.add('show');
+}
+function closeStaffModal() {
+  document.getElementById('staffModal').classList.remove('show');
+  state.selectedStaff = null;
+}
+
+function renderBaseOptions() {
+  if (!state.selectedStaff) return;
+  const { name, date, type } = state.selectedStaff;
+
+  const unassignedBases = state.bases.filter(b => {
+    const cur = (state.matrix[date] && state.matrix[date][b.name]) || '';
+    return !cur || cur === '【未割当】';
+  });
+
+  let prefs = [];
+  if (type !== 'spot') {
+    const seller = state.sellers.find(s => s.name === name);
+    if (seller) {
+      prefs = [seller.pref1, seller.pref2, seller.pref3].filter(p => p);
+    }
+  }
+
+  const preferred = [];
+  const others = [];
+  unassignedBases.forEach(b => {
+    const prefIdx = prefs.indexOf(b.name);
+    if (prefIdx >= 0) preferred.push({ ...b, prefRank: prefIdx + 1 });
+    else others.push(b);
+  });
+  preferred.sort((a, b) => a.prefRank - b.prefRank);
+
+  let html = '';
+  if (unassignedBases.length === 0) {
+    html = '<div class="diff-empty">未割当の拠点がありません</div>';
+  } else {
+    if (preferred.length > 0) {
+      html += '<div class="base-tier-head">⭐ 希望拠点</div>';
+      preferred.forEach(b => {
+        html += `<div class="base-option preferred"
+          onclick="assignStaffToBase('${escapeAttr(b.name)}')">
+          <span class="name">${escapeHtml(b.name)}</span>
+          <span class="pref-tag">第${b.prefRank}希望</span>
+        </div>`;
+      });
+    }
+    if (others.length > 0) {
+      html += `<div class="base-tier-head">未割当の拠点（${others.length}件）</div>`;
+      others.forEach(b => {
+        html += `<div class="base-option"
+          onclick="assignStaffToBase('${escapeAttr(b.name)}')">
+          <span class="name">${escapeHtml(b.name)}</span>
+        </div>`;
+      });
+    }
+  }
+  document.getElementById('staffModalBody').innerHTML = html;
+}
+
+async function assignStaffToBase(baseName) {
+  if (!state.selectedStaff) return;
+  const { name, date } = state.selectedStaff;
+  showLoading('割当を更新中...');
+  try {
+    const data = await apiPost('setAssignment', { date, base: baseName, name });
+    if (!data.success) throw new Error(data.error || '更新失敗');
+    closeStaffModal();
+    toast(`${baseName} → ${name}`, 'ok');
+    await loadAll();
+  } catch (e) {
+    toast(`更新失敗: ${e.message}`, 'err');
+  } finally {
+    hideLoading();
+  }
+}
+
 async function confirmAssign() {
   const ok = confirm('自動割振を実行します。\n\n現在のシフト表は上書きされます。\nよろしいですか？');
   if (!ok) return;
-  showLoading('自動割振中（10〜30秒かかります）...');
+  showLoading('自動割振中（10〜30秒）...');
   setStatus('busy', '自動割振中...');
   try {
     const data = await apiGet('admin', { task: 'assign' });
     if (data.status !== 'ok') throw new Error(data.message || '失敗');
     toast('自動割振完了', 'ok');
-    setStatus('ok', '自動割振完了。マトリクスを再読み込みします');
+    setStatus('ok', '自動割振完了');
     await loadAll();
   } catch (e) {
     toast(`失敗: ${e.message}`, 'err');
@@ -862,22 +1169,28 @@ async function confirmAssign() {
   }
 }
 
-// ═══ 一括送信 ═══
 async function confirmBatch() {
-  // 送信対象人数を計算
   const recipients = new Set();
-  let unassignedCount = 0;
   Object.values(state.matrix).forEach(row => {
     Object.values(row).forEach(name => {
-      if (!name || name === '【未割当】') unassignedCount++;
-      else recipients.add(name);
+      if (!name || name === '【未割当】') return;
+      if (isSpotName(name)) return;
+      recipients.add(name);
+    });
+  });
+
+  let normalUnassigned = 0;
+  Object.values(state.unassignedPool || {}).forEach(pool => {
+    pool.forEach(item => {
+      if (item.type === 'normal') normalUnassigned++;
     });
   });
 
   let msg = `${recipients.size}名の販売員にLINE通知を送信します。\n`;
-  msg += `対象週: ${state.weekTarget || '—'}\n\n`;
-  if (unassignedCount > 0) {
-    msg += `⚠ 未割当のセルが ${unassignedCount} 件あります。\nこのまま送信してよろしいですか？`;
+  msg += `対象週: ${state.weekTarget || '—'}\n`;
+  msg += `（スポットバイトには通知しません）\n\n`;
+  if (normalUnassigned > 0) {
+    msg += `⚠ 希望提出済みで未割当の方が ${normalUnassigned} 名います。\nこのまま送信してよろしいですか？`;
   } else {
     msg += `送信してよろしいですか？`;
   }
@@ -888,9 +1201,9 @@ async function confirmBatch() {
   showLoading('LINE通知を送信中...');
   setStatus('busy', 'LINE通知送信中...');
   try {
-    const data = await apiPost('sendShiftBatch', { 
-      weekTarget: state.weekTarget, 
-      source: 'manual' 
+    const data = await apiPost('sendShiftBatch', {
+      weekTarget: state.weekTarget,
+      source: 'manual'
     });
     if (!data.success) throw new Error(data.error || '送信失敗');
     const txt = `送信: ${data.sent}名 / スキップ: ${data.skipped}名`;
@@ -905,7 +1218,6 @@ async function confirmBatch() {
   }
 }
 
-// ═══ 差分確認 ═══
 function showDiffs() {
   const body = document.getElementById('diffBody');
   if (state.diffs.length === 0) {
@@ -913,9 +1225,6 @@ function showDiffs() {
       <div class="diff-empty">
         <div style="font-size:32px;margin-bottom:8px">✅</div>
         <div>通知後の変更はありません</div>
-        <div style="margin-top:6px;font-size:11px;color:var(--ink-mute)">
-          まだ一括送信していない場合も「変更なし」と表示されます
-        </div>
       </div>`;
   } else {
     let html = `<div style="font-size:12px;color:var(--ink-soft);margin-bottom:10px">
@@ -938,7 +1247,6 @@ function closeDiff() {
   document.getElementById('diffModal').classList.remove('show');
 }
 
-// ═══ UI ヘルパー ═══
 function setStatus(type, msg) {
   const el = document.getElementById('status');
   el.className = `status ${type}`;
@@ -967,10 +1275,9 @@ function escapeHtml(s) {
     .replace(/'/g, '&#39;');
 }
 function escapeAttr(s) {
-  return String(s ?? '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+  return String(s ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
 }
 
-// ═══ 初期化 ═══
 if (sessionStorage.getItem('shift_admin_auth') === '1') {
   showMain();
 }
