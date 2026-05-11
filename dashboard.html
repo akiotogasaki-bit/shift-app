@@ -3280,7 +3280,19 @@ function toggleSelectAllMemos(checked) {
 
 function openMemoReply(locationId, date) {
   // memo-reply.htmlへ遷移（クエリパラメータ付き）
-  const url = `memo-reply.html?locationId=${encodeURIComponent(locationId)}&date=${encodeURIComponent(date)}`;
+  // memo-reply.html は locId / date / uid を必須、locName / uname / memo を任意で受け取る
+  const memo = (_memoData.pending || []).concat(_memoData.history || [])
+    .find(m => m.locationId === locationId && m.date === date);
+  if (!memo) {
+    alert('申し送り情報が見つかりません');
+    return;
+  }
+  const url = `memo-reply.html?locId=${encodeURIComponent(locationId)}`
+    + `&date=${encodeURIComponent(date)}`
+    + `&uid=${encodeURIComponent(memo.userId || '')}`
+    + `&locName=${encodeURIComponent(memo.locationName || '')}`
+    + `&uname=${encodeURIComponent(memo.userName || '')}`
+    + `&memo=${encodeURIComponent(memo.memo || '')}`;
   window.location.href = url;
 }
 
