@@ -109,6 +109,12 @@ input { font-family: inherit; }
   gap: 8px;
   padding: 12px 16px 8px;
 }
+.actions-2nd {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 0 16px 8px;
+}
 .act-btn {
   position: relative;
   padding: 12px 4px;
@@ -127,6 +133,8 @@ input { font-family: inherit; }
 .act-btn.assign { background: var(--navy); }
 .act-btn.diff   { background: var(--orange); }
 .act-btn.batch  { background: var(--green); }
+.act-btn.remind-next { background: #5A6B82; }
+.act-btn.remind-this { background: #8B6F47; }
 .badge {
   position: absolute;
   top: 4px; right: 4px;
@@ -898,6 +906,17 @@ input { font-family: inherit; }
     </button>
   </div>
 
+  <div class="actions-2nd">
+    <button class="act-btn remind-next" onclick="confirmReminder('next')">
+      <span class="ico">📣</span>
+      <span>来週リマインド</span>
+    </button>
+    <button class="act-btn remind-this" onclick="confirmReminder('this')">
+      <span class="ico">📣</span>
+      <span>今週リマインド</span>
+    </button>
+  </div>
+
   <div class="status" id="status">準備中...</div>
 
   <div class="sec-title">📊 シフト割当</div>
@@ -1557,6 +1576,42 @@ async function confirmBatch() {
   } catch (e) {
     toast(`送信失敗: ${e.message}`, 'err');
     setStatus('err', `一括送信失敗: ${e.message}`);
+  } finally {
+    hideLoading();
+  }
+}
+
+// ─────────────────────────────────────────
+// STEP 3-A：シフト未提出者へのLINEリマインダー（v2026-05-11）
+//   - weekType: 'this' | 'next'
+//   - 事前APIコールなし。confirm時は「未提出者」とだけ表示
+//   - GAS側で対象抽出（属性=販売員 かつ userIdあり かつ 未提出）
+// ─────────────────────────────────────────
+async function confirmReminder(weekType) {
+  const label = weekType === 'this' ? '今週' : '来週';
+  const ok = confirm(
+    `${label}分のシフト未提出者にLINEリマインダーを送信します。\n\n` +
+    `（販売員のうち、まだ希望を提出していない人だけが対象です）\n\n` +
+    `送信してよろしいですか？`
+  );
+  if (!ok) return;
+
+  showLoading(`${label}リマインダー送信中...`);
+  setStatus('busy', `${label}リマインダー送信中...`);
+  try {
+    const data = await apiPost('sendReminder', { weekTarget: weekType });
+    if (!data.success) throw new Error(data.error || '送信失敗');
+    if (data.total === 0) {
+      toast(`${label}：未提出者なし（送信対象0名）`, 'ok');
+      setStatus('ok', `${label}リマインド：未提出者なし`);
+      return;
+    }
+    const txt = `送信: ${data.sent}名 / スキップ: ${data.skipped}名`;
+    toast(`${label}リマインド完了（${txt}）`, 'ok');
+    setStatus('ok', `${label}リマインド完了（${txt}）`);
+  } catch (e) {
+    toast(`リマインド送信失敗: ${e.message}`, 'err');
+    setStatus('err', `リマインド送信失敗: ${e.message}`);
   } finally {
     hideLoading();
   }
