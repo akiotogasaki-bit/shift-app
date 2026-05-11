@@ -640,6 +640,176 @@ body {
   z-index: 300;
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ═══════════════════════════════════════════════════════════════
+   v2026-05-11 追加：Task-7（モーダルUX）／Task-8（クーポンバー）
+   ／Task-9（締めから戻る）／Task-10（金庫サマリー）
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Task-7: pull-to-refresh抑止 */
+html, body { overscroll-behavior-y: contain; }
+
+/* Task-7: スワイプ閉じ用にハンドルをタップ可能化 */
+.modal-handle {
+  cursor: grab;
+  touch-action: none;
+  position: relative;
+  padding: 8px 0;
+  margin: -8px auto 12px;
+  width: 60px; height: 20px;
+  background: transparent;
+}
+.modal-handle::before {
+  content: '';
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 36px; height: 4px;
+  background: #444;
+  border-radius: 2px;
+}
+.modal-sheet.swiping { transition: none; }
+
+/* Task-7: モーダル右上 ✕ ボタン */
+.modal-close-x {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 44px; height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,.08);
+  border: none;
+  border-radius: 50%;
+  color: #FFF;
+  font-size: 20px;
+  font-weight: 700;
+  cursor: pointer;
+  z-index: 5;
+  -webkit-tap-highlight-color: transparent;
+}
+.modal-close-x:active { background: rgba(255,255,255,.18); transform: scale(.92); }
+.modal-sheet { position: relative; }
+
+/* Task-8: 決済ボタン直上のクーポンバー */
+.coupon-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  background: #2A2A2A;
+  border: 1.5px solid #444;
+  border-radius: 10px;
+  color: #BBB;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.coupon-bar:active { transform: scale(.99); }
+.coupon-bar.on {
+  background: rgba(39,174,96,.18);
+  border-color: var(--green);
+  color: var(--green);
+}
+.coupon-bar .cb-state {
+  background: #444;
+  color: #FFF;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  letter-spacing: .05em;
+}
+.coupon-bar.on .cb-state { background: var(--green); color: #FFF; }
+.coupon-bar .cb-input-wrap {
+  display: none;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+}
+.coupon-bar.on .cb-input-wrap { display: inline-flex; }
+.coupon-bar .cb-input {
+  width: 64px;
+  padding: 4px 6px;
+  background: #1A1A1A;
+  border: 1px solid var(--green);
+  border-radius: 6px;
+  color: #FFF;
+  font-size: 13px;
+  text-align: right;
+  font-family: inherit;
+}
+.coupon-bar .cb-input:focus { outline: none; }
+.coupon-bar .cb-unit { font-size: 11px; color: #888; }
+
+/* Task-9: 締め画面「← レジに戻る」ボタン */
+.back-to-register-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255,255,255,.15);
+  border: 1px solid rgba(255,255,255,.3);
+  color: #FFF;
+  padding: 6px 12px;
+  border-radius: 18px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+.back-to-register-btn:active { opacity: .7; transform: scale(.96); }
+.app-header.with-back { display: flex; align-items: center; gap: 10px; }
+
+/* Task-10: 金庫有高サマリーカード（在庫モーダル内） */
+.cashbox-summary {
+  background: linear-gradient(135deg, rgba(244,196,48,.12), rgba(244,196,48,.04));
+  border: 1px solid rgba(244,196,48,.4);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin: 0 0 14px;
+}
+.cashbox-summary-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #F4C430;
+  letter-spacing: .1em;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cashbox-summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-size: 12px;
+  color: #CCC;
+}
+.cashbox-summary-row.total {
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(244,196,48,.25);
+  font-size: 14px;
+  color: #FFF;
+  font-weight: 700;
+}
+.cashbox-summary-row .cs-val { color: #FFF; font-weight: 700; }
+.cashbox-summary-row.total .cs-val { color: #F4C430; font-size: 16px; }
+.cashbox-summary-note {
+  font-size: 10px;
+  color: #888;
+  margin-top: 6px;
+  text-align: right;
+}
+
 </style>
 </head>
 <body>
@@ -749,7 +919,7 @@ body {
       <span class="header-user" id="reg-sales-count" style="color:#F4C430;">0個</span>
       <button class="header-action-btn" onclick="openStockModal()">📦 在庫</button>
       <button class="header-action-btn" onclick="openHistoryModal()">📋 履歴</button>
-      <button class="header-action-btn" onclick="showScreen('final')">締め →</button>
+      <button class="header-action-btn" onclick="enterFinalScreen()">締め →</button>
     </div>
   </div>
 
@@ -758,15 +928,6 @@ body {
 
   <div style="overflow-y:auto;flex:1;padding-bottom:280px;">
     <div class="products-grid" id="products-grid"></div>
-
-    <div style="padding:0 12px;">
-      <div class="coupon-row">
-        <div class="coupon-toggle" id="coupon-toggle" onclick="toggleCoupon()"></div>
-        <span class="coupon-label">クーポン</span>
-        <input type="number" class="coupon-input" id="coupon-amount" value="300" inputmode="numeric" style="display:none;">
-        <span class="coupon-unit" id="coupon-unit-label" style="display:none;">円引き</span>
-      </div>
-    </div>
   </div>
 
   <!-- 固定下部：カート＋合計＋支払いボタン -->
@@ -779,6 +940,16 @@ body {
       <span class="total-label">合計</span>
       <span class="total-amount" id="total-amount">¥0</span>
     </div>
+    <!-- Task-8: クーポン適用バー（バー全体タップでON/OFF） -->
+    <div class="coupon-bar" id="coupon-toggle" onclick="toggleCoupon()">
+      <span>🎟 クーポン適用</span>
+      <span class="cb-state" id="coupon-state-label">OFF</span>
+      <span class="cb-input-wrap">
+        <input type="number" class="cb-input" id="coupon-amount" value="300" inputmode="numeric" onclick="event.stopPropagation()">
+        <span class="cb-unit">円引き</span>
+      </span>
+    </div>
+    <span id="coupon-unit-label" style="display:none;"></span>
     <div class="pay-btns">
       <button class="pay-btn pay-cash" id="btn-cash" onclick="openCashModal()" disabled>💴 現金</button>
       <button class="pay-btn pay-paypay" id="btn-paypay" onclick="openPayPayModal()" disabled>📱 PayPay</button>
@@ -788,8 +959,9 @@ body {
 
 <!-- FINAL REPORT -->
 <div id="screen-final" class="screen">
-  <div class="app-header">
-    <div>
+  <div class="app-header with-back">
+    <button class="back-to-register-btn" onclick="backToRegisterFromFinal()" aria-label="レジに戻る">← レジに戻る</button>
+    <div style="flex:1;">
       <div class="header-title" id="final-location-name">拠点名</div>
       <div class="header-sub">最終報告・締め</div>
     </div>
@@ -799,7 +971,7 @@ body {
       <div class="form-card-title">レジ最終金額</div>
       <div class="form-row">
         <span class="form-label">最終金額</span>
-        <input type="number" class="form-input" id="register-end" placeholder="0" inputmode="numeric">
+        <input type="number" class="form-input" id="register-end" placeholder="0" inputmode="numeric" oninput="saveState()">
         <span class="form-unit">円</span>
       </div>
     </div>
@@ -816,7 +988,7 @@ body {
       <div class="form-card-title">遅刻</div>
       <div class="form-row">
         <span class="form-label">遅刻時間</span>
-        <input type="number" class="form-input" id="late-minutes" value="" placeholder="0" min="0" inputmode="numeric" style="width:80px;text-align:right;" oninput="updateLatePenalty()">
+        <input type="number" class="form-input" id="late-minutes" value="" placeholder="0" min="0" inputmode="numeric" style="width:80px;text-align:right;" oninput="updateLatePenalty();saveState();">
         <span class="form-unit">分</span>
         <span style="font-size:12px;color:var(--red);margin-left:8px;" id="late-penalty-preview"></span>
       </div>
@@ -1001,11 +1173,26 @@ body {
 
 <!-- STOCK MODAL -->
 <div class="modal-overlay" id="stock-modal" onclick="if(event.target===this)closeStockModal()">
-  <div class="modal-sheet">
+  <div class="modal-sheet" data-swipe-close="closeStockModal">
+    <button class="modal-close-x" onclick="closeStockModal()" aria-label="閉じる">✕</button>
     <div class="modal-handle"></div>
-    <div class="modal-title" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+    <div class="modal-title" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding-right:48px;">
       <span>📦 在庫確認 <span id="stock-summary" style="color:#F4C430;font-size:13px;font-weight:700;"></span></span>
       <button id="stock-edit-btn" onclick="toggleStockEdit()" style="background:#333;color:#F4C430;border:1px solid #F4C430;border-radius:6px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer;flex-shrink:0;">✏️ 編集</button>
+    </div>
+    <!-- Task-10: 金庫有高サマリー -->
+    <div class="cashbox-summary" id="cashbox-summary">
+      <div class="cashbox-summary-title">💰 想定金庫額</div>
+      <div class="cashbox-summary-row">
+        <span>開始金庫</span><span class="cs-val" id="cs-start">¥0</span>
+      </div>
+      <div class="cashbox-summary-row">
+        <span>＋ 現金売上</span><span class="cs-val" id="cs-cash">¥0</span>
+      </div>
+      <div class="cashbox-summary-row total">
+        <span>= 現在の想定額</span><span class="cs-val" id="cs-total">¥0</span>
+      </div>
+      <div class="cashbox-summary-note">※ ギャラは締めで精算</div>
     </div>
     <div id="stock-list"></div>
     <button class="modal-confirm-btn" onclick="closeStockModal()" style="margin-top:14px;background:#444;">閉じる</button>
@@ -1014,9 +1201,10 @@ body {
 
 <!-- HISTORY MODAL -->
 <div class="modal-overlay" id="history-modal" onclick="if(event.target===this)closeHistoryModal()">
-  <div class="modal-sheet">
+  <div class="modal-sheet" data-swipe-close="closeHistoryModal">
+    <button class="modal-close-x" onclick="closeHistoryModal()" aria-label="閉じる">✕</button>
     <div class="modal-handle"></div>
-    <div class="modal-title">本日の会計履歴 <span id="history-count" style="color:#F4C430;font-size:14px;font-weight:700;"></span></div>
+    <div class="modal-title" style="padding-right:48px;">本日の会計履歴 <span id="history-count" style="color:#F4C430;font-size:14px;font-weight:700;"></span></div>
     <div id="history-list"></div>
     <button class="modal-confirm-btn" onclick="closeHistoryModal()" style="margin-top:14px;background:#444;">閉じる</button>
   </div>
@@ -1568,12 +1756,10 @@ function updateTotal() {
 }
 function toggleCoupon() {
   state.couponOn = !state.couponOn;
-  const toggle = document.getElementById('coupon-toggle');
-  const input  = document.getElementById('coupon-amount');
-  const unit   = document.getElementById('coupon-unit-label');
-  toggle.classList.toggle('on', state.couponOn);
-  input.style.display = state.couponOn ? 'block' : 'none';
-  unit.style.display  = state.couponOn ? 'inline' : 'none';
+  const bar = document.getElementById('coupon-toggle');
+  const label = document.getElementById('coupon-state-label');
+  bar.classList.toggle('on', state.couponOn);
+  if (label) label.textContent = state.couponOn ? 'ON' : 'OFF';
   updateTotal();
 }
 
@@ -1704,9 +1890,10 @@ function recordSales(method) {
 function clearCart() {
   state.cart = [];
   state.couponOn = false;
-  document.getElementById('coupon-toggle').classList.remove('on');
-  document.getElementById('coupon-amount').style.display = 'none';
-  document.getElementById('coupon-unit-label').style.display = 'none';
+  const bar = document.getElementById('coupon-toggle');
+  const label = document.getElementById('coupon-state-label');
+  if (bar) bar.classList.remove('on');
+  if (label) label.textContent = 'OFF';
   renderCart();
 }
 
@@ -1733,6 +1920,7 @@ function openStockModal() {
   stockEditMode = false;
   resetStockEditBtn();
   renderStockList();
+  renderCashboxSummary();  // Task-10: 金庫有高サマリー更新
   document.getElementById('stock-modal').classList.add('show');
 }
 function closeStockModal() {
@@ -1818,6 +2006,19 @@ function sendDeliveryUpdate(productId, newCount) {
     method: 'POST',
     body:   JSON.stringify(payload),
   }).catch(e => console.warn('updateDeliveryCount error:', e));
+}
+
+// Task-10 v2026-05-11：在庫モーダル内 金庫有高サマリー
+function renderCashboxSummary() {
+  const start = parseInt(state.registerStart) || 0;
+  const cash  = parseInt(state.cashSales)     || 0;
+  const total = start + cash;
+  const elStart = document.getElementById('cs-start');
+  const elCash  = document.getElementById('cs-cash');
+  const elTotal = document.getElementById('cs-total');
+  if (elStart) elStart.textContent = `¥${start.toLocaleString()}`;
+  if (elCash)  elCash.textContent  = `¥${cash.toLocaleString()}`;
+  if (elTotal) elTotal.textContent = `¥${total.toLocaleString()}`;
 }
 
 function renderStockList() {
@@ -2082,6 +2283,9 @@ function loadEditFromReport(report) {
 // ═══════════════════════════════════════════════════════════════
 function saveState() {
   try {
+    // Task-9: 締め画面の入力値も保存（再表示時に復元）
+    const finalRegisterEnd = document.getElementById('register-end')?.value || '';
+    const finalLateMinutes = document.getElementById('late-minutes')?.value || '';
     const save = {
       userId:        state.userId,
       userName:      state.userName,
@@ -2100,6 +2304,10 @@ function saveState() {
       soldOutMap:    state.soldOutMap || {},
       history:       state.history || [],
       activeCategory: state.activeCategory,
+      // Task-9 追加：締め画面の入力値
+      finalRegisterEnd: finalRegisterEnd,
+      finalLateMinutes: finalLateMinutes,
+      makanaiAri:    state['makanaiあり'],
       savedAt:       new Date().toISOString(),
     };
     localStorage.setItem('oedo_register_state', JSON.stringify(save));
@@ -2130,6 +2338,10 @@ function restoreState() {
     state.soldOutMap     = save.soldOutMap    || {};
     state.history        = save.history       || [];
     state.activeCategory = save.activeCategory || null;
+    // Task-9：締め画面の入力値も復元（DOM反映はenterFinalScreen側で行う）
+    state._finalRegisterEnd = save.finalRegisterEnd || '';
+    state._finalLateMinutes = save.finalLateMinutes || '';
+    if (typeof save.makanaiAri === 'boolean') state['makanaiあり'] = save.makanaiAri;
     return {
       savedUserId:   save.userId || '',
       savedUserName: save.userName || '',
@@ -2252,6 +2464,7 @@ function toggleMakanai() {
   state['makanaiあり'] = !state['makanaiあり'];
   document.getElementById('makanai-toggle').style.background = state['makanaiあり'] ? 'var(--green)' : '#888';
   document.getElementById('makanai-label').textContent = state['makanaiあり'] ? '有り' : '無し';
+  saveState();
 }
 
 function recalcFinal() {
@@ -2308,6 +2521,40 @@ function resumeForAdditionalSales() {
   // レジ画面に戻る
   showScreen('register');
   showToast('追加販売モード：販売後、再度「締め →」で報告してください');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Task-9 v2026-05-11：締め画面 入場／退場
+//   - 入場時：localStorage（state._finalRegisterEnd等）からDOMに復元
+//   - 退場（レジに戻る）：値を保持しつつregister画面へ
+// ═══════════════════════════════════════════════════════════════
+function enterFinalScreen() {
+  // localStorageから復元した値があればDOMに反映
+  const regEnd = document.getElementById('register-end');
+  const lateMin = document.getElementById('late-minutes');
+  if (regEnd && typeof state._finalRegisterEnd === 'string' && state._finalRegisterEnd !== '') {
+    regEnd.value = state._finalRegisterEnd;
+  }
+  if (lateMin && typeof state._finalLateMinutes === 'string' && state._finalLateMinutes !== '') {
+    lateMin.value = state._finalLateMinutes;
+    if (typeof updateLatePenalty === 'function') updateLatePenalty();
+  }
+  // 賄いトグルの見た目を state['makanaiあり'] に合わせる
+  const mkToggle = document.getElementById('makanai-toggle');
+  const mkLabel  = document.getElementById('makanai-label');
+  if (mkToggle) mkToggle.style.background = state['makanaiあり'] ? 'var(--green)' : '#888';
+  if (mkLabel)  mkLabel.textContent       = state['makanaiあり'] ? '有り' : '無し';
+  // 集計結果エリアは隠す（再計算前提）
+  const finalResults = document.getElementById('final-results');
+  if (finalResults) finalResults.style.display = 'none';
+  showScreen('final');
+}
+
+function backToRegisterFromFinal() {
+  // 値はoninputで既に保存済みだが念のため保存
+  saveState();
+  showScreen('register');
+  showToast('レジ画面に戻りました（締め画面の入力は保持されています）', 2500);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2380,8 +2627,73 @@ function showToast(msg, duration) {
   setTimeout(() => toast.classList.remove('show'), duration || 2000);
 }
 
+// ═══════════════════════════════════════════════════════════════
+// Task-7 v2026-05-11：モーダル スワイプ閉じ
+//   - .modal-sheet[data-swipe-close="関数名"] のmodal-handleを
+//     下方向にスワイプで閉じる。
+//   - body の overscroll-behavior は CSS 側で抑止済。
+// ═══════════════════════════════════════════════════════════════
+function attachModalSwipeClose() {
+  const sheets = document.querySelectorAll('.modal-sheet[data-swipe-close]');
+  sheets.forEach(sheet => {
+    const handle = sheet.querySelector('.modal-handle');
+    if (!handle) return;
+    const closeFnName = sheet.getAttribute('data-swipe-close');
+    let startY = 0;
+    let currentY = 0;
+    let dragging = false;
+    let startTime = 0;
+
+    function onStart(e) {
+      const t = e.touches ? e.touches[0] : e;
+      startY = t.clientY;
+      currentY = 0;
+      dragging = true;
+      startTime = Date.now();
+      sheet.classList.add('swiping');
+    }
+    function onMove(e) {
+      if (!dragging) return;
+      const t = e.touches ? e.touches[0] : e;
+      currentY = t.clientY - startY;
+      if (currentY < 0) currentY = 0; // 上方向は無効
+      sheet.style.transform = `translateY(${currentY}px)`;
+      if (e.cancelable) e.preventDefault();
+    }
+    function onEnd() {
+      if (!dragging) return;
+      dragging = false;
+      sheet.classList.remove('swiping');
+      const elapsed = Date.now() - startTime;
+      const velocity = currentY / Math.max(elapsed, 1); // px/ms
+      const shouldClose = currentY > 90 || velocity > 0.6;
+      sheet.style.transform = '';
+      if (shouldClose && typeof window[closeFnName] === 'function') {
+        window[closeFnName]();
+      }
+    }
+
+    handle.addEventListener('touchstart', onStart, { passive: true });
+    handle.addEventListener('touchmove', onMove, { passive: false });
+    handle.addEventListener('touchend', onEnd, { passive: true });
+    handle.addEventListener('touchcancel', onEnd, { passive: true });
+    // マウス操作（デバッグ・PCブラウザ用）
+    handle.addEventListener('mousedown', e => {
+      onStart(e);
+      const move = ev => onMove(ev);
+      const up = () => {
+        onEnd();
+        document.removeEventListener('mousemove', move);
+        document.removeEventListener('mouseup', up);
+      };
+      document.addEventListener('mousemove', move);
+      document.addEventListener('mouseup', up);
+    });
+  });
+}
+
 // BOOT
-init().then(() => { renderLocations(); });
+init().then(() => { renderLocations(); attachModalSwipeClose(); });
 </script>
 </body>
 </html>
