@@ -1003,7 +1003,10 @@ body {
 <div class="modal-overlay" id="stock-modal" onclick="if(event.target===this)closeStockModal()">
   <div class="modal-sheet">
     <div class="modal-handle"></div>
-    <div class="modal-title">📦 在庫確認 <span id="stock-summary" style="color:#F4C430;font-size:13px;font-weight:700;"></span></div>
+    <div class="modal-title" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+      <span>📦 在庫確認 <span id="stock-summary" style="color:#F4C430;font-size:13px;font-weight:700;"></span></span>
+      <button id="stock-edit-btn" onclick="toggleStockEdit()" style="background:#333;color:#F4C430;border:1px solid #F4C430;border-radius:6px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer;flex-shrink:0;">✏️ 編集</button>
+    </div>
     <div id="stock-list"></div>
     <button class="modal-confirm-btn" onclick="closeStockModal()" style="margin-top:14px;background:#444;">閉じる</button>
   </div>
@@ -1105,18 +1108,38 @@ async function init() {
     const restored = restoreState();
     if (restored) {
       const loc = state.location;
-      if (loc && confirm(`前回の販売データが見つかりました。\n\n拠点：${loc.name}\n販売数：${state.soldCount}個\n\n続きから再開しますか？`)) {
-        document.getElementById('start-location-name').textContent  = loc.name;
-        document.getElementById('start-user-name').textContent      = state.userName;
-        document.getElementById('reg-location-name').textContent    = loc.name;
-        document.getElementById('final-location-name').textContent  = loc.name;
-        renderCategoryTabs();
-        renderProducts();
-        document.getElementById('reg-sales-count').textContent = `${state.soldCount}個`;
-        showScreen('register');
-        return;
+      const isSamePerson = restored.savedUserId && restored.savedUserId === state.userId;
+
+      if (isSamePerson) {
+        // ◆ 同じ人：確認なしで自動復元
+        if (loc) {
+          document.getElementById('start-location-name').textContent  = loc.name;
+          document.getElementById('start-user-name').textContent      = state.userName;
+          document.getElementById('reg-location-name').textContent    = loc.name;
+          document.getElementById('final-location-name').textContent  = loc.name;
+          renderCategoryTabs();
+          renderProducts();
+          document.getElementById('reg-sales-count').textContent = `${state.soldCount}個`;
+          showScreen('register');
+          showToast('📋 前回の続きから再開しました', 3000);
+          return;
+        }
       } else {
-        clearSavedState();
+        // ◆ 違う人：名前入りダイアログで確認
+        const otherName = restored.savedUserName || '別のユーザー';
+        if (loc && confirm(`${otherName}さんのデータが残っています。\n\n拠点：${loc.name}\n販売数：${state.soldCount}個\n\n引き継ぎますか？`)) {
+          document.getElementById('start-location-name').textContent  = loc.name;
+          document.getElementById('start-user-name').textContent      = state.userName;
+          document.getElementById('reg-location-name').textContent    = loc.name;
+          document.getElementById('final-location-name').textContent  = loc.name;
+          renderCategoryTabs();
+          renderProducts();
+          document.getElementById('reg-sales-count').textContent = `${state.soldCount}個`;
+          showScreen('register');
+          return;
+        } else {
+          clearSavedState();
+        }
       }
     }
     showScreen('location');
@@ -1704,11 +1727,98 @@ function addToHistory(entry) {
   });
 }
 
+let stockEditMode = false;
+
 function openStockModal() {
+  stockEditMode = false;
+  resetStockEditBtn();
   renderStockList();
   document.getElementById('stock-modal').classList.add('show');
 }
-function closeStockModal() { document.getElementById('stock-modal').classList.remove('show'); }
+function closeStockModal() {
+  stockEditMode = false;
+  resetStockEditBtn();
+  document.getElementById('stock-modal').classList.remove('show');
+}
+
+function resetStockEditBtn() {
+  const btn = document.getElementById('stock-edit-btn');
+  if (!btn) return;
+  btn.textContent = '✏️ 編集';
+  btn.style.background = '#333';
+  btn.style.color = '#F4C430';
+}
+
+function toggleStockEdit() {
+  stockEditMode = !stockEditMode;
+  const btn = document.getElementById('stock-edit-btn');
+  if (stockEditMode) {
+    btn.textContent = '✓ 完了';
+    btn.style.background = '#F4C430';
+    btn.style.color = '#000';
+  } else {
+    resetStockEditBtn();
+  }
+  renderStockList();
+}
+
+// 納品数を相対調整（＋／−ボタン）
+function adjustDelivery(productId, delta) {
+  const sold     = state.productSales[productId] || 0;
+  const current  = state.deliveryCount[productId] || 0;
+  const newVal   = current + delta;
+  if (newVal < sold) {
+    showToast(`販売済（${sold}個）以下にはできません`);
+    return;
+  }
+  if (newVal < 0) return;
+  state.deliveryCount[productId] = newVal;
+  saveState();
+  sendDeliveryUpdate(productId, newVal);
+  // 残数≥1なら完売解除
+  if (state.soldOutMap[productId] && (newVal - sold) > 0) {
+    delete state.soldOutMap[productId];
+  }
+  renderStockList();
+  renderProducts();
+}
+
+// 納品数を直接入力（onblur）
+function setDelivery(productId, value) {
+  const sold = state.productSales[productId] || 0;
+  let newVal = parseInt(value);
+  if (isNaN(newVal) || newVal < 0) newVal = sold;
+  if (newVal < sold) {
+    showToast(`販売済（${sold}個）以下にはできません`);
+    newVal = sold;
+  }
+  state.deliveryCount[productId] = newVal;
+  saveState();
+  sendDeliveryUpdate(productId, newVal);
+  if (state.soldOutMap[productId] && (newVal - sold) > 0) {
+    delete state.soldOutMap[productId];
+  }
+  renderStockList();
+  renderProducts();
+}
+
+// GASに納品数更新を即時送信
+function sendDeliveryUpdate(productId, newCount) {
+  const payload = {
+    action:       'updateDeliveryCount',
+    userId:       state.userId,
+    userName:     state.userName,
+    locationId:   state.location?.id,
+    locationName: state.location?.name,
+    productId:    productId,
+    newCount:     newCount,
+    timestamp:    new Date().toISOString(),
+  };
+  fetch(state.GAS_URL, {
+    method: 'POST',
+    body:   JSON.stringify(payload),
+  }).catch(e => console.warn('updateDeliveryCount error:', e));
+}
 
 function renderStockList() {
   const list = document.getElementById('stock-list');
@@ -1721,11 +1831,16 @@ function renderStockList() {
   const sellRate = totalDelivery > 0 ? Math.round(nonTeaSold / totalDelivery * 1000) / 10 : 0;
   document.getElementById('stock-summary').textContent = `(${nonTeaSold}/${totalDelivery}個 ${sellRate}%)`;
 
-  const products = state.products.filter(p => (state.deliveryCount[p.id] || 0) > 0);
+  // 編集モードでは納品済みじゃない商品も全て表示（追加できるように）
+  const products = stockEditMode
+    ? state.products
+    : state.products.filter(p => (state.deliveryCount[p.id] || 0) > 0);
+
   if (products.length === 0) {
     list.innerHTML = '<div class="history-empty">納品データがありません</div>';
     return;
   }
+
   list.innerHTML = products.map(p => {
     const delivery  = state.deliveryCount[p.id] || 0;
     const sold      = state.productSales[p.id] || 0;
@@ -1733,6 +1848,24 @@ function renderStockList() {
     const isSoldOut = !!state.soldOutMap[p.id];
     const isTea     = teaIds.includes(p.id);
     const remColor  = remaining <= 0 ? '#EF5350' : (remaining <= 2 ? '#F4C430' : '#FFF');
+
+    if (stockEditMode) {
+      return `
+        <div style="background:#1A1A1A;border:1px solid #444;border-radius:10px;padding:10px 12px;margin-bottom:6px;">
+          <div style="color:#FFF;font-size:13px;font-weight:600;margin-bottom:8px;">${p.name}${isTea ? ' <small style="color:#888;">(お茶)</small>' : ''}</div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="color:#888;font-size:11px;flex-shrink:0;">納品数</span>
+            <button onclick="adjustDelivery('${p.id}', -1)" style="width:34px;height:34px;background:#333;color:#FFF;border:none;border-radius:6px;font-size:18px;font-weight:700;cursor:pointer;">−</button>
+            <input type="number" id="delivery-edit-${p.id}" value="${delivery}" min="${sold}" inputmode="numeric"
+                   onblur="setDelivery('${p.id}', this.value)"
+                   style="flex:1;min-width:0;height:34px;background:#0A0A0A;color:#F4C430;border:1px solid #555;border-radius:6px;text-align:center;font-size:15px;font-weight:700;">
+            <button onclick="adjustDelivery('${p.id}', 1)" style="width:34px;height:34px;background:#333;color:#FFF;border:none;border-radius:6px;font-size:18px;font-weight:700;cursor:pointer;">＋</button>
+            <span style="color:#888;font-size:11px;flex-shrink:0;">販売 ${sold}</span>
+          </div>
+        </div>
+      `;
+    }
+
     return `
       <div style="background:#1A1A1A;border:1px solid #333;border-radius:10px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;gap:8px;">
         <div style="flex:1;min-width:0;">
@@ -1950,6 +2083,8 @@ function loadEditFromReport(report) {
 function saveState() {
   try {
     const save = {
+      userId:        state.userId,
+      userName:      state.userName,
       locationId:    state.location?.id,
       locationName:  state.location?.name,
       baseGigSalary: state.baseGigSalary,
@@ -1974,13 +2109,13 @@ function saveState() {
 function restoreState() {
   try {
     const raw = localStorage.getItem('oedo_register_state');
-    if (!raw) return false;
+    if (!raw) return null;
     const save = JSON.parse(raw);
     const savedDate = new Date(save.savedAt).toLocaleDateString('ja-JP');
     const today     = new Date().toLocaleDateString('ja-JP');
-    if (savedDate !== today) { localStorage.removeItem('oedo_register_state'); return false; }
+    if (savedDate !== today) { localStorage.removeItem('oedo_register_state'); return null; }
     const loc = state.locations.find(l => l.id === save.locationId);
-    if (!loc) return false;
+    if (!loc) return null;
     state.location       = loc;
     state.baseGigSalary  = save.baseGigSalary;
     state.registerStart  = save.registerStart;
@@ -1995,8 +2130,11 @@ function restoreState() {
     state.soldOutMap     = save.soldOutMap    || {};
     state.history        = save.history       || [];
     state.activeCategory = save.activeCategory || null;
-    return true;
-  } catch(e) { return false; }
+    return {
+      savedUserId:   save.userId || '',
+      savedUserName: save.userName || '',
+    };
+  } catch(e) { return null; }
 }
 
 function clearSavedState() { localStorage.removeItem('oedo_register_state'); }
@@ -2235,11 +2373,11 @@ function submitEdit() {
 // ═══════════════════════════════════════════════════════════════
 // UTILS
 // ═══════════════════════════════════════════════════════════════
-function showToast(msg) {
+function showToast(msg, duration) {
   const toast = document.getElementById('toast');
   toast.textContent = msg;
   toast.classList.add('show');
-  setTimeout(() => toast.classList.remove('show'), 2000);
+  setTimeout(() => toast.classList.remove('show'), duration || 2000);
 }
 
 // BOOT
