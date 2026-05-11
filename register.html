@@ -1282,7 +1282,12 @@ async function init() {
     state.userName = profile.displayName;
     document.getElementById('user-name-location').textContent = state.userName;
 
-    await loadMasterData();
+    // Step1: マスタと商品スイッチを並列取得（案B Phase-1 / 2026-05-12）
+    await Promise.all([
+      loadMasterData(),
+      applyProductSwitches(),
+    ]);
+    filterStoppedProducts();
 
     const todayReport = await checkTodayReport();
     if (todayReport) {
@@ -1368,8 +1373,7 @@ async function loadMasterData() {
     } else {
       loadDemoData();
     }
-    // ★ NEW: 商品スイッチ（停止商品）のフィルタを適用
-    await applyProductSwitches();
+// ★ 商品スイッチのフィルタは init() で並列取得後に filterStoppedProducts() で適用
   } catch (e) {
     document.getElementById('screen-loading').innerHTML =
       `<div style="color:#fff;padding:40px;font-size:13px;word-break:break-all;">
@@ -1398,20 +1402,24 @@ function loadDemoData() {
 // ─ GAS関数 getProductSwitches が未デプロイの場合はフィルタなしで継続
 // ═══════════════════════════════════════════════════════════════
 async function applyProductSwitches() {
+  // ★ Phase-1（並列化）対応：fetchだけ実行し state.stoppedProductIds に保存。
+  // フィルタ適用は filterStoppedProducts() で別途実施（state.products との順序依存を解消）
   try {
     const res = await fetch(`${state.GAS_URL}?action=getProductSwitches`, { method: 'GET', redirect: 'follow' });
     const stoppedIds = JSON.parse(await res.text());
-    if (Array.isArray(stoppedIds) && stoppedIds.length > 0) {
-      const before = state.products.length;
-      state.stoppedProductIds = stoppedIds;
-      state.products = state.products.filter(p => !stoppedIds.includes(p.id));
-      console.log(`[商品スイッチ] ${before - state.products.length}件の商品を停止中: ${stoppedIds.join(', ')}`);
-    } else {
-      state.stoppedProductIds = [];
-    }
+    state.stoppedProductIds = Array.isArray(stoppedIds) ? stoppedIds : [];
   } catch(e) {
     console.warn('getProductSwitches error (フィルタなしで継続):', e);
     state.stoppedProductIds = [];
+  }
+}
+
+function filterStoppedProducts() {
+  const stoppedIds = state.stoppedProductIds || [];
+  if (stoppedIds.length > 0 && Array.isArray(state.products)) {
+    const before = state.products.length;
+    state.products = state.products.filter(p => !stoppedIds.includes(p.id));
+    console.log(`[商品スイッチ] ${before - state.products.length}件の商品を停止中: ${stoppedIds.join(', ')}`);
   }
 }
 
