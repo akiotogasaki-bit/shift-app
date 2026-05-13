@@ -2406,7 +2406,7 @@ function calcFinal() {
   } else if (state.fixedSalary > 0) {
     totalSalary = state.fixedSalary + makanaiBonus - latePenalty;
   } else {
-    incentive   = Math.floor(nonTeaSold / state.incentiveUnit) * state.incentiveRate;
+    incentive   = nonTeaSold >= 20 ? Math.floor(nonTeaSold / state.incentiveUnit) * state.incentiveRate : 0;
     totalSalary = state.baseGigSalary + incentive + makanaiBonus - latePenalty;
   }
 
