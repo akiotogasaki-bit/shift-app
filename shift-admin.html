@@ -1057,10 +1057,10 @@ input { font-family: inherit; }
   margin-left: 2px;
 }
 
-/* ── 希望者なし（グレー）セル ── */
+/* ── 希望者なし（薄い赤）セル ── */
 .matrix td.no-pool {
-  background: #F0F0F0;
-  color: #AAAAAA;
+  background: #FFEEEE;
+  color: #CC6666;
 }
 
 /* ── 未提出セクション（toggle付き） ── */
@@ -2138,23 +2138,22 @@ function toggleUnsubmittedSeller(name, checkbox) {
 // ─────────────────────────────────────────
 function openBulkAssign(staffName) {
   state.bulkAssignStaff = staffName;
-  document.getElementById('bulkAssignTitle').textContent = `一括割り当て：${staffName}`;
-  // この人がプールにいる日付を集計
-  const availDates = state.dates.filter(d =>
-    (state.unassignedPool[d] || []).some(p => p.name === staffName));
-  if (availDates.length === 0) {
-    toast('この週に提出された希望日がありません', 'err');
-    return;
-  }
-  document.getElementById('bulkAssignSub').textContent =
-    `希望日: ${availDates.join('、')}`;
+  document.getElementById('bulkAssignTitle').textContent = `割り当て：${staffName}`;
+  document.getElementById('bulkAssignSub').textContent = '未割当のある拠点を選択（全日程に一括セット）';
   let html = '';
   state.bases.forEach(b => {
+    const unassignedCount = state.dates.filter(d => {
+      const name = (state.matrix[d] && state.matrix[d][b.name]) || '';
+      return !name || name === '【未割当】';
+    }).length;
+    if (unassignedCount === 0) return;
     html += `<div class="bulk-base-item"
       onclick="executeBulkAssign('${escapeAttr(staffName)}', '${escapeAttr(b.name)}')">
       ${escapeHtml(b.name)}
+      <span style="font-size:11px;color:var(--ink-mute);margin-left:6px">未割当 ${unassignedCount}日</span>
     </div>`;
   });
+  if (!html) html = '<div class="diff-empty" style="padding:20px;text-align:center">未割当の拠点がありません</div>';
   document.getElementById('bulkAssignBody').innerHTML = html;
   document.getElementById('bulkAssignOverlay').classList.add('show');
 }
@@ -2165,12 +2164,10 @@ function closeBulkAssign() {
 }
 
 function executeBulkAssign(staffName, baseName) {
-  const availDates = state.dates.filter(d =>
-    (state.unassignedPool[d] || []).some(p => p.name === staffName));
   let count = 0;
-  availDates.forEach(d => {
-    const currentAssignee = (state.matrix[d] && state.matrix[d][baseName]) || '';
-    if (!currentAssignee || currentAssignee === '【未割当】') {
+  state.dates.forEach(d => {
+    const current = (state.matrix[d] && state.matrix[d][baseName]) || '';
+    if (!current || current === '【未割当】') {
       savePendingLocal(d, baseName, staffName);
       count++;
     }
@@ -2470,11 +2467,12 @@ function renderStaffList() {
       const prefs = [s.pref1, s.pref2, s.pref3].filter(x => x);
       prefsMini = prefs.length > 0 ? prefs.join(' / ') : '希望なし';
     }
+    const hasNoPref = !s.pref1 && !s.pref2 && !s.pref3;
     html += `<div class="staff-card ${spotClass}" id="staffCard_${idx}">
       <div class="staff-card-head" onclick="toggleStaffCard(${idx})">
         <span class="name">${escapeHtml(s.name)}</span>
         <span class="prefs-mini">${escapeHtml(prefsMini)}</span>
-        ${!s.isSpot ? `<button class="bulk-assign-btn" onclick="event.stopPropagation();openBulkAssign('${escapeAttr(s.name)}')">一括</button>` : ''}
+        ${(!s.isSpot && hasNoPref) ? `<button class="bulk-assign-btn" onclick="event.stopPropagation();openBulkAssign('${escapeAttr(s.name)}')">割り当て</button>` : ''}
         <span class="caret">▶</span>
       </div>`;
 
