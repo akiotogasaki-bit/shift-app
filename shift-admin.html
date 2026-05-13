@@ -1026,6 +1026,106 @@ input { font-family: inherit; }
   margin-left: 4px;
   font-weight: 700;
 }
+
+/* ── 保存ボタン ── */
+.act-btn.save {
+  background: var(--green);
+  position: relative;
+}
+.save-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background: var(--red);
+  color: #FFF;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 10px;
+  padding: 1px 5px;
+  min-width: 16px;
+  text-align: center;
+  display: none;
+}
+
+/* ── Pending dot（未保存インジケーター） ── */
+.matrix td.pending::after,
+.daily-row.pending .daily-caret::before {
+  content: '●';
+  font-size: 7px;
+  color: var(--blue);
+  vertical-align: super;
+  margin-left: 2px;
+}
+
+/* ── 希望者なし（グレー）セル ── */
+.matrix td.no-pool {
+  background: #F0F0F0;
+  color: #AAAAAA;
+}
+
+/* ── 未提出セクション（toggle付き） ── */
+.tier-head.notsubmit { color: var(--ink-mute); border-color: var(--border-light); }
+.seller-item.notsubmit-item {
+  opacity: .75;
+  justify-content: space-between;
+}
+.seller-item.notsubmit-item .name { color: var(--ink-mute); }
+
+/* トグルスイッチ */
+.toggle-wrap {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.toggle-wrap input { display: none; }
+.toggle-knob {
+  width: 36px;
+  height: 20px;
+  background: var(--border);
+  border-radius: 10px;
+  position: relative;
+  transition: background .2s;
+}
+.toggle-knob::after {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  background: #FFF;
+  border-radius: 50%;
+  top: 2px;
+  left: 2px;
+  transition: left .2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,.2);
+}
+.toggle-wrap input:checked + .toggle-knob { background: var(--green); }
+.toggle-wrap input:checked + .toggle-knob::after { left: 18px; }
+
+/* ── 一括割り当てボタン（スタッフ管理） ── */
+.bulk-assign-btn {
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1.5px solid var(--blue);
+  background: transparent;
+  color: var(--blue);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.bulk-assign-btn:active { background: var(--blue); color: #FFF; }
+
+/* ── 一括割り当て拠点選択シート ── */
+.bulk-base-item {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-light);
+  font-size: 14px;
+  color: var(--ink);
+  cursor: pointer;
+}
+.bulk-base-item:active { background: var(--cream); }
 </style>
 </head>
 <body>
@@ -1079,6 +1179,11 @@ input { font-family: inherit; }
       <span class="ico">📣</span>
       <span>一括送信</span>
     </button>
+    <button class="act-btn save" onclick="batchSave()">
+      <span class="ico">💾</span>
+      <span>保存</span>
+      <span class="save-badge" id="saveBadge">0</span>
+    </button>
   </div>
 
   <div class="actions-2nd">
@@ -1110,9 +1215,9 @@ input { font-family: inherit; }
 
     <div class="legend">
       <span class="legend-item"><span class="legend-dot assigned"></span>割当済</span>
-      <span class="legend-item"><span class="legend-dot unassigned"></span>未割当</span>
+      <span class="legend-item"><span class="legend-dot unassigned"></span>希望あり未割当</span>
+      <span class="legend-item"><span class="legend-dot" style="background:#D0D0D0"></span>希望者なし</span>
       <span class="legend-item"><span class="legend-dot spot"></span>スポット</span>
-      <span style="color: var(--ink-mute); margin-left: auto; font-size:10px;">セルをタップで編集</span>
     </div>
 
     <div class="sec-title">⚠️ 未割当スタッフ <span id="poolTotalCount" style="margin-left:auto;font-weight:500;color:var(--ink-mute);font-size:10px;letter-spacing:0;"></span></div>
@@ -1289,6 +1394,20 @@ input { font-family: inherit; }
   </div>
 </div>
 
+<div class="sheet-overlay" id="bulkAssignOverlay" onclick="if(event.target===this)closeBulkAssign()">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-head">
+      <div class="sheet-title" id="bulkAssignTitle">一括割り当て</div>
+      <div class="sheet-sub" id="bulkAssignSub">割り当て先の拠点を選択</div>
+    </div>
+    <div class="sheet-body" id="bulkAssignBody"></div>
+    <div class="sheet-foot">
+      <button class="btn btn-ghost" onclick="closeBulkAssign()">閉じる</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 <div class="loading" id="loading">
   <div class="spinner"></div>
@@ -1303,8 +1422,8 @@ const PASSWORD = '1115';
 
 const state = {
   weekTarget: null,
-  thisWeekTarget: null,   // 今週の基準weekTarget（前週計算に使用）
-  viewWeek: 'this',       // 'this' | 'prev'
+  thisWeekTarget: null,
+  viewWeek: 'this',
   bases: [],
   sellers: [],
   dates: [],
@@ -1314,9 +1433,13 @@ const state = {
   selected: null,
   selectedStaff: null,
   activeTab: 'shift',
-  activeShiftSub: 'all',  // 'all' | date文字列
+  activeShiftSub: 'all',
   showUnassignedOnly: false,
   directContactDate: null,
+  pending: {},            // {'date|base': {date,base,name}} 未保存変更
+  submittedNames: new Set(), // 今週希望提出済み販売員名
+  workHoursMap: {},       // 拠点名 → 勤務時間
+  bulkAssignStaff: null,
   salesStaff: [],
   orphans: [],
   ignored: [],
@@ -1384,6 +1507,24 @@ async function loadAll() {
     state.dates = data.dates || [];
     state.matrix = data.matrix || {};
     state.unassignedPool = data.unassignedPool || {};
+
+    // submittedNames: プールにいる人 + 既に割り当て済みの人
+    state.submittedNames = new Set();
+    Object.values(state.unassignedPool).forEach(pool =>
+      pool.forEach(p => state.submittedNames.add(p.name)));
+    Object.values(state.matrix).forEach(byBase =>
+      Object.values(byBase).forEach(n => {
+        if (n && n !== '【未割当】') state.submittedNames.add(n);
+      }));
+
+    // workHoursMap: 拠点名→勤務時間
+    state.workHoursMap = {};
+    (data.bases || []).forEach(b => {
+      if (b.workHours) state.workHoursMap[b.name] = b.workHours;
+    });
+
+    state.pending = {};
+    updateSaveBadge();
     updateWeekInfo();
     renderDayTabs();
     renderMatrix();
@@ -1449,14 +1590,27 @@ function renderMatrix() {
   basesToShow.forEach(b => {
     html += `<tr><th>${escapeHtml(b.name)}</th>`;
     state.dates.forEach(d => {
+      const key = `${d}|${b.name}`;
       const name = (state.matrix[d] && state.matrix[d][b.name]) || '';
       const isUn = !name || name === '【未割当】';
-      const isSpot = isSpotName(name);
+      const isSpot = !isUn && isSpotName(name);
+      const isPending = !!state.pending[key];
+
       let cls = '';
       let display = '';
-      if (isUn) { cls = 'unassigned'; display = '未割当'; }
-      else if (isSpot) { cls = 'spot'; display = name; }
-      else { display = name; }
+      if (isUn) {
+        // 希望者あり → orange（未割当）、希望者なし → no-pool（グレー）
+        const hasPool = (state.unassignedPool[d] || []).some(p =>
+          p.pref1 === b.name || p.pref2 === b.name || p.pref3 === b.name);
+        cls = hasPool ? 'unassigned' : 'no-pool';
+        display = '未割当';
+      } else if (isSpot) {
+        cls = 'spot'; display = name;
+      } else {
+        display = name;
+      }
+      if (isPending) cls += ' pending';
+
       html += `<td class="${cls}" data-date="${escapeAttr(d)}" data-base="${escapeAttr(b.name)}"
         onclick="openSheet(this.dataset.date, this.dataset.base)">${escapeHtml(display)}</td>`;
     });
@@ -1630,41 +1784,52 @@ function renderSellers() {
   });
 
   if (!html) html = '<div class="diff-empty">該当する販売員がいません</div>';
+
+  // ── 未提出セクション（希望を出していない販売員） ──
+  const assignedThisDate = new Set();
+  Object.values(state.matrix[date] || {}).forEach(n => {
+    if (n && n !== '【未割当】') assignedThisDate.add(n);
+  });
+  const notSubmitted = state.sellers.filter(s => {
+    if (s.isSpot) return false;
+    if (state.submittedNames.has(s.name)) return false;
+    if (assignedThisDate.has(s.name)) return false;
+    if (q && !s.name.toLowerCase().includes(q)) return false;
+    return true;
+  });
+  notSubmitted.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+  if (notSubmitted.length > 0) {
+    html += `<div class="tier-head notsubmit">📵 未提出（${notSubmitted.length}名）</div>`;
+    notSubmitted.forEach(s => {
+      const toggleId = `toggle_${escapeAttr(s.name)}`;
+      html += `<div class="seller-item notsubmit-item">
+        <span class="name">${escapeHtml(s.name)}</span>
+        <label class="toggle-wrap" title="ONにすると割り当て">
+          <input type="checkbox" id="${toggleId}"
+            onchange="toggleUnsubmittedSeller('${escapeAttr(s.name)}', this)">
+          <span class="toggle-knob"></span>
+        </label>
+      </div>`;
+    });
+  }
+
   document.getElementById('sheetBody').innerHTML = html;
 }
 
-async function selectSeller(name) {
+function selectSeller(name) {
   if (!state.selected) return;
   const { date, base } = state.selected;
-  showLoading('割当を更新中...');
-  try {
-    const data = await apiPost('setAssignment', { date, base, name });
-    if (!data.success) throw new Error(data.error || '更新失敗');
-    closeSheet();
-    toast(`${base} → ${name}`, 'ok');
-    await loadAll();
-  } catch (e) {
-    toast(`更新失敗: ${e.message}`, 'err');
-  } finally {
-    hideLoading();
-  }
+  savePendingLocal(date, base, name);
+  closeSheet();
+  toast(`${base} → ${name}（未保存）`, 'ok');
 }
 
-async function removeCurrent() {
+function removeCurrent() {
   if (!state.selected) return;
   const { date, base } = state.selected;
-  showLoading('未割当に戻しています...');
-  try {
-    const data = await apiPost('removeAssignment', { date, base });
-    if (!data.success) throw new Error(data.error || '更新失敗');
-    closeSheet();
-    toast(`${base} を未割当に戻しました`, 'ok');
-    await loadAll();
-  } catch (e) {
-    toast(`更新失敗: ${e.message}`, 'err');
-  } finally {
-    hideLoading();
-  }
+  savePendingLocal(date, base, '');
+  closeSheet();
+  toast(`${base} を未割当に戻しました（未保存）`, 'ok');
 }
 
 function openStaffModal(name, type, date) {
@@ -1915,7 +2080,104 @@ function escapeAttr(s) {
 }
 
 // ─────────────────────────────────────────
-// 週切替
+// ローカル保存 → 一括保存
+// ─────────────────────────────────────────
+function savePendingLocal(date, base, name) {
+  const key = `${date}|${base}`;
+  state.pending[key] = { date, base, name };
+  if (!state.matrix[date]) state.matrix[date] = {};
+  state.matrix[date][base] = name || '【未割当】';
+  updateSaveBadge();
+  // 現在表示中のビューを再描画
+  if (state.activeShiftSub === 'all') renderMatrix();
+  else renderDailyView(state.activeShiftSub);
+}
+
+function updateSaveBadge() {
+  const count = Object.keys(state.pending).length;
+  const badge = document.getElementById('saveBadge');
+  if (!badge) return;
+  badge.textContent = count;
+  badge.style.display = count > 0 ? 'block' : 'none';
+}
+
+async function batchSave() {
+  const entries = Object.values(state.pending);
+  if (entries.length === 0) {
+    toast('保存する変更がありません', 'ok');
+    return;
+  }
+  showLoading(`${entries.length}件を保存中...`);
+  try {
+    const data = await apiPost('setAssignmentBatch', { assignments: entries });
+    if (!data.success) throw new Error(data.error || '保存失敗');
+    state.pending = {};
+    updateSaveBadge();
+    toast(`${data.saved}件保存しました`, 'ok');
+    if (data.errors > 0) toast(`${data.errors}件でエラーが発生しました`, 'err');
+    await loadAll();
+  } catch (e) {
+    toast(`保存失敗: ${e.message}`, 'err');
+  } finally {
+    hideLoading();
+  }
+}
+
+// 未提出トグルON → その場で割り当て
+function toggleUnsubmittedSeller(name, checkbox) {
+  if (!checkbox.checked) return;
+  if (!state.selected) return;
+  const { date, base } = state.selected;
+  savePendingLocal(date, base, name);
+  closeSheet();
+  toast(`${base} → ${name}（未保存）`, 'ok');
+}
+
+// ─────────────────────────────────────────
+// 一括割り当て（スタッフ管理タブ）
+// ─────────────────────────────────────────
+function openBulkAssign(staffName) {
+  state.bulkAssignStaff = staffName;
+  document.getElementById('bulkAssignTitle').textContent = `一括割り当て：${staffName}`;
+  // この人がプールにいる日付を集計
+  const availDates = state.dates.filter(d =>
+    (state.unassignedPool[d] || []).some(p => p.name === staffName));
+  if (availDates.length === 0) {
+    toast('この週に提出された希望日がありません', 'err');
+    return;
+  }
+  document.getElementById('bulkAssignSub').textContent =
+    `希望日: ${availDates.join('、')}`;
+  let html = '';
+  state.bases.forEach(b => {
+    html += `<div class="bulk-base-item"
+      onclick="executeBulkAssign('${escapeAttr(staffName)}', '${escapeAttr(b.name)}')">
+      ${escapeHtml(b.name)}
+    </div>`;
+  });
+  document.getElementById('bulkAssignBody').innerHTML = html;
+  document.getElementById('bulkAssignOverlay').classList.add('show');
+}
+
+function closeBulkAssign() {
+  document.getElementById('bulkAssignOverlay').classList.remove('show');
+  state.bulkAssignStaff = null;
+}
+
+function executeBulkAssign(staffName, baseName) {
+  const availDates = state.dates.filter(d =>
+    (state.unassignedPool[d] || []).some(p => p.name === staffName));
+  let count = 0;
+  availDates.forEach(d => {
+    const currentAssignee = (state.matrix[d] && state.matrix[d][baseName]) || '';
+    if (!currentAssignee || currentAssignee === '【未割当】') {
+      savePendingLocal(d, baseName, staffName);
+      count++;
+    }
+  });
+  closeBulkAssign();
+  toast(`${staffName} → ${baseName} を${count}日分セット（未保存）`, 'ok');
+}
 // ─────────────────────────────────────────
 function switchWeek(type) {
   if (state.viewWeek === type) return;
@@ -1985,17 +2247,29 @@ function renderDailyView(date) {
   }
   let html = '';
   state.bases.forEach(b => {
+    const key = `${date}|${b.name}`;
     const name = (state.matrix[date] && state.matrix[date][b.name]) || '';
     const isUn = !name || name === '【未割当】';
     const isSpot = !isUn && isSpotName(name);
+    const isPending = !!state.pending[key];
+    const hours = state.workHoursMap[b.name] ? `<span style="font-size:11px;color:var(--ink-mute);margin-left:4px">${escapeHtml(state.workHoursMap[b.name])}</span>` : '';
+
     let nameClass = '';
     let displayName = '';
-    if (isUn) { nameClass = 'unassigned'; displayName = '未割当'; }
-    else if (isSpot) { nameClass = 'spot'; displayName = name; }
-    else { displayName = name; }
-    html += `<div class="daily-row"
+    if (isUn) {
+      const hasPool = (state.unassignedPool[date] || []).some(p =>
+        p.pref1 === b.name || p.pref2 === b.name || p.pref3 === b.name);
+      nameClass = hasPool ? 'unassigned' : 'unassigned';
+      displayName = hasPool ? '未割当' : '未割当（希望者なし）';
+    } else if (isSpot) {
+      nameClass = 'spot'; displayName = name;
+    } else {
+      displayName = name;
+    }
+
+    html += `<div class="daily-row${isPending ? ' pending' : ''}"
       onclick="openSheet('${escapeAttr(date)}','${escapeAttr(b.name)}')">
-      <span class="base-name">${escapeHtml(b.name)}</span>
+      <span class="base-name">${escapeHtml(b.name)}${hours}</span>
       <span class="assigned-name ${nameClass}">${escapeHtml(displayName)}</span>
       <span class="daily-caret">▶</span>
     </div>`;
@@ -2200,6 +2474,7 @@ function renderStaffList() {
       <div class="staff-card-head" onclick="toggleStaffCard(${idx})">
         <span class="name">${escapeHtml(s.name)}</span>
         <span class="prefs-mini">${escapeHtml(prefsMini)}</span>
+        ${!s.isSpot ? `<button class="bulk-assign-btn" onclick="event.stopPropagation();openBulkAssign('${escapeAttr(s.name)}')">一括</button>` : ''}
         <span class="caret">▶</span>
       </div>`;
 
