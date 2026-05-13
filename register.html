@@ -2506,6 +2506,7 @@ function submitFinal() {
     cashRefundFromPayPay: Math.max(0, (state.paypayReceivedTotal || 0) - state.paypayAmount),
     paypayCount: state.paypayCount,
     soldCount: state.soldCount,
+    teaSoldCount: state.teaSoldCount || 0,
     soldOutMap: state.soldOutMap,
     soldOutTimesJson: JSON.stringify(state.soldOutMap || {}),
     productSales: state.productSales,
