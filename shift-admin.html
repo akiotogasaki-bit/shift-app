@@ -860,6 +860,172 @@ input { font-family: inherit; }
   line-height: 1.6;
   margin-top: 8px;
 }
+
+/* ── 週切替ナビ ── */
+.week-nav {
+  display: flex;
+  gap: 6px;
+  margin-top: 5px;
+}
+.week-nav-btn {
+  padding: 3px 11px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1.5px solid var(--blue);
+  background: transparent;
+  color: var(--blue);
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.week-nav-btn.active {
+  background: var(--blue);
+  color: #FFF;
+}
+
+/* ── シフトサブタブ ── */
+.shift-sub-tabs {
+  display: flex;
+  overflow-x: auto;
+  gap: 4px;
+  padding: 10px 14px 2px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.shift-sub-tabs::-webkit-scrollbar { display: none; }
+.shift-sub-tab {
+  flex-shrink: 0;
+  padding: 5px 13px;
+  border-radius: 14px;
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--card);
+  border: 1.5px solid var(--border);
+  color: var(--ink-soft);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.shift-sub-tab.active {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: #FFF;
+}
+
+/* ── 未割当フィルター ── */
+.matrix-filter {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 16px 2px;
+  font-size: 12px;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.matrix-filter input[type=checkbox] {
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+  accent-color: var(--blue);
+}
+
+/* ── 日別ビュー ── */
+.daily-list { padding: 6px 12px 0; }
+.daily-row {
+  display: flex;
+  align-items: center;
+  padding: 11px 12px;
+  background: var(--white);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  margin-bottom: 6px;
+  cursor: pointer;
+  gap: 8px;
+}
+.daily-row:active { background: var(--cream); }
+.daily-row .base-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.daily-row .assigned-name {
+  font-size: 13px;
+  color: var(--ink);
+  flex-shrink: 0;
+}
+.daily-row .assigned-name.unassigned { color: var(--ink-mute); }
+.daily-row .assigned-name.spot { color: var(--orange); }
+.daily-caret { font-size: 10px; color: var(--ink-mute); flex-shrink: 0; }
+
+/* ── 直接連絡ボタン ── */
+.direct-contact-btn {
+  display: block;
+  width: calc(100% - 24px);
+  margin: 8px 12px 14px;
+  padding: 12px;
+  background: var(--card);
+  border: 1.5px dashed var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--ink-soft);
+  text-align: center;
+  cursor: pointer;
+  font-weight: 600;
+}
+.direct-contact-btn:active { background: var(--cream); }
+
+/* ── 直接連絡セラー選択オーバーレイ ── */
+#dcPickerOverlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.45);
+  z-index: 300;
+  align-items: flex-end;
+}
+#dcPickerOverlay.show { display: flex; }
+.dc-picker-sheet {
+  background: var(--white);
+  border-radius: 18px 18px 0 0;
+  width: 100%;
+  max-height: 75vh;
+  display: flex;
+  flex-direction: column;
+}
+.dc-picker-head {
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--border-light);
+}
+.dc-picker-title { font-size: 15px; font-weight: 700; color: var(--ink); }
+.dc-picker-sub { font-size: 11px; color: var(--ink-mute); margin-top: 2px; }
+.dc-picker-search {
+  margin: 8px 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 14px;
+  width: calc(100% - 24px);
+  box-sizing: border-box;
+}
+.dc-picker-body { overflow-y: auto; flex: 1; padding: 0 0 8px; }
+.dc-picker-foot {
+  padding: 10px 12px;
+  border-top: 1px solid var(--border-light);
+}
+.dc-tag {
+  font-size: 10px;
+  background: #E8F4FD;
+  color: #1A5276;
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-left: 4px;
+  font-weight: 700;
+}
 </style>
 </head>
 <body>
@@ -879,6 +1045,10 @@ input { font-family: inherit; }
     <div>
       <h1>📋 シフト管理</h1>
       <div class="week" id="weekInfo">読み込み中...</div>
+      <div class="week-nav">
+        <button class="week-nav-btn" id="btnPrevWeek" onclick="switchWeek('prev')">◀ 前週</button>
+        <button class="week-nav-btn active" id="btnThisWeek" onclick="switchWeek('this')">今週</button>
+      </div>
     </div>
     <button class="logout" onclick="logout()">ログアウト</button>
   </header>
@@ -889,6 +1059,11 @@ input { font-family: inherit; }
   </div>
 
   <div class="tab-panel active" id="panel-shift">
+
+  <!-- シフトサブタブ -->
+  <div class="shift-sub-tabs" id="shiftSubTabs">
+    <button class="shift-sub-tab active" data-tab="all" onclick="switchShiftSubTab('all')">全体</button>
+  </div>
 
   <div class="actions">
     <button class="act-btn assign" onclick="confirmAssign()">
@@ -919,24 +1094,39 @@ input { font-family: inherit; }
 
   <div class="status" id="status">準備中...</div>
 
-  <div class="sec-title">📊 シフト割当</div>
-  <div class="matrix-wrap" id="matrixWrap">
-    <div class="matrix-empty">
-      <div class="em-ico">📋</div>
-      <div>マトリクスを読み込み中...</div>
+  <!-- 全体ビュー（デフォルト） -->
+  <div id="allView">
+    <label class="matrix-filter">
+      <input type="checkbox" id="unassignedFilter" onchange="toggleUnassignedFilter()">
+      未割当のみ表示
+    </label>
+    <div class="sec-title">📊 シフト割当</div>
+    <div class="matrix-wrap" id="matrixWrap">
+      <div class="matrix-empty">
+        <div class="em-ico">📋</div>
+        <div>マトリクスを読み込み中...</div>
+      </div>
+    </div>
+
+    <div class="legend">
+      <span class="legend-item"><span class="legend-dot assigned"></span>割当済</span>
+      <span class="legend-item"><span class="legend-dot unassigned"></span>未割当</span>
+      <span class="legend-item"><span class="legend-dot spot"></span>スポット</span>
+      <span style="color: var(--ink-mute); margin-left: auto; font-size:10px;">セルをタップで編集</span>
+    </div>
+
+    <div class="sec-title">⚠️ 未割当スタッフ <span id="poolTotalCount" style="margin-left:auto;font-weight:500;color:var(--ink-mute);font-size:10px;letter-spacing:0;"></span></div>
+    <div class="pool-wrap" id="poolWrap">
+      <div class="pool-empty">読み込み中...</div>
     </div>
   </div>
 
-  <div class="legend">
-    <span class="legend-item"><span class="legend-dot assigned"></span>割当済</span>
-    <span class="legend-item"><span class="legend-dot unassigned"></span>未割当</span>
-    <span class="legend-item"><span class="legend-dot spot"></span>スポット</span>
-    <span style="color: var(--ink-mute); margin-left: auto; font-size:10px;">セルをタップで編集</span>
-  </div>
-
-  <div class="sec-title">⚠️ 未割当スタッフ <span id="poolTotalCount" style="margin-left:auto;font-weight:500;color:var(--ink-mute);font-size:10px;letter-spacing:0;"></span></div>
-  <div class="pool-wrap" id="poolWrap">
-    <div class="pool-empty">読み込み中...</div>
+  <!-- 日別ビュー（サブタブ選択時） -->
+  <div id="dailyView" style="display:none">
+    <div id="dailyViewContent" class="daily-list"></div>
+    <button class="direct-contact-btn" id="directContactBtn" onclick="addDirectContact()">
+      💬 直接連絡を追加
+    </button>
   </div>
 
   <div class="reload-wrap">
@@ -1020,6 +1210,22 @@ input { font-family: inherit; }
   </div>
 </div>
 
+<!-- 直接連絡：販売員ピッカー -->
+<div id="dcPickerOverlay" onclick="if(event.target===this)closeDcPicker()">
+  <div class="dc-picker-sheet">
+    <div class="dc-picker-head">
+      <div class="dc-picker-title">💬 直接連絡：販売員を選択</div>
+      <div class="dc-picker-sub" id="dcPickerSub">—</div>
+    </div>
+    <input type="text" class="dc-picker-search" id="dcPickerSearch"
+      placeholder="🔍 名前で絞り込み" oninput="renderDcPicker()">
+    <div class="dc-picker-body" id="dcPickerBody"></div>
+    <div class="dc-picker-foot">
+      <button class="btn btn-ghost" style="width:100%" onclick="closeDcPicker()">閉じる</button>
+    </div>
+  </div>
+</div>
+
 <div class="sheet-overlay" id="staffEditOverlay" onclick="if(event.target===this)closeStaffEdit()">
   <div class="sheet">
     <div class="sheet-handle"></div>
@@ -1097,6 +1303,8 @@ const PASSWORD = '1115';
 
 const state = {
   weekTarget: null,
+  thisWeekTarget: null,   // 今週の基準weekTarget（前週計算に使用）
+  viewWeek: 'this',       // 'this' | 'prev'
   bases: [],
   sellers: [],
   dates: [],
@@ -1106,6 +1314,9 @@ const state = {
   selected: null,
   selectedStaff: null,
   activeTab: 'shift',
+  activeShiftSub: 'all',  // 'all' | date文字列
+  showUnassignedOnly: false,
+  directContactDate: null,
   salesStaff: [],
   orphans: [],
   ignored: [],
@@ -1155,9 +1366,18 @@ async function apiPost(action, payload = {}) {
 
 async function loadAll() {
   setStatus('busy', 'マトリクスを読み込み中...');
+  // サブタブをリセット
+  state.activeShiftSub = 'all';
   try {
-    const data = await apiGet('getShiftMatrix');
+    const params = {};
+    if (state.viewWeek === 'prev' && state.thisWeekTarget) {
+      params.weekTarget = computePrevWeekTarget(state.thisWeekTarget);
+    }
+    const data = await apiGet('getShiftMatrix', params);
     if (!data.success) throw new Error(data.error || 'API失敗');
+    if (state.viewWeek !== 'prev') {
+      state.thisWeekTarget = data.weekTarget;
+    }
     state.weekTarget = data.weekTarget;
     state.bases = data.bases || [];
     state.sellers = data.sellers || [];
@@ -1165,6 +1385,7 @@ async function loadAll() {
     state.matrix = data.matrix || {};
     state.unassignedPool = data.unassignedPool || {};
     updateWeekInfo();
+    renderDayTabs();
     renderMatrix();
     renderPool();
     setStatus('ok', `読込完了：${state.bases.length}拠点 × ${state.dates.length}日`);
@@ -1192,6 +1413,8 @@ function updateWeekInfo() {
     ? `${state.dates[0]} 〜 ${state.dates[state.dates.length - 1]}`
     : '日付データなし';
   document.getElementById('weekInfo').textContent = `${wt} ・ ${dateRange}`;
+  document.getElementById('btnPrevWeek').classList.toggle('active', state.viewWeek === 'prev');
+  document.getElementById('btnThisWeek').classList.toggle('active', state.viewWeek !== 'prev');
 }
 
 function isSpotName(name) {
@@ -1210,12 +1433,20 @@ function renderMatrix() {
     return;
   }
 
+  // 未割当フィルター：未割当セルが1つでもある拠点のみ表示
+  const basesToShow = state.showUnassignedOnly
+    ? state.bases.filter(b => state.dates.some(d => {
+        const name = (state.matrix[d] && state.matrix[d][b.name]) || '';
+        return !name || name === '【未割当】';
+      }))
+    : state.bases;
+
   let html = '<table class="matrix"><thead><tr>';
   html += '<th class="corner">拠点</th>';
   state.dates.forEach(d => { html += `<th>${escapeHtml(d)}</th>`; });
   html += '</tr></thead><tbody>';
 
-  state.bases.forEach(b => {
+  basesToShow.forEach(b => {
     html += `<tr><th>${escapeHtml(b.name)}</th>`;
     state.dates.forEach(d => {
       const name = (state.matrix[d] && state.matrix[d][b.name]) || '';
@@ -1231,6 +1462,12 @@ function renderMatrix() {
     });
     html += '</tr>';
   });
+
+  if (basesToShow.length === 0) {
+    html += `<tr><td colspan="${state.dates.length + 1}" style="text-align:center;padding:20px;color:var(--ink-mute);">
+      未割当の拠点はありません ✅</td></tr>`;
+  }
+
   html += '</tbody></table>';
   wrap.innerHTML = html;
 }
@@ -1675,6 +1912,166 @@ function escapeHtml(s) {
 }
 function escapeAttr(s) {
   return String(s ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
+
+// ─────────────────────────────────────────
+// 週切替
+// ─────────────────────────────────────────
+function switchWeek(type) {
+  if (state.viewWeek === type) return;
+  state.viewWeek = type;
+  loadAll();
+}
+
+function computePrevWeekTarget(wt) {
+  const m = String(wt || '').match(/^(\d{4})-W(\d{1,2})$/);
+  if (!m) return wt;
+  let year = parseInt(m[1]);
+  let week = parseInt(m[2]) - 1;
+  if (week < 1) {
+    year -= 1;
+    // 前年の最終ISO週を計算
+    const dec28 = new Date(year, 11, 28);
+    const d = new Date(Date.UTC(dec28.getFullYear(), dec28.getMonth(), dec28.getDate()));
+    const dayNum = d.getUTCDay() || 7;
+    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    week = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+  }
+  return `${year}-W${String(week).padStart(2, '0')}`;
+}
+
+// ─────────────────────────────────────────
+// 日別サブタブ
+// ─────────────────────────────────────────
+function renderDayTabs() {
+  const container = document.getElementById('shiftSubTabs');
+  let html = `<button class="shift-sub-tab${state.activeShiftSub === 'all' ? ' active' : ''}"
+    data-tab="all" onclick="switchShiftSubTab('all')">全体</button>`;
+  state.dates.forEach(dateStr => {
+    const isActive = state.activeShiftSub === dateStr;
+    // 年を省略：5/18(月) 形式で表示
+    const short = dateStr.replace(/^\d{4}\//, '');
+    html += `<button class="shift-sub-tab${isActive ? ' active' : ''}"
+      data-tab="${escapeAttr(dateStr)}"
+      onclick="switchShiftSubTab('${escapeAttr(dateStr)}')">${escapeHtml(short)}</button>`;
+  });
+  container.innerHTML = html;
+}
+
+function switchShiftSubTab(tab) {
+  state.activeShiftSub = tab;
+  document.querySelectorAll('.shift-sub-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tab);
+  });
+  const allView = document.getElementById('allView');
+  const dailyView = document.getElementById('dailyView');
+  if (tab === 'all') {
+    allView.style.display = '';
+    dailyView.style.display = 'none';
+  } else {
+    allView.style.display = 'none';
+    dailyView.style.display = '';
+    document.getElementById('directContactBtn').dataset.date = tab;
+    renderDailyView(tab);
+  }
+}
+
+function renderDailyView(date) {
+  const wrap = document.getElementById('dailyViewContent');
+  if (state.bases.length === 0) {
+    wrap.innerHTML = '<div class="pool-empty">データがありません</div>';
+    return;
+  }
+  let html = '';
+  state.bases.forEach(b => {
+    const name = (state.matrix[date] && state.matrix[date][b.name]) || '';
+    const isUn = !name || name === '【未割当】';
+    const isSpot = !isUn && isSpotName(name);
+    let nameClass = '';
+    let displayName = '';
+    if (isUn) { nameClass = 'unassigned'; displayName = '未割当'; }
+    else if (isSpot) { nameClass = 'spot'; displayName = name; }
+    else { displayName = name; }
+    html += `<div class="daily-row"
+      onclick="openSheet('${escapeAttr(date)}','${escapeAttr(b.name)}')">
+      <span class="base-name">${escapeHtml(b.name)}</span>
+      <span class="assigned-name ${nameClass}">${escapeHtml(displayName)}</span>
+      <span class="daily-caret">▶</span>
+    </div>`;
+  });
+  wrap.innerHTML = html;
+}
+
+// ─────────────────────────────────────────
+// 未割当フィルター
+// ─────────────────────────────────────────
+function toggleUnassignedFilter() {
+  state.showUnassignedOnly = document.getElementById('unassignedFilter').checked;
+  renderMatrix();
+}
+
+// ─────────────────────────────────────────
+// 直接連絡（販売員ピッカー）
+// ─────────────────────────────────────────
+function addDirectContact() {
+  const btn = document.getElementById('directContactBtn');
+  const date = btn.dataset.date;
+  if (!date) return;
+  state.directContactDate = date;
+  document.getElementById('dcPickerSub').textContent = `対象日: ${date}`;
+  document.getElementById('dcPickerSearch').value = '';
+  renderDcPicker();
+  document.getElementById('dcPickerOverlay').classList.add('show');
+}
+
+function renderDcPicker() {
+  const q = document.getElementById('dcPickerSearch').value.trim().toLowerCase();
+  const date = state.directContactDate;
+  const assignedNames = new Set();
+  if (date) {
+    Object.values(state.matrix[date] || {}).forEach(n => {
+      if (n && n !== '【未割当】') assignedNames.add(n);
+    });
+  }
+  const poolNames = new Set((state.unassignedPool[date] || []).map(p => p.name));
+
+  const available = state.sellers.filter(s => {
+    if (s.isSpot) return false;
+    if (assignedNames.has(s.name)) return false;
+    if (q && !s.name.toLowerCase().includes(q)) return false;
+    return true;
+  });
+  available.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+
+  let html = '';
+  if (available.length === 0) {
+    html = '<div class="diff-empty" style="padding:20px;text-align:center">該当する販売員がいません</div>';
+  } else {
+    available.forEach(s => {
+      const inPool = poolNames.has(s.name);
+      const tag = inPool
+        ? '<span class="pool-tag">未割当</span>'
+        : '<span class="dc-tag">直接連絡</span>';
+      html += `<div class="seller-item"
+        onclick="selectDcStaff('${escapeAttr(s.name)}')">
+        <span class="name">${escapeHtml(s.name)}</span>
+        ${tag}
+      </div>`;
+    });
+  }
+  document.getElementById('dcPickerBody').innerHTML = html;
+}
+
+function selectDcStaff(name) {
+  closeDcPicker();
+  // 拠点選択モーダルへ（既存のstaffModal流用）
+  openStaffModal(name, 'normal', state.directContactDate);
+}
+
+function closeDcPicker() {
+  document.getElementById('dcPickerOverlay').classList.remove('show');
+  state.directContactDate = null;
 }
 
 /* ═══ スタッフ管理タブ ═══ */
