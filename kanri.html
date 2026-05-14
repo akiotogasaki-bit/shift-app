@@ -434,6 +434,111 @@ body {
 .pack-val { font-weight: bold; }
 .pack-ceil { font-size: 11px; color: #888; margin-left: 4px; }
 
+/* ── 発注タブ ── */
+.order-ctrl { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.order-week-btn {
+  padding: 4px 13px;
+  border: 1px solid #64b5f6;
+  border-radius: 14px;
+  background: transparent;
+  color: #90caf9;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+.order-week-btn:hover { background: rgba(100,181,246,0.15); }
+.order-date-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.order-date-lbl {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 11px;
+  border: 1px solid #aaa;
+  border-radius: 14px;
+  cursor: pointer;
+  font-size: 12px;
+  user-select: none;
+  transition: background 0.12s, color 0.12s;
+}
+.order-date-lbl:hover { border-color: #64b5f6; }
+.order-date-lbl.checked { background: #1565c0; color: #fff; border-color: #1565c0; font-weight: bold; }
+.order-date-lbl input { display: none; }
+.order-sel-info { font-size: 12px; color: #555; margin-bottom: 10px; min-height: 18px; }
+.order-vendor-list { display: flex; flex-direction: column; gap: 10px; }
+.order-vendor-card { border: 2px solid #bbb; border-radius: 6px; overflow: hidden; background: white; }
+.order-vendor-head {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  cursor: pointer;
+  gap: 8px;
+}
+.order-vendor-name { font-size: 13px; font-weight: bold; flex: 1; }
+.order-vendor-summary { font-size: 11px; opacity: 0.85; font-weight: normal; }
+.order-done-wrap { display: flex; align-items: center; gap: 4px; font-size: 12px; cursor: pointer; }
+.order-done-cb { width: 15px; height: 15px; cursor: pointer; accent-color: #fff; }
+.order-copy-btn {
+  padding: 3px 10px;
+  border-radius: 4px;
+  border: 1px solid white;
+  background: rgba(255,255,255,0.15);
+  color: white;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: inherit;
+  transition: background 0.12s;
+}
+.order-copy-btn:hover { background: rgba(255,255,255,0.3); }
+.order-vendor-body { padding: 10px 14px; }
+.order-vendor-card.collapsed .order-vendor-body { display: none; }
+.order-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 6px; }
+.order-table th, .order-table td { padding: 5px 8px; border: 0.5px solid #ddd; }
+.order-table th { background: rgba(0,0,0,0.04); font-weight: bold; font-size: 12px; }
+.order-table td.order-qty { font-size: 15px; font-weight: bold; text-align: right; width: 30%; }
+.order-bd-toggle {
+  font-size: 11px;
+  color: #1565c0;
+  cursor: pointer;
+  padding: 2px 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: none;
+  font-family: inherit;
+  margin-top: 4px;
+}
+.order-bd-toggle:hover { text-decoration: underline; }
+.order-breakdown { display: none; margin-top: 8px; border-top: 1px dashed #ddd; padding-top: 8px; }
+.order-breakdown.open { display: block; }
+.order-bd-row {
+  display: flex;
+  gap: 6px;
+  padding: 3px 0;
+  border-bottom: 1px dotted #eee;
+  font-size: 11px;
+}
+.order-bd-row:last-child { border-bottom: none; }
+.order-bd-date { color: #555; min-width: 80px; flex-shrink: 0; }
+.order-bd-items { flex: 1; color: #333; }
+/* 業者カラー */
+.ovc-red    { border-color: #c62828; }
+.ovc-red    .order-vendor-head { background: #c62828; color: white; }
+.ovc-blue   { border-color: #1565c0; }
+.ovc-blue   .order-vendor-head { background: #1565c0; color: white; }
+.ovc-orange { border-color: #e65100; }
+.ovc-orange .order-vendor-head { background: #e65100; color: white; }
+.ovc-brown  { border-color: #4e342e; }
+.ovc-brown  .order-vendor-head { background: #4e342e; color: white; }
+.ovc-purple { border-color: #6a1b9a; }
+.ovc-purple .order-vendor-head { background: #6a1b9a; color: white; }
+.ovc-teal   { border-color: #00695c; }
+.ovc-teal   .order-vendor-head { background: #00695c; color: white; }
+.ovc-gray   { border-color: #546e7a; }
+.ovc-gray   .order-vendor-head { background: #546e7a; color: white; }
+.order-vendor-card.done { opacity: 0.55; }
+
 /* ── 印刷スタイル ── */
 @media print {
   body { background: white; }
@@ -458,7 +563,7 @@ body {
   <button class="tab-btn" data-tab="sheet2">📦 午前盛り出し</button>
   <button class="tab-btn" disabled data-tab="sheet3">🚚 午後便盛り出し <small>準備中</small></button>
   <button class="tab-btn" data-tab="sheet4">🍳 仕込み</button>
-  <button class="tab-btn" disabled data-tab="order">📋 発注 <small>準備中</small></button>
+  <button class="tab-btn" data-tab="order">📋 発注</button>
   <button class="tab-btn" disabled data-tab="master">基本数マスタ <small>準備中</small></button>
   <button class="tab-btn" disabled data-tab="settings">設定 <small>準備中</small></button>
 </div>
@@ -504,6 +609,18 @@ body {
     <span class="status-msg" id="s4-status-msg"></span>
   </div>
   <div id="sheet4-body"></div>
+</div>
+<!-- 発注タブ -->
+<div class="tab-pane" id="tab-order">
+  <div class="order-ctrl">
+    <button class="order-week-btn" id="order-btn-week0">今週 月〜金</button>
+    <button class="order-week-btn" id="order-btn-week1">来週 月〜金</button>
+    <button class="btn btn-primary" id="order-btn-fetch">取得</button>
+    <span class="status-msg" id="order-status-msg"></span>
+  </div>
+  <div class="order-date-row" id="order-date-row"></div>
+  <div class="order-sel-info" id="order-sel-info">日付を選択して取得ボタンを押してください</div>
+  <div class="order-vendor-list" id="order-body"></div>
 </div>
 <div class="tab-pane" id="tab-master"><div class="placeholder-msg">基本数マスタ画面は準備中です</div></div>
 <div class="tab-pane" id="tab-settings"><div class="placeholder-msg">設定画面は準備中です</div></div>
@@ -972,6 +1089,246 @@ function renderSheet2(data) {
       <div class="delivery-area">${cardsHTML}</div>
     </div>`;
 }
+// ═══════════════════════════════════════
+// 発注タブ
+// ═══════════════════════════════════════
+
+// 業者名→カラークラス（食材マスタの業者名に合わせて追記可）
+const VENDOR_COLOR_MAP = {
+  '鶏肉業者': 'red',   '魚業者':   'blue',  '卵業者':   'orange',
+  '米業者':   'brown', '食品問屋': 'purple', '豆腐業者': 'teal',
+};
+const VENDOR_KW_MAP = [
+  ['鶏','red'],['肉','red'],['魚','blue'],['鮭','blue'],['水産','blue'],
+  ['卵','orange'],['玉子','orange'],['野菜','orange'],
+  ['米','brown'],['穀','brown'],
+  ['食品','purple'],['問屋','purple'],
+  ['豆腐','teal'],['乳','teal'],
+];
+function getVendorColorClass(n) {
+  if (VENDOR_COLOR_MAP[n]) return 'ovc-' + VENDOR_COLOR_MAP[n];
+  for (const [kw, col] of VENDOR_KW_MAP) { if (n.includes(kw)) return 'ovc-' + col; }
+  return 'ovc-gray';
+}
+
+// 発注済みフラグ（localStorage）
+let _orderDoneFlags = {};
+let _orderDoneFlagsKey = '';
+function loadOrderDoneFlags(key) {
+  _orderDoneFlagsKey = 'orderDone_' + key;
+  try { _orderDoneFlags = JSON.parse(localStorage.getItem(_orderDoneFlagsKey) || '{}'); }
+  catch(e) { _orderDoneFlags = {}; }
+}
+function saveOrderDoneFlags() {
+  try { localStorage.setItem(_orderDoneFlagsKey, JSON.stringify(_orderDoneFlags)); } catch(e) {}
+}
+
+// 選択日セット
+const orderSelectedDates = new Set();
+
+// 日付チェックボックス初期化（翌日から10平日分 = 今週+来週）
+function initOrderDateChecks() {
+  const jst = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);
+  const DOW = ['日','月','火','水','木','金','土'];
+  const row = document.getElementById('order-date-row');
+  row.innerHTML = '';
+  orderSelectedDates.clear();
+
+  // 翌日から14日先まで走査して平日を収集
+  let weekCounter = 0; // 0=今週, 1=来週
+  let prevMonday = null;
+  for (let i = 1; i <= 14; i++) {
+    const d = new Date(jst);
+    d.setDate(d.getDate() + i);
+    const dow = d.getDay();
+    if (dow === 0 || dow === 6) continue;
+    // 月曜日が来たら週番号を上げる
+    if (dow === 1) {
+      if (prevMonday !== null) weekCounter++;
+      prevMonday = d.toISOString().slice(0, 10);
+    } else if (prevMonday === null) {
+      // 今週の途中から始まる場合
+      weekCounter = 0;
+    }
+    const dateStr = d.toISOString().slice(0, 10);
+    const m = d.getMonth() + 1, day = d.getDate();
+    const wn = weekCounter;
+
+    const lbl = document.createElement('label');
+    lbl.className = 'order-date-lbl';
+    lbl.dataset.date = dateStr;
+    lbl.dataset.week = wn;
+    lbl.innerHTML = `<input type="checkbox" value="${dateStr}"> ${m}/${day}(${DOW[dow]})`;
+    lbl.querySelector('input').addEventListener('change', e => {
+      if (e.target.checked) { orderSelectedDates.add(dateStr); lbl.classList.add('checked'); }
+      else { orderSelectedDates.delete(dateStr); lbl.classList.remove('checked'); }
+    });
+    row.appendChild(lbl);
+  }
+}
+
+function orderSelectWeek(wn) {
+  document.querySelectorAll('#order-date-row .order-date-lbl').forEach(lbl => {
+    const cb = lbl.querySelector('input');
+    const dateStr = lbl.dataset.date;
+    if (parseInt(lbl.dataset.week) === wn) {
+      cb.checked = true; orderSelectedDates.add(dateStr); lbl.classList.add('checked');
+    } else {
+      cb.checked = false; orderSelectedDates.delete(dateStr); lbl.classList.remove('checked');
+    }
+  });
+}
+
+const orderStatus = document.getElementById('order-status-msg');
+function orderSetStatus(msg, isErr) {
+  orderStatus.textContent = msg;
+  orderStatus.className = 'status-msg' + (isErr ? ' err' : '');
+}
+
+document.getElementById('order-btn-fetch').addEventListener('click', fetchOrderData);
+document.getElementById('order-btn-week0').addEventListener('click', () => orderSelectWeek(0));
+document.getElementById('order-btn-week1').addEventListener('click', () => orderSelectWeek(1));
+
+async function fetchOrderData() {
+  const dates = Array.from(orderSelectedDates).sort();
+  if (dates.length === 0) { orderSetStatus('日付を1日以上選択してください', true); return; }
+  orderSetStatus('取得中…');
+  document.getElementById('order-body').innerHTML = '';
+  try {
+    const res  = await fetch(GAS_URL + '?action=getOrderData&dates=' + encodeURIComponent(JSON.stringify(dates)));
+    const data = await res.json();
+    if (!data.ok) { orderSetStatus(data.error || '取得エラー', true); return; }
+    orderSetStatus('');
+    loadOrderDoneFlags(dates.join('_'));
+    renderOrderData(data);
+  } catch(e) {
+    orderSetStatus('通信エラー: ' + e.message, true);
+  }
+}
+
+function renderOrderData(data) {
+  const { dates, vendors, dailyBreakdown } = data;
+  const DOW = ['日','月','火','水','木','金','土'];
+
+  const datesLabel = dates.map(d => {
+    const dt = new Date(d.replace(/-/g, '/'));
+    return `${dt.getMonth()+1}/${dt.getDate()}(${DOW[dt.getDay()]})`;
+  }).join('・');
+  document.getElementById('order-sel-info').textContent = `選択中：${datesLabel}（${dates.length}日分合計）`;
+
+  const body = document.getElementById('order-body');
+  if (!vendors || vendors.length === 0) {
+    body.innerHTML = '<div class="placeholder-msg">発注データがありません<br><small>食材マスタと単価マスタの食材ID列を確認してください</small></div>';
+    return;
+  }
+
+  let html = '';
+  vendors.forEach(v => {
+    const cc    = getVendorColorClass(v.name);
+    const safeN = v.name.replace(/[^\w\u3000-\u9FFF]/g, '_'); // CSSセーフなID用
+    const isDone = _orderDoneFlags[v.name] || false;
+
+    // 食材テーブル
+    const rows = v.items.map(it =>
+      `<tr><td>${escHtml(it.name)}</td><td class="order-qty">${it.packCeil} パック</td></tr>`
+    ).join('');
+
+    // 日別内訳
+    const bdId = 'order-bd-' + safeN;
+    let bdRows = '';
+    dates.forEach(d => {
+      const dayItems = (dailyBreakdown[d] || []).filter(it => it.vendorName === v.name);
+      if (!dayItems.length) return;
+      const dt = new Date(d.replace(/-/g, '/'));
+      const lbl = `${dt.getMonth()+1}/${dt.getDate()}(${DOW[dt.getDay()]})`;
+      const items = dayItems.map(it => `${escHtml(it.name)} ${it.packCeil}P`).join(' / ');
+      bdRows += `<div class="order-bd-row"><span class="order-bd-date">${lbl}</span><span class="order-bd-items">${items}</span></div>`;
+    });
+    const bdSection = bdRows
+      ? `<button class="order-bd-toggle" onclick="toggleOrderBd('${bdId}')"><span id="${bdId}-arrow">▶</span> 日別内訳</button>
+         <div class="order-breakdown" id="${bdId}">${bdRows}</div>`
+      : '';
+
+    html += `
+      <div class="order-vendor-card ${cc}${isDone ? ' done' : ''}" id="ovc-${safeN}">
+        <div class="order-vendor-head" onclick="toggleOrderCard('${safeN}')">
+          <span class="order-vendor-name">${escHtml(v.name)}</span>
+          <span class="order-vendor-summary">（${v.items.length}品目）</span>
+          <div style="display:flex;align-items:center;gap:8px;margin-left:auto;" onclick="event.stopPropagation()">
+            <label class="order-done-wrap">
+              <input type="checkbox" class="order-done-cb" data-vendor="${escHtml(v.name)}"
+                ${isDone ? 'checked' : ''} onchange="onOrderDone('${escHtml(v.name)}',this.checked)">
+              発注済み
+            </label>
+            <button class="order-copy-btn" onclick="copyOrderText('${escHtml(v.name)}')">📋 コピー</button>
+          </div>
+        </div>
+        <div class="order-vendor-body" id="ovcb-${safeN}">
+          <table class="order-table">
+            <thead><tr><th style="text-align:left">食材名</th><th style="text-align:right;width:30%">発注量</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+          ${bdSection}
+        </div>
+      </div>`;
+  });
+  body.innerHTML = html;
+  window._orderData = data;
+}
+
+function toggleOrderCard(safeN) {
+  const body = document.getElementById('ovcb-' + safeN);
+  if (body) body.style.display = body.style.display === 'none' ? '' : 'none';
+}
+
+function toggleOrderBd(bdId) {
+  const el    = document.getElementById(bdId);
+  const arrow = document.getElementById(bdId + '-arrow');
+  if (!el) return;
+  el.classList.toggle('open');
+  if (arrow) arrow.textContent = el.classList.contains('open') ? '▼' : '▶';
+}
+
+function onOrderDone(vendorName, checked) {
+  _orderDoneFlags[vendorName] = checked;
+  saveOrderDoneFlags();
+  const safeN = vendorName.replace(/[^\w\u3000-\u9FFF]/g, '_');
+  const card  = document.getElementById('ovc-' + safeN);
+  if (card) card.classList.toggle('done', checked);
+}
+
+function copyOrderText(vendorName) {
+  const data = window._orderData;
+  if (!data) return;
+  const vendor = data.vendors.find(v => v.name === vendorName);
+  if (!vendor) return;
+  const DOW = ['日','月','火','水','木','金','土'];
+  const datesStr = data.dates.map(d => {
+    const dt = new Date(d.replace(/-/g, '/'));
+    return `${dt.getMonth()+1}/${dt.getDate()}(${DOW[dt.getDay()]})`;
+  }).join('・');
+
+  const lines = [vendorName + ' 発注 ' + datesStr, ''];
+  vendor.items.forEach(it => lines.push(`${it.name}\t${it.packCeil}パック`));
+  const text = lines.join('\n');
+
+  navigator.clipboard.writeText(text).then(
+    () => { orderSetStatus(vendorName + ' のコピー完了'); setTimeout(() => orderSetStatus(''), 2500); },
+    () => {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); orderSetStatus(vendorName + ' のコピー完了'); setTimeout(() => orderSetStatus(''), 2500); }
+      catch(e2) { orderSetStatus('コピー失敗', true); }
+      finally { document.body.removeChild(ta); }
+    }
+  );
+}
+
+// 発注タブ 初期化
+initOrderDateChecks();
+
 </script>
 </body>
 </html>
