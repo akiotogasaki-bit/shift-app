@@ -618,7 +618,7 @@ body {
     <label>日付：</label>
     <input type="date" id="s1-date-input">
     <button class="btn btn-primary" id="s1-btn-fetch">取得</button>
-    <button class="btn btn-print" onclick="doPrint('sheet1')">🖨 印刷</button>
+    <button class="btn btn-print" onclick="window.print()">🖨 印刷</button>
     <span class="status-msg" id="s1-status-msg"></span>
   </div>
   <div id="sheet1-body"></div>
@@ -630,7 +630,7 @@ body {
     <label>日付：</label>
     <input type="date" id="s2-date-input">
     <button class="btn btn-primary" id="s2-btn-fetch">取得</button>
-    <button class="btn btn-print" onclick="doPrint('sheet2')">🖨 印刷</button>
+    <button class="btn btn-print" onclick="window.print()">🖨 印刷</button>
     <span class="status-msg" id="s2-status-msg"></span>
     <div class="legend">
       <span>色：</span>
@@ -889,59 +889,6 @@ document.querySelectorAll('.tab-btn:not(:disabled)').forEach(btn => {
     if (pane) pane.classList.add('active');
   });
 });
-
-// ─────────────────────────────────────────
-// 印刷（専用ウィンドウ方式：GASのiframeを回避）
-//   sheetKey: 'sheet1' / 'sheet2' / 'sheet3'
-// ─────────────────────────────────────────
-function doPrint(sheetKey) {
-  const bodyEl = document.getElementById(sheetKey + '-body');
-  if (!bodyEl || !bodyEl.innerHTML.trim()) {
-    alert('先に「取得」ボタンでデータを表示してください');
-    return;
-  }
-  const orientation = (sheetKey === 'sheet3') ? 'portrait' : 'landscape';
-  const rootH = (orientation === 'portrait') ? '287mm' : '200mm';
-  const baseStyles = document.getElementById('app-style').innerHTML;
-  const content = bodyEl.innerHTML;
-
-  const doc =
-'<!DOCTYPE html>\n' +
-'<html lang="ja"><head><meta charset="UTF-8"><title>印刷</title>\n' +
-'<style>\n' +
-'@page { size: A4 ' + orientation + '; margin: 3mm; }\n' +
-baseStyles + '\n' +
-'/* ── 印刷ウィンドウ用オーバーライド ── */\n' +
-'body { background:#fff; margin:0; padding:2mm; }\n' +
-'#print-root { display:flex; flex-direction:column; height:' + rootH + '; overflow:hidden; }\n' +
-'#print-root .page-title { flex-shrink:0; font-size:13pt; font-weight:bold; margin-bottom:4px; }\n' +
-'#print-root .table-wrap { overflow:visible !important; }\n' +
-'/* シート1 */\n' +
-'#print-root.s-sheet1 .sheet1-content { flex:1; min-height:0; align-items:stretch; gap:4px; }\n' +
-'#print-root.s-sheet1 .table-wrap { flex:1; min-height:0; }\n' +
-'/* シート2 */\n' +
-'#print-root.s-sheet2 .sheet2-container { flex:1; min-height:0; align-items:stretch; gap:5px; }\n' +
-'#print-root.s-sheet2 .delivery-area { display:grid; grid-template-rows:repeat(6,1fr); gap:2px; }\n' +
-'/* シート3（実装後に有効） */\n' +
-'#print-root.s-sheet3 .sheet2-container { flex:1; min-height:0; align-items:stretch; gap:5px; }\n' +
-'</style></head>\n' +
-'<body>\n' +
-'<div id="print-root" class="s-' + sheetKey + '">' + content + '</div>\n' +
-'<scr' + 'ipt>\n' +
-'window.onafterprint=function(){window.close();};\n' +
-'window.onload=function(){window.focus();setTimeout(function(){window.print();},200);};\n' +
-'</scr' + 'ipt>\n' +
-'</body></html>';
-
-  const win = window.open('', '_blank');
-  if (!win) {
-    alert('ポップアップがブロックされました。ブラウザ設定でポップアップを許可してください');
-    return;
-  }
-  win.document.open();
-  win.document.write(doc);
-  win.document.close();
-}
 
 // ─────────────────────────────────────────
 // 日付ピッカー初期化（今日・JST）
