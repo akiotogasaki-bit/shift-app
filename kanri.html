@@ -7,6 +7,7 @@
 <style id="app-style">
 @page { size: A4 landscape; margin: 3mm; }
 @page sheet3-portrait { size: A4 portrait; margin: 3mm; }
+  @page sheet-landscape { size: A4 landscape; margin: 3mm; }
 * {
   box-sizing: border-box;
   margin: 0;
@@ -635,12 +636,18 @@ body {
     flex-shrink: 0;
   }
 
-  /* ════════ シート1：A4横・自然サイズ（プロトタイプ準拠） ════════ */
+  /* 竹・松を印刷でもはっきり区別（緑／紫） */
+  .cell-take,
+  .delivery-header.grade-take  { background: #a5d6a7 !important; }
+  .cell-matsu,
+  .delivery-header.grade-matsu { background: #ce93d8 !important; }
+
+  /* ════════ シート1：A4横・自然サイズ ════════ */
   #tab-sheet1.active {
     display: block !important;
     padding: 2mm;
+    page: sheet-landscape;
   }
-  /* マトリクス＋拠点リストを横並び・上ぞろえ・自然幅 */
   #tab-sheet1 .sheet1-content {
     display: flex;
     gap: 4px;
@@ -652,7 +659,6 @@ body {
     min-width: 0;
   }
   #tab-sheet1 .ref-panel { flex: 0 0 auto; }
-  /* matrix-table はベースCSSの 7.5pt を踏襲、セル高をプロト準拠の13pxに */
   #tab-sheet1 .matrix-table { font-size: 7.5pt; }
   #tab-sheet1 .matrix-table th,
   #tab-sheet1 .matrix-table td {
@@ -660,7 +666,16 @@ body {
     line-height: 13px;
     padding: 0 2px;
   }
-  #tab-sheet1 .matrix-table td.cell-name { width: 82px; }
+  /* 商品名セル：5文字幅で固定・はみ出しは切り詰め */
+  #tab-sheet1 .matrix-table th:first-child,
+  #tab-sheet1 .matrix-table td.cell-name {
+    width: 54px;
+    max-width: 54px;
+    padding: 0 3px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   #tab-sheet1 .ref-table { font-size: 8pt; }
   #tab-sheet1 .ref-table th,
   #tab-sheet1 .ref-table td {
@@ -668,64 +683,85 @@ body {
     line-height: 14px;
   }
 
-  /* ════════ シート2：A4横・3エリア縦いっぱい（プロトタイプ準拠） ════════ */
+  /* ════════ シート2：A4横・固定マス（正方形・高さ固定） ════════ */
   #tab-sheet2.active {
-    display: flex !important;
-    flex-direction: column;
-    height: 200mm;
+    display: block !important;
     padding: 2mm;
-    box-sizing: border-box;
-    overflow: hidden;
+    page: sheet-landscape;
   }
-  /* 白米｜玄米｜配達カード を 5fr 5fr 2.5fr で縦いっぱい */
+  /* 白米｜玄米｜配達カード を 5fr 5fr 2.5fr 横並び（引き伸ばしなし） */
   #tab-sheet2 .sheet2-container {
     display: grid;
     grid-template-columns: 5fr 5fr 2.5fr;
     gap: 5px;
-    flex: 1;
-    align-items: stretch;
-    min-height: 0;
+    align-items: start;
   }
-  #tab-sheet2 .table-wrap {
-    overflow: hidden;
-    min-height: 0;
-    min-width: 0;
-  }
-  /* マトリクスを枠いっぱいに引き伸ばし・9pt */
+  #tab-sheet2 .table-wrap { overflow: visible; min-width: 0; }
+  /* マトリクスは引き伸ばさず自然な高さ */
   #tab-sheet2 .matrix-table {
-    width: 100%;
-    height: 100%;
-    table-layout: fixed;
+    width: auto;
     font-size: 9pt;
   }
-  #tab-sheet2 .matrix-table th {
-    height: 22px;
-    font-size: 8.5pt;
+  /* データセルは正方形固定（26×26px） */
+  #tab-sheet2 .matrix-table th,
+  #tab-sheet2 .matrix-table td {
+    width: 26px;
+    height: 26px;
+    line-height: 26px;
+    padding: 0;
   }
-  #tab-sheet2 .matrix-table td { padding: 0 3px; }
+  /* 商品名セル：5文字幅で固定・はみ出しは切り詰め */
+  #tab-sheet2 .matrix-table th:first-child,
+  #tab-sheet2 .matrix-table td.cell-name {
+    width: 66px;
+    max-width: 66px;
+    height: 26px;
+    line-height: 26px;
+    padding: 0 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* セクション見出し行（白米／玄米）は横いっぱい・固定高 */
   #tab-sheet2 .matrix-table td.cell-section-rice,
   #tab-sheet2 .matrix-table td.cell-section-brown {
+    width: auto;
     height: 20px;
     line-height: 20px;
     font-size: 9.5pt;
   }
-  /* 配達カードエリア：縦に6分割 */
+  /* 配達カードエリア：自然流し */
   #tab-sheet2 .delivery-area {
-    display: grid;
-    grid-template-rows: repeat(6, 1fr);
-    gap: 2px;
-    height: 100%;
-    min-height: 0;
-  }
-  #tab-sheet2 .delivery-card {
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    gap: 2px;
   }
-  #tab-sheet2 .delivery-body {
-    flex: 1;
+  #tab-sheet2 .delivery-card { overflow: hidden; }
+
+  /* ════════ シート3：A4縦（前チャット実装済み・維持） ════════ */
+  #tab-sheet3.active {
+    display: flex !important;
+    flex-direction: column;
+    height: 285mm;
+    padding: 2mm;
+    box-sizing: border-box;
     overflow: hidden;
+    page: sheet3-portrait;
   }
+  #tab-sheet3 .sheet3-container { flex: 1; min-height: 0; gap: 4px; }
+  #tab-sheet3 .sheet3-matrix { flex: 2; min-height: 0; }
+  #tab-sheet3 .sheet3-delivery { flex: 1; min-height: 0; }
+  #tab-sheet3 .delivery-card { overflow: hidden; }
+
+  /* ════════ シート4・発注：縦流し（維持） ════════ */
+  #tab-sheet4.active,
+  #tab-order.active {
+    display: block !important;
+    padding: 2mm;
+  }
+  #tab-sheet4 .kawari-box,
+  #tab-sheet4 .kaito-box { page-break-inside: avoid; }
+}
 
   /* ════════ シート3：A4縦（前チャット実装済み・維持） ════════ */
   #tab-sheet3.active {
