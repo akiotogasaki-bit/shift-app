@@ -3,9 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>🍱 配分表</title>
+<title>🍱 納品管理</title>
 <style id="app-style">
 @page { size: A4 landscape; margin: 3mm; }
+@page sheet3-portrait { size: A4 portrait; margin: 3mm; }
 * {
   box-sizing: border-box;
   margin: 0;
@@ -544,25 +545,48 @@ body {
 .ovc-gray   { border-color: #546e7a; }
 .ovc-gray   .order-vendor-head { background: #546e7a; color: white; }
 .order-vendor-card.done { opacity: 0.55; }
+
+/* ── シート3：2便盛り出し コンテナ ── */
+.sheet3-container {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sheet3-matrix {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  align-items: start;
+}
+.sheet3-delivery {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+}
+
 /* ── 画面表示：配分表・盛り出し表を画面いっぱいに ── */
 @media screen {
   /* テーブルを横幅いっぱいに伸ばす */
   #tab-sheet1 .matrix-table,
-  #tab-sheet2 .matrix-table {
+  #tab-sheet2 .matrix-table,
+  #tab-sheet3 .matrix-table {
     width: 100%;
     font-size: 13px;
   }
   #tab-sheet1 .matrix-table th,
   #tab-sheet1 .matrix-table td,
   #tab-sheet2 .matrix-table th,
-  #tab-sheet2 .matrix-table td {
+  #tab-sheet2 .matrix-table td,
+  #tab-sheet3 .matrix-table th,
+  #tab-sheet3 .matrix-table td {
     height: 28px;
     line-height: 28px;
     padding: 0 6px;
   }
   /* 商品名セル：表示名が収まるよう内容なりの幅に */
   #tab-sheet1 .matrix-table td.cell-name,
-  #tab-sheet2 .matrix-table td.cell-name {
+  #tab-sheet2 .matrix-table td.cell-name,
+  #tab-sheet3 .matrix-table td.cell-name {
     width: auto;
     min-width: 110px;
     font-size: 13px;
@@ -571,7 +595,9 @@ body {
   #tab-sheet1 .matrix-table td.cell-section-rice,
   #tab-sheet1 .matrix-table td.cell-section-brown,
   #tab-sheet2 .matrix-table td.cell-section-rice,
-  #tab-sheet2 .matrix-table td.cell-section-brown {
+  #tab-sheet2 .matrix-table td.cell-section-brown,
+  #tab-sheet3 .matrix-table td.cell-section-rice,
+  #tab-sheet3 .matrix-table td.cell-section-brown {
     font-size: 14px;
     height: 32px;
     line-height: 32px;
@@ -582,7 +608,12 @@ body {
   #tab-sheet1 .ref-table td { height: 26px; line-height: 26px; }
   #tab-sheet1 .ref-table td.col-name { width: 130px; }
   #tab-sheet1 .ref-table td.col-wh   { width: 76px; font-size: 11px; }
+  /* シート3：配達カードを画面では少し見やすく */
+  #tab-sheet3 .delivery-card .delivery-body { font-size: 11px; }
+  #tab-sheet3 .delivery-row .lbl { font-size: 10px; width: 42px; }
+  #tab-sheet3 .delivery-row .val { font-size: 11px; }
 }
+
 /* ── 印刷スタイル ── */
 @media print {
   *, *::before, *::after {
@@ -604,12 +635,22 @@ body {
     overflow: hidden;
   }
 
-  /* シート3（準備中）・シート4・発注：縦流し */
-  #tab-sheet3.active,
+  /* シート4・発注：縦流し */
   #tab-sheet4.active,
   #tab-order.active {
     display: block !important;
     padding: 2mm;
+  }
+
+  /* シート3：A4縦 縦いっぱい固定 */
+  #tab-sheet3.active {
+    display: flex !important;
+    flex-direction: column;
+    height: 285mm;
+    padding: 2mm;
+    box-sizing: border-box;
+    overflow: hidden;
+    page: sheet3-portrait;
   }
 
   .page-title { font-size: 13pt; font-weight: bold; margin-bottom: 4px; flex-shrink: 0; }
@@ -628,6 +669,12 @@ body {
     overflow: hidden;
   }
 
+  /* ── シート3 ── */
+  #tab-sheet3 .sheet3-container { flex: 1; min-height: 0; gap: 4px; }
+  #tab-sheet3 .sheet3-matrix { flex: 2; min-height: 0; }
+  #tab-sheet3 .sheet3-delivery { flex: 1; min-height: 0; }
+  #tab-sheet3 .delivery-card { overflow: hidden; }
+
   /* ── シート4 ── */
   #tab-sheet4 .kawari-box,
   #tab-sheet4 .kaito-box { page-break-inside: avoid; }
@@ -643,7 +690,7 @@ body {
 <div class="tab-bar">
   <button class="tab-btn active" data-tab="sheet1">📋 拠点配分</button>
   <button class="tab-btn" data-tab="sheet2">📦 午前盛り出し</button>
-  <button class="tab-btn" disabled data-tab="sheet3">🚚 午後便盛り出し <small>準備中</small></button>
+  <button class="tab-btn" data-tab="sheet3">🚚 午後便盛り出し</button>
   <button class="tab-btn" data-tab="sheet4">🍳 仕込み</button>
   <button class="tab-btn" data-tab="order">📋 発注</button>
   <button class="tab-btn" disabled data-tab="master">基本数マスタ <small>準備中</small></button>
@@ -682,7 +729,24 @@ body {
 </div>
 
 <!-- 他タブ（準備中） -->
-<div class="tab-pane" id="tab-sheet3"><div class="placeholder-msg">シート3（2便盛り出し表）は準備中です</div></div>
+<!-- シート3 -->
+<div class="tab-pane" id="tab-sheet3">
+  <div class="ctrl-bar">
+    <label>日付：</label>
+    <input type="date" id="s3-date-input">
+    <button class="btn btn-primary" id="s3-btn-fetch">取得</button>
+    <button class="btn btn-print" onclick="window.print()">🖨 印刷</button>
+    <span class="status-msg" id="s3-status-msg"></span>
+    <div class="legend">
+      <span>色：</span>
+      <span class="legend-item" style="background:#fff;">梅</span>
+      <span class="legend-item" style="background:#c8e6c9;">竹</span>
+      <span class="legend-item" style="background:#d1c4e9;">松</span>
+      <span class="legend-ohm">大盛り</span>
+    </div>
+  </div>
+  <div id="sheet3-body"></div>
+</div>
 <div class="tab-pane" id="tab-sheet4">
   <div class="ctrl-bar">
     <label>日付：</label>
@@ -939,6 +1003,7 @@ function toJstDateStr() {
 const TODAY = toJstDateStr();
 document.getElementById('s1-date-input').value = TODAY;
 document.getElementById('s2-date-input').value = TODAY;
+document.getElementById('s3-date-input').value = TODAY;
 document.getElementById('s4-date-input').value = TODAY;
 
 // ─────────────────────────────────────────
@@ -1172,6 +1237,134 @@ function renderSheet2(data) {
       <div class="delivery-area">${cardsHTML}</div>
     </div>`;
 }
+
+// ═══════════════════════════════════════
+// シート3（2便盛り出し表）
+// ═══════════════════════════════════════
+
+const s3Status = document.getElementById('s3-status-msg');
+
+function s3SetStatus(msg, isErr) {
+  s3Status.textContent = msg;
+  s3Status.className = 'status-msg' + (isErr ? ' err' : '');
+}
+
+document.getElementById('s3-btn-fetch').addEventListener('click', fetchSheet3);
+
+async function fetchSheet3() {
+  const dateVal = document.getElementById('s3-date-input').value;
+  if (!dateVal) { s3SetStatus('日付を選択してください', true); return; }
+  s3SetStatus('取得中…');
+  document.getElementById('sheet3-body').innerHTML = '';
+  try {
+    const res  = await fetch(GAS_URL + '?action=getSheet3Data&date=' + dateVal);
+    const data = await res.json();
+    if (!data.ok) { s3SetStatus(data.error || '取得エラー', true); return; }
+    s3SetStatus('');
+    renderSheet3(data);
+  } catch(e) {
+    s3SetStatus('通信エラー: ' + e.message, true);
+  }
+}
+
+function renderSheet3(data) {
+  const body = document.getElementById('sheet3-body');
+  const { dateLabel, deliveries, rice, brown } = data;
+  const dCount = deliveries.length;
+
+  // ── マトリクス HTML 構築（拠点合計列なし） ──
+  function buildMatrixHTML(rows, isBrown) {
+    const sectionClass = isBrown ? 'cell-section-brown' : 'cell-section-rice';
+    const sectionLabel = isBrown ? '▼ 玄米' : '▼ 白米';
+    const rowClass     = isBrown ? ' brown-row' : '';
+    const colspan      = 1 + dCount + 1; // 商品名 + N配達 + 計
+
+    let html = '<thead>';
+    html += `<tr><td colspan="${colspan}" class="${sectionClass}">${sectionLabel}</td></tr>`;
+    html += '<tr>';
+    html += '<th style="text-align:left;padding-left:5px;min-width:80px;">商品</th>';
+    for (let d = 0; d < dCount; d++) {
+      const tip = escHtml(deliveries[d].address || deliveries[d].orderNum);
+      html += `<th title="${tip}" style="min-width:20px;">${d + 1}</th>`;
+    }
+    html += '<th class="cell-tot">計</th>';
+    html += '</tr></thead><tbody>';
+
+    (rows || []).forEach(row => {
+      const color  = getColor(row.category, row.baseName);
+      const trCls  = `g-${color}${rowClass}`;
+      html += `<tr class="${trCls}">`;
+      html += `<td class="cell-name">${escHtml(row.baseName)}</td>`;
+      for (let d = 0; d < dCount; d++) {
+        const qty  = row.deliveryQtys[d];
+        const ohm  = row.deliveryOhm[d];
+        const gc   = GRADE_CLASS[deliveries[d].grade];
+        const bgCls = (qty > 0 && gc) ? `cell-${gc}` : '';
+        const txt  = qty ? (ohm ? `<span class="ohm">${qty}</span>` : qty) : '';
+        html += `<td class="${bgCls}">${txt}</td>`;
+      }
+      html += `<td class="cell-tot">${row.total || ''}</td>`;
+      html += '</tr>';
+    });
+
+    html += '</tbody>';
+    return html;
+  }
+
+  // 2便データが無い日
+  if (dCount === 0) {
+    body.innerHTML = `
+      <div class="page-title">📋 ${escHtml(dateLabel)}　2便盛り出し表</div>
+      <div class="no-delivery-msg">本日の2便配達データはありません</div>`;
+    return;
+  }
+
+  const riceHTML  = '<table class="matrix-table">' + buildMatrixHTML(rice,  false) + '</table>';
+  const brownHTML = '<table class="matrix-table">' + buildMatrixHTML(brown, true)  + '</table>';
+
+  // ── 配達カード HTML 構築 ──
+  let cardsHTML = '';
+  deliveries.forEach(d => {
+    const gc       = GRADE_CLASS[d.grade] ? `grade-${GRADE_CLASS[d.grade]}` : 'grade-empty';
+    const addrFull = d.address + (d.detail ? '　' + d.detail : '');
+    const returnBadge = d.hasReturn
+      ? `<span class="return-badge">🔄 回収 ${d.returnTime || ''}</span>`
+      : '';
+
+    cardsHTML += `
+      <div class="delivery-card">
+        <div class="delivery-header ${gc}">
+          <span>配達 ${d.n}</span>
+          <span class="grade-badge">${escHtml(d.grade) || '—'}</span>
+        </div>
+        <div class="delivery-body">
+          <div class="delivery-row">
+            <span class="lbl">時間</span>
+            <span class="val">${escHtml(d.time)}</span>
+          </div>
+          <div class="delivery-row">
+            <span class="lbl">届先</span>
+            <span class="val">${escHtml(addrFull)}</span>
+          </div>
+          ${d.contact ? `<div class="delivery-row"><span class="lbl">担当</span><span class="val">${escHtml(d.contact)}</span></div>` : ''}
+          ${d.note ? `<div class="delivery-row"><span class="lbl">備考</span><span class="val">${escHtml(d.note)}</span></div>` : ''}
+          ${d.hasReturn ? `<div class="delivery-row"><span class="lbl">回収</span><span class="val">${returnBadge}</span></div>` : ''}
+        </div>
+      </div>`;
+  });
+
+  // ── 組み合わせ ──
+  body.innerHTML = `
+    <div class="page-title">📋 ${escHtml(dateLabel)}　2便盛り出し表（配達 ${dCount} 件）</div>
+    <div class="sheet3-container">
+      <div class="sheet3-matrix">
+        <div class="table-wrap">${riceHTML}</div>
+        <div class="table-wrap">${brownHTML}</div>
+      </div>
+      <div class="sheet3-delivery">${cardsHTML}</div>
+    </div>`;
+}
+
 // ═══════════════════════════════════════
 // 発注タブ
 // ═══════════════════════════════════════
