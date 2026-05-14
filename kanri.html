@@ -544,7 +544,45 @@ body {
 .ovc-gray   { border-color: #546e7a; }
 .ovc-gray   .order-vendor-head { background: #546e7a; color: white; }
 .order-vendor-card.done { opacity: 0.55; }
-
+/* ── 画面表示：配分表・盛り出し表を画面いっぱいに ── */
+@media screen {
+  /* テーブルを横幅いっぱいに伸ばす */
+  #tab-sheet1 .matrix-table,
+  #tab-sheet2 .matrix-table {
+    width: 100%;
+    font-size: 13px;
+  }
+  #tab-sheet1 .matrix-table th,
+  #tab-sheet1 .matrix-table td,
+  #tab-sheet2 .matrix-table th,
+  #tab-sheet2 .matrix-table td {
+    height: 28px;
+    line-height: 28px;
+    padding: 0 6px;
+  }
+  /* 商品名セル：表示名が収まるよう内容なりの幅に */
+  #tab-sheet1 .matrix-table td.cell-name,
+  #tab-sheet2 .matrix-table td.cell-name {
+    width: auto;
+    min-width: 110px;
+    font-size: 13px;
+  }
+  /* セクション見出し行（白米／玄米）も拡大 */
+  #tab-sheet1 .matrix-table td.cell-section-rice,
+  #tab-sheet1 .matrix-table td.cell-section-brown,
+  #tab-sheet2 .matrix-table td.cell-section-rice,
+  #tab-sheet2 .matrix-table td.cell-section-brown {
+    font-size: 14px;
+    height: 32px;
+    line-height: 32px;
+  }
+  /* シート1：右の拠点リストも合わせて拡大 */
+  #tab-sheet1 .ref-table { font-size: 12px; }
+  #tab-sheet1 .ref-table th,
+  #tab-sheet1 .ref-table td { height: 26px; line-height: 26px; }
+  #tab-sheet1 .ref-table td.col-name { width: 130px; }
+  #tab-sheet1 .ref-table td.col-wh   { width: 76px; font-size: 11px; }
+}
 /* ── 印刷スタイル ── */
 @media print {
   *, *::before, *::after {
