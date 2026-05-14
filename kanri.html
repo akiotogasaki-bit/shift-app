@@ -903,7 +903,14 @@ const NAME_COLOR_RULES = [
 ];
 
 // グレード（日本語） → CSS クラス
-const GRADE_CLASS = { '松': 'matsu', '竹': 'take', '梅': 'ume' };
+function gradeClassOf(g) {
+  if (g == null) return '';
+  const s = String(g);
+  if (s.indexOf('松') >= 0) return 'matsu';
+  if (s.indexOf('竹') >= 0) return 'take';
+  if (s.indexOf('梅') >= 0) return 'ume';
+  return '';
+}
 
 function getColor(category, baseName) {
   if (category && CATEGORY_COLOR[category]) return CATEGORY_COLOR[category];
@@ -1286,7 +1293,7 @@ function renderSheet2(data) {
       for (let d = 0; d < dCount; d++) {
         const qty  = row.deliveryQtys[d];
         const ohm  = row.deliveryOhm[d];
-        const gc   = GRADE_CLASS[deliveries[d].grade];
+        const gc   = gradeClassOf(deliveries[d].grade)
         const bgCls = (qty > 0 && gc) ? `cell-${gc}` : '';
         const txt  = qty ? (ohm ? `<span class="ohm">${qty}</span>` : qty) : '';
         html += `<td class="${bgCls}">${txt}</td>`;
@@ -1409,7 +1416,7 @@ function renderSheet3(data) {
       for (let d = 0; d < dCount; d++) {
         const qty  = row.deliveryQtys[d];
         const ohm  = row.deliveryOhm[d];
-        const gc   = GRADE_CLASS[deliveries[d].grade];
+        const gc   = gradeClassOf(deliveries[d].grade)
         const bgCls = (qty > 0 && gc) ? `cell-${gc}` : '';
         const txt  = qty ? (ohm ? `<span class="ohm">${qty}</span>` : qty) : '';
         html += `<td class="${bgCls}">${txt}</td>`;
