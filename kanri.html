@@ -616,16 +616,59 @@ body {
 
 /* ── 印刷スタイル ── */
 @media print {
+  /* ── 色を維持 ── */
   *, *::before, *::after {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+    color-adjust: exact !important;
   }
   body { background: white; padding: 0; margin: 0; }
+
+  /* 画面用UIを全て非表示 */
   .app-header, .tab-bar, .ctrl-bar, .legend { display: none !important; }
   .tab-pane { display: none !important; }
 
-  /* シート1・2：A4横 縦いっぱい固定 */
-  #tab-sheet1.active,
+  .page-title {
+    font-size: 13pt;
+    font-weight: bold;
+    margin-bottom: 4px;
+    flex-shrink: 0;
+  }
+
+  /* ════════ シート1：A4横・自然サイズ（プロトタイプ準拠） ════════ */
+  #tab-sheet1.active {
+    display: block !important;
+    padding: 2mm;
+  }
+  /* マトリクス＋拠点リストを横並び・上ぞろえ・自然幅 */
+  #tab-sheet1 .sheet1-content {
+    display: flex;
+    gap: 4px;
+    align-items: flex-start;
+  }
+  #tab-sheet1 .table-wrap {
+    flex: 0 0 auto;
+    overflow: visible;
+    min-width: 0;
+  }
+  #tab-sheet1 .ref-panel { flex: 0 0 auto; }
+  /* matrix-table はベースCSSの 7.5pt を踏襲、セル高をプロト準拠の13pxに */
+  #tab-sheet1 .matrix-table { font-size: 7.5pt; }
+  #tab-sheet1 .matrix-table th,
+  #tab-sheet1 .matrix-table td {
+    height: 13px;
+    line-height: 13px;
+    padding: 0 2px;
+  }
+  #tab-sheet1 .matrix-table td.cell-name { width: 82px; }
+  #tab-sheet1 .ref-table { font-size: 8pt; }
+  #tab-sheet1 .ref-table th,
+  #tab-sheet1 .ref-table td {
+    height: 14px;
+    line-height: 14px;
+  }
+
+  /* ════════ シート2：A4横・3エリア縦いっぱい（プロトタイプ準拠） ════════ */
   #tab-sheet2.active {
     display: flex !important;
     flex-direction: column;
@@ -634,15 +677,57 @@ body {
     box-sizing: border-box;
     overflow: hidden;
   }
-
-  /* シート4・発注：縦流し */
-  #tab-sheet4.active,
-  #tab-order.active {
-    display: block !important;
-    padding: 2mm;
+  /* 白米｜玄米｜配達カード を 5fr 5fr 2.5fr で縦いっぱい */
+  #tab-sheet2 .sheet2-container {
+    display: grid;
+    grid-template-columns: 5fr 5fr 2.5fr;
+    gap: 5px;
+    flex: 1;
+    align-items: stretch;
+    min-height: 0;
+  }
+  #tab-sheet2 .table-wrap {
+    overflow: hidden;
+    min-height: 0;
+    min-width: 0;
+  }
+  /* マトリクスを枠いっぱいに引き伸ばし・9pt */
+  #tab-sheet2 .matrix-table {
+    width: 100%;
+    height: 100%;
+    table-layout: fixed;
+    font-size: 9pt;
+  }
+  #tab-sheet2 .matrix-table th {
+    height: 22px;
+    font-size: 8.5pt;
+  }
+  #tab-sheet2 .matrix-table td { padding: 0 3px; }
+  #tab-sheet2 .matrix-table td.cell-section-rice,
+  #tab-sheet2 .matrix-table td.cell-section-brown {
+    height: 20px;
+    line-height: 20px;
+    font-size: 9.5pt;
+  }
+  /* 配達カードエリア：縦に6分割 */
+  #tab-sheet2 .delivery-area {
+    display: grid;
+    grid-template-rows: repeat(6, 1fr);
+    gap: 2px;
+    height: 100%;
+    min-height: 0;
+  }
+  #tab-sheet2 .delivery-card {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  #tab-sheet2 .delivery-body {
+    flex: 1;
+    overflow: hidden;
   }
 
-  /* シート3：A4縦 縦いっぱい固定 */
+  /* ════════ シート3：A4縦（前チャット実装済み・維持） ════════ */
   #tab-sheet3.active {
     display: flex !important;
     flex-direction: column;
@@ -652,30 +737,17 @@ body {
     overflow: hidden;
     page: sheet3-portrait;
   }
-
-  .page-title { font-size: 13pt; font-weight: bold; margin-bottom: 4px; flex-shrink: 0; }
-  .table-wrap { overflow: visible; }
-
-  /* ── シート1 ── */
-  #tab-sheet1 .sheet1-content { flex: 1; align-items: stretch; min-height: 0; gap: 4px; }
-  #tab-sheet1 .table-wrap { flex: 1; min-height: 0; overflow: hidden; }
-
-  /* ── シート2 ── */
-  #tab-sheet2 .sheet2-container { flex: 1; align-items: stretch; min-height: 0; gap: 5px; }
-  #tab-sheet2 .delivery-area {
-    display: grid;
-    grid-template-rows: repeat(6, 1fr);
-    gap: 2px;
-    overflow: hidden;
-  }
-
-  /* ── シート3 ── */
   #tab-sheet3 .sheet3-container { flex: 1; min-height: 0; gap: 4px; }
   #tab-sheet3 .sheet3-matrix { flex: 2; min-height: 0; }
   #tab-sheet3 .sheet3-delivery { flex: 1; min-height: 0; }
   #tab-sheet3 .delivery-card { overflow: hidden; }
 
-  /* ── シート4 ── */
+  /* ════════ シート4・発注：縦流し（維持） ════════ */
+  #tab-sheet4.active,
+  #tab-order.active {
+    display: block !important;
+    padding: 2mm;
+  }
   #tab-sheet4 .kawari-box,
   #tab-sheet4 .kaito-box { page-break-inside: avoid; }
 }
