@@ -3,178 +3,471 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>🍱 配分表</title>
+<title>🍱 納品管理</title>
 <style>
+@page { size: A4 landscape; margin: 4mm; }
 * { box-sizing: border-box; margin: 0; padding: 0; }
+
 body {
   font-family: 'Yu Gothic', 'Meiryo', sans-serif;
   font-size: 13px;
   background: #f5f5f5;
   color: #212121;
 }
+
+/* ── ヘッダー ── */
 .app-header {
-  background: #1a3c5e; color: white;
-  padding: 8px 16px; display: flex; align-items: center; gap: 10px;
-  position: sticky; top: 0; z-index: 100;
+  background: #1a3c5e;
+  color: white;
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
 }
 .app-header h1 { font-size: 15px; font-weight: bold; }
+
+/* ── タブバー ── */
 .tab-bar {
-  background: #1a3c5e; border-bottom: 2px solid #0d2a42;
-  display: flex; padding: 0 8px;
-  position: sticky; top: 37px; z-index: 99;
+  background: #1a3c5e;
+  border-bottom: 2px solid #0d2a42;
+  display: flex;
+  padding: 0 8px;
+  position: sticky;
+  top: 37px;
+  z-index: 99;
 }
 .tab-btn {
-  padding: 7px 14px; color: rgba(255,255,255,0.65);
-  border: none; background: transparent; cursor: pointer;
-  font-size: 12px; font-family: inherit;
-  border-bottom: 3px solid transparent; white-space: nowrap; transition: color 0.15s;
+  padding: 7px 14px;
+  color: rgba(255,255,255,0.65);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: inherit;
+  border-bottom: 3px solid transparent;
+  white-space: nowrap;
+  transition: color 0.15s;
 }
 .tab-btn:hover { color: rgba(255,255,255,0.9); }
 .tab-btn.active { color: #fff; border-bottom-color: #64b5f6; font-weight: bold; }
 .tab-btn:disabled { color: rgba(255,255,255,0.3); cursor: default; }
+
+/* ── タブコンテンツ ── */
 .tab-pane { display: none; padding: 12px 14px; }
 .tab-pane.active { display: block; }
 .placeholder-msg { text-align: center; padding: 60px; color: #888; font-size: 15px; }
+
+/* ── コントロールバー（共通） ── */
 .ctrl-bar {
-  display: flex; align-items: center; gap: 8px;
-  margin-bottom: 10px; flex-wrap: wrap;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
 }
 .ctrl-bar label { font-size: 12px; color: #555; }
 .ctrl-bar input[type="date"] {
-  padding: 4px 8px; border: 1px solid #bbb; border-radius: 4px;
-  font-family: inherit; font-size: 13px;
+  padding: 4px 8px;
+  border: 1px solid #bbb;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 13px;
 }
 .btn {
-  padding: 5px 14px; border: none; border-radius: 4px;
-  cursor: pointer; font-family: inherit; font-size: 13px; font-weight: bold;
+  padding: 5px 14px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: bold;
 }
 .btn-primary { background: #1a3c5e; color: white; }
 .btn-primary:hover { background: #274f7a; }
 .btn-print { background: #546e7a; color: white; }
 .btn-print:hover { background: #607d8b; }
-.status-msg { font-size: 12px; color: #888; margin-left: 4px; }
+
+.status-msg {
+  font-size: 12px;
+  color: #888;
+  margin-left: 4px;
+}
 .status-msg.err { color: #c62828; }
-.legend { display: flex; gap: 6px; align-items: center; font-size: 10px; margin-left: 8px; }
-.legend-item { display: inline-block; padding: 1px 8px; border: 1px solid #888; font-size: 9.5px; }
-.legend-ohm { color: #c62828; font-weight: bold; font-size: 9.5px; }
+
+/* ── シート1 コンテンツ ── */
+.sheet1-content {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+/* ── テーブルエリア（共通） ── */
 .table-wrap { overflow-x: auto; flex: 1; min-width: 0; }
-.page-title { font-size: 13px; font-weight: bold; margin-bottom: 6px; }
+
+.page-title {
+  font-size: 13px;
+  font-weight: bold;
+  margin-bottom: 6px;
+}
+
+/* ── メインテーブル（共通） ── */
 .matrix-table {
-  border-collapse: collapse; font-size: 7.5pt; white-space: nowrap; width: 100%;
+  border-collapse: collapse;
+  font-size: 7.5pt;
+  white-space: nowrap;
 }
-.matrix-table th, .matrix-table td {
-  border: 1px solid #888; padding: 0 3px;
-  text-align: center; height: 14px; line-height: 14px; min-width: 22px;
+.matrix-table th,
+.matrix-table td {
+  border: 1px solid #888;
+  padding: 0 3px;
+  text-align: center;
+  height: 14px;
+  line-height: 14px;
+  min-width: 22px;
 }
-.matrix-table th { background: #e0e0e0; font-weight: bold; }
+.matrix-table th {
+  background: #e0e0e0;
+  font-weight: bold;
+}
+
+/* 商品名セル */
 .matrix-table td.cell-name {
-  text-align: left; padding: 0 5px; width: 82px;
-  background: #f5f5f5; font-weight: bold;
+  text-align: left;
+  padding: 0 5px;
+  width: 82px;
+  background: #f5f5f5;
+  font-weight: bold;
 }
+
+/* 数値セル */
+.matrix-table td.cell-data { }
+
+/* 中間計・合計 */
 .matrix-table td.cell-sub  { background: #e8eaf6; font-weight: bold; }
 .matrix-table td.cell-tot  { background: #c5cae9; font-weight: bold; }
 .matrix-table th.cell-sub  { background: #c5cae9; }
 .matrix-table th.cell-tot  { background: #9fa8da; color: #fff; }
+
+/* 拠点合計（シート2用） */
 .matrix-table th.cell-kyoten { background: #c5cae9; }
 .matrix-table td.cell-kyoten { background: #e8eaf6; font-weight: bold; }
+
+/* セクションラベル行 */
 .matrix-table td.cell-section-rice {
-  background: #424242; color: white; font-weight: bold; font-size: 8pt;
-  text-align: left; padding-left: 8px; height: 16px; line-height: 16px;
+  background: #424242; color: white;
+  font-weight: bold; font-size: 8pt;
+  text-align: left; padding-left: 8px;
+  height: 16px; line-height: 16px;
 }
 .matrix-table td.cell-section-brown {
-  background: #5d4037; color: white; font-weight: bold; font-size: 8pt;
-  text-align: left; padding-left: 8px; height: 16px; line-height: 16px;
+  background: #5d4037; color: white;
+  font-weight: bold; font-size: 8pt;
+  text-align: left; padding-left: 8px;
+  height: 16px; line-height: 16px;
 }
+
+/* 商品グループ色（白米） */
 .matrix-table tr.g-blue  td.cell-data { background: #e3f2fd; }
 .matrix-table tr.g-green td.cell-data { background: #e8f5e9; }
 .matrix-table tr.g-yel   td.cell-data { background: #fff9c4; }
+
+/* 商品グループ色（玄米） */
 .matrix-table tr.g-blue.brown-row  td.cell-data { background: #fff3e0; }
 .matrix-table tr.g-green.brown-row td.cell-data { background: #ffe0b2; }
 .matrix-table tr.g-yel.brown-row   td.cell-data { background: #ffcc80; }
+
+/* ── シート2：グレード配色（配達列セル背景） ── */
 .cell-ume   { background: #ffffff !important; }
 .cell-take  { background: #c8e6c9 !important; }
 .cell-matsu { background: #d1c4e9 !important; }
 .ohm        { color: #c62828; font-weight: bold; }
 
-/* シート1 */
-.sheet1-content { display: flex; gap: 10px; align-items: flex-start; }
-.ref-panel { flex-shrink: 0; }
-.ref-table { border-collapse: collapse; font-size: 7.5pt; white-space: nowrap; }
-.ref-table th, .ref-table td { border: 1px solid #aaa; padding: 0 4px; height: 14px; line-height: 14px; }
-.ref-table th { background: #e0e0e0; text-align: center; }
-.ref-table td.col-no   { width: 22px; text-align: center; background: #fffde7; font-weight: bold; }
-.ref-table td.col-name { width: 88px; text-align: left; padding-left: 4px; font-weight: bold; }
-.ref-table td.col-wh   { width: 60px; text-align: center; font-size: 7pt; color: #555; }
+/* 凡例 */
+.legend {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 10px;
+  margin-left: 8px;
+}
+.legend-item {
+  display: inline-block;
+  padding: 1px 8px;
+  border: 1px solid #888;
+  font-size: 9.5px;
+}
+.legend-ohm { color: #c62828; font-weight: bold; font-size: 9.5px; }
 
-/* シート2 レイアウト（横3カラム） */
-.sheet2-container { display: grid; grid-template-columns: 5fr 5fr 2.5fr; gap: 8px; align-items: start; }
-.delivery-area-vertical { display: flex; flex-direction: column; gap: 3px; }
+/* ── シート2：3エリアレイアウト ── */
+.sheet2-container {
+  display: grid;
+  grid-template-columns: 5fr 5fr 2.5fr;
+  gap: 8px;
+  align-items: start;
+}
 
-/* シート3 レイアウト（縦2段） */
-.sheet3-container { display: flex; flex-direction: column; gap: 8px; }
-.sheet3-matrix-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: start; }
-.delivery-area-horizontal { display: grid; gap: 4px; }
+/* ── 配達カードエリア ── */
+.delivery-area {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
 
-/* 配達カード共通 */
-.delivery-card { border: 1px solid #555; background: white; overflow: hidden; }
+.delivery-card {
+  border: 1px solid #555;
+  background: white;
+  overflow: hidden;
+}
 .delivery-header {
-  font-weight: bold; padding: 2px 6px;
-  display: flex; justify-content: space-between; align-items: center;
-  border-bottom: 1px solid #aaa; font-size: 8pt; line-height: 1.3;
+  font-weight: bold;
+  padding: 2px 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #aaa;
+  font-size: 8pt;
+  flex-shrink: 0;
+  line-height: 1.3;
 }
 .delivery-header.grade-matsu { background: #d1c4e9; }
 .delivery-header.grade-take  { background: #c8e6c9; }
 .delivery-header.grade-ume   { background: #ffffff; }
 .delivery-header.grade-empty { background: #f5f5f5; color: #aaa; }
+
 .grade-badge {
-  font-size: 7.5pt; padding: 0 4px;
-  border: 1px solid #666; background: white; font-weight: bold;
+  font-size: 7.5pt;
+  padding: 0 4px;
+  border: 1px solid #666;
+  background: white;
+  font-weight: bold;
+  line-height: 1.3;
 }
-.delivery-body { padding: 3px 6px; font-size: 7.5pt; }
-.delivery-row { display: flex; line-height: 1.5; border-bottom: 1px dotted #ddd; padding-bottom: 1px; }
+.delivery-body {
+  padding: 3px 6px;
+  font-size: 7.5pt;
+}
+.delivery-row {
+  display: flex;
+  line-height: 1.5;
+  border-bottom: 1px dotted #ddd;
+  padding-bottom: 1px;
+}
 .delivery-row:last-child { border-bottom: none; }
-.delivery-row .lbl { flex-shrink: 0; width: 38px; color: #555; font-weight: bold; font-size: 7pt; }
-.delivery-row .val { flex: 1; font-size: 7.5pt; word-break: break-all; }
+.delivery-row .lbl {
+  flex-shrink: 0;
+  width: 38px;
+  color: #555;
+  font-weight: bold;
+  font-size: 7pt;
+}
+.delivery-row .val {
+  flex: 1;
+  font-size: 7.5pt;
+  word-break: break-all;
+}
 .return-badge {
-  display: inline-block; background: #fff3e0;
-  border: 1px solid #ff9800; border-radius: 2px;
-  padding: 0 3px; font-size: 6.5pt; color: #e65100; font-weight: bold;
+  display: inline-block;
+  background: #fff3e0;
+  border: 1px solid #ff9800;
+  border-radius: 2px;
+  padding: 0 3px;
+  font-size: 6.5pt;
+  color: #e65100;
+  font-weight: bold;
 }
 .no-delivery-msg {
-  text-align: center; color: #888; font-size: 13px;
-  padding: 40px 0; background: white; border: 1px dashed #ccc; border-radius: 4px;
+  text-align: center;
+  color: #888;
+  font-size: 12px;
+  padding: 20px 0;
 }
 
+/* ── 拠点リスト（右パネル） ── */
+.ref-panel { flex-shrink: 0; }
+.ref-table {
+  border-collapse: collapse;
+  font-size: 7.5pt;
+  white-space: nowrap;
+}
+.ref-table th,
+.ref-table td {
+  border: 1px solid #aaa;
+  padding: 0 4px;
+  height: 14px;
+  line-height: 14px;
+}
+.ref-table th { background: #e0e0e0; text-align: center; }
+.ref-table td.col-no   { width: 22px; text-align: center; background: #fffde7; font-weight: bold; }
+.ref-table td.col-name { width: 88px; text-align: left; padding-left: 4px; font-weight: bold; }
+.ref-table td.col-wh   { width: 60px; text-align: center; font-size: 7pt; color: #555; }
+
+/* ── シート4：仕込みタブ ── */
+.kawari-box {
+  background: var(--color-bg, #fff);
+  border: 0.5px solid #bbb;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+}
+.kawari-title {
+  font-size: 12px;
+  font-weight: bold;
+  color: #555;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.kawari-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.kawari-sep {
+  font-size: 12px;
+  font-weight: bold;
+  padding-bottom: 4px;
+  border-bottom: 0.5px solid #ddd;
+  margin-bottom: 6px;
+}
+.kawari-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.kawari-lbl { font-size: 11px; color: #777; }
+.kawari-item select {
+  padding: 5px 8px;
+  border: 1px solid #bbb;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 13px;
+}
+.kawari-footer {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.save-badge {
+  font-size: 11px;
+  color: #388e3c;
+  display: none;
+  align-items: center;
+  gap: 3px;
+}
+.kaito-box {
+  background: var(--color-bg, #fff);
+  border: 0.5px solid #bbb;
+  border-radius: 8px;
+  padding: 10px 16px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.kaito-title {
+  font-size: 12px;
+  font-weight: bold;
+  color: #555;
+  white-space: nowrap;
+}
+.kaito-items {
+  display: flex;
+  gap: 0;
+  flex: 1;
+}
+.kaito-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+}
+.kaito-main  { font-size: 20px; font-weight: bold; color: #1a3c5e; }
+.kaito-actual { font-size: 12px; color: #888; }
+.kaito-sub   { font-size: 11px; color: #888; margin-top: 1px; }
+.kaito-divider {
+  width: 0.5px;
+  background: #ddd;
+  align-self: stretch;
+  margin: 2px 8px;
+}
+.kaito-total .kaito-main { color: #c62828; }
+.s4-section-title {
+  font-size: 12px;
+  font-weight: bold;
+  color: #555;
+  margin-bottom: 8px;
+}
+.prep-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  border: 0.5px solid #bbb;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.prep-table th {
+  background: #f5f5f5;
+  font-size: 11px;
+  font-weight: bold;
+  color: #666;
+  padding: 6px 12px;
+  text-align: left;
+  border-bottom: 0.5px solid #ccc;
+}
+.prep-table th.r { text-align: right; }
+.prep-table td {
+  padding: 7px 12px;
+  font-size: 13px;
+  border-bottom: 0.5px solid #eee;
+}
+.prep-table td.r {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.prep-table tr:last-child td { border-bottom: none; }
+.pack-val { font-weight: bold; }
+.pack-ceil { font-size: 11px; color: #888; margin-left: 4px; }
+
+/* ── 印刷スタイル ── */
 @media print {
   body { background: white; }
   .app-header, .tab-bar, .ctrl-bar, .legend { display: none !important; }
   .tab-pane { display: none !important; padding: 0; }
   .tab-pane.active { display: block !important; }
+  .sheet1-content, .sheet2-container { page-break-inside: avoid; }
   .table-wrap { overflow: visible; }
   .page-title { margin-bottom: 4px; font-size: 12pt; }
+  .delivery-area { gap: 2px; }
 }
 </style>
 </head>
 <body>
 
 <div class="app-header">
-  <h1>🍱 配分表</h1>
+  <h1>🍱 納品管理</h1>
 </div>
 
 <div class="tab-bar">
-  <button class="tab-btn active" data-tab="sheet1" data-orientation="landscape">📋 拠点配分</button>
-  <button class="tab-btn" data-tab="sheet2" data-orientation="landscape">📦 午前盛り出し</button>
-  <button class="tab-btn" data-tab="sheet3" data-orientation="portrait">🚚 午後便盛り出し</button>
-  <button class="tab-btn" disabled data-tab="sheet4">🍳 仕込み <small>準備中</small></button>
+  <button class="tab-btn active" data-tab="sheet1">📋 拠点配分</button>
+  <button class="tab-btn" data-tab="sheet2">📦 午前盛り出し</button>
+  <button class="tab-btn" disabled data-tab="sheet3">🚚 午後便盛り出し <small>準備中</small></button>
+  <button class="tab-btn" data-tab="sheet4">🍳 仕込み</button>
   <button class="tab-btn" disabled data-tab="order">📋 発注 <small>準備中</small></button>
   <button class="tab-btn" disabled data-tab="master">基本数マスタ <small>準備中</small></button>
   <button class="tab-btn" disabled data-tab="settings">設定 <small>準備中</small></button>
 </div>
 
-<!-- シート1 拠点配分 -->
+<!-- シート1 -->
 <div class="tab-pane active" id="tab-sheet1">
   <div class="ctrl-bar">
-    <label>日付：</label><input type="date" id="s1-date-input">
+    <label>日付：</label>
+    <input type="date" id="s1-date-input">
     <button class="btn btn-primary" id="s1-btn-fetch">取得</button>
     <button class="btn btn-print" onclick="window.print()">🖨 印刷</button>
     <span class="status-msg" id="s1-status-msg"></span>
@@ -182,10 +475,11 @@ body {
   <div id="sheet1-body"></div>
 </div>
 
-<!-- シート2 午前盛り出し -->
+<!-- シート2 -->
 <div class="tab-pane" id="tab-sheet2">
   <div class="ctrl-bar">
-    <label>日付：</label><input type="date" id="s2-date-input">
+    <label>日付：</label>
+    <input type="date" id="s2-date-input">
     <button class="btn btn-primary" id="s2-btn-fetch">取得</button>
     <button class="btn btn-print" onclick="window.print()">🖨 印刷</button>
     <span class="status-msg" id="s2-status-msg"></span>
@@ -200,35 +494,29 @@ body {
   <div id="sheet2-body"></div>
 </div>
 
-<!-- シート3 午後便盛り出し -->
-<div class="tab-pane" id="tab-sheet3">
+<!-- 他タブ（準備中） -->
+<div class="tab-pane" id="tab-sheet3"><div class="placeholder-msg">シート3（2便盛り出し表）は準備中です</div></div>
+<div class="tab-pane" id="tab-sheet4">
   <div class="ctrl-bar">
-    <label>日付：</label><input type="date" id="s3-date-input">
-    <button class="btn btn-primary" id="s3-btn-fetch">取得</button>
-    <button class="btn btn-print" onclick="window.print()">🖨 印刷（A4縦）</button>
-    <span class="status-msg" id="s3-status-msg"></span>
-    <div class="legend">
-      <span>色：</span>
-      <span class="legend-item" style="background:#fff;">梅</span>
-      <span class="legend-item" style="background:#c8e6c9;">竹</span>
-      <span class="legend-item" style="background:#d1c4e9;">松</span>
-      <span class="legend-ohm">大盛り</span>
-    </div>
+    <label>日付：</label>
+    <input type="date" id="s4-date-input">
+    <button class="btn btn-primary" id="s4-btn-fetch">取得</button>
+    <span class="status-msg" id="s4-status-msg"></span>
   </div>
-  <div id="sheet3-body"></div>
+  <div id="sheet4-body"></div>
 </div>
-
-<!-- 準備中タブ -->
-<div class="tab-pane" id="tab-sheet4"><div class="placeholder-msg">🍳 仕込みは準備中です</div></div>
-<div class="tab-pane" id="tab-order"><div class="placeholder-msg">📋 発注は準備中です</div></div>
 <div class="tab-pane" id="tab-master"><div class="placeholder-msg">基本数マスタ画面は準備中です</div></div>
 <div class="tab-pane" id="tab-settings"><div class="placeholder-msg">設定画面は準備中です</div></div>
 
 <script>
 'use strict';
 
+// ─────────────────────────────────────────
+// 設定
+// ─────────────────────────────────────────
 const GAS_URL = 'https://script.google.com/macros/s/AKfycby2w7DLb-HULShiC5rKhD_wKg_TGjpx5nURr4Mk-E4Mzg_koC7eJbBedQ6u5QfwsJ_T4Q/exec';
 
+// ★ 単価マスタの「カテゴリー」列の実値に合わせて変更してください
 const CATEGORY_COLOR = {
   '海苔弁系': 'blue',
   '満腹系':   'green',
@@ -236,33 +524,201 @@ const CATEGORY_COLOR = {
   '他社商品': 'yellow',
   '全':       'yellow',
 };
+
+// カテゴリー未設定時のフォールバック（商品名パターン）
 const NAME_COLOR_RULES = [
   { re: /^(あいもり|銀鮭|塩麹|照り焼き|鯖から|アジフライ|柚子焼き|マグロ|あさひめ)/, color: 'blue' },
-  { re: /^(メンチ|カレー|満腹)/, color: 'green' },
+  { re: /^(メンチ|カレー|満腹)/,                                                        color: 'green' },
 ];
+
+// グレード（日本語） → CSS クラス
 const GRADE_CLASS = { '松': 'matsu', '竹': 'take', '梅': 'ume' };
 
-function getColor(cat, name) {
-  if (cat && CATEGORY_COLOR[cat]) return CATEGORY_COLOR[cat];
-  for (const r of NAME_COLOR_RULES) if (r.re.test(name)) return r.color;
+function getColor(category, baseName) {
+  if (category && CATEGORY_COLOR[category]) return CATEGORY_COLOR[category];
+  for (const rule of NAME_COLOR_RULES) {
+    if (rule.re.test(baseName)) return rule.color;
+  }
   return 'yellow';
 }
-function escHtml(s) {
-  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+document.getElementById('s4-date-input').value = TODAY;
+
+// ═══════════════════════════════════════
+// シート4（仕込み表）
+// ═══════════════════════════════════════
+
+const s4Status = document.getElementById('s4-status-msg');
+function s4SetStatus(msg, isErr) {
+  s4Status.textContent = msg;
+  s4Status.className = 'status-msg' + (isErr ? ' err' : '');
 }
 
-// ── 印刷向き切替 ──
-let _pageStyle = null;
-function setPrintOrientation(o) {
-  if (!_pageStyle) {
-    _pageStyle = document.createElement('style');
-    document.head.appendChild(_pageStyle);
+document.getElementById('s4-btn-fetch').addEventListener('click', fetchSheet4);
+
+async function fetchSheet4() {
+  const dateVal = document.getElementById('s4-date-input').value;
+  if (!dateVal) { s4SetStatus('日付を選択してください', true); return; }
+  s4SetStatus('取得中…');
+  document.getElementById('sheet4-body').innerHTML = '';
+  try {
+    // ① 保存済み日替わり選択を取得
+    const kRes  = await fetch(GAS_URL + '?action=getKawariSelections&date=' + dateVal);
+    const kData = await kRes.json();
+    const kawari = (kData.ok && kData.selections) ? kData.selections : {};
+
+    // ② 仕込み表データを取得
+    const kawariJson = encodeURIComponent(JSON.stringify(kawari));
+    const res  = await fetch(GAS_URL + '?action=getSheet4Data&date=' + dateVal + '&kawari=' + kawariJson);
+    const data = await res.json();
+    if (!data.ok) { s4SetStatus(data.error || '取得エラー', true); return; }
+    s4SetStatus('');
+    renderSheet4(data);
+
+    // 保存済みバッジを表示（選択が1件でもあれば）
+    const hasSelection = Object.values(kawari).some(v => v !== '');
+    if (hasSelection) showS4SavedBadge(dateVal);
+  } catch(e) {
+    s4SetStatus('通信エラー: ' + e.message, true);
   }
-  _pageStyle.textContent = `@page { size: A4 ${o||'landscape'}; margin: 4mm; }`;
 }
-setPrintOrientation('landscape');
 
-// ── タブ切替 ──
+async function onS4KawariSave() {
+  const dateVal    = document.getElementById('s4-date-input').value;
+  const selections = getS4KawariSelections();
+  s4SetStatus('保存中…');
+  try {
+    await fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'saveKawariSelections', date: dateVal, selections })
+    });
+    showS4SavedBadge(dateVal);
+
+    // 仕込み表を選択内容で再計算
+    const kawariJson = encodeURIComponent(JSON.stringify(selections));
+    const res  = await fetch(GAS_URL + '?action=getSheet4Data&date=' + dateVal + '&kawari=' + kawariJson);
+    const data = await res.json();
+    if (!data.ok) { s4SetStatus(data.error || '更新エラー', true); return; }
+    s4SetStatus('');
+    renderSheet4(data);
+    showS4SavedBadge(dateVal);
+  } catch(e) {
+    s4SetStatus('通信エラー: ' + e.message, true);
+  }
+}
+
+function getS4KawariSelections() {
+  return {
+    '全六あり主菜1': document.getElementById('s4-zr-s1') ? document.getElementById('s4-zr-s1').value : '',
+    '全六あり主菜2': document.getElementById('s4-zr-s2') ? document.getElementById('s4-zr-s2').value : '',
+    '全六なし主菜1': document.getElementById('s4-zn-s1') ? document.getElementById('s4-zn-s1').value : '',
+    '全六なし主菜2': document.getElementById('s4-zn-s2') ? document.getElementById('s4-zn-s2').value : ''
+  };
+}
+
+function showS4SavedBadge(dateVal) {
+  const badge = document.getElementById('s4-save-badge');
+  if (!badge) return;
+  const d = new Date(dateVal.replace(/-/g, '/'));
+  badge.textContent = '✓ ' + (d.getMonth()+1) + '/' + d.getDate() + ' 保存済み';
+  badge.style.display = 'inline-flex';
+}
+
+function buildKawariSelect(id, cands, selected) {
+  let html = `<select id="${id}" style="padding:5px 8px;border:1px solid #bbb;border-radius:4px;font-family:inherit;font-size:13px;">`;
+  html += `<option value="">-- 未選択 --</option>`;
+  (cands || []).forEach(c => {
+    html += `<option value="${escHtml(c)}"${c === selected ? ' selected' : ''}>${escHtml(c)}</option>`;
+  });
+  html += '</select>';
+  return html;
+}
+
+function renderSheet4(data) {
+  const body = document.getElementById('sheet4-body');
+  const { dateLabel, rows, kaito, candidates, kawari } = data;
+
+  const zrC = candidates['全六あり'] || [];
+  const znC = candidates['全六なし'] || [];
+
+  // 日替わり選択ボックス
+  const kawariHTML = `
+    <div class="kawari-box">
+      <div class="kawari-title">🔄 当日おかず選択（日替わり）</div>
+      <div class="kawari-grid">
+        <div>
+          <div class="kawari-sep">全六あり</div>
+          <div class="kawari-item"><span class="kawari-lbl">主菜1</span>${buildKawariSelect('s4-zr-s1', zrC, kawari['全六あり主菜1'] || '')}</div>
+          <div class="kawari-item"><span class="kawari-lbl">主菜2</span>${buildKawariSelect('s4-zr-s2', zrC, kawari['全六あり主菜2'] || '')}</div>
+        </div>
+        <div>
+          <div class="kawari-sep">全六なし</div>
+          <div class="kawari-item"><span class="kawari-lbl">主菜1</span>${buildKawariSelect('s4-zn-s1', znC, kawari['全六なし主菜1'] || '')}</div>
+          <div class="kawari-item"><span class="kawari-lbl">主菜2</span>${buildKawariSelect('s4-zn-s2', znC, kawari['全六なし主菜2'] || '')}</div>
+        </div>
+      </div>
+      <div class="kawari-footer">
+        <button class="btn btn-primary" id="s4-kawari-save" style="font-size:12px;padding:4px 14px;">保存</button>
+        <span id="s4-save-badge" class="save-badge"></span>
+      </div>
+    </div>`;
+
+  // 解凍セクション
+  const { cut, full, sum } = kaito;
+  const kaitoHTML = `
+    <div class="kaito-box">
+      <span class="kaito-title">解凍</span>
+      <div class="kaito-items">
+        <div class="kaito-item">
+          <span class="kaito-main">${cut.display}P</span>
+          <span class="kaito-actual">(${cut.packCeil}P)</span>
+          <span class="kaito-sub">カット</span>
+        </div>
+        <div class="kaito-divider"></div>
+        <div class="kaito-item">
+          <span class="kaito-main">${full.display}P</span>
+          <span class="kaito-actual">(${full.packCeil}P)</span>
+          <span class="kaito-sub">正肉</span>
+        </div>
+        <div class="kaito-divider"></div>
+        <div class="kaito-item kaito-total">
+          <span class="kaito-main">${sum.display}P</span>
+          <span class="kaito-actual">(${sum.packCeil}P)</span>
+          <span class="kaito-sub">合計</span>
+        </div>
+      </div>
+    </div>`;
+
+  // 仕込み表
+  let tableContent;
+  if (rows.length === 0) {
+    tableContent = '<div class="no-delivery-msg">当日の仕込みデータがありません<br><small>食材マスタと単価マスタの食材ID列を確認してください</small></div>';
+  } else {
+    let trs = '';
+    rows.forEach(r => {
+      trs += `<tr>
+        <td>${escHtml(r.name)}</td>
+        <td class="r">${r.total}</td>
+        <td class="r"><span class="pack-val">${r.packCount.toFixed(1)}P</span><span class="pack-ceil">→${r.packCeil}P</span></td>
+      </tr>`;
+    });
+    tableContent = `<table class="prep-table">
+      <thead><tr><th>食材名</th><th class="r">必要量</th><th class="r">パック数</th></tr></thead>
+      <tbody>${trs}</tbody>
+    </table>`;
+  }
+
+  body.innerHTML = `
+    <div class="page-title">🍳 ${escHtml(dateLabel)}　仕込み表</div>
+    ${kawariHTML}
+    ${kaitoHTML}
+    <div class="s4-section-title">仕込み表</div>
+    ${tableContent}`;
+
+  document.getElementById('s4-kawari-save').addEventListener('click', onS4KawariSave);
+}
+
 document.querySelectorAll('.tab-btn:not(:disabled)').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -270,196 +726,252 @@ document.querySelectorAll('.tab-btn:not(:disabled)').forEach(btn => {
     btn.classList.add('active');
     const pane = document.getElementById('tab-' + btn.dataset.tab);
     if (pane) pane.classList.add('active');
-    setPrintOrientation(btn.dataset.orientation || 'landscape');
   });
 });
 
-// ── 日付初期化 ──
-const TODAY = (() => {
-  const jst = new Date(Date.now() + 9*3600000);
-  return jst.toISOString().slice(0,10);
-})();
-['s1','s2','s3'].forEach(p => {
-  const el = document.getElementById(p+'-date-input');
-  if (el) el.value = TODAY;
-});
+// ─────────────────────────────────────────
+// 日付ピッカー初期化（今日・JST）
+// ─────────────────────────────────────────
+function toJstDateStr() {
+  const now = new Date();
+  const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  return jst.toISOString().slice(0, 10);
+}
+const TODAY = toJstDateStr();
+document.getElementById('s1-date-input').value = TODAY;
+document.getElementById('s2-date-input').value = TODAY;
 
-// ── 配達カード HTML（共通）──
-function buildCardHTML(d) {
-  const gc  = GRADE_CLASS[d.grade] ? `grade-${GRADE_CLASS[d.grade]}` : 'grade-empty';
-  const addr = d.address + (d.detail ? '　'+d.detail : '');
-  return `<div class="delivery-card">
-    <div class="delivery-header ${gc}">
-      <span>配達 ${d.n}</span><span class="grade-badge">${escHtml(d.grade)||'—'}</span>
-    </div>
-    <div class="delivery-body">
-      <div class="delivery-row"><span class="lbl">時間</span><span class="val">${escHtml(d.time)}</span></div>
-      <div class="delivery-row"><span class="lbl">届先</span><span class="val">${escHtml(addr)}</span></div>
-      ${d.contact?`<div class="delivery-row"><span class="lbl">担当</span><span class="val">${escHtml(d.contact)}</span></div>`:''}
-      ${d.note?`<div class="delivery-row"><span class="lbl">備考</span><span class="val">${escHtml(d.note)}</span></div>`:''}
-      ${d.hasReturn?`<div class="delivery-row"><span class="lbl">回収</span><span class="val"><span class="return-badge">🔄 ${escHtml(d.returnTime||'時間未定')}</span></span></div>`:''}
-    </div>
-  </div>`;
+// ─────────────────────────────────────────
+// ユーティリティ
+// ─────────────────────────────────────────
+function escHtml(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-// ════════════════════════════
-// シート1 拠点配分
-// ════════════════════════════
-document.getElementById('s1-btn-fetch').addEventListener('click', async () => {
-  const v = document.getElementById('s1-date-input').value;
-  const st = document.getElementById('s1-status-msg');
-  if (!v) { st.textContent='日付を選択してください'; st.className='status-msg err'; return; }
-  st.textContent='取得中…'; st.className='status-msg';
-  document.getElementById('sheet1-body').innerHTML='';
+// ═══════════════════════════════════════
+// シート1
+// ═══════════════════════════════════════
+
+const s1Status = document.getElementById('s1-status-msg');
+
+function s1SetStatus(msg, isErr) {
+  s1Status.textContent = msg;
+  s1Status.className = 'status-msg' + (isErr ? ' err' : '');
+}
+
+document.getElementById('s1-btn-fetch').addEventListener('click', fetchSheet1);
+
+async function fetchSheet1() {
+  const dateVal = document.getElementById('s1-date-input').value;
+  if (!dateVal) { s1SetStatus('日付を選択してください', true); return; }
+  s1SetStatus('取得中…');
+  document.getElementById('sheet1-body').innerHTML = '';
   try {
-    const data = await fetch(GAS_URL+'?action=getSheet1Data&date='+v).then(r=>r.json());
-    if (!data.ok) { st.textContent=data.error||'取得エラー'; st.className='status-msg err'; return; }
-    st.textContent='';
-    const { dateLabel, locations, rice, brown, subtotalSplit } = data;
-    const locIds = locations.map(l=>l.id);
-    function tbl(rows, isBrown) {
-      if (!rows||!rows.length) return '';
-      const sc = isBrown?'cell-section-brown':'cell-section-rice';
-      const sl = isBrown?'▼ 玄米':'▼ 白米';
-      const rc = isBrown?' brown-row':'';
-      const cs = 1+locIds.length+1+1;
-      let h = `<tr><td colspan="${cs}" class="${sc}">${sl}</td></tr><tr>`;
-      h += '<th style="width:82px;text-align:left;padding-left:5px;">商品</th>';
-      locIds.forEach((lid,i)=>{
-        const loc=locations.find(l=>l.id===lid);
-        const nm=loc?loc.name:lid;
-        const sh=nm.length>5?nm.slice(0,4)+'…':nm;
-        if (i===subtotalSplit) h+=`<th class="cell-sub" title="中間計(前${subtotalSplit}拠点)">中計</th>`;
-        h+=`<th title="${nm}">${sh}</th>`;
-      });
-      h+='<th class="cell-tot">合計</th></tr>';
-      rows.forEach(row=>{
-        const c=getColor(row.category,row.baseName);
-        h+=`<tr class="g-${c}${rc}"><td class="cell-name">${escHtml(row.baseName)}</td>`;
-        locIds.forEach((lid,i)=>{
-          if (i===subtotalSplit) h+=`<td class="cell-sub">${row.subtotal||''}</td>`;
-          h+=`<td class="cell-data">${row.byLocation[lid]||''}</td>`;
-        });
-        h+=`<td class="cell-tot">${row.total||''}</td></tr>`;
-      });
-      return h;
-    }
-    let ref='<table class="ref-table"><tr><th class="col-no">No.</th><th class="col-name">拠点名</th><th class="col-wh">勤務時間</th></tr>';
-    locations.forEach((l,i)=>{
-      ref+=`<tr><td class="col-no">${i+1}</td><td class="col-name">${escHtml(l.name)}</td><td class="col-wh">${escHtml(l.workHours)}</td></tr>`;
+    const res  = await fetch(GAS_URL + '?action=getSheet1Data&date=' + dateVal);
+    const data = await res.json();
+    if (!data.ok) { s1SetStatus(data.error || '取得エラー', true); return; }
+    s1SetStatus('');
+    renderSheet1(data);
+  } catch(e) {
+    s1SetStatus('通信エラー: ' + e.message, true);
+  }
+}
+
+function renderSheet1(data) {
+  const body = document.getElementById('sheet1-body');
+  const { dateLabel, locations, rice, brown, subtotalSplit } = data;
+  const locIds = locations.map(l => l.id);
+
+  function buildTableHTML(rows, isBrown) {
+    if (!rows || rows.length === 0) return '';
+    const sectionClass = isBrown ? 'cell-section-brown' : 'cell-section-rice';
+    const sectionLabel = isBrown ? '▼ 玄米' : '▼ 白米';
+    const rowClass     = isBrown ? 'brown-row' : '';
+    const colspan      = 1 + locIds.length + 1 + 1;
+
+    let html = '';
+    html += `<tr><td colspan="${colspan}" class="${sectionClass}">${sectionLabel}</td></tr>`;
+    html += '<tr>';
+    html += '<th style="width:82px;text-align:left;padding-left:5px;">商品</th>';
+    locIds.forEach((lid, idx) => {
+      const loc   = locations.find(l => l.id === lid);
+      const name  = loc ? loc.name : lid;
+      const short = name.length > 5 ? name.slice(0, 4) + '…' : name;
+      if (idx === subtotalSplit) {
+        html += `<th class="cell-sub" title="中間計(前${subtotalSplit}拠点)">中計</th>`;
+      }
+      html += `<th title="${name}">${short}</th>`;
     });
-    ref+='</table>';
-    document.getElementById('sheet1-body').innerHTML=`
-      <div class="page-title">📋 ${escHtml(dateLabel)}　拠点配分表</div>
-      <div class="sheet1-content">
-        <div class="table-wrap"><table class="matrix-table">${tbl(rice,false)}${tbl(brown,true)}</table></div>
-        <div class="ref-panel">${ref}</div>
-      </div>`;
-  } catch(e) { st.textContent='通信エラー: '+e.message; st.className='status-msg err'; }
-});
+    html += '<th class="cell-tot">合計</th>';
+    html += '</tr>';
 
-// ════════════════════════════
-// シート2 午前盛り出し
-// ════════════════════════════
-document.getElementById('s2-btn-fetch').addEventListener('click', async () => {
-  const v = document.getElementById('s2-date-input').value;
-  const st = document.getElementById('s2-status-msg');
-  if (!v) { st.textContent='日付を選択してください'; st.className='status-msg err'; return; }
-  st.textContent='取得中…'; st.className='status-msg';
-  document.getElementById('sheet2-body').innerHTML='';
-  try {
-    const data = await fetch(GAS_URL+'?action=getSheet2Data&date='+v).then(r=>r.json());
-    if (!data.ok) { st.textContent=data.error||'取得エラー'; st.className='status-msg err'; return; }
-    st.textContent='';
-    const { dateLabel, deliveries, rice, brown } = data;
-    const dc = deliveries.length;
-    function mTbl(rows, isBrown) {
-      const sc=isBrown?'cell-section-brown':'cell-section-rice';
-      const sl=isBrown?'▼ 玄米':'▼ 白米';
-      const rc=isBrown?' brown-row':'';
-      const cs=1+1+dc+1;
-      let h=`<thead><tr><td colspan="${cs}" class="${sc}">${sl}</td></tr><tr>`;
-      h+='<th style="text-align:left;padding-left:5px;min-width:80px;">商品</th><th class="cell-kyoten">拠点</th>';
-      for(let d=0;d<dc;d++) h+=`<th title="${escHtml(deliveries[d].address)}" style="min-width:20px;">${d+1}</th>`;
-      h+='<th class="cell-tot">計</th></tr></thead><tbody>';
-      (rows||[]).forEach(row=>{
-        const c=getColor(row.category,row.baseName);
-        h+=`<tr class="g-${c}${rc}"><td class="cell-name">${escHtml(row.baseName)}</td><td class="cell-kyoten">${row.kyotenTotal||''}</td>`;
-        for(let d=0;d<dc;d++){
-          const q=row.deliveryQtys[d],ohm=row.deliveryOhm[d];
-          const gc=GRADE_CLASS[deliveries[d].grade];
-          h+=`<td class="${q>0&&gc?'cell-'+gc:''}">${q?(ohm?`<span class="ohm">${q}</span>`:q):''}</td>`;
+    rows.forEach(row => {
+      const color  = getColor(row.category, row.baseName);
+      const trCls  = `g-${color}${rowClass ? ' ' + rowClass : ''}`;
+      html += `<tr class="${trCls}">`;
+      html += `<td class="cell-name">${escHtml(row.baseName)}</td>`;
+      locIds.forEach((lid, idx) => {
+        if (idx === subtotalSplit) {
+          html += `<td class="cell-sub">${row.subtotal || ''}</td>`;
         }
-        h+=`<td class="cell-tot">${row.total||''}</td></tr>`;
+        const q = row.byLocation[lid];
+        html += `<td class="cell-data">${q ? q : ''}</td>`;
       });
-      return h+'</tbody>';
-    }
-    const cards=dc===0?'<div class="no-delivery-msg">本日の午前便配達データはありません</div>':deliveries.map(buildCardHTML).join('');
-    document.getElementById('sheet2-body').innerHTML=`
-      <div class="page-title">📋 ${escHtml(dateLabel)}　午前盛り出し表（配達 ${dc} 件）</div>
-      <div class="sheet2-container">
-        <div class="table-wrap"><table class="matrix-table">${mTbl(rice,false)}</table></div>
-        <div class="table-wrap"><table class="matrix-table">${mTbl(brown,true)}</table></div>
-        <div class="delivery-area-vertical">${cards}</div>
-      </div>`;
-  } catch(e) { st.textContent='通信エラー: '+e.message; st.className='status-msg err'; }
-});
+      html += `<td class="cell-tot">${row.total || ''}</td>`;
+      html += '</tr>';
+    });
 
-// ════════════════════════════
-// シート3 午後便盛り出し
-// ════════════════════════════
-document.getElementById('s3-btn-fetch').addEventListener('click', async () => {
-  const v = document.getElementById('s3-date-input').value;
-  const st = document.getElementById('s3-status-msg');
-  if (!v) { st.textContent='日付を選択してください'; st.className='status-msg err'; return; }
-  st.textContent='取得中…'; st.className='status-msg';
-  document.getElementById('sheet3-body').innerHTML='';
+    return html;
+  }
+
+  const tableHTML = '<table class="matrix-table">'
+    + buildTableHTML(rice,  false)
+    + buildTableHTML(brown, true)
+    + '</table>';
+
+  let refHTML = '<table class="ref-table">'
+    + '<tr><th class="col-no">No.</th><th class="col-name">拠点名</th><th class="col-wh">勤務時間</th></tr>';
+  locations.forEach((loc, idx) => {
+    refHTML += `<tr>`
+      + `<td class="col-no">${idx + 1}</td>`
+      + `<td class="col-name">${escHtml(loc.name)}</td>`
+      + `<td class="col-wh">${escHtml(loc.workHours)}</td>`
+      + `</tr>`;
+  });
+  refHTML += '</table>';
+
+  body.innerHTML = `
+    <div class="page-title">📋 ${escHtml(dateLabel)}　拠点配分表</div>
+    <div class="sheet1-content">
+      <div class="table-wrap">${tableHTML}</div>
+      <div class="ref-panel">${refHTML}</div>
+    </div>`;
+}
+
+// ═══════════════════════════════════════
+// シート2
+// ═══════════════════════════════════════
+
+const s2Status = document.getElementById('s2-status-msg');
+
+function s2SetStatus(msg, isErr) {
+  s2Status.textContent = msg;
+  s2Status.className = 'status-msg' + (isErr ? ' err' : '');
+}
+
+document.getElementById('s2-btn-fetch').addEventListener('click', fetchSheet2);
+
+async function fetchSheet2() {
+  const dateVal = document.getElementById('s2-date-input').value;
+  if (!dateVal) { s2SetStatus('日付を選択してください', true); return; }
+  s2SetStatus('取得中…');
+  document.getElementById('sheet2-body').innerHTML = '';
   try {
-    const data = await fetch(GAS_URL+'?action=getSheet3Data&date='+v).then(r=>r.json());
-    if (!data.ok) { st.textContent=data.error||'取得エラー'; st.className='status-msg err'; return; }
-    st.textContent='';
-    const body = document.getElementById('sheet3-body');
-    if (data.empty) {
-      body.innerHTML=`<div class="page-title">📋 ${escHtml(data.dateLabel)}　午後便盛り出し表</div><div class="no-delivery-msg">本日は午後便の配達はありません</div>`;
-      return;
+    const res  = await fetch(GAS_URL + '?action=getSheet2Data&date=' + dateVal);
+    const data = await res.json();
+    if (!data.ok) { s2SetStatus(data.error || '取得エラー', true); return; }
+    s2SetStatus('');
+    renderSheet2(data);
+  } catch(e) {
+    s2SetStatus('通信エラー: ' + e.message, true);
+  }
+}
+
+function renderSheet2(data) {
+  const body = document.getElementById('sheet2-body');
+  const { dateLabel, deliveries, rice, brown } = data;
+  const dCount = deliveries.length;
+
+  // ── マトリクス HTML 構築 ──
+  function buildMatrixHTML(rows, isBrown) {
+    const sectionClass = isBrown ? 'cell-section-brown' : 'cell-section-rice';
+    const sectionLabel = isBrown ? '▼ 玄米' : '▼ 白米';
+    const rowClass     = isBrown ? ' brown-row' : '';
+    const colspan      = 1 + 1 + dCount + 1; // 商品名 + 拠点合計 + N配達 + 計
+
+    let html = '<thead>';
+    html += `<tr><td colspan="${colspan}" class="${sectionClass}">${sectionLabel}</td></tr>`;
+    html += '<tr>';
+    html += '<th style="text-align:left;padding-left:5px;min-width:80px;">商品</th>';
+    html += '<th class="cell-kyoten">拠点</th>';
+    for (let d = 0; d < dCount; d++) {
+      const tip = escHtml(deliveries[d].address || deliveries[d].orderNum);
+      html += `<th title="${tip}" style="min-width:20px;">${d + 1}</th>`;
     }
-    const { dateLabel, deliveries, rice, brown } = data;
-    const dc = deliveries.length;
-    function mTbl3(rows, isBrown) {
-      const sc=isBrown?'cell-section-brown':'cell-section-rice';
-      const sl=isBrown?'▼ 玄米':'▼ 白米';
-      const rc=isBrown?' brown-row':'';
-      const cs=1+dc+1; // 拠点合計列なし
-      let h=`<thead><tr><td colspan="${cs}" class="${sc}">${sl}</td></tr><tr>`;
-      h+='<th style="text-align:left;padding-left:5px;min-width:80px;">商品</th>';
-      for(let d=0;d<dc;d++) h+=`<th title="${escHtml(deliveries[d].address)}" style="min-width:22px;">${d+1}</th>`;
-      h+='<th class="cell-tot">計</th></tr></thead><tbody>';
-      (rows||[]).forEach(row=>{
-        const c=getColor(row.category,row.baseName);
-        h+=`<tr class="g-${c}${rc}"><td class="cell-name">${escHtml(row.baseName)}</td>`;
-        for(let d=0;d<dc;d++){
-          const q=row.deliveryQtys[d],ohm=row.deliveryOhm[d];
-          const gc=GRADE_CLASS[deliveries[d].grade];
-          h+=`<td class="${q>0&&gc?'cell-'+gc:''}">${q?(ohm?`<span class="ohm">${q}</span>`:q):''}</td>`;
-        }
-        h+=`<td class="cell-tot">${row.total||''}</td></tr>`;
-      });
-      return h+'</tbody>';
-    }
-    const cardCols = Math.min(dc, 6);
-    body.innerHTML=`
-      <div class="page-title">📋 ${escHtml(dateLabel)}　午後便盛り出し表（配達 ${dc} 件）</div>
-      <div class="sheet3-container">
-        <div class="sheet3-matrix-row">
-          <div class="table-wrap"><table class="matrix-table">${mTbl3(rice,false)}</table></div>
-          <div class="table-wrap"><table class="matrix-table">${mTbl3(brown,true)}</table></div>
-        </div>
-        <div class="delivery-area-horizontal" style="grid-template-columns:repeat(${cardCols},1fr);">
-          ${deliveries.map(buildCardHTML).join('')}
-        </div>
-      </div>`;
-  } catch(e) { st.textContent='通信エラー: '+e.message; st.className='status-msg err'; }
-});
+    html += '<th class="cell-tot">計</th>';
+    html += '</tr></thead><tbody>';
+
+    (rows || []).forEach(row => {
+      const color  = getColor(row.category, row.baseName);
+      const trCls  = `g-${color}${rowClass}`;
+      html += `<tr class="${trCls}">`;
+      html += `<td class="cell-name">${escHtml(row.baseName)}</td>`;
+      html += `<td class="cell-kyoten">${row.kyotenTotal || ''}</td>`;
+
+      for (let d = 0; d < dCount; d++) {
+        const qty  = row.deliveryQtys[d];
+        const ohm  = row.deliveryOhm[d];
+        const gc   = GRADE_CLASS[deliveries[d].grade];
+        const bgCls = (qty > 0 && gc) ? `cell-${gc}` : '';
+        const txt  = qty ? (ohm ? `<span class="ohm">${qty}</span>` : qty) : '';
+        html += `<td class="${bgCls}">${txt}</td>`;
+      }
+      html += `<td class="cell-tot">${row.total || ''}</td>`;
+      html += '</tr>';
+    });
+
+    html += '</tbody>';
+    return html;
+  }
+
+  const riceHTML  = '<table class="matrix-table">' + buildMatrixHTML(rice,  false) + '</table>';
+  const brownHTML = '<table class="matrix-table">' + buildMatrixHTML(brown, true)  + '</table>';
+
+  // ── 配達カード HTML 構築 ──
+  let cardsHTML = '';
+
+  if (dCount === 0) {
+    cardsHTML = '<div class="no-delivery-msg">本日の1便配達データはありません</div>';
+  } else {
+    deliveries.forEach(d => {
+      const gc      = GRADE_CLASS[d.grade] ? `grade-${GRADE_CLASS[d.grade]}` : 'grade-empty';
+      const addrFull = d.address + (d.detail ? '　' + d.detail : '');
+      const returnBadge = d.hasReturn
+        ? `<span class="return-badge">🔄 回収 ${d.returnTime || ''}</span>`
+        : '';
+
+      cardsHTML += `
+        <div class="delivery-card">
+          <div class="delivery-header ${gc}">
+            <span>配達 ${d.n}</span>
+            <span class="grade-badge">${escHtml(d.grade) || '—'}</span>
+          </div>
+          <div class="delivery-body">
+            <div class="delivery-row">
+              <span class="lbl">時間</span>
+              <span class="val">${escHtml(d.time)}</span>
+            </div>
+            <div class="delivery-row">
+              <span class="lbl">届先</span>
+              <span class="val">${escHtml(addrFull)}</span>
+            </div>
+            ${d.contact ? `<div class="delivery-row"><span class="lbl">担当</span><span class="val">${escHtml(d.contact)}</span></div>` : ''}
+            ${d.note ? `<div class="delivery-row"><span class="lbl">備考</span><span class="val">${escHtml(d.note)}</span></div>` : ''}
+            ${d.hasReturn ? `<div class="delivery-row"><span class="lbl">回収</span><span class="val">${returnBadge}</span></div>` : ''}
+          </div>
+        </div>`;
+    });
+  }
+
+  // ── 組み合わせ ──
+  body.innerHTML = `
+    <div class="page-title">📋 ${escHtml(dateLabel)}　1便盛り出し表（配達 ${dCount} 件）</div>
+    <div class="sheet2-container">
+      <div class="table-wrap">${riceHTML}</div>
+      <div class="table-wrap">${brownHTML}</div>
+      <div class="delivery-area">${cardsHTML}</div>
+    </div>`;
+}
 </script>
 </body>
 </html>
