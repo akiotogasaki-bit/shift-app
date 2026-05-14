@@ -1071,6 +1071,7 @@ function renderSheet1(data) {
     html += '</tr>';
 
     rows.forEach(row => {
+      if (!row.total) return;
       const color  = getColor(row.category, row.baseName);
       const trCls  = `g-${color}${rowClass ? ' ' + rowClass : ''}`;
       html += `<tr class="${trCls}">`;
@@ -1167,6 +1168,7 @@ function renderSheet2(data) {
     html += '</tr></thead><tbody>';
 
     (rows || []).forEach(row => {
+      if (!row.total) return;
       const color  = getColor(row.category, row.baseName);
       const trCls  = `g-${color}${rowClass}`;
       html += `<tr class="${trCls}">`;
@@ -1291,6 +1293,7 @@ function renderSheet3(data) {
     html += '</tr></thead><tbody>';
 
     (rows || []).forEach(row => {
+      if (!row.total) return;
       const color  = getColor(row.category, row.baseName);
       const trCls  = `g-${color}${rowClass}`;
       html += `<tr class="${trCls}">`;
