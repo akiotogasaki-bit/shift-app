@@ -2070,8 +2070,18 @@ function renderLocationTable() {
       : (r.totalSales || 0);
     const teaIds = (masterData.products || []).filter(p => p.name.includes('お茶')).map(p => p.id);
     const delivery = r.deliveryCount ? Object.entries(r.deliveryCount).filter(([id]) => !teaIds.includes(id)).reduce((s,[,v])=>s+Number(v),0) : 0;
+    // リアルタイム時は productSalesJson からお茶分を引いて分子に
+    let nonTeaSoldRT = r.soldCount || 0;
+    if (r.isIntermediate && r.productSalesJson) {
+      try {
+        const psObj = JSON.parse(r.productSalesJson || '{}');
+        let teaSoldRT = 0;
+        teaIds.forEach(id => { teaSoldRT += Number(psObj[id] || 0); });
+        nonTeaSoldRT = Math.max(0, (r.soldCount || 0) - teaSoldRT);
+      } catch(e) {}
+    }
     const sellRate = r.isIntermediate
-      ? (delivery > 0 ? Math.round((r.soldCount||0) / delivery * 1000) / 10 : '—')
+      ? (delivery > 0 ? Math.round(nonTeaSoldRT / delivery * 1000) / 10 : '—')
       : rateNum;
     const rateStr  = r.isIntermediate ? (sellRate === '—' ? '—' : sellRate + '%') : rateNum + '%';
     const badge    = r.isIntermediate
@@ -2280,7 +2290,8 @@ function openModal(locationId) {
     <div style="font-size:12px;font-weight:700;color:var(--ink-mute);letter-spacing:.1em;margin-bottom:10px;">商品別完売率</div>
   `;
 
-  products.forEach(p => {
+  const modalTeaIds = (masterData.products || []).filter(p => p.name.includes('お茶')).map(p => p.id);
+  products.filter(p => !modalTeaIds.includes(p.id)).forEach(p => {
     const d    = Number(delivery[p.id] || 0);
     const s    = Number(sales[p.id]    || 0);
     const rate = d > 0 ? Math.round(s / d * 100) : null;
@@ -2383,12 +2394,14 @@ function renderWeeklyData(data) {
   const totalSold  = rows.reduce((s, r) => s + r.sold, 0);
   const operDays   = new Set(data.map(r => r.date)).size;
 
-  const productRows = products.map(p => {
-    const d    = productDelivery[p.id] || 0;
-    const s    = productSales[p.id]    || 0;
-    const rate = d > 0 ? Math.round(s / d * 100) : null;
-    return { name: p.name, d, s, rate };
-  }).filter(p => p.d > 0);
+  const productRows = products
+    .filter(p => !teaIds.includes(p.id))
+    .map(p => {
+      const d    = productDelivery[p.id] || 0;
+      const s    = productSales[p.id]    || 0;
+      const rate = d > 0 ? Math.round(s / d * 100) : null;
+      return { name: p.name, d, s, rate };
+    }).filter(p => p.d > 0);
 
   document.getElementById('weekly-data').innerHTML = `
     <div class="kpi-grid" style="margin-bottom:16px;">
