@@ -314,7 +314,7 @@ body {
 .ref-table th { background: #e0e0e0; text-align: center; }
 .ref-table td.col-no   { width: 22px; text-align: center; background: #fffde7; font-weight: bold; }
 .ref-table td.col-name { width: 88px; text-align: left; padding-left: 4px; font-weight: bold; }
-.ref-table td.col-wh   { width: 60px; text-align: center; font-size: 7pt; color: #555; }
+.ref-table td.col-sp   { width: 72px; text-align: center; font-size: 7pt; color: #333; }
 
 /* ── シート4：仕込みタブ ── */
 .kawari-box {
@@ -612,7 +612,7 @@ body {
   #tab-sheet1 .ref-table th,
   #tab-sheet1 .ref-table td { height: 26px; line-height: 26px; }
   #tab-sheet1 .ref-table td.col-name { width: 130px; }
-  #tab-sheet1 .ref-table td.col-wh   { width: 76px; font-size: 11px; }
+  #tab-sheet1 .ref-table td.col-sp   { width: 90px; font-size: 11px; }
   /* シート3：配達カードを画面では少し見やすく */
   #tab-sheet3 .delivery-card .delivery-body { font-size: 11px; }
   #tab-sheet3 .delivery-row .lbl { font-size: 10px; width: 42px; }
@@ -1198,12 +1198,12 @@ function renderSheet1(data) {
     + '</table>';
 
   let refHTML = '<table class="ref-table">'
-    + '<tr><th class="col-no">No.</th><th class="col-name">拠点名</th><th class="col-wh">勤務時間</th></tr>';
+    + '<tr><th class="col-no">No.</th><th class="col-name">拠点名</th><th class="col-sp">販売員名</th></tr>';
   locations.forEach((loc, idx) => {
     refHTML += `<tr>`
       + `<td class="col-no">${idx + 1}</td>`
       + `<td class="col-name">${escHtml(loc.name)}</td>`
-      + `<td class="col-wh">${escHtml(loc.workHours)}</td>`
+      + `<td class="col-sp">${escHtml(loc.salesPerson || '')}</td>`
       + `</tr>`;
   });
   refHTML += '</table>';
