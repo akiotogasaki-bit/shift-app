@@ -775,6 +775,41 @@ body {
   #tab-sheet3 .sheet3-matrix { flex: 2; min-height: 0; }
   #tab-sheet3 .sheet3-delivery { flex: 1; min-height: 0; }
   #tab-sheet3 .delivery-card { overflow: hidden; }
+  /* マトリクスはシート2と同サイズに統一（拠点合計列はシート3には無し） */
+  #tab-sheet3 .matrix-table {
+    width: auto;
+    font-size: 9pt;
+  }
+  /* データセル・計列：39×33px に統一・数字13pt */
+  #tab-sheet3 .matrix-table th,
+  #tab-sheet3 .matrix-table td {
+    width: 39px;
+    height: 33px;
+    line-height: 33px;
+    padding: 0;
+    font-size: 13pt;
+  }
+  /* 商品名セル：66px固定・はみ出しは切り詰め（高さはデータセルに追従） */
+  #tab-sheet3 .matrix-table th:first-child,
+  #tab-sheet3 .matrix-table td.cell-name {
+    width: 66px;
+    max-width: 66px;
+    height: 33px;
+    line-height: 33px;
+    padding: 0 4px;
+    font-size: 9pt;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* セクション見出し行（白米／玄米）は横いっぱい・固定高 */
+  #tab-sheet3 .matrix-table td.cell-section-rice,
+  #tab-sheet3 .matrix-table td.cell-section-brown {
+    width: auto;
+    height: 20px;
+    line-height: 20px;
+    font-size: 9.5pt;
+  }
 
   /* ════════ シート4・発注：縦流し（維持） ════════ */
   #tab-sheet4.active,
