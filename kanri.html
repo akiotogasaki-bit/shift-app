@@ -766,14 +766,28 @@ body {
   #tab-sheet3.active {
     display: flex !important;
     flex-direction: column;
+    width: 204mm;     /* ← 追加：A4縦の有効幅を明示してブラウザ自動スケール防止 */
     height: 285mm;
     padding: 2mm;
     box-sizing: border-box;
     overflow: hidden;
   }
   #tab-sheet3 .sheet3-container { flex: 1; min-height: 0; gap: 4px; }
-  #tab-sheet3 .sheet3-matrix { flex: 2; min-height: 0; }
+  /* マトリクス並びを grid から flex に変更（テーブルが押し縮められないように） */
+  #tab-sheet3 .sheet3-matrix {
+    display: flex !important;
+    flex-direction: row;
+    gap: 4px;
+    align-items: flex-start;
+    flex: 2;
+    min-height: 0;
+  }
   #tab-sheet3 .sheet3-delivery { flex: 1; min-height: 0; }
+  #tab-sheet3 .table-wrap {
+    flex: 0 0 auto;
+    overflow: visible;
+    min-width: 0;
+  }
   #tab-sheet3 .delivery-card { overflow: hidden; }
   /* マトリクスはシート2と同サイズに統一（拠点合計列はシート3には無し） */
   #tab-sheet3 .matrix-table {
