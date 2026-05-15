@@ -257,6 +257,10 @@ body {
   padding: 3px 6px;
   font-size: 7.5pt;
 }
+  .grade-badge.grade-matsu { background: #d1c4e9; }
+.grade-badge.grade-take  { background: #c8e6c9; }
+.grade-badge.grade-ume   { background: #ffffff; }
+.grade-badge.grade-empty { background: #f5f5f5; color: #aaa; }
 .delivery-row {
   display: flex;
   line-height: 1.5;
@@ -638,10 +642,11 @@ body {
 
   /* 竹・松を印刷でもはっきり区別（緑／紫） */
   .cell-take,
-  .delivery-header.grade-take  { background: #a5d6a7 !important; }
+  .delivery-header.grade-take,
+  .grade-badge.grade-take      { background: #a5d6a7 !important; }
   .cell-matsu,
-  .delivery-header.grade-matsu { background: #ce93d8 !important; }
-
+  .delivery-header.grade-matsu,
+  .grade-badge.grade-matsu     { background: #ce93d8 !important; }
   /* ════════ シート1：A4横・自然サイズ ════════ */
   #tab-sheet1.active {
     display: block !important;
@@ -737,31 +742,6 @@ body {
     gap: 2px;
   }
   #tab-sheet2 .delivery-card { overflow: hidden; }
-
-  /* ════════ シート3：A4縦（前チャット実装済み・維持） ════════ */
-  #tab-sheet3.active {
-    display: flex !important;
-    flex-direction: column;
-    height: 285mm;
-    padding: 2mm;
-    box-sizing: border-box;
-    overflow: hidden;
-    page: sheet3-portrait;
-  }
-  #tab-sheet3 .sheet3-container { flex: 1; min-height: 0; gap: 4px; }
-  #tab-sheet3 .sheet3-matrix { flex: 2; min-height: 0; }
-  #tab-sheet3 .sheet3-delivery { flex: 1; min-height: 0; }
-  #tab-sheet3 .delivery-card { overflow: hidden; }
-
-  /* ════════ シート4・発注：縦流し（維持） ════════ */
-  #tab-sheet4.active,
-  #tab-order.active {
-    display: block !important;
-    padding: 2mm;
-  }
-  #tab-sheet4 .kawari-box,
-  #tab-sheet4 .kaito-box { page-break-inside: avoid; }
-}
 
   /* ════════ シート3：A4縦（前チャット実装済み・維持） ════════ */
   #tab-sheet3.active {
@@ -905,11 +885,18 @@ const NAME_COLOR_RULES = [
 // グレード（日本語） → CSS クラス
 function gradeClassOf(g) {
   if (g == null) return '';
-  const s = String(g);
-  if (s.indexOf('松') >= 0) return 'matsu';
-  if (s.indexOf('竹') >= 0) return 'take';
-  if (s.indexOf('梅') >= 0) return 'ume';
+  const s = String(g).trim().toLowerCase();
+  if (s.indexOf('松') >= 0 || s.indexOf('matsu') >= 0) return 'matsu';
+  if (s.indexOf('竹') >= 0 || s.indexOf('take')  >= 0) return 'take';
+  if (s.indexOf('梅') >= 0 || s.indexOf('ume')   >= 0) return 'ume';
   return '';
+}
+function gradeLabelJa(g) {
+  const c = gradeClassOf(g);
+  if (c === 'matsu') return '松';
+  if (c === 'take')  return '竹';
+  if (c === 'ume')   return '梅';
+  return '—';
 }
 
 function getColor(category, baseName) {
@@ -1316,7 +1303,7 @@ function renderSheet2(data) {
     cardsHTML = '<div class="no-delivery-msg">本日の1便配達データはありません</div>';
   } else {
     deliveries.forEach(d => {
-      const gc      = GRADE_CLASS[d.grade] ? `grade-${GRADE_CLASS[d.grade]}` : 'grade-empty';
+      const gc      = gradeClassOf(d.grade) ? `grade-${gradeClassOf(d.grade)}` : 'grade-empty';
       const addrFull = d.address + (d.detail ? '　' + d.detail : '');
       const returnBadge = d.hasReturn
         ? `<span class="return-badge">🔄 回収 ${d.returnTime || ''}</span>`
@@ -1326,7 +1313,7 @@ function renderSheet2(data) {
         <div class="delivery-card">
           <div class="delivery-header ${gc}">
             <span>配達 ${d.n}</span>
-            <span class="grade-badge">${escHtml(d.grade) || '—'}</span>
+            <span class="grade-badge grade-${gradeClassOf(d.grade) || 'empty'}">${gradeLabelJa(d.grade)}</span>
           </div>
           <div class="delivery-body">
             <div class="delivery-row">
@@ -1443,7 +1430,7 @@ function renderSheet3(data) {
   // ── 配達カード HTML 構築 ──
   let cardsHTML = '';
   deliveries.forEach(d => {
-    const gc       = GRADE_CLASS[d.grade] ? `grade-${GRADE_CLASS[d.grade]}` : 'grade-empty';
+    const gc       = gradeClassOf(d.grade) ? `grade-${gradeClassOf(d.grade)}` : 'grade-empty';
     const addrFull = d.address + (d.detail ? '　' + d.detail : '');
     const returnBadge = d.hasReturn
       ? `<span class="return-badge">🔄 回収 ${d.returnTime || ''}</span>`
@@ -1453,7 +1440,7 @@ function renderSheet3(data) {
       <div class="delivery-card">
         <div class="delivery-header ${gc}">
           <span>配達 ${d.n}</span>
-          <span class="grade-badge">${escHtml(d.grade) || '—'}</span>
+          <span class="grade-badge grade-${gradeClassOf(d.grade) || 'empty'}">${gradeLabelJa(d.grade)}</span>
         </div>
         <div class="delivery-body">
           <div class="delivery-row">
