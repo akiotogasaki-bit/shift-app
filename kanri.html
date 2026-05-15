@@ -150,7 +150,7 @@ body {
 }
 
 /* 数値セル */
-.matrix-table td.cell-data { }
+.matrix-table td.cell-data { font-weight: bold; }
 
 /* 中間計・合計 */
 .matrix-table td.cell-sub  { background: #e8eaf6; font-weight: bold; }
@@ -669,19 +669,23 @@ body {
     min-width: 0;
   }
   #tab-sheet1 .ref-panel { flex: 0 0 auto; }
-  #tab-sheet1 .matrix-table { font-size: 7.5pt; }
+  #tab-sheet1 .matrix-table { font-size: 9.5pt; }
+  /* データセル：2文字基準の正方形（24×24px）・数字を大きく */
   #tab-sheet1 .matrix-table th,
   #tab-sheet1 .matrix-table td {
-    height: 13px;
-    line-height: 13px;
-    padding: 0 2px;
+    width: 24px;
+    height: 24px;
+    line-height: 24px;
+    padding: 0;
   }
-  /* 商品名セル：5文字幅で固定・はみ出しは切り詰め */
+  /* 商品名セル：固定幅・はみ出しは切り詰め */
   #tab-sheet1 .matrix-table th:first-child,
   #tab-sheet1 .matrix-table td.cell-name {
-    width: 54px;
-    max-width: 54px;
-    padding: 0 3px;
+    width: 60px;
+    max-width: 60px;
+    height: 24px;
+    line-height: 24px;
+    padding: 0 4px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1173,7 +1177,7 @@ function renderSheet1(data) {
     locIds.forEach((lid, idx) => {
       const loc   = locations.find(l => l.id === lid);
       const name  = loc ? loc.name : lid;
-      const short = name.length > 5 ? name.slice(0, 4) + '…' : name;
+      const short = name.slice(0, 2);   // 列見出し＝拠点名の先頭2文字
       if (idx === subtotalSplit) {
         html += `<th class="cell-sub" title="中間計(前${subtotalSplit}拠点)">中計</th>`;
       }
