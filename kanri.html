@@ -1400,7 +1400,7 @@ async function fetchSheet3() {
 
 function renderSheet3(data) {
   const body = document.getElementById('sheet3-body');
-  const { dateLabel, deliveries, rice, brown } = data;
+  const { dateLabel, deliveries = [], rice = [], brown = [] } = data;
   const dCount = deliveries.length;
 
   // ── マトリクス HTML 構築（拠点合計列なし） ──
