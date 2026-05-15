@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>🍱 納品管理</title>
 <style id="app-style">
-/* @page は #page-orient（JS制御）で動的に設定 */
+/* @page は全環境で確実に効く静的指定（用紙＝縦）。横向きはシート1・2をCSS回転で実現（A案） */
+@page { size: A4; margin: 3mm; }
 * {
   box-sizing: border-box;
   margin: 0;
@@ -645,10 +646,17 @@ body {
   .cell-matsu,
   .delivery-header.grade-matsu,
   .grade-badge.grade-matsu     { background: #ce93d8 !important; }
-  /* ════════ シート1：A4横・自然サイズ ════════ */
+  /* ════════ シート1：縦用紙上で横長に回転（A案） ════════ */
   #tab-sheet1.active {
     display: block !important;
     padding: 2mm;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 291mm;     /* 横向きの幅＝用紙の縦-余白 */
+    height: 204mm;    /* 横向きの高さ＝用紙の横-余白 */
+    transform-origin: top left;
+    transform: rotate(-90deg) translateX(-100%);
   }
   #tab-sheet1 .sheet1-content {
     display: flex;
@@ -685,10 +693,17 @@ body {
     line-height: 14px;
   }
 
-  /* ════════ シート2：A4横・固定マス（正方形・高さ固定） ════════ */
+  /* ════════ シート2：縦用紙上で横長に回転（A案） ════════ */
   #tab-sheet2.active {
     display: block !important;
     padding: 2mm;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 291mm;     /* 横向きの幅＝用紙の縦-余白 */
+    height: 204mm;    /* 横向きの高さ＝用紙の横-余白 */
+    transform-origin: top left;
+    transform: rotate(-90deg) translateX(-100%);
   }
   /* 白米｜玄米｜配達カード を 5fr 5fr 2.5fr 横並び（引き伸ばしなし） */
   #tab-sheet2 .sheet2-container {
@@ -739,7 +754,7 @@ body {
   }
   #tab-sheet2 .delivery-card { overflow: hidden; }
 
-  /* ════════ シート3：A4縦（前チャット実装済み・維持） ════════ */
+  /* ════════ シート3：A4縦（前チャット実装済み・維持／用紙既定が縦） ════════ */
   #tab-sheet3.active {
     display: flex !important;
     flex-direction: column;
@@ -763,7 +778,6 @@ body {
   #tab-sheet4 .kaito-box { page-break-inside: avoid; }
 }
 </style>
-<style id="page-orient">@page { size: A4 landscape; margin: 3mm; }</style>
 </head>
 <body>
 
@@ -787,7 +801,7 @@ body {
     <label>日付：</label>
     <input type="date" id="s1-date-input">
     <button class="btn btn-primary" id="s1-btn-fetch">取得</button>
-    <button class="btn btn-print" onclick="printPane()">🖨 印刷</button>
+    <button class="btn btn-print" onclick="window.print()">🖨 印刷</button>
     <span class="status-msg" id="s1-status-msg"></span>
   </div>
   <div id="sheet1-body"></div>
@@ -799,7 +813,7 @@ body {
     <label>日付：</label>
     <input type="date" id="s2-date-input">
     <button class="btn btn-primary" id="s2-btn-fetch">取得</button>
-    <button class="btn btn-print" onclick="printPane()">🖨 印刷</button>
+    <button class="btn btn-print" onclick="window.print()">🖨 印刷</button>
     <span class="status-msg" id="s2-status-msg"></span>
     <div class="legend">
       <span>色：</span>
@@ -819,7 +833,7 @@ body {
     <label>日付：</label>
     <input type="date" id="s3-date-input">
     <button class="btn btn-primary" id="s3-btn-fetch">取得</button>
-    <button class="btn btn-print" onclick="printPane()">🖨 印刷</button>
+    <button class="btn btn-print" onclick="window.print()">🖨 印刷</button>
     <span class="status-msg" id="s3-status-msg"></span>
     <div class="legend">
       <span>色：</span>
@@ -1087,39 +1101,8 @@ document.querySelectorAll('.tab-btn:not(:disabled)').forEach(btn => {
     btn.classList.add('active');
     const pane = document.getElementById('tab-' + btn.dataset.tab);
     if (pane) pane.classList.add('active');
-    // タブ切替時点で用紙向きを確定（Ctrl+P 対策）
-    setPageOrientation();
   });
 });
-
-// ─────────────────────────────────────────
-// 印刷向きの動的切替
-//   Chrome は @page の size 変更を印刷直前に同期確定しないと反映されないため、
-//   印刷ボタン押下時に「向き確定 → window.print()」を同期実行する。
-//   シート3 のみ A4縦／それ以外は A4横。
-//   タブ切替時・初回ロード時にも @page を更新し、Ctrl+P にも対応。
-// ─────────────────────────────────────────
-function setPageOrientation() {
-  const active = document.querySelector('.tab-pane.active');
-  const isPortrait = active && active.id === 'tab-sheet3';
-  const size = isPortrait ? 'A4 portrait' : 'A4 landscape';
-  const styleEl = document.getElementById('page-orient');
-  if (styleEl) {
-    styleEl.textContent = '@page { size: ' + size + '; margin: 3mm; }';
-  }
-}
-
-// 🖨ボタンから呼ぶ：向きを同期確定してから印刷
-function printPane() {
-  setPageOrientation();
-  window.print();
-}
-
-// Ctrl+P 用の保険（環境によっては効かないことがある）
-window.addEventListener('beforeprint', setPageOrientation);
-
-// 初回ロード時：初期表示タブに合わせて @page を設定
-setPageOrientation();
 
 // ─────────────────────────────────────────
 // 日付ピッカー初期化（今日・JST）
@@ -1400,7 +1383,7 @@ async function fetchSheet3() {
 
 function renderSheet3(data) {
   const body = document.getElementById('sheet3-body');
-  const { dateLabel, deliveries = [], rice = [], brown = [] } = data;
+  const { dateLabel, deliveries, rice, brown } = data;
   const dCount = deliveries.length;
 
   // ── マトリクス HTML 構築（拠点合計列なし） ──
