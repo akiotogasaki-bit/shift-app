@@ -149,8 +149,8 @@ body {
   font-weight: bold;
 }
 
-/* 数値セル */
-.matrix-table td.cell-data { font-weight: bold; }
+/* 数値セル（全シート共通でボールド） */
+.matrix-table td { font-weight: bold; }
 
 /* 中間計・合計 */
 .matrix-table td.cell-sub  { background: #e8eaf6; font-weight: bold; }
@@ -722,26 +722,30 @@ body {
     width: auto;
     font-size: 9pt;
   }
-  /* データセルは正方形固定（26×26px） */
+  /* データセル・拠点列・計列：39×33px に統一・数字13pt */
   #tab-sheet2 .matrix-table th,
   #tab-sheet2 .matrix-table td {
-    width: 26px;
-    height: 26px;
-    line-height: 26px;
+    width: 39px;
+    height: 33px;
+    line-height: 33px;
     padding: 0;
+    font-size: 13pt;
   }
-  /* 商品名セル：5文字幅で固定・はみ出しは切り詰め */
+  /* 商品名セル：66px固定・はみ出しは切り詰め（高さはデータセルに追従） */
   #tab-sheet2 .matrix-table th:first-child,
   #tab-sheet2 .matrix-table td.cell-name {
     width: 66px;
     max-width: 66px;
-    height: 26px;
-    line-height: 26px;
+    height: 33px;
+    line-height: 33px;
     padding: 0 4px;
+    font-size: 9pt;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  /* 空の配達列（その表に数量が1つも無い列）は印刷時のみ非表示 */
+  #tab-sheet2 .matrix-table .col-empty-print { display: none; }
   /* セクション見出し行（白米／玄米）は横いっぱい・固定高 */
   #tab-sheet2 .matrix-table td.cell-section-rice,
   #tab-sheet2 .matrix-table td.cell-section-brown {
@@ -1212,10 +1216,9 @@ function renderSheet1(data) {
     + '</table>';
 
   let refHTML = '<table class="ref-table">'
-    + '<tr><th class="col-no">No.</th><th class="col-name">拠点名</th><th class="col-sp">販売員名</th></tr>';
-  locations.forEach((loc, idx) => {
+    + '<tr><th class="col-name">拠点名</th><th class="col-sp">販売員名</th></tr>';
+  locations.forEach((loc) => {
     refHTML += `<tr>`
-      + `<td class="col-no">${idx + 1}</td>`
       + `<td class="col-name">${escHtml(loc.name)}</td>`
       + `<td class="col-sp">${escHtml(loc.salesPerson || '')}</td>`
       + `</tr>`;
@@ -1271,6 +1274,14 @@ function renderSheet2(data) {
     const rowClass     = isBrown ? ' brown-row' : '';
     const colspan      = 1 + 1 + dCount + 1; // 商品名 + 拠点合計 + N配達 + 計
 
+    // この表に数量が1つも無い配達列を判定（印刷時のみ非表示・列番号は元のまま維持）
+    const activeRows = (rows || []).filter(r => r.total);
+    const colEmpty = [];
+    for (let d = 0; d < dCount; d++) {
+      colEmpty[d] = !activeRows.some(r => r.deliveryQtys[d] > 0);
+    }
+    const colEmptyCls = d => colEmpty[d] ? ' col-empty-print' : '';
+
     let html = '<thead>';
     html += `<tr><td colspan="${colspan}" class="${sectionClass}">${sectionLabel}</td></tr>`;
     html += '<tr>';
@@ -1278,13 +1289,12 @@ function renderSheet2(data) {
     html += '<th class="cell-kyoten">拠点</th>';
     for (let d = 0; d < dCount; d++) {
       const tip = escHtml(deliveries[d].address || deliveries[d].orderNum);
-      html += `<th title="${tip}" style="min-width:20px;">${d + 1}</th>`;
+      html += `<th title="${tip}" class="${colEmptyCls(d).trim()}" style="min-width:20px;">${d + 1}</th>`;
     }
     html += '<th class="cell-tot">計</th>';
     html += '</tr></thead><tbody>';
 
-    (rows || []).forEach(row => {
-      if (!row.total) return;
+    activeRows.forEach(row => {
       const color  = getColor(row.category, row.baseName);
       const trCls  = `g-${color}${rowClass}`;
       html += `<tr class="${trCls}">`;
@@ -1297,7 +1307,7 @@ function renderSheet2(data) {
         const gc   = gradeClassOf(deliveries[d].grade)
         const bgCls = (qty > 0 && gc) ? `cell-${gc}` : '';
         const txt  = qty ? (ohm ? `<span class="ohm">${qty}</span>` : qty) : '';
-        html += `<td class="${bgCls}">${txt}</td>`;
+        html += `<td class="${(bgCls + colEmptyCls(d)).trim()}">${txt}</td>`;
       }
       html += `<td class="cell-tot">${row.total || ''}</td>`;
       html += '</tr>';
