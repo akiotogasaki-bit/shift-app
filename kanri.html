@@ -789,29 +789,29 @@ body {
     min-width: 0;
   }
   #tab-sheet3 .delivery-card { overflow: hidden; }
-  /* マトリクスはシート2と同サイズに統一（拠点合計列はシート3には無し） */
+  /* マトリクスはシート2より一回り大きく（コンテンツ少なくてもページに見映えするよう調整） */
   #tab-sheet3 .matrix-table {
     width: auto;
-    font-size: 9pt;
+    font-size: 11pt;
   }
-  /* データセル・計列：39×33px に統一・数字13pt */
+  /* データセル・計列：50×42px・数字16pt */
   #tab-sheet3 .matrix-table th,
   #tab-sheet3 .matrix-table td {
-    width: 39px;
-    height: 33px;
-    line-height: 33px;
+    width: 50px;
+    height: 42px;
+    line-height: 42px;
     padding: 0;
-    font-size: 13pt;
+    font-size: 16pt;
   }
-  /* 商品名セル：66px固定・はみ出しは切り詰め（高さはデータセルに追従） */
+  /* 商品名セル：84px固定・はみ出しは切り詰め（高さはデータセルに追従） */
   #tab-sheet3 .matrix-table th:first-child,
   #tab-sheet3 .matrix-table td.cell-name {
-    width: 66px;
-    max-width: 66px;
-    height: 33px;
-    line-height: 33px;
+    width: 84px;
+    max-width: 84px;
+    height: 42px;
+    line-height: 42px;
     padding: 0 4px;
-    font-size: 9pt;
+    font-size: 11pt;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -820,9 +820,9 @@ body {
   #tab-sheet3 .matrix-table td.cell-section-rice,
   #tab-sheet3 .matrix-table td.cell-section-brown {
     width: auto;
-    height: 20px;
-    line-height: 20px;
-    font-size: 9.5pt;
+    height: 26px;
+    line-height: 26px;
+    font-size: 12pt;
   }
 
   /* ════════ シート4・発注：縦流し（維持） ════════ */
