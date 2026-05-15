@@ -787,7 +787,7 @@ body {
     <label>日付：</label>
     <input type="date" id="s1-date-input">
     <button class="btn btn-primary" id="s1-btn-fetch">取得</button>
-    <button class="btn btn-print" onclick="window.print()">🖨 印刷</button>
+    <button class="btn btn-print" onclick="printPane()">🖨 印刷</button>
     <span class="status-msg" id="s1-status-msg"></span>
   </div>
   <div id="sheet1-body"></div>
@@ -799,7 +799,7 @@ body {
     <label>日付：</label>
     <input type="date" id="s2-date-input">
     <button class="btn btn-primary" id="s2-btn-fetch">取得</button>
-    <button class="btn btn-print" onclick="window.print()">🖨 印刷</button>
+    <button class="btn btn-print" onclick="printPane()">🖨 印刷</button>
     <span class="status-msg" id="s2-status-msg"></span>
     <div class="legend">
       <span>色：</span>
@@ -819,7 +819,7 @@ body {
     <label>日付：</label>
     <input type="date" id="s3-date-input">
     <button class="btn btn-primary" id="s3-btn-fetch">取得</button>
-    <button class="btn btn-print" onclick="window.print()">🖨 印刷</button>
+    <button class="btn btn-print" onclick="printPane()">🖨 印刷</button>
     <span class="status-msg" id="s3-status-msg"></span>
     <div class="legend">
       <span>色：</span>
@@ -1087,13 +1087,17 @@ document.querySelectorAll('.tab-btn:not(:disabled)').forEach(btn => {
     btn.classList.add('active');
     const pane = document.getElementById('tab-' + btn.dataset.tab);
     if (pane) pane.classList.add('active');
+    // タブ切替時点で用紙向きを確定（Ctrl+P 対策）
+    setPageOrientation();
   });
 });
 
 // ─────────────────────────────────────────
-// 印刷向きの動的切替（Chrome は名前付き@pageのsize指定が不安定なため）
-//   シート3 のみ A4縦／それ以外は A4横
-//   🖨ボタン・Ctrl+P の両方に対応（beforeprint）
+// 印刷向きの動的切替
+//   Chrome は @page の size 変更を印刷直前に同期確定しないと反映されないため、
+//   印刷ボタン押下時に「向き確定 → window.print()」を同期実行する。
+//   シート3 のみ A4縦／それ以外は A4横。
+//   タブ切替時・初回ロード時にも @page を更新し、Ctrl+P にも対応。
 // ─────────────────────────────────────────
 function setPageOrientation() {
   const active = document.querySelector('.tab-pane.active');
@@ -1104,7 +1108,18 @@ function setPageOrientation() {
     styleEl.textContent = '@page { size: ' + size + '; margin: 3mm; }';
   }
 }
+
+// 🖨ボタンから呼ぶ：向きを同期確定してから印刷
+function printPane() {
+  setPageOrientation();
+  window.print();
+}
+
+// Ctrl+P 用の保険（環境によっては効かないことがある）
 window.addEventListener('beforeprint', setPageOrientation);
+
+// 初回ロード時：初期表示タブに合わせて @page を設定
+setPageOrientation();
 
 // ─────────────────────────────────────────
 // 日付ピッカー初期化（今日・JST）
