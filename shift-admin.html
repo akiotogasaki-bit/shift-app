@@ -1630,49 +1630,7 @@ function renderMatrix() {
   wrap.innerHTML = html;
 }
 
-function renderPool() {
-  const wrap = document.getElementById('poolWrap');
-  const countEl = document.getElementById('poolTotalCount');
-
-  // 未割当数カウント（スポットは未割当概念から除外済 by GAS）
-  let normalCount = 0;
-  Object.values(state.unassignedPool || {}).forEach(pool => {
-    pool.forEach(item => {
-      if (item.type !== 'spot') normalCount++;
-    });
-  });
-  countEl.textContent = `未割当 ${normalCount}名`;
-
-  if (state.dates.length === 0) {
-    wrap.innerHTML = '<div class="pool-empty">日付データがありません</div>';
-    return;
-  }
-
-  let html = '';
-  state.dates.forEach(date => {
-    const pool = (state.unassignedPool[date] || []).filter(p => p.type !== 'spot');
-    if (pool.length === 0) return;
-    html += `<div class="date-group">`;
-    html += `<div class="date-head">
-      <span>${escapeHtml(date)}</span>
-      <span class="count">${pool.length}名</span>
-    </div>`;
-    html += `<div class="chip-row">`;
-    pool.forEach(item => {
-      html += `<div class="chip normal"
-        onclick="openStaffModal('${escapeAttr(item.name)}','${item.type}','${escapeAttr(date)}')">
-        <span class="ico">👤</span>
-        <span>${escapeHtml(item.name)}</span>
-      </div>`;
-    });
-    html += `</div></div>`;
-  });
-
-  if (!html) {
-    html = '<div class="pool-empty">✅ 未割当スタッフはいません</div>';
-  }
-  wrap.innerHTML = html;
-}
+renderPool
 
 function updateDiffBadge() {
   const badge = document.getElementById('diffBadge');
