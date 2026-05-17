@@ -583,6 +583,57 @@ const state = {
 };
 
 // ═══════════════════════════════════════════════════════════════
+// 案B Phase-2：ドライバー localStorage キャッシュ（v2026-05-18 C案フル）
+//   - マスタ（locations/products）：24h TTL
+//   - 拠点別レポート状況（reportsByLoc）：5分 TTL
+//   - 回収・休止状態（collected/inactive）：30秒 TTL（ポーリング間隔と整合）
+//   - 起動時のみキャッシュから先描画。30秒ポーリング・自操作時にキャッシュ更新
+// ═══════════════════════════════════════════════════════════════
+const DRV_MASTER_CACHE_KEY      = 'oedo_driver_master_cache_v1';
+const DRV_REPORTS_CACHE_KEY     = 'oedo_driver_reports_cache_v1';
+const DRV_DRIVERSTATE_CACHE_KEY = 'oedo_driver_drvstate_cache_v1';
+const DRV_MASTER_TTL_MS      = 24 * 60 * 60 * 1000;  // 24時間
+const DRV_REPORTS_TTL_MS     = 5 * 60 * 1000;        // 5分
+const DRV_DRIVERSTATE_TTL_MS = 30 * 1000;            // 30秒
+
+function _drvLoadCache(key, ttl) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
+    if (!obj || !obj.savedAt) return null;
+    if (Date.now() - obj.savedAt > ttl) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    return obj.data || null;
+  } catch(e) {
+    console.warn('drv cache load error:', key, e);
+    return null;
+  }
+}
+function _drvSaveCache(key, data) {
+  try {
+    localStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), data: data }));
+  } catch(e) { console.warn('drv cache save error:', key, e); }
+}
+
+function loadDrvMasterCache()      { return _drvLoadCache(DRV_MASTER_CACHE_KEY, DRV_MASTER_TTL_MS); }
+function saveDrvMasterCache(data)  { _drvSaveCache(DRV_MASTER_CACHE_KEY, data); }
+function loadDrvReportsCache()     { return _drvLoadCache(DRV_REPORTS_CACHE_KEY, DRV_REPORTS_TTL_MS); }
+function saveDrvReportsCache(data) { _drvSaveCache(DRV_REPORTS_CACHE_KEY, data); }
+function loadDrvDriverStateCache()     { return _drvLoadCache(DRV_DRIVERSTATE_CACHE_KEY, DRV_DRIVERSTATE_TTL_MS); }
+function saveDrvDriverStateCache(data) { _drvSaveCache(DRV_DRIVERSTATE_CACHE_KEY, data); }
+
+// state.collectedIds / state.inactiveIds の現在値をキャッシュへ反映するショートカット
+function persistDrvDriverStateFromState() {
+  saveDrvDriverStateCache({
+    collected: Array.from(state.collectedIds),
+    inactive:  Array.from(state.inactiveIds),
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
 // localStorage（リマインド送信履歴のみ。回収状態はサーバーが正の状態源 A1）
 // ═══════════════════════════════════════════════════════════════
 function saveReminders() {
@@ -643,7 +694,52 @@ async function init() {
     state.userId   = profile.userId;
     state.userName = profile.displayName;
 
-    // 並列取得：マスタ + 当日レポート + 当日中間販売 + ドライバー状態（A3）
+    // ─────────────────────────────────────────────────────────
+    // Phase A：localStorage キャッシュから先描画（v2026-05-18 案B Phase-2 C案フル）
+    // ─────────────────────────────────────────────────────────
+    let renderedFromCache = false;
+    let prevSnapshot = null;
+    const cachedMaster      = loadDrvMasterCache();
+    const cachedReports     = loadDrvReportsCache();
+    const cachedDriverState = loadDrvDriverStateCache();
+
+    if (cachedMaster) {
+      state.locations = cachedMaster.locations || [];
+      state.products  = cachedMaster.products  || [];
+    }
+    if (cachedReports && typeof cachedReports === 'object') {
+      state.reportsByLoc = cachedReports;
+    }
+    if (cachedDriverState) {
+      state.collectedIds = new Set(cachedDriverState.collected || []);
+      state.inactiveIds  = new Set(cachedDriverState.inactive  || []);
+    }
+
+    if (cachedMaster && state.locations.length > 0) {
+      // 当日のリマインド送信履歴を復元（先描画でも必要）
+      restoreReminders();
+      const now = new Date();
+      document.getElementById('driver-name').textContent = state.userName;
+      document.getElementById('main-date').textContent =
+        `${now.getMonth()+1}/${now.getDate()}（${['日','月','火','水','木','金','土'][now.getDay()]}）`;
+      try {
+        renderCollectionList();
+        renderProductList();
+        showScreen('main');
+        renderedFromCache = true;
+      } catch(e) { console.warn('cache render error:', e); }
+
+      prevSnapshot = {
+        masterJson:    JSON.stringify({ locations: state.locations, products: state.products }),
+        reportsJson:   JSON.stringify(state.reportsByLoc || {}),
+        collectedJson: JSON.stringify(Array.from(state.collectedIds).sort()),
+        inactiveJson:  JSON.stringify(Array.from(state.inactiveIds).sort()),
+      };
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // Phase B：4API完全並列で取得
+    // ─────────────────────────────────────────────────────────
     const [masterRes, reportsRes, intermediateRes, driverStateRes] = await Promise.all([
       fetch(`${GAS_URL}?action=getMaster`,             { redirect: 'follow' }).then(r => r.json()),
       fetch(`${GAS_URL}?action=getTodayReports`,        { redirect: 'follow' }).then(r => r.json()).catch(() => ({ data: [] })),
@@ -668,22 +764,57 @@ async function init() {
     state.collectedIds = new Set((driverStateRes.collected || []).map(c => c.locationId));
     state.inactiveIds  = new Set((driverStateRes.inactive  || []).map(i => i.locationId));
 
+    // ─────────────────────────────────────────────────────────
+    // キャッシュ保存（マスタ・レポート・ドライバー状態）
+    // ─────────────────────────────────────────────────────────
+    saveDrvMasterCache({ locations: state.locations, products: state.products });
+    saveDrvReportsCache(state.reportsByLoc);
+    persistDrvDriverStateFromState();
+
     // 当日のリマインド送信履歴を復元
-    restoreReminders();
+    if (!renderedFromCache) restoreReminders();
 
     const now = new Date();
     document.getElementById('driver-name').textContent = state.userName;
     document.getElementById('main-date').textContent =
       `${now.getMonth()+1}/${now.getDate()}（${['日','月','火','水','木','金','土'][now.getDay()]}）`;
 
-    renderCollectionList();
-    renderProductList();
-    showScreen('main');
+    // ─────────────────────────────────────────────────────────
+    // Phase C：差分検出して silent 再描画（先描画していた場合のみ）
+    // ─────────────────────────────────────────────────────────
+    if (prevSnapshot) {
+      const newSnapshot = {
+        masterJson:    JSON.stringify({ locations: state.locations, products: state.products }),
+        reportsJson:   JSON.stringify(state.reportsByLoc || {}),
+        collectedJson: JSON.stringify(Array.from(state.collectedIds).sort()),
+        inactiveJson:  JSON.stringify(Array.from(state.inactiveIds).sort()),
+      };
+      const changed = (
+        prevSnapshot.masterJson    !== newSnapshot.masterJson    ||
+        prevSnapshot.reportsJson   !== newSnapshot.reportsJson   ||
+        prevSnapshot.collectedJson !== newSnapshot.collectedJson ||
+        prevSnapshot.inactiveJson  !== newSnapshot.inactiveJson
+      );
+      if (changed) {
+        console.log('[案B] ドライバー差分検出 → 再描画');
+        renderCollectionList();
+        renderProductList();
+      }
+    } else {
+      renderCollectionList();
+      renderProductList();
+      showScreen('main');
+    }
 
     // ★ A3：ドライバー状態の常時ポーリング開始（30秒）
     startDriverStateTimer();
 
   } catch (e) {
+    // キャッシュ先描画していればエラー画面で潰さない
+    if (state.locations.length > 0) {
+      console.warn('init error (cache fallback):', e);
+      return;
+    }
     document.getElementById('screen-loading').innerHTML =
       `<div style="color:#fff;padding:40px;font-size:13px;word-break:break-all;">
         <p style="font-size:18px;margin-bottom:16px;">⚠️ エラー</p><p>${e.message}</p>
@@ -716,6 +847,8 @@ async function syncDriverState() {
       changed = true;
     }
     if (changed) renderCollectionList();
+    // ポーリング成功時は常にキャッシュ更新（30秒以内の鮮度を保つ）
+    persistDrvDriverStateFromState();
   } catch(e) {
     console.warn('syncDriverState error:', e);
   }
@@ -884,6 +1017,8 @@ async function toggleCollection(id) {
     if (!result || result.success === false) {
       throw new Error((result && result.error) || 'サーバーエラー');
     }
+    // 成功時：キャッシュも更新
+    persistDrvDriverStateFromState();
   } catch(e) {
     // ロールバック
     if (wasCollected) {
@@ -892,6 +1027,7 @@ async function toggleCollection(id) {
       state.collectedIds.delete(id);
     }
     renderCollectionList();
+    persistDrvDriverStateFromState();  // ロールバック後もキャッシュ整合
     showToast('回収状態の更新に失敗しました', 'error');
     console.warn('toggleCollection error:', e);
   }
@@ -965,6 +1101,8 @@ async function confirmToggleInactive() {
       throw new Error((result && result.error) || 'サーバーエラー');
     }
     showToast(wasInactive ? `${loc.name} の休止を解除しました` : `${loc.name} を休止にしました`, 'success');
+    // 成功時：キャッシュも更新
+    persistDrvDriverStateFromState();
   } catch(e) {
     // ロールバック
     if (wasInactive) {
@@ -973,6 +1111,7 @@ async function confirmToggleInactive() {
       state.inactiveIds.delete(locationId);
     }
     renderCollectionList();
+    persistDrvDriverStateFromState();  // ロールバック後もキャッシュ整合
     showToast('休止状態の更新に失敗しました', 'error');
     console.warn('confirmToggleInactive error:', e);
   }
