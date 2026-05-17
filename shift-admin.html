@@ -1504,6 +1504,44 @@ input { font-family: inherit; }
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5AawPDc7aluPokONkYz6f2ikwl0S487JvhKdKh6QSp1xhEhA/exec';
 const PASSWORD = '1115';
 
+// ═══════════════════════════════════════════════════════════════
+// 案B Phase-2：shift-admin localStorage キャッシュ（v2026-05-18 B案）
+//   - マトリクス（getShiftMatrix結果）：5分 TTL
+//   - 差分（getNotifiedDiff結果）：5分 TTL
+//   - キャッシュキーは this/prev で分離（週切替時の混同防止）
+//   - 起動時：キャッシュから先描画 → 2API並列実行 → 差分検出 silent 再描画
+// ═══════════════════════════════════════════════════════════════
+const SA_CACHE_KEY_PREFIX = 'oedo_shift_admin_';
+const SA_CACHE_TTL_MS     = 5 * 60 * 1000;  // 5分
+
+function _saCacheKey(kind, suffix) {
+  return SA_CACHE_KEY_PREFIX + kind + '_cache_v1' + (suffix || '');
+}
+function loadSaCacheFor(kind, suffix) {
+  try {
+    const raw = localStorage.getItem(_saCacheKey(kind, suffix));
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
+    if (!obj || !obj.savedAt) return null;
+    if (Date.now() - obj.savedAt > SA_CACHE_TTL_MS) {
+      localStorage.removeItem(_saCacheKey(kind, suffix));
+      return null;
+    }
+    return obj.data || null;
+  } catch(e) {
+    console.warn('sa cache load error:', kind, e);
+    return null;
+  }
+}
+function saveSaCacheFor(kind, suffix, data) {
+  try {
+    localStorage.setItem(_saCacheKey(kind, suffix), JSON.stringify({
+      savedAt: Date.now(),
+      data: data,
+    }));
+  } catch(e) { console.warn('sa cache save error:', kind, e); }
+}
+
 const state = {
   weekTarget: null,
   thisWeekTarget: null,
@@ -1571,6 +1609,43 @@ async function apiPost(action, payload = {}) {
   return await res.json();
 }
 
+// state.matrix・state.sellers等への反映を共通関数化（v2026-05-18 案B Phase-2）
+function applyMatrixToState(data) {
+  if (state.viewWeek !== 'prev') {
+    state.thisWeekTarget = data.weekTarget;
+  }
+  state.weekTarget = data.weekTarget;
+  state.bases = data.bases || [];
+  state.sellers = data.sellers || [];
+  state.dates = data.dates || [];
+  state.matrix = data.matrix || {};
+  state.unassignedPool = data.unassignedPool || {};
+
+  // submittedNames: プールにいる人 + 既に割り当て済みの人
+  state.submittedNames = new Set();
+  Object.values(state.unassignedPool).forEach(pool =>
+    pool.forEach(p => state.submittedNames.add(p.name)));
+  Object.values(state.matrix).forEach(byBase =>
+    Object.values(byBase).forEach(n => {
+      if (n && n !== '【未割当】') state.submittedNames.add(n);
+    }));
+
+  // workHoursMap: 拠点名→勤務時間
+  state.workHoursMap = {};
+  (data.bases || []).forEach(b => {
+    if (b.workHours) state.workHoursMap[b.name] = b.workHours;
+  });
+}
+
+function renderAfterLoad() {
+  state.pending = {};
+  updateSaveBadge();
+  updateWeekInfo();
+  renderDayTabs();
+  renderMatrix();
+  renderPool();
+}
+
 async function loadAll() {
   setStatus('busy', 'マトリクスを読み込み中...');
   // サブタブをリセット
@@ -1580,41 +1655,90 @@ async function loadAll() {
     if (state.viewWeek === 'prev' && state.thisWeekTarget) {
       params.weekTarget = computePrevWeekTarget(state.thisWeekTarget);
     }
-    const data = await apiGet('getShiftMatrix', params);
-    if (!data.success) throw new Error(data.error || 'API失敗');
-    if (state.viewWeek !== 'prev') {
-      state.thisWeekTarget = data.weekTarget;
+
+    // ─────────────────────────────────────────────────────────
+    // Phase A：localStorage キャッシュから先描画
+    //   キャッシュキーには viewWeek を suffix で区別（this/prev 混同防止）
+    // ─────────────────────────────────────────────────────────
+    const suffix = state.viewWeek === 'prev' ? '_prev' : '_this';
+    const cachedMatrix = loadSaCacheFor('matrix', suffix);
+    const cachedDiffs  = loadSaCacheFor('diffs', suffix);
+    let prevSnapshot = null;
+
+    if (cachedMatrix && cachedMatrix.success) {
+      try {
+        applyMatrixToState(cachedMatrix);
+        renderAfterLoad();
+        if (cachedDiffs && cachedDiffs.success) {
+          state.diffs = cachedDiffs.diffs || [];
+          updateDiffBadge();
+        }
+        prevSnapshot = {
+          matrixJson: JSON.stringify(cachedMatrix),
+          diffsJson:  JSON.stringify(state.diffs || []),
+        };
+        setStatus('ok', `読込完了：${state.bases.length}拠点 × ${state.dates.length}日（キャッシュ）`);
+      } catch(e) { console.warn('cache render error:', e); prevSnapshot = null; }
     }
-    state.weekTarget = data.weekTarget;
-    state.bases = data.bases || [];
-    state.sellers = data.sellers || [];
-    state.dates = data.dates || [];
-    state.matrix = data.matrix || {};
-    state.unassignedPool = data.unassignedPool || {};
 
-    // submittedNames: プールにいる人 + 既に割り当て済みの人
-    state.submittedNames = new Set();
-    Object.values(state.unassignedPool).forEach(pool =>
-      pool.forEach(p => state.submittedNames.add(p.name)));
-    Object.values(state.matrix).forEach(byBase =>
-      Object.values(byBase).forEach(n => {
-        if (n && n !== '【未割当】') state.submittedNames.add(n);
-      }));
+    // ─────────────────────────────────────────────────────────
+    // Phase B：API取得
+    //   キャッシュあり：weekTarget判明済→2API並列化
+    //   キャッシュなし：matrix → diff の逐次（diffがmatrixのweekTargetに依存）
+    // ─────────────────────────────────────────────────────────
+    let data, diffsData;
+    if (cachedMatrix && cachedMatrix.weekTarget) {
+      const wt = cachedMatrix.weekTarget;
+      [data, diffsData] = await Promise.all([
+        apiGet('getShiftMatrix', params),
+        apiGet('getNotifiedDiff', { weekTarget: wt }).catch(() => ({ success: false, diffs: [] })),
+      ]);
+    } else {
+      data = await apiGet('getShiftMatrix', params);
+      if (data && data.success && data.weekTarget) {
+        diffsData = await apiGet('getNotifiedDiff', { weekTarget: data.weekTarget })
+          .catch(() => ({ success: false, diffs: [] }));
+      } else {
+        diffsData = { success: false, diffs: [] };
+      }
+    }
 
-    // workHoursMap: 拠点名→勤務時間
-    state.workHoursMap = {};
-    (data.bases || []).forEach(b => {
-      if (b.workHours) state.workHoursMap[b.name] = b.workHours;
-    });
+    if (!data.success) throw new Error(data.error || 'API失敗');
+    applyMatrixToState(data);
+    state.diffs = (diffsData && diffsData.success) ? (diffsData.diffs || []) : [];
 
-    state.pending = {};
-    updateSaveBadge();
-    updateWeekInfo();
-    renderDayTabs();
-    renderMatrix();
-    renderPool();
-    setStatus('ok', `読込完了：${state.bases.length}拠点 × ${state.dates.length}日`);
-    loadDiffs();
+    // ─────────────────────────────────────────────────────────
+    // キャッシュ保存
+    // ─────────────────────────────────────────────────────────
+    saveSaCacheFor('matrix', suffix, data);
+    if (diffsData && diffsData.success) {
+      saveSaCacheFor('diffs', suffix, diffsData);
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // Phase C：差分検出して silent 再描画（先描画していた場合のみ）
+    // ─────────────────────────────────────────────────────────
+    if (prevSnapshot) {
+      const newSnapshot = {
+        matrixJson: JSON.stringify(data),
+        diffsJson:  JSON.stringify(state.diffs || []),
+      };
+      const changed = (
+        prevSnapshot.matrixJson !== newSnapshot.matrixJson ||
+        prevSnapshot.diffsJson  !== newSnapshot.diffsJson
+      );
+      if (changed) {
+        console.log('[案B] shift-admin 差分検出 → 再描画');
+        renderAfterLoad();
+        updateDiffBadge();
+      }
+      setStatus('ok', `読込完了：${state.bases.length}拠点 × ${state.dates.length}日`);
+    } else {
+      // キャッシュなし＝通常通り描画
+      renderAfterLoad();
+      updateDiffBadge();
+      setStatus('ok', `読込完了：${state.bases.length}拠点 × ${state.dates.length}日`);
+    }
   } catch (e) {
     setStatus('err', `エラー: ${e.message}`);
     toast(`読込失敗: ${e.message}`, 'err');
@@ -1627,6 +1751,9 @@ async function loadDiffs() {
     if (!data.success) return;
     state.diffs = data.diffs || [];
     updateDiffBadge();
+    // キャッシュも更新
+    const suffix = state.viewWeek === 'prev' ? '_prev' : '_this';
+    saveSaCacheFor('diffs', suffix, data);
   } catch (e) {
     console.warn('diff load failed:', e);
   }
