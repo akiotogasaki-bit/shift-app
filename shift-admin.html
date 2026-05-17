@@ -1183,6 +1183,11 @@ input { font-family: inherit; }
       <span class="ico">📣</span>
       <span>一括送信</span>
     </button>
+    <button class="act-btn batch" onclick="confirmDiffSend()" style="background:#1ABC9C;">
+      <span class="ico">📨</span>
+      <span>差分送信</span>
+      <span class="badge" id="diffSendBadge" hidden>0</span>
+    </button>
     <button class="act-btn save" onclick="batchSave()">
       <span class="ico">💾</span>
       <span>保存</span>
@@ -1675,13 +1680,30 @@ function renderPool() {
 }
 
 function updateDiffBadge() {
+  const pendingCount = Object.keys(state.pending || {}).length;
+  const diffCount = (state.diffs || []).length;
+  const total = pendingCount + diffCount;
+
+  // 差分確認ボタンのバッジ（pending + 累積差分の合計）
   const badge = document.getElementById('diffBadge');
-  const n = state.diffs.length;
-  if (n > 0) {
-    badge.textContent = n;
-    badge.hidden = false;
-  } else {
-    badge.hidden = true;
+  if (badge) {
+    if (total > 0) {
+      badge.textContent = total;
+      badge.hidden = false;
+    } else {
+      badge.hidden = true;
+    }
+  }
+
+  // 差分送信ボタンのバッジ（同じく合計）
+  const sendBadge = document.getElementById('diffSendBadge');
+  if (sendBadge) {
+    if (total > 0) {
+      sendBadge.textContent = total;
+      sendBadge.hidden = false;
+    } else {
+      sendBadge.hidden = true;
+    }
   }
 }
 
@@ -1966,6 +1988,102 @@ async function confirmBatch() {
 }
 
 // ─────────────────────────────────────────
+// 差分送信（v2026-05-18 新規）
+//   - 未保存pending を SS に保存
+//   - pending と 累積未通知差分（state.diffs）を統合
+//   - 変更に関わった人だけにシンプルメッセージで通知
+//   - スポット（スポットバイト〜）は通知対象外
+// ─────────────────────────────────────────
+async function confirmDiffSend() {
+  const pendingEntries = Object.values(state.pending || {});
+  const diffEntries = state.diffs || [];
+
+  if (pendingEntries.length === 0 && diffEntries.length === 0) {
+    toast('送信する差分がありません', 'ok');
+    return;
+  }
+
+  // 重複割当チェック（pending含めた現在のmatrix状態で）
+  if (pendingEntries.length > 0) {
+    const conflicts = checkDuplicateAssignments();
+    if (conflicts.length > 0) {
+      alert(formatDuplicateAlert(conflicts));
+      return;
+    }
+  }
+
+  // 全変更を統合（pending + diffs）
+  // フォーマット: { date, base, oldName, newName }
+  const allChanges = [];
+  pendingEntries.forEach(p => {
+    allChanges.push({
+      date: p.date, base: p.base,
+      oldName: p.oldName || '', newName: p.newName || ''
+    });
+  });
+  diffEntries.forEach(d => {
+    allChanges.push({
+      date: d.date, base: d.base,
+      oldName: d.notifiedName || '', newName: d.currentName || ''
+    });
+  });
+
+  // 対象者集計（スポット・空除外）
+  const targetNames = new Set();
+  allChanges.forEach(c => {
+    if (c.oldName && !isSpotName(c.oldName)) targetNames.add(c.oldName);
+    if (c.newName && !isSpotName(c.newName)) targetNames.add(c.newName);
+  });
+
+  if (targetNames.size === 0) {
+    toast('通知対象者がいません（全てスポット または 未割当のみ）', 'warn');
+    return;
+  }
+
+  const totalCount = allChanges.length;
+  const ok = confirm(
+    `変更を保存し、対象者にLINE通知します。\n\n` +
+    `未保存: ${pendingEntries.length}件 / 保存済未通知: ${diffEntries.length}件\n` +
+    `合計変更: ${totalCount}件\n` +
+    `通知対象: ${targetNames.size}名（${Array.from(targetNames).join('、')}）\n\n` +
+    `実行してよろしいですか？`
+  );
+  if (!ok) return;
+
+  showLoading('保存＋差分通知中...');
+  setStatus('busy', '保存＋差分通知中...');
+  try {
+    // ① 未保存があればまず保存
+    if (pendingEntries.length > 0) {
+      const assignments = pendingEntries.map(e => ({
+        date: e.date, base: e.base, name: e.newName
+      }));
+      const saveData = await apiPost('setAssignmentBatch', { assignments });
+      if (!saveData.success) throw new Error(saveData.error || '保存失敗');
+    }
+
+    // ② 差分送信
+    const sendData = await apiPost('sendShiftDiff', {
+      weekTarget: state.weekTarget,
+      changes: allChanges
+    });
+    if (!sendData.success) throw new Error(sendData.error || '通知失敗');
+
+    state.pending = {};
+    updateSaveBadge();
+    const txt = `保存${pendingEntries.length}件 / 通知${sendData.sent}名 / スキップ${sendData.skipped}名`;
+    toast(txt, 'ok');
+    setStatus('ok', `差分送信完了（${txt}）`);
+    await loadAll();  // loadAll 内で loadDiffs も再実行され state.diffs 更新
+  } catch (e) {
+    toast(`失敗: ${e.message}`, 'err');
+    setStatus('err', `差分送信失敗: ${e.message}`);
+  } finally {
+    hideLoading();
+  }
+}
+
+// ─────────────────────────────────────────
 // STEP 3-A：シフト未提出者へのLINEリマインダー（v2026-05-11）
 //   - weekType: 'this' | 'next'
 //   - 事前APIコールなし。confirm時は「未提出者」とだけ表示
@@ -2003,25 +2121,52 @@ async function confirmReminder(weekType) {
 
 function showDiffs() {
   const body = document.getElementById('diffBody');
-  if (state.diffs.length === 0) {
+  const pendingEntries = Object.values(state.pending || {});
+  const diffEntries = state.diffs || [];
+
+  if (pendingEntries.length === 0 && diffEntries.length === 0) {
     body.innerHTML = `
       <div class="diff-empty">
         <div style="font-size:32px;margin-bottom:8px">✅</div>
-        <div>通知後の変更はありません</div>
+        <div>未保存変更も未通知差分もありません</div>
       </div>`;
   } else {
-    let html = `<div style="font-size:12px;color:var(--ink-soft);margin-bottom:10px">
-      ${state.diffs.length}件の変更を検出</div>`;
-    state.diffs.forEach(d => {
-      html += `<div class="diff-item">
-        <div class="meta">${escapeHtml(d.date)} / ${escapeHtml(d.base)}</div>
-        <div class="change">
-          <span class="from">${escapeHtml(d.notifiedName)}</span>
-          <span class="arrow">→</span>
-          <span class="to">${escapeHtml(d.currentName)}</span>
-        </div>
-      </div>`;
-    });
+    let html = '';
+
+    // ▼ セッション内未保存変更（state.pending）
+    if (pendingEntries.length > 0) {
+      html += `<div style="font-size:12px;color:var(--ink-soft);margin:6px 0 8px;font-weight:700">
+        ▼ 未保存変更（${pendingEntries.length}件）</div>`;
+      pendingEntries.forEach(d => {
+        const from = d.oldName || '【未割当】';
+        const to = d.newName || '【未割当】';
+        html += `<div class="diff-item">
+          <div class="meta">${escapeHtml(d.date)} / ${escapeHtml(d.base)} <span style="color:var(--orange);font-weight:700">●未保存</span></div>
+          <div class="change">
+            <span class="from">${escapeHtml(from)}</span>
+            <span class="arrow">→</span>
+            <span class="to">${escapeHtml(to)}</span>
+          </div>
+        </div>`;
+      });
+    }
+
+    // ▼ 保存済み未通知差分（state.diffs）
+    if (diffEntries.length > 0) {
+      html += `<div style="font-size:12px;color:var(--ink-soft);margin:14px 0 8px;font-weight:700">
+        ▼ 保存済み未通知差分（${diffEntries.length}件）</div>`;
+      diffEntries.forEach(d => {
+        html += `<div class="diff-item">
+          <div class="meta">${escapeHtml(d.date)} / ${escapeHtml(d.base)} <span style="color:var(--green);font-weight:700">●保存済</span></div>
+          <div class="change">
+            <span class="from">${escapeHtml(d.notifiedName || '【未割当】')}</span>
+            <span class="arrow">→</span>
+            <span class="to">${escapeHtml(d.currentName || '【未割当】')}</span>
+          </div>
+        </div>`;
+      });
+    }
+
     body.innerHTML = html;
   }
   document.getElementById('diffModal').classList.add('show');
@@ -2066,13 +2211,67 @@ function escapeAttr(s) {
 // ─────────────────────────────────────────
 function savePendingLocal(date, base, name) {
   const key = `${date}|${base}`;
-  state.pending[key] = { date, base, name };
+  const newName = name || '';
+
+  // 既存pendingがあれば oldName を維持、なければ matrix から退避
+  let oldName;
+  if (state.pending[key]) {
+    oldName = state.pending[key].oldName;
+  } else {
+    const cur = (state.matrix[date] && state.matrix[date][base]) || '';
+    oldName = (cur === '【未割当】') ? '' : cur;
+  }
+
+  // 変更ゼロなら pending から削除（元に戻った状態）
+  if (oldName === newName) {
+    delete state.pending[key];
+  } else {
+    state.pending[key] = { date, base, oldName, newName };
+  }
+
   if (!state.matrix[date]) state.matrix[date] = {};
   state.matrix[date][base] = name || '【未割当】';
   updateSaveBadge();
+  updateDiffBadge();
   // 現在表示中のビューを再描画
   if (state.activeShiftSub === 'all') renderMatrix();
   else renderDailyView(state.activeShiftSub);
+}
+
+// 重複割当チェック（同一日に同じ販売員が複数拠点に割り当てられているか）
+// スポット名は除外。
+// 戻り値：[] = 重複なし、[{date, name, bases:[...]}] = 重複あり
+function checkDuplicateAssignments() {
+  // 各日付ごとに「名前 → 拠点リスト」を集計
+  const conflicts = [];
+  (state.dates || []).forEach(date => {
+    const matrixRow = state.matrix[date] || {};
+    const nameToBases = {};
+    Object.entries(matrixRow).forEach(([base, name]) => {
+      const n = String(name || '').trim();
+      if (!n || n === '【未割当】') return;
+      if (isSpotName(n)) return;  // スポット枠は除外
+      if (!nameToBases[n]) nameToBases[n] = [];
+      nameToBases[n].push(base);
+    });
+    Object.entries(nameToBases).forEach(([name, bases]) => {
+      if (bases.length >= 2) {
+        conflicts.push({ date, name, bases });
+      }
+    });
+  });
+  return conflicts;
+}
+
+function formatDuplicateAlert(conflicts) {
+  let msg = '⚠️ 重複割当が検出されました\n\n';
+  conflicts.forEach(c => {
+    msg += `${c.date}  ${c.name}さんが ${c.bases.length}箇所に割り当てられています:\n`;
+    c.bases.forEach(b => { msg += `  ・${b}\n`; });
+    msg += '\n';
+  });
+  msg += '修正してから保存してください。';
+  return msg;
 }
 
 function updateSaveBadge() {
@@ -2089,12 +2288,27 @@ async function batchSave() {
     toast('保存する変更がありません', 'ok');
     return;
   }
+
+  // 重複割当チェック
+  const conflicts = checkDuplicateAssignments();
+  if (conflicts.length > 0) {
+    alert(formatDuplicateAlert(conflicts));
+    return;
+  }
+
   showLoading(`${entries.length}件を保存中...`);
   try {
-    const data = await apiPost('setAssignmentBatch', { assignments: entries });
+    // 新構造（newName）→ 既存API形式（name）に変換
+    const assignments = entries.map(e => ({
+      date: e.date,
+      base: e.base,
+      name: e.newName
+    }));
+    const data = await apiPost('setAssignmentBatch', { assignments });
     if (!data.success) throw new Error(data.error || '保存失敗');
     state.pending = {};
     updateSaveBadge();
+    updateDiffBadge();
     toast(`${data.saved}件保存しました`, 'ok');
     if (data.errors > 0) toast(`${data.errors}件でエラーが発生しました`, 'err');
     await loadAll();
