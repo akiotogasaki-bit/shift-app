@@ -1759,6 +1759,20 @@ function renderSellers() {
     });
   }
 
+  // ⭐ スポット枠（常時利用可・全件表示）※未割当の直下に表示
+  if (allSpots.length > 0) {
+    html += `<div class="tier-head spot-head">⭐ スポット枠（常時利用可・${allSpots.length}名）</div>`;
+    allSpots.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+    allSpots.forEach(s => {
+      const isCur = s.name === current;
+      html += `<div class="seller-item spot-item ${isCur ? 'current' : ''}"
+        onclick="selectSeller('${escapeAttr(s.name)}')">
+        <span class="name spot">${escapeHtml(s.name)}</span>
+        ${isCur ? '<span class="check">✓</span>' : ''}
+      </div>`;
+    });
+  }
+
   // 第1希望〜その他
   const labels = ['第1希望', '第2希望', '第3希望', 'その他'];
   tiers.forEach((arr, i) => {
@@ -1779,20 +1793,6 @@ function renderSellers() {
       </div>`;
     });
   });
-
-  // ⭐ スポット枠（常時利用可・全件表示）
-  if (allSpots.length > 0) {
-    html += `<div class="tier-head spot-head">⭐ スポット枠（常時利用可・${allSpots.length}名）</div>`;
-    allSpots.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
-    allSpots.forEach(s => {
-      const isCur = s.name === current;
-      html += `<div class="seller-item spot-item ${isCur ? 'current' : ''}"
-        onclick="selectSeller('${escapeAttr(s.name)}')">
-        <span class="name spot">${escapeHtml(s.name)}</span>
-        ${isCur ? '<span class="check">✓</span>' : ''}
-      </div>`;
-    });
-  }
 
   if (!html) html = '<div class="diff-empty">該当する販売員がいません</div>';
   document.getElementById('sheetBody').innerHTML = html;
