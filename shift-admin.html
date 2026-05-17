@@ -262,6 +262,60 @@ input { font-family: inherit; }
   font-weight: 700;
 }
 
+/* ── セル内バッジ（未提出・重複） ── */
+.matrix td .cell-name {
+  display: inline-block;
+  line-height: 1.2;
+}
+.matrix td .cell-badges {
+  display: block;
+  margin-top: 1px;
+  line-height: 1;
+}
+.cell-badge {
+  display: inline-block;
+  font-size: 8px;
+  font-weight: 700;
+  padding: 1px 3px;
+  border-radius: 2px;
+  margin-right: 2px;
+  letter-spacing: 0;
+  vertical-align: middle;
+}
+.cell-badge.notsubmit {
+  background: #FFA500;
+  color: #FFFFFF;
+}
+.cell-badge.dup {
+  background: #E74C3C;
+  color: #FFFFFF;
+}
+
+/* ── モーダル「現在: 〇〇」内のバッジ ── */
+.cur-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 3px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+.cur-badge.notsubmit { background: #FFA500; color: #FFFFFF; }
+.cur-badge.dup { background: #E74C3C; color: #FFFFFF; }
+
+/* ── 割当済みアイテム内の重複バッジ ── */
+.seller-item .item-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 3px;
+  margin-left: 4px;
+}
+.seller-item .item-badge.notsubmit { background: #FFA500; color: #FFFFFF; }
+.seller-item .item-badge.dup { background: #E74C3C; color: #FFFFFF; }
+
 .matrix-empty {
   padding: 32px 16px;
   text-align: center;
@@ -1592,6 +1646,38 @@ function isSpotName(name) {
   return /^スポットバイト/.test(String(name || '').trim());
 }
 
+// その日に重複している名前のセットを返す（renderMatrix・renderSellers から利用）
+function getDuplicateNamesByDate() {
+  const result = {};
+  (state.dates || []).forEach(date => {
+    const matrixRow = state.matrix[date] || {};
+    const nameCount = {};
+    Object.entries(matrixRow).forEach(([base, name]) => {
+      const n = String(name || '').trim();
+      if (!n || n === '【未割当】') return;
+      if (isSpotName(n)) return;
+      nameCount[n] = (nameCount[n] || 0) + 1;
+    });
+    const dupSet = new Set();
+    Object.entries(nameCount).forEach(([n, c]) => {
+      if (c >= 2) dupSet.add(n);
+    });
+    result[date] = dupSet;
+  });
+  return result;
+}
+
+// 名前に対するバッジ種別を判定（'notsubmit' / 'dup'）
+function getBadgesFor(name, date, dupNamesByDate) {
+  const badges = [];
+  if (!name || name === '【未割当】') return badges;
+  if (isSpotName(name)) return badges;
+  if (!state.submittedNames.has(name)) badges.push('notsubmit');
+  const dupSet = dupNamesByDate[date];
+  if (dupSet && dupSet.has(name)) badges.push('dup');
+  return badges;
+}
+
 function renderMatrix() {
   const wrap = document.getElementById('matrixWrap');
   if (state.dates.length === 0 || state.bases.length === 0) {
@@ -1603,6 +1689,9 @@ function renderMatrix() {
       </div>`;
     return;
   }
+
+  // 重複検知（その日に2拠点以上に入っている人）
+  const dupNamesByDate = getDuplicateNamesByDate();
 
   // 未割当フィルター：未割当セルが1つでもある拠点のみ表示
   const basesToShow = state.showUnassignedOnly
@@ -1627,22 +1716,33 @@ function renderMatrix() {
       const isPending = !!state.pending[key];
 
       let cls = '';
-      let display = '';
+      let displayHtml = '';
       if (isUn) {
         // 希望者あり → orange（未割当）、希望者なし → no-pool（グレー）
         const hasPool = (state.unassignedPool[d] || []).some(p =>
           p.pref1 === b.name || p.pref2 === b.name || p.pref3 === b.name);
         cls = hasPool ? 'unassigned' : 'no-pool';
-        display = '未割当';
+        displayHtml = '<span class="cell-name">未割当</span>';
       } else if (isSpot) {
-        cls = 'spot'; display = name;
+        cls = 'spot';
+        displayHtml = `<span class="cell-name">${escapeHtml(name)}</span>`;
       } else {
-        display = name;
+        const badges = getBadgesFor(name, d, dupNamesByDate);
+        let badgeHtml = '';
+        if (badges.length > 0) {
+          badgeHtml = '<span class="cell-badges">';
+          badges.forEach(bd => {
+            if (bd === 'notsubmit') badgeHtml += '<span class="cell-badge notsubmit">未提出</span>';
+            if (bd === 'dup') badgeHtml += '<span class="cell-badge dup">⚠重複</span>';
+          });
+          badgeHtml += '</span>';
+        }
+        displayHtml = `<span class="cell-name">${escapeHtml(name)}</span>${badgeHtml}`;
       }
       if (isPending) cls += ' pending';
 
       html += `<td class="${cls}" data-date="${escapeAttr(d)}" data-base="${escapeAttr(b.name)}"
-        onclick="openSheet(this.dataset.date, this.dataset.base)">${escapeHtml(display)}</td>`;
+        onclick="openSheet(this.dataset.date, this.dataset.base)">${displayHtml}</td>`;
     });
     html += '</tr>';
   });
@@ -1738,9 +1838,18 @@ function openSheet(date, base) {
   const curEl = document.getElementById('sheetCurrent');
   if (isUn) {
     curEl.style.display = 'none';
+    curEl.innerHTML = '';
   } else {
     curEl.style.display = 'inline-block';
-    curEl.textContent = `現在: ${current}`;
+    // バッジ判定
+    const dupNamesByDate = getDuplicateNamesByDate();
+    const badges = getBadgesFor(current, date, dupNamesByDate);
+    let badgeHtml = '';
+    badges.forEach(b => {
+      if (b === 'notsubmit') badgeHtml += '<span class="cur-badge notsubmit">未提出</span>';
+      if (b === 'dup') badgeHtml += '<span class="cur-badge dup">⚠重複</span>';
+    });
+    curEl.innerHTML = `現在: ${escapeHtml(current)}${badgeHtml}`;
   }
   document.getElementById('sheetSearch').value = '';
   renderSellers();
@@ -1758,6 +1867,10 @@ function renderSellers() {
 
   const pool = state.unassignedPool[date] || [];
   const poolNames = new Set(pool.map(p => p.name));
+
+  // その日に重複している人のセット
+  const dupNamesByDate = getDuplicateNamesByDate();
+  const dupSet = dupNamesByDate[date] || new Set();
 
   // その日に既にどこかの拠点に割り当てられている人の名前 → 拠点名 のマップ
   // （現在編集中の base は除外しない：自分の拠点に入っている人もここで扱う）
@@ -1842,9 +1955,12 @@ function renderSellers() {
     alreadyAssigned.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
     alreadyAssigned.forEach(s => {
       const isCur = s.name === current;
+      const isDup = dupSet.has(s.name);
+      const dupBadge = isDup ? '<span class="item-badge dup">⚠重複</span>' : '';
       html += `<div class="seller-item assigned-item ${isCur ? 'current' : ''}"
         onclick="selectSeller('${escapeAttr(s.name)}')">
         <span class="name">${escapeHtml(s.name)}</span>
+        ${dupBadge}
         ${isCur ? '<span class="check">✓</span>' : ''}
       </div>`;
     });
@@ -1856,9 +1972,12 @@ function renderSellers() {
     notSubmitted.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
     notSubmitted.forEach(s => {
       const isCur = s.name === current;
+      const isDup = dupSet.has(s.name);
+      const dupBadge = isDup ? '<span class="item-badge dup">⚠重複</span>' : '';
       html += `<div class="seller-item notsubmit-item ${isCur ? 'current' : ''}"
         onclick="selectSeller('${escapeAttr(s.name)}')">
         <span class="name">${escapeHtml(s.name)}</span>
+        ${dupBadge}
         ${isCur ? '<span class="check">✓</span>' : ''}
       </div>`;
     });
