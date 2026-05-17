@@ -1283,14 +1283,60 @@ async function init() {
     state.userName = profile.displayName;
     document.getElementById('user-name-location').textContent = state.userName;
 
-    // Step1: マスタと商品スイッチを並列取得（案B Phase-1 / 2026-05-12）
-    await Promise.all([
+    // ─────────────────────────────────────────────────────────
+    // Phase A：localStorage キャッシュから先描画（v2026-05-18 案B Phase-2）
+    //   キャッシュがあれば state を先に埋めて、API待ちなしで画面表示できる状態に
+    // ─────────────────────────────────────────────────────────
+    const cachedMaster   = loadMasterCache();
+    const cachedSwitches = loadSwitchesCache();
+    let prevSnapshot = null;
+    if (cachedMaster && applyMasterToState(cachedMaster)) {
+      if (Array.isArray(cachedSwitches)) state.stoppedProductIds = cachedSwitches;
+      filterStoppedProducts();
+      prevSnapshot = {
+        productsJson:  JSON.stringify(state.products),
+        locationsJson: JSON.stringify(state.locations),
+        switchesJson:  JSON.stringify(state.stoppedProductIds || []),
+      };
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // Phase B：3API 完全並列で取得（getMaster / getProductSwitches / getReport）
+    //   - キャッシュなし：このPromise.all完了待ちで初描画
+    //   - キャッシュあり：既に描画は進める。Promise.all 結果で差分検出
+    // ─────────────────────────────────────────────────────────
+    const [masterData, _switchesData, todayReport] = await Promise.all([
       loadMasterData(),
       applyProductSwitches(),
+      checkTodayReport(),
     ]);
     filterStoppedProducts();
 
-    const todayReport = await checkTodayReport();
+    // ─────────────────────────────────────────────────────────
+    // Phase C：差分検出して silent 再描画（先描画していた場合のみ）
+    // ─────────────────────────────────────────────────────────
+    if (prevSnapshot) {
+      const newSnapshot = {
+        productsJson:  JSON.stringify(state.products),
+        locationsJson: JSON.stringify(state.locations),
+        switchesJson:  JSON.stringify(state.stoppedProductIds || []),
+      };
+      const changed = (
+        prevSnapshot.productsJson  !== newSnapshot.productsJson  ||
+        prevSnapshot.locationsJson !== newSnapshot.locationsJson ||
+        prevSnapshot.switchesJson  !== newSnapshot.switchesJson
+      );
+      if (changed) {
+        console.log('[案B] マスタ差分検出 → 再描画');
+        // 拠点選択画面（renderLocations）／販売画面（renderCategoryTabs+renderProducts）を
+        // 既に描画している可能性があるので再構築
+        if (state.location) {
+          renderCategoryTabs();
+          renderProducts();
+        }
+      }
+    }
+
     if (todayReport) {
       const msg = `本日すでに報告が提出されています。\n\n拠点：${todayReport.locationName}\n販売数：${todayReport.soldCount}個\n完売率：${todayReport.sellRate}%\n\n報告内容を修正しますか？`;
       if (confirm(msg)) {
@@ -1347,41 +1393,118 @@ async function init() {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════
+// 案B Phase-2：マスタ localStorage キャッシュ（v2026-05-18）
+//   - 起動時にキャッシュから先描画 → 裏でAPI実行 → 差分検出して silent 更新
+//   - 有効期限：24時間（業務日次サイクルと一致）
+//   - 対象：products / locations / incentiveUnit / incentiveRate /
+//          couponDefault / staffList / stoppedProductIds
+// ═══════════════════════════════════════════════════════════════
+const MASTER_CACHE_KEY   = 'oedo_register_master_cache_v1';
+const SWITCHES_CACHE_KEY = 'oedo_register_switches_cache_v1';
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000;  // 24時間
+
+function loadMasterCache() {
+  try {
+    const raw = localStorage.getItem(MASTER_CACHE_KEY);
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
+    if (!obj || !obj.savedAt) return null;
+    if (Date.now() - obj.savedAt > CACHE_TTL_MS) {
+      localStorage.removeItem(MASTER_CACHE_KEY);
+      return null;
+    }
+    return obj.data || null;
+  } catch(e) {
+    console.warn('loadMasterCache error:', e);
+    return null;
+  }
+}
+
+function saveMasterCache(data) {
+  try {
+    localStorage.setItem(MASTER_CACHE_KEY, JSON.stringify({
+      savedAt: Date.now(),
+      data: data,
+    }));
+  } catch(e) { console.warn('saveMasterCache error:', e); }
+}
+
+function loadSwitchesCache() {
+  try {
+    const raw = localStorage.getItem(SWITCHES_CACHE_KEY);
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
+    if (!obj || !obj.savedAt) return null;
+    if (Date.now() - obj.savedAt > CACHE_TTL_MS) {
+      localStorage.removeItem(SWITCHES_CACHE_KEY);
+      return null;
+    }
+    return Array.isArray(obj.data) ? obj.data : null;
+  } catch(e) {
+    console.warn('loadSwitchesCache error:', e);
+    return null;
+  }
+}
+
+function saveSwitchesCache(stoppedIds) {
+  try {
+    localStorage.setItem(SWITCHES_CACHE_KEY, JSON.stringify({
+      savedAt: Date.now(),
+      data: Array.isArray(stoppedIds) ? stoppedIds : [],
+    }));
+  } catch(e) { console.warn('saveSwitchesCache error:', e); }
+}
+
+// マスタデータを state に反映（キャッシュ復元・API取得 両方から使う）
+function applyMasterToState(data) {
+  if (!data || !data.products || data.products.length === 0) return false;
+  const rawProducts = data.products || [];
+  const normalized = rawProducts
+    .map(p => ({ ...p, price: Number(p.price) }))
+    .filter(p => !isNaN(p.price) && p.price >= 0);
+  state.products      = normalized;
+  state.locations     = data.locations || [];
+  state.incentiveUnit = data.incentiveUnit || 10;
+  state.incentiveRate = data.incentiveRate || 100;
+  state.couponDefault = data.couponDefault || 300;
+  state.staffList     = data.staffList || [];
+  return true;
+}
+
 async function loadMasterData() {
   try {
     const res = await fetch(`${state.GAS_URL}?action=getMaster`, { method: 'GET', redirect: 'follow' });
     const data = JSON.parse(await res.text());
     if (data && data.products && data.products.length > 0) {
-      // ★ 価格を数値化＋未設定商品を除外（v2026-05-09 デバッグ）
+      // ★ 価格未設定の商品診断（v2026-05-09 デバッグ）
       const rawProducts = data.products || [];
-      const normalized = rawProducts
-        .map(p => ({ ...p, price: Number(p.price) }))
-        .filter(p => !isNaN(p.price) && p.price >= 0);
       const dropped = rawProducts.filter(p => isNaN(Number(p.price)) || Number(p.price) < 0);
       if (dropped.length > 0) {
         console.warn(`[警告] 価格未設定の商品を除外: ${dropped.map(p => `${p.id}/${p.name}`).join(', ')}`);
-        const sample = rawProducts.slice(0, 3).map(p => 
-          `[${p.id || '?'}] ${p.name || '?'}\n  price値: "${p.price}" (型: ${typeof p.price})\n  キー一覧: ${Object.keys(p).join(', ')}`
-        ).join('\n\n');
-        alert(`【商品データ診断】\n\n商品総数: ${rawProducts.length}件\n除外: ${dropped.length}件\n\n=== 先頭3件 ===\n\n${sample}`);
       }
-      state.products      = normalized;
-      state.locations     = data.locations || [];
-      state.incentiveUnit = data.incentiveUnit || 10;
-      state.incentiveRate = data.incentiveRate || 100;
-      state.couponDefault = data.couponDefault || 300;
-      state.staffList     = data.staffList || [];
+      // state 反映 ＋ localStorage キャッシュ保存
+      applyMasterToState(data);
+      saveMasterCache(data);
+      return data;
     } else {
       loadDemoData();
+      return null;
     }
 // ★ 商品スイッチのフィルタは init() で並列取得後に filterStoppedProducts() で適用
   } catch (e) {
+    // キャッシュがあればエラー画面を出さずに継続（先描画が既に効いている）
+    if (state.products && state.products.length > 0) {
+      console.warn('loadMasterData error (cache fallback):', e);
+      return null;
+    }
     document.getElementById('screen-loading').innerHTML =
       `<div style="color:#fff;padding:40px;font-size:13px;word-break:break-all;">
         <p style="font-size:18px;margin-bottom:16px;">⚠️ マスタ取得エラー</p>
         <p>${e.message}</p>
       </div>`;
     document.getElementById('screen-loading').classList.add('active');
+    return null;
   }
 }
 
@@ -1409,9 +1532,12 @@ async function applyProductSwitches() {
     const res = await fetch(`${state.GAS_URL}?action=getProductSwitches`, { method: 'GET', redirect: 'follow' });
     const stoppedIds = JSON.parse(await res.text());
     state.stoppedProductIds = Array.isArray(stoppedIds) ? stoppedIds : [];
+    saveSwitchesCache(state.stoppedProductIds);
+    return state.stoppedProductIds;
   } catch(e) {
     console.warn('getProductSwitches error (フィルタなしで継続):', e);
-    state.stoppedProductIds = [];
+    if (!Array.isArray(state.stoppedProductIds)) state.stoppedProductIds = [];
+    return null;
   }
 }
 
