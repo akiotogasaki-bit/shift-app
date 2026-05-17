@@ -834,6 +834,176 @@ body {
   #tab-sheet4 .kawari-box,
   #tab-sheet4 .kaito-box { page-break-inside: avoid; }
 }
+
+/* ============================================================
+   基本数マスタ画面（tab-master）専用スタイル
+   ============================================================ */
+#tab-master { padding: 8px 10px; background: #f0f0f0; }
+#tab-master .bm-page {
+  background: white; padding: 6px 10px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+#tab-master .bm-title-bar {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 5px; gap: 12px; flex-wrap: wrap;
+}
+#tab-master .bm-title-left { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+#tab-master .bm-title { font-size: 13pt; font-weight: bold; white-space: nowrap; color:#000; }
+#tab-master .bm-subtitle {
+  font-size: 8.5pt; color: #555;
+  padding: 1px 6px; background: #f5f5f5;
+  border: 1px solid #ddd; border-radius: 3px; white-space: nowrap;
+}
+#tab-master .bm-title-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+#tab-master .bm-day-tabs { display: inline-flex; gap: 3px; }
+#tab-master .bm-day-tab {
+  padding: 4px 14px; border: 1px solid #888; background: #fafafa;
+  cursor: pointer; font-family: inherit; font-size: 10pt; font-weight: bold;
+  border-radius: 4px; color: #555; min-width: 36px;
+}
+#tab-master .bm-day-tab.bm-active { background: #1976d2; color: white; border-color: #1976d2; }
+#tab-master .bm-day-tab.bm-active.bm-confirmed-all { background: #2e7d32; border-color: #2e7d32; }
+#tab-master .bm-day-tab:not(.bm-active):hover { background: #e0e0e0; }
+#tab-master .bm-day-tab .bm-tab-mark { display:inline-block; margin-left:4px; font-size: 8pt; }
+#tab-master .bm-legend {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 8.5pt; color: #555;
+  padding: 3px 8px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 3px;
+}
+#tab-master .bm-legend .bm-sw { display:inline-block; width:10px; height:10px; border-radius:2px; vertical-align:middle; }
+#tab-master .bm-print-btn, #tab-master .bm-confirm-all-btn, #tab-master .bm-reload-btn {
+  font-size: 9pt; padding: 4px 10px; border: 1px solid #555; background: #fafafa;
+  cursor: pointer; border-radius: 3px; font-family: inherit; color:#000;
+}
+#tab-master .bm-print-btn:hover, #tab-master .bm-reload-btn:hover { background:#eee; }
+#tab-master .bm-confirm-all-btn { background:#c62828; color:white; border-color:#c62828; font-weight:bold; }
+#tab-master .bm-confirm-all-btn:hover { background:#b71c1c; }
+#tab-master .bm-confirm-all-btn.bm-done { background:#2e7d32; border-color:#2e7d32; }
+#tab-master .bm-calc-info {
+  font-size: 9pt; color: #444; background: #f5f7fa;
+  border: 1px solid #d0d7de; border-radius: 4px;
+  padding: 4px 10px; margin-bottom: 6px;
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+}
+#tab-master .bm-calc-info b { color: #1976d2; }
+#tab-master .bm-calc-info .bm-diff-summary { color:#c62828; font-weight:bold; }
+#tab-master .bm-calc-info .bm-sellout-summary { color:#c62828; }
+#tab-master .bm-calc-info .bm-progress-summary { color:#2e7d32; font-weight:bold; }
+
+#tab-master table.bm-matrix { border-collapse: collapse; font-size: 10pt; table-layout: fixed; }
+#tab-master .bm-matrix th, #tab-master .bm-matrix td {
+  border: 1px solid #999; text-align: center; vertical-align: middle;
+  padding: 0; height: 22px; line-height: 22px;
+}
+#tab-master .bm-matrix th.bm-loc-id-h { background:#e3f2fd; font-size: 8.5pt; height: 20px; width: 60px; }
+#tab-master .bm-matrix th.bm-loc-name-h {
+  background:#e3f2fd; font-size: 8.5pt; height: 88px; width: 60px;
+  writing-mode: vertical-rl; white-space: nowrap;
+}
+#tab-master .bm-matrix th.bm-loc-confirmed-h { background:#d4d4d4; }
+#tab-master .bm-matrix .bm-product-cell {
+  background:#f5f5f5; font-weight:bold; text-align:left;
+  padding: 0 6px; width: 110px; font-size: 9.5pt;
+}
+#tab-master .bm-matrix .bm-total-col { background:#e8eaf6; font-weight:bold; width: 56px; }
+#tab-master .bm-matrix .bm-section-label {
+  text-align:left; background:#fafafa; font-weight:bold;
+  padding: 2px 8px; height: 22px; line-height: 22px; font-size: 10pt;
+}
+#tab-master .bm-matrix .bm-section-label.bm-brown-label { background:#efebe9; }
+#tab-master .bm-matrix .bm-data-cell { padding:0; height: 22px; position:relative; }
+#tab-master .bm-matrix .bm-data-cell.bm-loc-confirmed { background:#e8eaed; }
+#tab-master .bm-matrix .bm-data-cell.bm-zero-cell { background:#f8f8f8; }
+#tab-master .bm-cell-2col { display:flex; height: 22px; line-height: 22px; position:relative; }
+#tab-master .bm-cell-sales {
+  flex: 1; padding: 0 2px; font-size: 9pt;
+  border-right: 1px dashed #ccc; cursor:text; outline:none;
+}
+#tab-master .bm-cell-sales:focus { background:#fff9c4; }
+#tab-master .bm-cell-sales.bm-fallback { color:#999; font-style: italic; }
+#tab-master .bm-cell-sales.bm-edited { background:#ffe0b2 !important; color:#e65100; font-weight:bold; }
+#tab-master .bm-cell-sales.bm-recommended { background:#e1f5fe !important; color:#0277bd; font-weight:bold; }
+#tab-master .bm-cell-sales.bm-no-sales { background:#f0f0f0; color:#b0b0b0; }
+#tab-master .bm-cell-proposal { flex: 1; padding: 0 2px; font-size: 9.5pt; cursor: pointer; }
+#tab-master .bm-loc-confirmed .bm-cell-sales,
+#tab-master .bm-loc-confirmed .bm-cell-proposal { color:#2e7d32; font-weight: bold; }
+#tab-master .bm-loc-confirmed .bm-cell-sales::after { content:" ✓"; font-size: 7pt; color:#2e7d32; }
+#tab-master .bm-ind-up { color:#1976d2; font-size: 7pt; margin-left:1px; }
+#tab-master .bm-ind-down { color:#c62828; font-size: 7pt; margin-left:1px; }
+#tab-master .bm-sellout-badge {
+  position:absolute; top:1px; left:1px; width:6px; height:6px;
+  background:#c62828; border-radius:50%; animation: bm-pulse 1.8s ease-in-out infinite;
+}
+@keyframes bm-pulse {
+  0%,100% { transform:scale(1); opacity:1; }
+  50% { transform:scale(1.4); opacity:0.6; }
+}
+#tab-master .bm-cat-row td { background:#e3f2fd; font-weight:bold; padding: 2px; }
+#tab-master .bm-cat-row .bm-product-cell.bm-cat-label { background:#fff3e0; font-size: 9.5pt; }
+#tab-master .bm-cat-cell-actual { font-size: 7.5pt; color:#666; }
+#tab-master .bm-cat-cell-next { font-size: 10pt; }
+#tab-master .bm-summary-row td { background:#e3f2fd; font-weight:bold; }
+#tab-master .bm-loc-confirm-row td, #tab-master .bm-loc-recommend-row td { padding: 2px; height: 28px; }
+#tab-master .bm-loc-confirm-btn {
+  font-size: 8.5pt; padding: 2px 6px; border: 1px solid #666;
+  background:#fff; cursor:pointer; border-radius:3px; min-width: 40px;
+}
+#tab-master .bm-loc-confirm-btn.bm-done { background:#2e7d32; color:white; border-color:#2e7d32; font-weight:bold; }
+#tab-master .bm-loc-confirm-btn:hover { background:#eee; }
+#tab-master .bm-loc-confirm-btn.bm-done:hover { background:#1b5e20; }
+#tab-master .bm-loc-recommend-btn {
+  font-size: 8.5pt; padding: 2px 6px; border: 1px solid #1976d2;
+  background:#e3f2fd; color:#1976d2; cursor:pointer; border-radius:3px; min-width: 50px;
+}
+#tab-master .bm-loc-recommend-btn:hover { background:#bbdefb; }
+#tab-master .bm-loc-recommend-btn:disabled { background:#eee; color:#999; border-color:#ccc; cursor: default; }
+
+/* モーダル */
+.bm-modal-overlay {
+  display: none; position: fixed; top:0; left:0; width:100%; height:100%;
+  background:rgba(0,0,0,0.5); z-index: 10000;
+  justify-content: center; align-items: center;
+}
+.bm-modal-overlay.bm-show { display: flex; }
+.bm-modal {
+  background: white; border-radius: 8px; padding: 16px 20px;
+  max-width: 520px; width: 90%; max-height: 85vh; overflow-y: auto;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+.bm-modal-head {
+  display:flex; justify-content: space-between; align-items: flex-start;
+  margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid #1976d2;
+}
+.bm-modal-head.bm-has-sellout { border-bottom-color: #c62828; }
+.bm-modal-title { font-size: 13pt; font-weight: bold; color: #1976d2; }
+.bm-modal-head.bm-has-sellout .bm-modal-title { color: #c62828; }
+.bm-modal-subtitle { font-size: 9pt; color:#777; margin-top: 2px; }
+.bm-modal-close { background:none; border:none; font-size: 16pt; cursor:pointer; color:#999; padding:0 4px; line-height: 1; }
+.bm-modal-close:hover { color:#555; }
+.bm-modal-body { font-size: 10pt; }
+.bm-modal-section { margin-bottom: 14px; }
+.bm-modal-section-title { font-size: 10.5pt; font-weight: bold; color:#333; margin-bottom: 6px; }
+.bm-modal-history-table { width:100%; border-collapse: collapse; }
+.bm-modal-history-table td { border:1px solid #ddd; padding: 4px 8px; font-size: 9.5pt; background:white; text-align:left; }
+.bm-modal-history-table td.bm-h-label { width: 40%; font-weight:bold; background:#fafafa; }
+.bm-modal-history-table td.bm-h-value { text-align:right; }
+.bm-modal-history-table tr.bm-is-sellout td { background:#ffebee; }
+.bm-sellout-mark-inline { display:inline-block; font-size:8pt; color:#c62828; font-weight:bold; margin-left: 4px; }
+.bm-modal-calc { background:#fafafa; border: 1px solid #ddd; border-radius: 4px; padding: 10px 12px; font-size: 10pt; line-height: 1.6; }
+.bm-modal-calc-row { display:flex; justify-content: space-between; align-items: center; padding: 3px 0; }
+.bm-modal-calc-row.bm-final { border-top: 2px solid #1976d2; margin-top: 6px; padding-top: 8px; font-size: 11pt; font-weight: bold; }
+.bm-modal-calc-row.bm-final.bm-has-sellout { border-top-color: #c62828; }
+.bm-modal-calc-label { color:#555; }
+.bm-modal-calc-value { font-weight:bold; }
+.bm-modal-calc-value.bm-bonus { color:#c62828; }
+.bm-modal-calc-value.bm-final-value { color:#1976d2; font-size: 14pt; }
+.bm-modal-calc-value.bm-final-value.bm-has-sellout { color:#c62828; }
+.bm-modal-note { font-size: 8.5pt; color:#666; background:#fff3e0; border-left: 3px solid #ff9800; padding: 6px 10px; margin-top: 8px; line-height: 1.5; }
+
+/* ローディング */
+#tab-master .bm-loading { text-align: center; padding: 40px; color:#888; font-size: 13pt; }
+#tab-master .bm-error { text-align: center; padding: 40px; color:#c62828; font-size: 12pt; }
+
 </style>
 </head>
 <body>
@@ -848,7 +1018,7 @@ body {
   <button class="tab-btn" data-tab="sheet3">🚚 午後便盛り出し</button>
   <button class="tab-btn" data-tab="sheet4">🍳 仕込み</button>
   <button class="tab-btn" data-tab="order">📋 発注</button>
-  <button class="tab-btn" disabled data-tab="master">基本数マスタ <small>準備中</small></button>
+  <button class="tab-btn" data-tab="master">📐 基本数マスタ</button>
   <button class="tab-btn" disabled data-tab="settings">設定 <small>準備中</small></button>
 </div>
 
@@ -923,7 +1093,47 @@ body {
   <div class="order-sel-info" id="order-sel-info">日付を選択して取得ボタンを押してください</div>
   <div class="order-vendor-list" id="order-body"></div>
 </div>
-<div class="tab-pane" id="tab-master"><div class="placeholder-msg">基本数マスタ画面は準備中です</div></div>
+<div class="tab-pane" id="tab-master">
+  <div class="bm-page">
+    <div class="bm-title-bar">
+      <div class="bm-title-left">
+        <div class="bm-title">📐 基本数マスタ</div>
+        <div class="bm-subtitle" id="bm-subtitle">読み込み中...</div>
+      </div>
+      <div class="bm-title-right">
+        <div class="bm-day-tabs" id="bm-day-tabs"></div>
+        <div class="bm-legend">
+          <b>左</b>=販売(編集) <b>右</b>=提案
+          <span class="bm-sw" style="background:#e8eaed;border:1px solid #888;"></span>確定
+          <span class="bm-sw" style="background:#ffe0b2;"></span>編集
+          <span class="bm-sw" style="background:#e1f5fe;"></span>推奨
+        </div>
+        <button class="bm-confirm-all-btn" id="bm-confirm-all" onclick="bmConfirmAll()">✓ 全拠点確定</button>
+        <button class="bm-reload-btn" onclick="bmReload()">🔄 再取得</button>
+        <button class="bm-print-btn" onclick="window.print()">🖨 印刷</button>
+      </div>
+    </div>
+    <div class="bm-calc-info" id="bm-calc-info"></div>
+    <div id="bm-matrix-wrap">
+      <div class="bm-loading">基本数マスタを読み込み中...</div>
+    </div>
+  </div>
+</div>
+
+<!-- 基本数マスタ 内訳モーダル -->
+<div class="bm-modal-overlay" id="bm-modal-overlay" onclick="bmCloseModal(event)">
+  <div class="bm-modal" onclick="event.stopPropagation()">
+    <div class="bm-modal-head" id="bm-modal-head">
+      <div>
+        <div class="bm-modal-title" id="bm-modal-title">―</div>
+        <div class="bm-modal-subtitle" id="bm-modal-subtitle">―</div>
+      </div>
+      <button class="bm-modal-close" onclick="bmCloseModal()">✕</button>
+    </div>
+    <div class="bm-modal-body" id="bm-modal-body"></div>
+  </div>
+</div>
+
 <div class="tab-pane" id="tab-settings"><div class="placeholder-msg">設定画面は準備中です</div></div>
 
 <script>
@@ -1782,6 +1992,575 @@ function copyOrderText(vendorName) {
 
 // 発注タブ 初期化
 initOrderDateChecks();
+
+
+
+// ═══════════════════════════════════════════════════════════
+// 基本数マスタ画面
+// ═══════════════════════════════════════════════════════════
+
+const BM_DAYS = [
+  { id:'mon', label:'月' },
+  { id:'tue', label:'火' },
+  { id:'wed', label:'水' },
+  { id:'thu', label:'木' },
+  { id:'fri', label:'金' }
+];
+const BM_CATEGORIES = [
+  { id:'noriben', label:'海苔弁系' },
+  { id:'manpuku', label:'満腹シリーズ' },
+  { id:'zenroku', label:'全六' },
+  { id:'other',   label:'他社製品' }
+];
+const BM_SELLOUT_RULES = [
+  { from:'08:00', to:'10:59', bonus:5 },
+  { from:'11:00', to:'11:59', bonus:3 },
+  { from:'12:00', to:'12:59', bonus:2 },
+  { from:'13:00', to:'13:59', bonus:1 }
+];
+
+const BM_LS_KEY = 'kanri_bm_edits_v1';
+let bmCurrentDay = 'mon';
+let bmServerData = null;   // 現在表示中の曜日のサーバーデータ
+let bmEditsCache = {};     // { dayId: { 'pid_lid': editedValue } }
+let bmInitialized = false;
+let bmLoadedDays = new Set();
+
+// localStorage 読込
+function bmLoadEdits() {
+  try {
+    const raw = localStorage.getItem(BM_LS_KEY);
+    bmEditsCache = raw ? JSON.parse(raw) : {};
+  } catch(e) { bmEditsCache = {}; }
+}
+function bmSaveEdits() {
+  try { localStorage.setItem(BM_LS_KEY, JSON.stringify(bmEditsCache)); } catch(e) {}
+}
+function bmGetEdit(dayId, pid, lid) {
+  return (bmEditsCache[dayId] && bmEditsCache[dayId][pid + '_' + lid] !== undefined)
+    ? bmEditsCache[dayId][pid + '_' + lid] : null;
+}
+function bmSetEdit(dayId, pid, lid, val) {
+  if (!bmEditsCache[dayId]) bmEditsCache[dayId] = {};
+  if (val === null || val === undefined) {
+    delete bmEditsCache[dayId][pid + '_' + lid];
+  } else {
+    bmEditsCache[dayId][pid + '_' + lid] = val;
+  }
+  bmSaveEdits();
+}
+function bmClearEditsForLoc(dayId, lid) {
+  if (!bmEditsCache[dayId]) return;
+  const keys = Object.keys(bmEditsCache[dayId]);
+  for (const k of keys) {
+    if (k.endsWith('_' + lid)) delete bmEditsCache[dayId][k];
+  }
+  bmSaveEdits();
+}
+
+// 完売増量
+function bmGetSelloutBonus(timeStr) {
+  if (!timeStr) return 0;
+  const s = String(timeStr).substring(0,5);
+  for (const r of BM_SELLOUT_RULES) {
+    if (s >= r.from && s <= r.to) return r.bonus;
+  }
+  return 0;
+}
+
+// API
+async function bmFetchMatrix(dayId) {
+  try {
+    const res = await fetch(GAS_URL + '?action=getBasicMasterMatrix&dayId=' + encodeURIComponent(dayId));
+    const json = await res.json();
+    return json;
+  } catch(err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
+async function bmPostAction(action, payload) {
+  try {
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(Object.assign({ action }, payload || {}))
+    });
+    return await res.json();
+  } catch(err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
+// 確定状態：拠点の全商品でG列に値があるか（cell.confirmed が null でない）
+function bmIsLocConfirmed(lid) {
+  if (!bmServerData) return false;
+  const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
+  for (const p of products) {
+    const c = bmServerData.cells[p.id + '_' + lid];
+    if (!c) continue;
+    if (c.confirmed === null || c.confirmed === undefined) return false;
+  }
+  return true;
+}
+function bmIsAllConfirmed() {
+  if (!bmServerData) return false;
+  for (const loc of bmServerData.locations) {
+    if (!bmIsLocConfirmed(loc.id)) return false;
+  }
+  return true;
+}
+
+// セルの「表示する販売数」を取得（編集値 > サーバーweekSales）
+function bmGetDisplaySales(pid, lid) {
+  const edit = bmGetEdit(bmCurrentDay, pid, lid);
+  if (edit !== null && edit !== undefined && edit !== '') return Number(edit);
+  if (!bmServerData) return 0;
+  const c = bmServerData.cells[pid + '_' + lid];
+  return c ? c.weekSales : 0;
+}
+
+// レンダリング
+function bmRenderAll() {
+  bmRenderDayTabs();
+  bmRenderCalcInfo();
+  bmRenderMatrix();
+  bmUpdateConfirmAllBtn();
+  bmUpdateSubtitle();
+}
+
+function bmRenderDayTabs() {
+  const wrap = document.getElementById('bm-day-tabs');
+  let html = '';
+  for (const d of BM_DAYS) {
+    const active = d.id === bmCurrentDay ? 'bm-active' : '';
+    // 確定状態は bmServerData の取得済の曜日でしか分からないため、
+    // 簡易的に現在曜日のみマーク表示
+    html += `<button class="bm-day-tab ${active}" data-day="${d.id}" onclick="bmSetDay('${d.id}')">${d.label}</button>`;
+  }
+  wrap.innerHTML = html;
+}
+
+function bmRenderCalcInfo() {
+  const el = document.getElementById('bm-calc-info');
+  if (!bmServerData) { el.innerHTML = ''; return; }
+  const d = BM_DAYS.find(x => x.id === bmCurrentDay);
+  const w = bmServerData.weights;
+  let confirmedCount = 0;
+  for (const loc of bmServerData.locations) if (bmIsLocConfirmed(loc.id)) confirmedCount++;
+  let selloutCount = 0, diffCount = 0;
+  const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
+  for (const loc of bmServerData.locations) {
+    for (const p of products) {
+      const c = bmServerData.cells[p.id + '_' + loc.id];
+      if (!c) continue;
+      if (c.selloutTime) selloutCount++;
+      const sales = bmGetDisplaySales(p.id, loc.id);
+      if (c.proposed !== sales && c.proposed > 0) diffCount++;
+    }
+  }
+  let html = '';
+  html += `<span><b>計算式:</b> W1:${w.w1} / W2:${w.w2} / W3:${w.w3} / W4:${w.w4}</span>`;
+  if (bmServerData.isPastOrToday) {
+    html += `<span><b>今週${d.label}:</b> ${bmServerData.thisWeekDate} 実績</span>`;
+  } else {
+    html += `<span><b>今週${d.label}:</b> ${bmServerData.thisWeekDate} <span style="color:#999;">未計上(先週分グレー)</span></span>`;
+  }
+  html += `<span><b>反映先:</b> ${bmServerData.nextReflectDate}</span>`;
+  html += `<span class="bm-diff-summary">変動: ${diffCount}件</span>`;
+  html += `<span class="bm-sellout-summary">🔴 完売: ${selloutCount}件</span>`;
+  html += `<span class="bm-progress-summary">確定: ${confirmedCount}/${bmServerData.locations.length}拠点</span>`;
+  el.innerHTML = html;
+}
+
+function bmRenderMatrix() {
+  const wrap = document.getElementById('bm-matrix-wrap');
+  if (!bmServerData) { wrap.innerHTML = '<div class="bm-loading">読み込み中...</div>'; return; }
+  const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
+  const totalCols = 1 + bmServerData.locations.length + 1;
+  let html = '<table class="bm-matrix">';
+  html += '<thead><tr>';
+  html += '<th rowspan="2" class="bm-product-cell">商品名</th>';
+  for (const loc of bmServerData.locations) {
+    const cf = bmIsLocConfirmed(loc.id) ? 'bm-loc-confirmed-h' : '';
+    html += `<th class="bm-loc-id-h ${cf}">${loc.no}</th>`;
+  }
+  html += '<th rowspan="2" class="bm-total-col">合計</th></tr><tr>';
+  for (const loc of bmServerData.locations) {
+    const cf = bmIsLocConfirmed(loc.id) ? 'bm-loc-confirmed-h' : '';
+    html += `<th class="bm-loc-name-h ${cf}">${bmEscape(loc.name)}</th>`;
+  }
+  html += '</tr></thead>';
+
+  // 白米
+  html += '<tbody>';
+  html += `<tr><td class="bm-section-label" colspan="${totalCols}">▼ 白米</td></tr>`;
+  for (const p of bmServerData.products.rice) html += bmRenderRow(p);
+  html += '</tbody>';
+  // 玄米
+  html += '<tbody class="bm-brown">';
+  html += `<tr><td class="bm-section-label bm-brown-label" colspan="${totalCols}">▼ 玄米</td></tr>`;
+  for (const p of bmServerData.products.brown) html += bmRenderRow(p);
+  html += '</tbody>';
+
+  // 拠点合計
+  html += '<tbody>';
+  html += '<tr class="bm-summary-row"><td class="bm-product-cell">拠点合計</td>';
+  let grand = 0;
+  for (const loc of bmServerData.locations) {
+    let sum = 0;
+    for (const p of products) sum += bmGetDisplaySales(p.id, loc.id);
+    grand += sum;
+    const cf = bmIsLocConfirmed(loc.id) ? 'bm-loc-confirmed' : '';
+    html += `<td class="${cf}">${sum}</td>`;
+  }
+  html += `<td class="bm-total-col">${grand}</td></tr>`;
+
+  // カテゴリ別合計
+  for (const cat of BM_CATEGORIES) html += bmRenderCategoryRow(cat);
+
+  // 確定ボタン行
+  html += '<tr class="bm-loc-confirm-row"><td class="bm-product-cell">確定</td>';
+  for (const loc of bmServerData.locations) {
+    const isC = bmIsLocConfirmed(loc.id);
+    const cls = isC ? 'bm-loc-confirm-btn bm-done' : 'bm-loc-confirm-btn';
+    const txt = isC ? '✓' : '確定';
+    html += `<td><button class="${cls}" data-lid="${loc.id}" onclick="bmConfirmLoc('${loc.id}')">${txt}</button></td>`;
+  }
+  html += `<td class="bm-total-col">—</td></tr>`;
+
+  // 推奨ボタン行
+  html += '<tr class="bm-loc-recommend-row"><td class="bm-product-cell">推奨</td>';
+  for (const loc of bmServerData.locations) {
+    const isC = bmIsLocConfirmed(loc.id);
+    const dis = isC ? 'disabled' : '';
+    html += `<td><button class="bm-loc-recommend-btn" data-lid="${loc.id}" onclick="bmRecommendLoc('${loc.id}')" ${dis} title="提案値を採用+確定">→推奨</button></td>`;
+  }
+  html += `<td class="bm-total-col">—</td></tr>`;
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
+function bmRenderRow(p) {
+  let html = `<tr><td class="bm-product-cell">${bmEscape(p.name)}</td>`;
+  let total = 0;
+  for (const loc of bmServerData.locations) {
+    total += bmGetDisplaySales(p.id, loc.id);
+    html += bmRenderCell(p.id, loc.id);
+  }
+  html += `<td class="bm-total-col">${total}</td></tr>`;
+  return html;
+}
+
+function bmRenderCell(pid, lid) {
+  const c = bmServerData.cells[pid + '_' + lid];
+  if (!c) return '<td class="bm-data-cell"></td>';
+  const sales = bmGetDisplaySales(pid, lid);
+  const pro = c.proposed;
+  const diff = pro - sales;
+  const isLocC = bmIsLocConfirmed(lid);
+  const hasSO = !!c.selloutTime;
+  const isZero = !pro && !sales;
+  const edit = bmGetEdit(bmCurrentDay, pid, lid);
+  const isEdited = (edit !== null && edit !== undefined);
+
+  let cls = 'bm-data-cell';
+  if (isLocC) cls += ' bm-loc-confirmed';
+  if (isZero) cls += ' bm-zero-cell';
+
+  let salesCls = 'bm-cell-sales';
+  if (c.isFallback && !isEdited) salesCls += ' bm-fallback';
+  if (isEdited) salesCls += ' bm-edited';
+  if (!sales && !isZero) salesCls += ' bm-no-sales';
+  if (isZero) salesCls += ' bm-no-sales';
+
+  const proStr = pro || '–';
+  const salStr = (sales || sales === 0) && pro ? String(sales) : (sales ? String(sales) : '–');
+
+  let ind = '';
+  if (diff > 0 && pro > 0) ind = '<span class="bm-ind-up">▲</span>';
+  else if (diff < 0 && pro > 0) ind = '<span class="bm-ind-down">▼</span>';
+  const badge = hasSO ? '<span class="bm-sellout-badge"></span>' : '';
+
+  const editable = !isZero;
+  const editAttrs = editable
+    ? `contenteditable="true" inputmode="numeric" data-pid="${pid}" data-lid="${lid}" onkeydown="bmOnSalesKey(event)" onblur="bmOnSalesBlur(this)" onfocus="bmOnSalesFocus(this)"`
+    : '';
+  const proClick = isZero ? '' : `onclick="bmOpenModal('${pid}','${lid}')"`;
+
+  return `<td class="${cls}">
+    <div class="bm-cell-2col">${badge}<div class="${salesCls}" ${editAttrs}>${salStr}</div><div class="bm-cell-proposal" ${proClick}>${proStr}${ind}</div></div>
+  </td>`;
+}
+
+function bmRenderCategoryRow(cat) {
+  const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
+  let html = `<tr class="bm-cat-row"><td class="bm-product-cell bm-cat-label">${cat.label}</td>`;
+  let totalNext = 0, totalSales = 0;
+  for (const loc of bmServerData.locations) {
+    let sumP = 0, sumS = 0;
+    for (const p of products) {
+      if (p.group !== cat.id) continue;
+      const c = bmServerData.cells[p.id + '_' + loc.id];
+      if (!c) continue;
+      sumP += c.proposed;
+      sumS += bmGetDisplaySales(p.id, loc.id);
+    }
+    totalNext += sumP;
+    totalSales += sumS;
+    const isC = bmIsLocConfirmed(loc.id);
+    const isZero = !sumP && !sumS;
+    let cls = 'bm-cat-cell';
+    if (isC) cls += ' bm-loc-confirmed';
+    if (isZero) cls += ' bm-cat-cell-zero';
+    html += `<td class="${cls}"><div class="bm-cat-cell-actual">${sumS || '–'}</div><div class="bm-cat-cell-next">${sumP || '–'}</div></td>`;
+  }
+  html += `<td class="bm-total-col"><div class="bm-cat-cell-actual">${totalSales}</div><div class="bm-cat-cell-next">${totalNext}</div></td></tr>`;
+  return html;
+}
+
+function bmUpdateConfirmAllBtn() {
+  const btn = document.getElementById('bm-confirm-all');
+  if (!btn) return;
+  if (bmIsAllConfirmed()) {
+    btn.classList.add('bm-done');
+    btn.textContent = '✓ 全拠点確定済（クリックで解除）';
+  } else {
+    btn.classList.remove('bm-done');
+    btn.textContent = '✓ 全拠点確定';
+  }
+}
+function bmUpdateSubtitle() {
+  const d = BM_DAYS.find(x => x.id === bmCurrentDay);
+  const el = document.getElementById('bm-subtitle');
+  if (!el || !bmServerData) { if(el) el.textContent = '読み込み中...'; return; }
+  const r = bmServerData.products.rice.length;
+  const b = bmServerData.products.brown.length;
+  el.textContent = `${d.label}曜 / ${bmServerData.locations.length}拠点 × ${r+b}SKU`;
+}
+
+// 編集ハンドラ
+function bmOnSalesFocus(el) {
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+  if (el.classList.contains('bm-fallback')) el.textContent = '';
+}
+function bmOnSalesKey(e) {
+  const allowed = /^[0-9]$/.test(e.key) || ['Backspace','Delete','Tab','ArrowLeft','ArrowRight'].includes(e.key);
+  if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); return; }
+  if (e.key === 'Escape') { e.target.blur(); return; }
+  if (!allowed) e.preventDefault();
+}
+function bmOnSalesBlur(el) {
+  const pid = el.dataset.pid;
+  const lid = el.dataset.lid;
+  const raw = (el.textContent || '').trim();
+  const c = bmServerData.cells[pid + '_' + lid];
+  if (raw === '') {
+    bmSetEdit(bmCurrentDay, pid, lid, null);
+  } else {
+    const v = parseInt(raw, 10);
+    if (isNaN(v) || v < 0) {
+      bmSetEdit(bmCurrentDay, pid, lid, null);
+    } else {
+      // 元値と同じなら編集解除
+      const orig = c ? c.weekSales : 0;
+      if (v === orig) bmSetEdit(bmCurrentDay, pid, lid, null);
+      else bmSetEdit(bmCurrentDay, pid, lid, v);
+    }
+  }
+  bmRenderMatrix();
+  bmRenderCalcInfo();
+}
+
+// 内訳モーダル
+function bmOpenModal(pid, lid) {
+  const c = bmServerData.cells[pid + '_' + lid];
+  if (!c || (!c.proposed && !c.weekSales)) return;
+  const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
+  const p = products.find(x => x.id === pid);
+  const loc = bmServerData.locations.find(x => x.id === lid);
+  const d = BM_DAYS.find(x => x.id === bmCurrentDay);
+  const isBrown = bmServerData.products.brown.some(b => b.id === pid);
+  const productLabel = isBrown ? `${p.name}(玄米)` : `${p.name}(白米)`;
+  const hasSO = !!c.selloutTime;
+
+  document.getElementById('bm-modal-title').textContent = `${productLabel} @ ${loc.name}`;
+  document.getElementById('bm-modal-subtitle').textContent = `${d.label}曜 / 翌週提案の計算内訳`;
+  const head = document.getElementById('bm-modal-head');
+  head.classList.toggle('bm-has-sellout', hasSO);
+
+  const histLabels = ['先週','2週前','3週前','4週前'];
+  let histHtml = '<table class="bm-modal-history-table">';
+  for (let i = 0; i < 4; i++) {
+    const h = c.hist[i];
+    const isSO = (i === 0 && hasSO);
+    const trCls = isSO ? 'bm-is-sellout' : '';
+    const mark = isSO ? `<span class="bm-sellout-mark-inline">🔴 ${c.selloutTime}完売</span>` : '';
+    histHtml += `<tr class="${trCls}"><td class="bm-h-label">${histLabels[i]}<br><span style="font-size:7.5pt;color:#888;font-weight:normal;">${h.date}</span></td><td class="bm-h-value">${h.value}個 ${mark}</td></tr>`;
+  }
+  histHtml += '</table>';
+
+  const w = bmServerData.weights;
+  const wAvg = c.weightedAvg.toFixed(1);
+  let calcHtml = '<div class="bm-modal-calc">';
+  calcHtml += `<div class="bm-modal-calc-row"><span class="bm-modal-calc-label">加重平均(W1:${w.w1}/W2:${w.w2}/W3:${w.w3}/W4:${w.w4})</span><span class="bm-modal-calc-value">${wAvg}個</span></div>`;
+  if (hasSO) {
+    calcHtml += `<div class="bm-modal-calc-row"><span class="bm-modal-calc-label">🔴 完売増量(${c.selloutTime})</span><span class="bm-modal-calc-value bm-bonus">+${c.selloutBonus}個</span></div>`;
+  } else {
+    calcHtml += `<div class="bm-modal-calc-row" style="color:#999;"><span class="bm-modal-calc-label">完売増量</span><span class="bm-modal-calc-value">+0個</span></div>`;
+  }
+  calcHtml += `<div class="bm-modal-calc-row bm-final ${hasSO ? 'bm-has-sellout' : ''}"><span class="bm-modal-calc-label">翌週提案</span><span class="bm-modal-calc-value bm-final-value ${hasSO ? 'bm-has-sellout' : ''}">${c.proposed}個</span></div>`;
+  calcHtml += '</div>';
+  if (hasSO) {
+    calcHtml += `<div class="bm-modal-note">💡 完売は<b>直近の同曜日のみ</b>翌週に加算されます。それ以前の完売は加重平均に反映済のため追加加算しません。</div>`;
+  }
+
+  let weekInfo = '';
+  if (c.isFallback) {
+    weekInfo = `<div class="bm-modal-note" style="background:#eceff1;border-left-color:#90a4ae;">📅 今週${d.label}曜(${bmServerData.thisWeekDate})は<b>未計上</b>のため、参考として先週${d.label}曜の販売数(${c.hist[0].value}個)を表示しています。</div>`;
+  } else {
+    const sales = bmGetDisplaySales(pid, lid);
+    const edit = bmGetEdit(bmCurrentDay, pid, lid);
+    const tag = (edit !== null && edit !== undefined) ? '(編集中)' : '';
+    weekInfo = `<div class="bm-modal-note" style="background:#e3f2fd;border-left-color:#1976d2;">📊 今週${d.label}曜(${bmServerData.thisWeekDate})の販売数: <b>${sales}個</b>${tag}</div>`;
+  }
+
+  let body = weekInfo;
+  body += `<div class="bm-modal-section"><div class="bm-modal-section-title">📅 過去4週の${d.label}曜販売実績</div>${histHtml}</div>`;
+  body += `<div class="bm-modal-section"><div class="bm-modal-section-title">🧮 計算内訳</div>${calcHtml}</div>`;
+  document.getElementById('bm-modal-body').innerHTML = body;
+  document.getElementById('bm-modal-overlay').classList.add('bm-show');
+}
+function bmCloseModal(e) {
+  if (e && e.target.id !== 'bm-modal-overlay' && e.type !== undefined) return;
+  document.getElementById('bm-modal-overlay').classList.remove('bm-show');
+}
+
+// 操作
+async function bmSetDay(dayId) {
+  if (dayId === bmCurrentDay && bmServerData) return;
+  bmCurrentDay = dayId;
+  await bmLoadDay(dayId);
+}
+
+async function bmLoadDay(dayId) {
+  const wrap = document.getElementById('bm-matrix-wrap');
+  wrap.innerHTML = '<div class="bm-loading">基本数マスタを読み込み中...</div>';
+  document.getElementById('bm-calc-info').innerHTML = '';
+  const r = await bmFetchMatrix(dayId);
+  if (!r.ok) {
+    wrap.innerHTML = `<div class="bm-error">取得エラー: ${bmEscape(r.error || '不明')}</div>`;
+    return;
+  }
+  bmServerData = r;
+  bmLoadedDays.add(dayId);
+  bmRenderAll();
+}
+
+async function bmReload() {
+  await bmLoadDay(bmCurrentDay);
+}
+
+// 確定／推奨／全拠点確定
+async function bmConfirmLoc(lid) {
+  if (!bmServerData) return;
+  if (bmIsLocConfirmed(lid)) {
+    // 解除
+    const locName = (bmServerData.locations.find(l => l.id === lid) || {}).name || lid;
+    if (!confirm(`${locName} の確定を解除しますか？\n(G列をクリアします)`)) return;
+    const r = await bmPostAction('unconfirmBasicMasterLocation', { dayId: bmCurrentDay, locId: lid });
+    if (!r.ok) { alert('解除失敗: ' + (r.error || '')); return; }
+    await bmLoadDay(bmCurrentDay);
+    return;
+  }
+  // 確定：編集値を items に集約
+  const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
+  const items = {};
+  for (const p of products) {
+    const e = bmGetEdit(bmCurrentDay, p.id, lid);
+    if (e !== null && e !== undefined) items[p.id] = Number(e);
+  }
+  const r = await bmPostAction('confirmBasicMasterLocation', { dayId: bmCurrentDay, locId: lid, items });
+  if (!r.ok) { alert('確定失敗: ' + (r.error || '')); return; }
+  // 編集値クリア（G列に反映済）
+  bmClearEditsForLoc(bmCurrentDay, lid);
+  await bmLoadDay(bmCurrentDay);
+}
+
+async function bmRecommendLoc(lid) {
+  if (!bmServerData) return;
+  const locName = (bmServerData.locations.find(l => l.id === lid) || {}).name || lid;
+  if (!confirm(`${locName} の全商品を提案値で確定します。編集値があれば破棄されます。よろしいですか？`)) return;
+  const r = await bmPostAction('recommendBasicMasterLocation', { dayId: bmCurrentDay, locId: lid });
+  if (!r.ok) { alert('推奨失敗: ' + (r.error || '')); return; }
+  bmClearEditsForLoc(bmCurrentDay, lid);
+  await bmLoadDay(bmCurrentDay);
+}
+
+async function bmConfirmAll() {
+  if (!bmServerData) return;
+  if (bmIsAllConfirmed()) {
+    if (!confirm(`${bmCurrentDay}曜の全25拠点の確定を解除しますか？\n(G列をすべてクリアします)`)) return;
+    // 全拠点の G列クリア（順次）
+    for (const loc of bmServerData.locations) {
+      await bmPostAction('unconfirmBasicMasterLocation', { dayId: bmCurrentDay, locId: loc.id });
+    }
+    bmEditsCache[bmCurrentDay] = {};
+    bmSaveEdits();
+    await bmLoadDay(bmCurrentDay);
+    return;
+  }
+  if (!confirm(`${bmCurrentDay}曜の全25拠点を確定します。\n(編集値あれば編集値、なければ提案値をG列に保存)\nよろしいですか？`)) return;
+  // 編集値を itemsByLoc に集約
+  const itemsByLoc = {};
+  const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
+  for (const loc of bmServerData.locations) {
+    const locItems = {};
+    for (const p of products) {
+      const e = bmGetEdit(bmCurrentDay, p.id, loc.id);
+      if (e !== null && e !== undefined) locItems[p.id] = Number(e);
+    }
+    if (Object.keys(locItems).length > 0) itemsByLoc[loc.id] = locItems;
+  }
+  const r = await bmPostAction('confirmBasicMasterAll', { dayId: bmCurrentDay, itemsByLoc });
+  if (!r.ok) { alert('全拠点確定失敗: ' + (r.error || '')); return; }
+  bmEditsCache[bmCurrentDay] = {};
+  bmSaveEdits();
+  await bmLoadDay(bmCurrentDay);
+}
+
+function bmEscape(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;').replace(/"/g,'&quot;');
+}
+
+// 初期化（tab-master を開いた時にトリガー）
+function bmInitIfNeeded() {
+  if (bmInitialized) return;
+  bmInitialized = true;
+  bmLoadEdits();
+  bmRenderDayTabs();
+  // 今日の曜日に自動で合わせる（土日は月曜）
+  const dow = new Date().getDay();
+  const map = { 0:'mon', 1:'mon', 2:'tue', 3:'wed', 4:'thu', 5:'fri', 6:'mon' };
+  bmCurrentDay = map[dow] || 'mon';
+  bmLoadDay(bmCurrentDay);
+}
+
+// タブ切替フック：master タブを開いたら初期化
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  if (btn.dataset.tab === 'master') {
+    btn.addEventListener('click', () => { bmInitIfNeeded(); });
+  }
+});
+
+// ESC でモーダル閉じる
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') bmCloseModal();
+});
 
 </script>
 </body>
