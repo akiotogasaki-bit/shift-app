@@ -445,6 +445,10 @@ input { font-family: inherit; }
   background: var(--warn-bg);
   color: var(--orange);
 }
+  .tier-head.spot-head {
+  background: #FFF4E6;
+  color: var(--orange);
+}
 .seller-item {
   display: flex;
   align-items: center;
@@ -1630,14 +1634,14 @@ function renderPool() {
   const wrap = document.getElementById('poolWrap');
   const countEl = document.getElementById('poolTotalCount');
 
-  let normalCount = 0, spotCount = 0;
+  // 未割当数カウント（スポットは未割当概念から除外済 by GAS）
+  let normalCount = 0;
   Object.values(state.unassignedPool || {}).forEach(pool => {
     pool.forEach(item => {
-      if (item.type === 'spot') spotCount++;
-      else normalCount++;
+      if (item.type !== 'spot') normalCount++;
     });
   });
-  countEl.textContent = `希望者${normalCount} / スポット${spotCount}`;
+  countEl.textContent = `未割当 ${normalCount}名`;
 
   if (state.dates.length === 0) {
     wrap.innerHTML = '<div class="pool-empty">日付データがありません</div>';
@@ -1646,22 +1650,18 @@ function renderPool() {
 
   let html = '';
   state.dates.forEach(date => {
-    const pool = state.unassignedPool[date] || [];
+    const pool = (state.unassignedPool[date] || []).filter(p => p.type !== 'spot');
     if (pool.length === 0) return;
-    const normalNum = pool.filter(p => p.type === 'normal').length;
-    const spotNum   = pool.filter(p => p.type === 'spot').length;
     html += `<div class="date-group">`;
     html += `<div class="date-head">
       <span>${escapeHtml(date)}</span>
-      <span class="count">希望者${normalNum} / スポット${spotNum}</span>
+      <span class="count">${pool.length}名</span>
     </div>`;
     html += `<div class="chip-row">`;
     pool.forEach(item => {
-      const cls = item.type === 'spot' ? 'spot' : 'normal';
-      const ico = item.type === 'spot' ? '★' : '👤';
-      html += `<div class="chip ${cls}"
+      html += `<div class="chip normal"
         onclick="openStaffModal('${escapeAttr(item.name)}','${item.type}','${escapeAttr(date)}')">
-        <span class="ico">${ico}</span>
+        <span class="ico">👤</span>
         <span>${escapeHtml(item.name)}</span>
       </div>`;
     });
@@ -1716,18 +1716,21 @@ function renderSellers() {
   const pool = state.unassignedPool[date] || [];
   const poolNames = new Set(pool.map(p => p.name));
 
-  const poolNormal = [], poolSpot = [];
+  const poolNormal = [];
+  const allSpots = [];     // ★ スポットは常時全件表示
   const tiers = [[], [], [], []];
   state.sellers.forEach(s => {
     const name = s.name;
     if (q && !name.toLowerCase().includes(q)) return;
 
-    if (poolNames.has(name)) {
-      if (s.isSpot) poolSpot.push({ ...s });
-      else poolNormal.push({ ...s });
+    if (s.isSpot) {
+      allSpots.push({ ...s });
       return;
     }
-    if (s.isSpot) return;
+    if (poolNames.has(name)) {
+      poolNormal.push({ ...s });
+      return;
+    }
     if (s.pref1 === base) tiers[0].push({ ...s, tier: 1 });
     else if (s.pref2 === base) tiers[1].push({ ...s, tier: 2 });
     else if (s.pref3 === base) tiers[2].push({ ...s, tier: 3 });
@@ -1736,8 +1739,9 @@ function renderSellers() {
 
   let html = '';
 
-  if (poolNormal.length > 0 || poolSpot.length > 0) {
-    html += `<div class="tier-head pool">⚠️ この日の未割当（${poolNormal.length + poolSpot.length}名）</div>`;
+  // ⚠️ この日の未割当（通常スタッフのみ）
+  if (poolNormal.length > 0) {
+    html += `<div class="tier-head pool">⚠️ この日の未割当（${poolNormal.length}名）</div>`;
     poolNormal.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
     poolNormal.forEach(s => {
       const isCur = s.name === current;
@@ -1753,16 +1757,9 @@ function renderSellers() {
         ${isCur ? '<span class="check">✓</span>' : ''}
       </div>`;
     });
-    poolSpot.forEach(s => {
-      const isCur = s.name === current;
-      html += `<div class="seller-item spot-item ${isCur ? 'current' : ''}"
-        onclick="selectSeller('${escapeAttr(s.name)}')">
-        <span class="name spot">${escapeHtml(s.name)}</span>
-        ${isCur ? '<span class="check">✓</span>' : ''}
-      </div>`;
-    });
   }
 
+  // 第1希望〜その他
   const labels = ['第1希望', '第2希望', '第3希望', 'その他'];
   tiers.forEach((arr, i) => {
     if (arr.length === 0) return;
@@ -1783,36 +1780,21 @@ function renderSellers() {
     });
   });
 
-  if (!html) html = '<div class="diff-empty">該当する販売員がいません</div>';
-
-  // ── 未提出セクション（希望を出していない販売員） ──
-  const assignedThisDate = new Set();
-  Object.values(state.matrix[date] || {}).forEach(n => {
-    if (n && n !== '【未割当】') assignedThisDate.add(n);
-  });
-  const notSubmitted = state.sellers.filter(s => {
-    if (s.isSpot) return false;
-    if (state.submittedNames.has(s.name)) return false;
-    if (assignedThisDate.has(s.name)) return false;
-    if (q && !s.name.toLowerCase().includes(q)) return false;
-    return true;
-  });
-  notSubmitted.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
-  if (notSubmitted.length > 0) {
-    html += `<div class="tier-head notsubmit">📵 未提出（${notSubmitted.length}名）</div>`;
-    notSubmitted.forEach(s => {
-      const toggleId = `toggle_${escapeAttr(s.name)}`;
-      html += `<div class="seller-item notsubmit-item">
-        <span class="name">${escapeHtml(s.name)}</span>
-        <label class="toggle-wrap" title="ONにすると割り当て">
-          <input type="checkbox" id="${toggleId}"
-            onchange="toggleUnsubmittedSeller('${escapeAttr(s.name)}', this)">
-          <span class="toggle-knob"></span>
-        </label>
+  // ⭐ スポット枠（常時利用可・全件表示）
+  if (allSpots.length > 0) {
+    html += `<div class="tier-head spot-head">⭐ スポット枠（常時利用可・${allSpots.length}名）</div>`;
+    allSpots.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+    allSpots.forEach(s => {
+      const isCur = s.name === current;
+      html += `<div class="seller-item spot-item ${isCur ? 'current' : ''}"
+        onclick="selectSeller('${escapeAttr(s.name)}')">
+        <span class="name spot">${escapeHtml(s.name)}</span>
+        ${isCur ? '<span class="check">✓</span>' : ''}
       </div>`;
     });
   }
 
+  if (!html) html = '<div class="diff-empty">該当する販売員がいません</div>';
   document.getElementById('sheetBody').innerHTML = html;
 }
 
