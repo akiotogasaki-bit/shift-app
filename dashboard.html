@@ -1601,6 +1601,70 @@ let allData     = [];
 let masterData  = { locations: [], products: [] };
 let currentSort = 'rate_desc';
 let inactiveLocationIds = new Set();  // 本日の休止拠点ID（driver.htmlで「営業しない」設定）
+let isFirstLoad = true;  // 案B Phase-2：初回起動判定（キャッシュ先描画用）
+
+// ═══════════════════════════════════════════════════════════════
+// 案B Phase-2：ダッシュボード localStorage キャッシュ（v2026-05-18）
+//   - マスタ系：24h TTL（拠点・商品・スタッフ・インセンティブ等）
+//   - リアルタイム拠点データ：5分 TTL（allData・inactiveLocationIds）
+//   - 起動時のみキャッシュから先描画。5分間隔の setInterval 更新時はキャッシュ無視
+// ═══════════════════════════════════════════════════════════════
+const DASH_MASTER_CACHE_KEY    = 'oedo_dashboard_master_cache_v1';
+const DASH_REALTIME_CACHE_KEY  = 'oedo_dashboard_realtime_cache_v1';
+const DASH_MASTER_TTL_MS       = 24 * 60 * 60 * 1000;  // 24時間
+const DASH_REALTIME_TTL_MS     = 5 * 60 * 1000;        // 5分
+
+function loadDashMasterCache() {
+  try {
+    const raw = localStorage.getItem(DASH_MASTER_CACHE_KEY);
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
+    if (!obj || !obj.savedAt) return null;
+    if (Date.now() - obj.savedAt > DASH_MASTER_TTL_MS) {
+      localStorage.removeItem(DASH_MASTER_CACHE_KEY);
+      return null;
+    }
+    return obj.data || null;
+  } catch(e) {
+    console.warn('loadDashMasterCache error:', e);
+    return null;
+  }
+}
+
+function saveDashMasterCache(data) {
+  try {
+    localStorage.setItem(DASH_MASTER_CACHE_KEY, JSON.stringify({
+      savedAt: Date.now(),
+      data: data,
+    }));
+  } catch(e) { console.warn('saveDashMasterCache error:', e); }
+}
+
+function loadDashRealtimeCache() {
+  try {
+    const raw = localStorage.getItem(DASH_REALTIME_CACHE_KEY);
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
+    if (!obj || !obj.savedAt) return null;
+    if (Date.now() - obj.savedAt > DASH_REALTIME_TTL_MS) {
+      localStorage.removeItem(DASH_REALTIME_CACHE_KEY);
+      return null;
+    }
+    return obj.data || null;
+  } catch(e) {
+    console.warn('loadDashRealtimeCache error:', e);
+    return null;
+  }
+}
+
+function saveDashRealtimeCache(data) {
+  try {
+    localStorage.setItem(DASH_REALTIME_CACHE_KEY, JSON.stringify({
+      savedAt: Date.now(),
+      data: data,
+    }));
+  } catch(e) { console.warn('saveDashRealtimeCache error:', e); }
+}
 
 // ─────────────────────────────────────
 // LIFF初期化＋権限チェック
@@ -1823,6 +1887,43 @@ function renderDeliveryOrders(orders, date) {
 // ─────────────────────────────────────
 async function loadAll() {
   updateTime();
+
+  // ─────────────────────────────────────────────────────────
+  // Phase A：初回のみ localStorage キャッシュから先描画（v2026-05-18 案B Phase-2）
+  //   2回目以降（5分間隔の自動更新）はキャッシュ無視で素通り
+  // ─────────────────────────────────────────────────────────
+  let prevSnapshot = null;
+  if (isFirstLoad) {
+    const cachedMaster   = loadDashMasterCache();
+    const cachedRealtime = loadDashRealtimeCache();
+    let renderedFromCache = false;
+
+    if (cachedMaster) {
+      masterData = cachedMaster;
+    }
+    if (cachedRealtime) {
+      allData = cachedRealtime.allData || [];
+      inactiveLocationIds = new Set(cachedRealtime.inactiveIds || []);
+      if (allData.length > 0) {
+        try {
+          renderRealtime();
+          if (document.getElementById('tab-cash').classList.contains('active')) {
+            renderCashTable();
+          }
+          renderedFromCache = true;
+        } catch(e) { console.warn('cache render error:', e); }
+      }
+    }
+
+    if (renderedFromCache) {
+      prevSnapshot = {
+        masterJson:   JSON.stringify(masterData || {}),
+        allDataJson:  JSON.stringify(allData || []),
+        inactiveJson: JSON.stringify(Array.from(inactiveLocationIds || [])),
+      };
+    }
+  }
+
   try {
     const [master, reports, intermediate, driverState] = await Promise.all([
       fetchJSON(`${GAS_URL}?action=getMaster`),
@@ -1842,12 +1943,52 @@ async function loadAll() {
       if (!finalMap[r.locationId]) merged.push(r);
     });
     allData = merged;
-    renderRealtime();
 
-    if (document.getElementById('tab-cash').classList.contains('active')) {
-      renderCashTable();
+    // ─────────────────────────────────────────────────────────
+    // キャッシュ保存（マスタ・リアルタイム両方）
+    // ─────────────────────────────────────────────────────────
+    saveDashMasterCache(master);
+    saveDashRealtimeCache({
+      allData: merged,
+      inactiveIds: Array.from(inactiveLocationIds),
+    });
+
+    // ─────────────────────────────────────────────────────────
+    // Phase C：差分検出して silent 再描画（先描画していた場合のみ）
+    //   先描画していない場合は通常通り renderRealtime を呼ぶ
+    // ─────────────────────────────────────────────────────────
+    if (prevSnapshot) {
+      const newSnapshot = {
+        masterJson:   JSON.stringify(masterData || {}),
+        allDataJson:  JSON.stringify(allData || []),
+        inactiveJson: JSON.stringify(Array.from(inactiveLocationIds || [])),
+      };
+      const changed = (
+        prevSnapshot.masterJson   !== newSnapshot.masterJson   ||
+        prevSnapshot.allDataJson  !== newSnapshot.allDataJson  ||
+        prevSnapshot.inactiveJson !== newSnapshot.inactiveJson
+      );
+      if (changed) {
+        console.log('[案B] ダッシュボード差分検出 → 再描画');
+        renderRealtime();
+        if (document.getElementById('tab-cash').classList.contains('active')) {
+          renderCashTable();
+        }
+      }
+    } else {
+      renderRealtime();
+      if (document.getElementById('tab-cash').classList.contains('active')) {
+        renderCashTable();
+      }
     }
+
+    isFirstLoad = false;
   } catch (e) {
+    // キャッシュから既に描画済みなら、エラー画面に塗りつぶさず警告のみ
+    if (prevSnapshot) {
+      console.warn('loadAll error (cache fallback):', e);
+      return;
+    }
     document.getElementById('rt-loading').innerHTML =
       `<p style="color:var(--red);">データ取得エラー：${e.message}</p>`;
   }
