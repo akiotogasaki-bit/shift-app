@@ -175,26 +175,6 @@ body {
   text-align: left; padding-left: 8px;
   height: 16px; line-height: 16px;
 }
-.matrix-table td.cell-section-cat {
-  background: #1565c0; color: white;
-  font-weight: bold; font-size: 8pt;
-  text-align: left; padding-left: 8px;
-  height: 16px; line-height: 16px;
-}
-/* カテゴリー合計行：カテゴリー色の行背景 */
-.matrix-table tr.cat-blue   td.cell-data,
-.matrix-table tr.cat-blue   td.cell-sub,
-.matrix-table tr.cat-blue   td.cell-tot { background: #bbdefb; }
-.matrix-table tr.cat-green  td.cell-data,
-.matrix-table tr.cat-green  td.cell-sub,
-.matrix-table tr.cat-green  td.cell-tot { background: #c8e6c9; }
-.matrix-table tr.cat-yellow td.cell-data,
-.matrix-table tr.cat-yellow td.cell-sub,
-.matrix-table tr.cat-yellow td.cell-tot { background: #fff59d; }
-.matrix-table tr.cat-gray   td.cell-data,
-.matrix-table tr.cat-gray   td.cell-sub,
-.matrix-table tr.cat-gray   td.cell-tot { background: #e0e0e0; }
-.matrix-table tr.cat-row td.cell-name { font-weight: bold; padding-left: 6px; }
 
 /* 商品グループ色（白米） */
 .matrix-table tr.g-blue  td.cell-data { background: #e3f2fd; }
@@ -716,12 +696,6 @@ body {
     height: 14px;
     line-height: 14px;
   }
-  /* カテゴリー合計セクション見出し（印刷時の高さ調整） */
-  #tab-sheet1 .matrix-table td.cell-section-cat {
-    height: 18px;
-    line-height: 18px;
-    font-size: 9pt;
-  }
 
   /* ════════ シート2：縦用紙上で横長に回転（A案） ════════ */
   #tab-sheet2.active {
@@ -881,7 +855,14 @@ body {
   border: 1px solid #ddd; border-radius: 3px; white-space: nowrap;
 }
 #tab-master .bm-title-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-#tab-master .bm-day-tabs { display: inline-flex; gap: 3px; }
+#tab-master .bm-day-tabs { display: inline-flex; gap: 3px; flex-wrap: wrap; }
+#tab-master .bm-week-tabs { display: inline-flex; gap: 3px; margin-right: 8px; }
+#tab-master .bm-week-tab {
+  padding: 4px 10px; font-size: 10pt; border: 1px solid #999;
+  background: #fafafa; cursor: pointer; border-radius: 3px; font-weight: bold;
+}
+#tab-master .bm-week-tab.bm-active { background: #ef6c00; color: white; border-color: #ef6c00; }
+#tab-master .bm-week-tab:not(.bm-active):hover { background: #e0e0e0; }
 #tab-master .bm-day-tab {
   padding: 4px 14px; border: 1px solid #888; background: #fafafa;
   cursor: pointer; font-family: inherit; font-size: 10pt; font-weight: bold;
@@ -1127,6 +1108,10 @@ body {
         <div class="bm-subtitle" id="bm-subtitle">読み込み中...</div>
       </div>
       <div class="bm-title-right">
+        <div class="bm-week-tabs" id="bm-week-tabs">
+          <button class="bm-week-tab bm-active" data-week="this" onclick="bmSetWeek('this')">今週</button>
+          <button class="bm-week-tab" data-week="next" onclick="bmSetWeek('next')">翌週</button>
+        </div>
         <div class="bm-day-tabs" id="bm-day-tabs"></div>
         <div class="bm-legend">
           <b>左</b>=販売(編集) <b>右</b>=提案
@@ -1495,70 +1480,9 @@ function renderSheet1(data) {
     return html;
   }
 
-  // ▼ カテゴリー別合計ブロック（白米＋玄米 合算・マトリクス末尾）
-  function buildCategoryTotalsHTML(rice, brown, locIds, subtotalSplit) {
-    const allRows = [].concat(rice || [], brown || []);
-    if (allRows.length === 0) return '';
-
-    // 集計
-    const totals = {};  // { [category]: { byLocation:{}, subtotal, total } }
-    allRows.forEach(row => {
-      if (!row.total) return;
-      const cat = row.category || 'その他';
-      if (!totals[cat]) {
-        totals[cat] = { byLocation: {}, subtotal: 0, total: 0 };
-        locIds.forEach(lid => { totals[cat].byLocation[lid] = 0; });
-      }
-      locIds.forEach(lid => {
-        totals[cat].byLocation[lid] += Number(row.byLocation[lid] || 0);
-      });
-      totals[cat].subtotal += Number(row.subtotal || 0);
-      totals[cat].total    += Number(row.total    || 0);
-    });
-
-    const presentCats = Object.keys(totals);
-    if (presentCats.length === 0) return '';
-
-    // 表示順：定義順 → その他
-    const order = ['海苔弁系', '満腹系', '全六', '他社商品', '全'];
-    const orderedCats = order.filter(c => presentCats.indexOf(c) >= 0)
-      .concat(presentCats.filter(c => order.indexOf(c) < 0));
-
-    // カテゴリー → 行クラス
-    function catRowClass(cat) {
-      const c = CATEGORY_COLOR[cat];
-      if (c === 'blue')   return 'cat-row cat-blue';
-      if (c === 'green')  return 'cat-row cat-green';
-      if (c === 'yellow') return 'cat-row cat-yellow';
-      return 'cat-row cat-gray';
-    }
-
-    const colspan = 1 + locIds.length + 1 + 1;
-    let html = '';
-    html += `<tr><td colspan="${colspan}" class="cell-section-cat">▼ カテゴリー別合計（白米＋玄米）</td></tr>`;
-
-    orderedCats.forEach(cat => {
-      const data = totals[cat];
-      html += `<tr class="${catRowClass(cat)}">`;
-      html += `<td class="cell-name">${escHtml(cat)}</td>`;
-      locIds.forEach((lid, idx) => {
-        if (idx === subtotalSplit) {
-          html += `<td class="cell-sub">${data.subtotal || ''}</td>`;
-        }
-        const q = data.byLocation[lid];
-        html += `<td class="cell-data">${q ? q : ''}</td>`;
-      });
-      html += `<td class="cell-tot">${data.total || ''}</td>`;
-      html += '</tr>';
-    });
-
-    return html;
-  }
-
   const tableHTML = '<table class="matrix-table">'
     + buildTableHTML(rice,  false)
     + buildTableHTML(brown, true)
-    + buildCategoryTotalsHTML(rice, brown, locIds, subtotalSplit)
     + '</table>';
 
   let refHTML = '<table class="ref-table">'
@@ -2082,17 +2006,11 @@ initOrderDateChecks();
 
 
 
+
 // ═══════════════════════════════════════════════════════════
-// 基本数マスタ画面
+// 基本数マスタ画面（日付キー版 2026-05-19）
 // ═══════════════════════════════════════════════════════════
 
-const BM_DAYS = [
-  { id:'mon', label:'月' },
-  { id:'tue', label:'火' },
-  { id:'wed', label:'水' },
-  { id:'thu', label:'木' },
-  { id:'fri', label:'金' }
-];
 const BM_CATEGORIES = [
   { id:'noriben', label:'海苔弁系' },
   { id:'manpuku', label:'満腹シリーズ' },
@@ -2105,13 +2023,17 @@ const BM_SELLOUT_RULES = [
   { from:'12:00', to:'12:59', bonus:2 },
   { from:'13:00', to:'13:59', bonus:1 }
 ];
+const BM_DOW_JA = ['日','月','火','水','木','金','土'];
 
-const BM_LS_KEY = 'kanri_bm_edits_v1';
-let bmCurrentDay = 'mon';
-let bmServerData = null;   // 現在表示中の曜日のサーバーデータ
-let bmEditsCache = {};     // { dayId: { 'pid_lid': editedValue } }
+const BM_LS_KEY = 'kanri_bm_edits_v2_date';  // 旧キー(v1)とは別物。旧データは無効化
+let bmCurrentDate = null;     // 'YYYY-MM-DD' 形式
+let bmCurrentWeek = 'this';   // 'this' or 'next'
+let bmServerData  = null;     // 現在表示中の日付のサーバーデータ
+let bmEditsCache  = {};       // { dateStr: { 'pid_lid': editedValue } }
 let bmInitialized = false;
-let bmLoadedDays = new Set();
+let bmLoadedDates = new Set();
+let bmThisWeekDates = [];     // ['2026-05-19','2026-05-20',...]
+let bmNextWeekDates = [];
 
 // localStorage 読込
 function bmLoadEdits() {
@@ -2119,30 +2041,47 @@ function bmLoadEdits() {
     const raw = localStorage.getItem(BM_LS_KEY);
     bmEditsCache = raw ? JSON.parse(raw) : {};
   } catch(e) { bmEditsCache = {}; }
+  // 旧版localStorage(kanri_bm_edits_v1)があれば削除（曜日キー版・無効化）
+  try { localStorage.removeItem('kanri_bm_edits_v1'); } catch(e) {}
 }
 function bmSaveEdits() {
   try { localStorage.setItem(BM_LS_KEY, JSON.stringify(bmEditsCache)); } catch(e) {}
 }
-function bmGetEdit(dayId, pid, lid) {
-  return (bmEditsCache[dayId] && bmEditsCache[dayId][pid + '_' + lid] !== undefined)
-    ? bmEditsCache[dayId][pid + '_' + lid] : null;
+function bmGetEdit(dateStr, pid, lid) {
+  return (bmEditsCache[dateStr] && bmEditsCache[dateStr][pid + '_' + lid] !== undefined)
+    ? bmEditsCache[dateStr][pid + '_' + lid] : null;
 }
-function bmSetEdit(dayId, pid, lid, val) {
-  if (!bmEditsCache[dayId]) bmEditsCache[dayId] = {};
+function bmSetEdit(dateStr, pid, lid, val) {
+  if (!bmEditsCache[dateStr]) bmEditsCache[dateStr] = {};
   if (val === null || val === undefined) {
-    delete bmEditsCache[dayId][pid + '_' + lid];
+    delete bmEditsCache[dateStr][pid + '_' + lid];
   } else {
-    bmEditsCache[dayId][pid + '_' + lid] = val;
+    bmEditsCache[dateStr][pid + '_' + lid] = val;
   }
   bmSaveEdits();
 }
-function bmClearEditsForLoc(dayId, lid) {
-  if (!bmEditsCache[dayId]) return;
-  const keys = Object.keys(bmEditsCache[dayId]);
+function bmClearEditsForLoc(dateStr, lid) {
+  if (!bmEditsCache[dateStr]) return;
+  const keys = Object.keys(bmEditsCache[dateStr]);
   for (const k of keys) {
-    if (k.endsWith('_' + lid)) delete bmEditsCache[dayId][k];
+    if (k.endsWith('_' + lid)) delete bmEditsCache[dateStr][k];
   }
   bmSaveEdits();
+}
+
+// 古い日付の編集キャッシュをクリア（範囲外の日付を削除）
+function bmPurgeOldEdits(validDates) {
+  const validSet = new Set(validDates);
+  const keys = Object.keys(bmEditsCache);
+  let purged = 0;
+  for (const k of keys) {
+    if (!validSet.has(k)) {
+      delete bmEditsCache[k];
+      purged++;
+    }
+  }
+  if (purged > 0) bmSaveEdits();
+  return purged;
 }
 
 // 完売増量
@@ -2155,10 +2094,45 @@ function bmGetSelloutBonus(timeStr) {
   return 0;
 }
 
+// 日付フォーマット系
+function bmFmtDateLabel(dateStr) {
+  // 'YYYY-MM-DD' → 'M/D(曜)'
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return dateStr;
+  const m = parseInt(parts[1], 10);
+  const d = parseInt(parts[2], 10);
+  // JS Date を JST 解釈：YYYY-MM-DD は UTC扱いになるので注意
+  // ローカル時刻でつくる
+  const dt = new Date(parseInt(parts[0],10), m-1, d);
+  const dow = BM_DOW_JA[dt.getDay()];
+  return m + '/' + d + '(' + dow + ')';
+}
+function bmFmtDateFull(dateStr) {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return dateStr;
+  const y = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
+  const d = parseInt(parts[2], 10);
+  const dt = new Date(y, m-1, d);
+  const dow = BM_DOW_JA[dt.getDay()];
+  return y + '年' + m + '月' + d + '日(' + dow + ')';
+}
+
+// 今日の日付取得（YYYY-MM-DD 形式・ローカル時刻）
+function bmTodayStr() {
+  const t = new Date();
+  const y = t.getFullYear();
+  const m = String(t.getMonth() + 1).padStart(2, '0');
+  const d = String(t.getDate()).padStart(2, '0');
+  return y + '-' + m + '-' + d;
+}
+
 // API
-async function bmFetchMatrix(dayId) {
+async function bmFetchMatrix(dateStr) {
   try {
-    const res = await fetch(GAS_URL + '?action=getBasicMasterMatrix&dayId=' + encodeURIComponent(dayId));
+    const res = await fetch(GAS_URL + '?action=getBasicMasterMatrix&date=' + encodeURIComponent(dateStr));
     const json = await res.json();
     return json;
   } catch(err) {
@@ -2179,7 +2153,7 @@ async function bmPostAction(action, payload) {
   }
 }
 
-// 確定状態：拠点の全商品でG列に値があるか（cell.confirmed が null でない）
+// 確定状態：拠点の全商品でG列に値があるか
 function bmIsLocConfirmed(lid) {
   if (!bmServerData) return false;
   const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
@@ -2200,7 +2174,7 @@ function bmIsAllConfirmed() {
 
 // セルの「表示する販売数」を取得（編集値 > サーバーweekSales）
 function bmGetDisplaySales(pid, lid) {
-  const edit = bmGetEdit(bmCurrentDay, pid, lid);
+  const edit = bmGetEdit(bmCurrentDate, pid, lid);
   if (edit !== null && edit !== undefined && edit !== '') return Number(edit);
   if (!bmServerData) return 0;
   const c = bmServerData.cells[pid + '_' + lid];
@@ -2209,6 +2183,7 @@ function bmGetDisplaySales(pid, lid) {
 
 // レンダリング
 function bmRenderAll() {
+  bmRenderWeekTabs();
   bmRenderDayTabs();
   bmRenderCalcInfo();
   bmRenderMatrix();
@@ -2216,14 +2191,28 @@ function bmRenderAll() {
   bmUpdateSubtitle();
 }
 
+function bmRenderWeekTabs() {
+  const wrap = document.getElementById('bm-week-tabs');
+  if (!wrap) return;
+  const buttons = wrap.querySelectorAll('.bm-week-tab');
+  buttons.forEach(b => {
+    if (b.dataset.week === bmCurrentWeek) b.classList.add('bm-active');
+    else b.classList.remove('bm-active');
+  });
+}
+
 function bmRenderDayTabs() {
   const wrap = document.getElementById('bm-day-tabs');
+  if (!wrap) return;
+  const dates = bmCurrentWeek === 'next' ? bmNextWeekDates : bmThisWeekDates;
+  if (!dates || dates.length === 0) {
+    wrap.innerHTML = '<span style="color:#999;font-size:9pt;">日付未取得</span>';
+    return;
+  }
   let html = '';
-  for (const d of BM_DAYS) {
-    const active = d.id === bmCurrentDay ? 'bm-active' : '';
-    // 確定状態は bmServerData の取得済の曜日でしか分からないため、
-    // 簡易的に現在曜日のみマーク表示
-    html += `<button class="bm-day-tab ${active}" data-day="${d.id}" onclick="bmSetDay('${d.id}')">${d.label}</button>`;
+  for (const ds of dates) {
+    const active = (ds === bmCurrentDate) ? 'bm-active' : '';
+    html += '<button class="bm-day-tab ' + active + '" data-date="' + ds + '" onclick="bmSetDate(\'' + ds + '\')">' + bmFmtDateLabel(ds) + '</button>';
   }
   wrap.innerHTML = html;
 }
@@ -2231,7 +2220,6 @@ function bmRenderDayTabs() {
 function bmRenderCalcInfo() {
   const el = document.getElementById('bm-calc-info');
   if (!bmServerData) { el.innerHTML = ''; return; }
-  const d = BM_DAYS.find(x => x.id === bmCurrentDay);
   const w = bmServerData.weights;
   let confirmedCount = 0;
   for (const loc of bmServerData.locations) if (bmIsLocConfirmed(loc.id)) confirmedCount++;
@@ -2246,17 +2234,18 @@ function bmRenderCalcInfo() {
       if (c.proposed !== sales && c.proposed > 0) diffCount++;
     }
   }
+  const dowJa = bmServerData.dowJa || '';
   let html = '';
-  html += `<span><b>計算式:</b> W1:${w.w1} / W2:${w.w2} / W3:${w.w3} / W4:${w.w4}</span>`;
+  html += '<span><b>計算式:</b> W1:' + w.w1 + ' / W2:' + w.w2 + ' / W3:' + w.w3 + ' / W4:' + w.w4 + '</span>';
   if (bmServerData.isPastOrToday) {
-    html += `<span><b>今週${d.label}:</b> ${bmServerData.thisWeekDate} 実績</span>`;
+    html += '<span><b>' + bmFmtDateLabel(bmServerData.thisWeekDate) + ':</b> 実績</span>';
   } else {
-    html += `<span><b>今週${d.label}:</b> ${bmServerData.thisWeekDate} <span style="color:#999;">未計上(先週分グレー)</span></span>`;
+    html += '<span><b>' + bmFmtDateLabel(bmServerData.thisWeekDate) + ':</b> <span style="color:#999;">未計上(先週分グレー)</span></span>';
   }
-  html += `<span><b>反映先:</b> ${bmServerData.nextReflectDate}</span>`;
-  html += `<span class="bm-diff-summary">変動: ${diffCount}件</span>`;
-  html += `<span class="bm-sellout-summary">🔴 完売: ${selloutCount}件</span>`;
-  html += `<span class="bm-progress-summary">確定: ${confirmedCount}/${bmServerData.locations.length}拠点</span>`;
+  html += '<span><b>反映先:</b> ' + bmFmtDateLabel(bmServerData.nextReflectDate) + '</span>';
+  html += '<span class="bm-diff-summary">変動: ' + diffCount + '件</span>';
+  html += '<span class="bm-sellout-summary">🔴 完売: ' + selloutCount + '件</span>';
+  html += '<span class="bm-progress-summary">確定: ' + confirmedCount + '/' + bmServerData.locations.length + '拠点</span>';
   el.innerHTML = html;
 }
 
@@ -2270,23 +2259,23 @@ function bmRenderMatrix() {
   html += '<th rowspan="2" class="bm-product-cell">商品名</th>';
   for (const loc of bmServerData.locations) {
     const cf = bmIsLocConfirmed(loc.id) ? 'bm-loc-confirmed-h' : '';
-    html += `<th class="bm-loc-id-h ${cf}">${loc.no}</th>`;
+    html += '<th class="bm-loc-id-h ' + cf + '">' + loc.no + '</th>';
   }
   html += '<th rowspan="2" class="bm-total-col">合計</th></tr><tr>';
   for (const loc of bmServerData.locations) {
     const cf = bmIsLocConfirmed(loc.id) ? 'bm-loc-confirmed-h' : '';
-    html += `<th class="bm-loc-name-h ${cf}">${bmEscape(loc.name)}</th>`;
+    html += '<th class="bm-loc-name-h ' + cf + '">' + bmEscape(loc.name) + '</th>';
   }
   html += '</tr></thead>';
 
   // 白米
   html += '<tbody>';
-  html += `<tr><td class="bm-section-label" colspan="${totalCols}">▼ 白米</td></tr>`;
+  html += '<tr><td class="bm-section-label" colspan="' + totalCols + '">▼ 白米</td></tr>';
   for (const p of bmServerData.products.rice) html += bmRenderRow(p);
   html += '</tbody>';
   // 玄米
   html += '<tbody class="bm-brown">';
-  html += `<tr><td class="bm-section-label bm-brown-label" colspan="${totalCols}">▼ 玄米</td></tr>`;
+  html += '<tr><td class="bm-section-label bm-brown-label" colspan="' + totalCols + '">▼ 玄米</td></tr>';
   for (const p of bmServerData.products.brown) html += bmRenderRow(p);
   html += '</tbody>';
 
@@ -2299,9 +2288,9 @@ function bmRenderMatrix() {
     for (const p of products) sum += bmGetDisplaySales(p.id, loc.id);
     grand += sum;
     const cf = bmIsLocConfirmed(loc.id) ? 'bm-loc-confirmed' : '';
-    html += `<td class="${cf}">${sum}</td>`;
+    html += '<td class="' + cf + '">' + sum + '</td>';
   }
-  html += `<td class="bm-total-col">${grand}</td></tr>`;
+  html += '<td class="bm-total-col">' + grand + '</td></tr>';
 
   // カテゴリ別合計
   for (const cat of BM_CATEGORIES) html += bmRenderCategoryRow(cat);
@@ -2312,30 +2301,30 @@ function bmRenderMatrix() {
     const isC = bmIsLocConfirmed(loc.id);
     const cls = isC ? 'bm-loc-confirm-btn bm-done' : 'bm-loc-confirm-btn';
     const txt = isC ? '✓' : '確定';
-    html += `<td><button class="${cls}" data-lid="${loc.id}" onclick="bmConfirmLoc('${loc.id}')">${txt}</button></td>`;
+    html += '<td><button class="' + cls + '" data-lid="' + loc.id + '" onclick="bmConfirmLoc(\'' + loc.id + '\')">' + txt + '</button></td>';
   }
-  html += `<td class="bm-total-col">—</td></tr>`;
+  html += '<td class="bm-total-col">—</td></tr>';
 
   // 推奨ボタン行
   html += '<tr class="bm-loc-recommend-row"><td class="bm-product-cell">推奨</td>';
   for (const loc of bmServerData.locations) {
     const isC = bmIsLocConfirmed(loc.id);
     const dis = isC ? 'disabled' : '';
-    html += `<td><button class="bm-loc-recommend-btn" data-lid="${loc.id}" onclick="bmRecommendLoc('${loc.id}')" ${dis} title="提案値を採用+確定">→推奨</button></td>`;
+    html += '<td><button class="bm-loc-recommend-btn" data-lid="' + loc.id + '" onclick="bmRecommendLoc(\'' + loc.id + '\')" ' + dis + ' title="提案値を採用+確定">→推奨</button></td>';
   }
-  html += `<td class="bm-total-col">—</td></tr>`;
+  html += '<td class="bm-total-col">—</td></tr>';
   html += '</tbody></table>';
   wrap.innerHTML = html;
 }
 
 function bmRenderRow(p) {
-  let html = `<tr><td class="bm-product-cell">${bmEscape(p.name)}</td>`;
+  let html = '<tr><td class="bm-product-cell">' + bmEscape(p.name) + '</td>';
   let total = 0;
   for (const loc of bmServerData.locations) {
     total += bmGetDisplaySales(p.id, loc.id);
     html += bmRenderCell(p.id, loc.id);
   }
-  html += `<td class="bm-total-col">${total}</td></tr>`;
+  html += '<td class="bm-total-col">' + total + '</td></tr>';
   return html;
 }
 
@@ -2348,7 +2337,7 @@ function bmRenderCell(pid, lid) {
   const isLocC = bmIsLocConfirmed(lid);
   const hasSO = !!c.selloutTime;
   const isZero = !pro && !sales;
-  const edit = bmGetEdit(bmCurrentDay, pid, lid);
+  const edit = bmGetEdit(bmCurrentDate, pid, lid);
   const isEdited = (edit !== null && edit !== undefined);
 
   let cls = 'bm-data-cell';
@@ -2371,18 +2360,20 @@ function bmRenderCell(pid, lid) {
 
   const editable = !isZero;
   const editAttrs = editable
-    ? `contenteditable="true" inputmode="numeric" data-pid="${pid}" data-lid="${lid}" onkeydown="bmOnSalesKey(event)" onblur="bmOnSalesBlur(this)" onfocus="bmOnSalesFocus(this)"`
+    ? 'contenteditable="true" inputmode="numeric" data-pid="' + pid + '" data-lid="' + lid + '" onkeydown="bmOnSalesKey(event)" onblur="bmOnSalesBlur(this)" onfocus="bmOnSalesFocus(this)"'
     : '';
-  const proClick = isZero ? '' : `onclick="bmOpenModal('${pid}','${lid}')"`;
+  const proClick = isZero ? '' : 'onclick="bmOpenModal(\'' + pid + '\',\'' + lid + '\')"';
 
-  return `<td class="${cls}">
-    <div class="bm-cell-2col">${badge}<div class="${salesCls}" ${editAttrs}>${salStr}</div><div class="bm-cell-proposal" ${proClick}>${proStr}${ind}</div></div>
-  </td>`;
+  return '<td class="' + cls + '">'
+    + '<div class="bm-cell-2col">' + badge
+    + '<div class="' + salesCls + '" ' + editAttrs + '>' + salStr + '</div>'
+    + '<div class="bm-cell-proposal" ' + proClick + '>' + proStr + ind + '</div>'
+    + '</div></td>';
 }
 
 function bmRenderCategoryRow(cat) {
   const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
-  let html = `<tr class="bm-cat-row"><td class="bm-product-cell bm-cat-label">${cat.label}</td>`;
+  let html = '<tr class="bm-cat-row"><td class="bm-product-cell bm-cat-label">' + cat.label + '</td>';
   let totalNext = 0, totalSales = 0;
   for (const loc of bmServerData.locations) {
     let sumP = 0, sumS = 0;
@@ -2400,9 +2391,9 @@ function bmRenderCategoryRow(cat) {
     let cls = 'bm-cat-cell';
     if (isC) cls += ' bm-loc-confirmed';
     if (isZero) cls += ' bm-cat-cell-zero';
-    html += `<td class="${cls}"><div class="bm-cat-cell-actual">${sumS || '–'}</div><div class="bm-cat-cell-next">${sumP || '–'}</div></td>`;
+    html += '<td class="' + cls + '"><div class="bm-cat-cell-actual">' + (sumS || '–') + '</div><div class="bm-cat-cell-next">' + (sumP || '–') + '</div></td>';
   }
-  html += `<td class="bm-total-col"><div class="bm-cat-cell-actual">${totalSales}</div><div class="bm-cat-cell-next">${totalNext}</div></td></tr>`;
+  html += '<td class="bm-total-col"><div class="bm-cat-cell-actual">' + totalSales + '</div><div class="bm-cat-cell-next">' + totalNext + '</div></td></tr>';
   return html;
 }
 
@@ -2418,12 +2409,11 @@ function bmUpdateConfirmAllBtn() {
   }
 }
 function bmUpdateSubtitle() {
-  const d = BM_DAYS.find(x => x.id === bmCurrentDay);
   const el = document.getElementById('bm-subtitle');
   if (!el || !bmServerData) { if(el) el.textContent = '読み込み中...'; return; }
   const r = bmServerData.products.rice.length;
   const b = bmServerData.products.brown.length;
-  el.textContent = `${d.label}曜 / ${bmServerData.locations.length}拠点 × ${r+b}SKU`;
+  el.textContent = bmFmtDateFull(bmCurrentDate) + ' / ' + bmServerData.locations.length + '拠点 × ' + (r+b) + 'SKU';
 }
 
 // 編集ハンドラ
@@ -2447,16 +2437,15 @@ function bmOnSalesBlur(el) {
   const raw = (el.textContent || '').trim();
   const c = bmServerData.cells[pid + '_' + lid];
   if (raw === '') {
-    bmSetEdit(bmCurrentDay, pid, lid, null);
+    bmSetEdit(bmCurrentDate, pid, lid, null);
   } else {
     const v = parseInt(raw, 10);
     if (isNaN(v) || v < 0) {
-      bmSetEdit(bmCurrentDay, pid, lid, null);
+      bmSetEdit(bmCurrentDate, pid, lid, null);
     } else {
-      // 元値と同じなら編集解除
       const orig = c ? c.weekSales : 0;
-      if (v === orig) bmSetEdit(bmCurrentDay, pid, lid, null);
-      else bmSetEdit(bmCurrentDay, pid, lid, v);
+      if (v === orig) bmSetEdit(bmCurrentDate, pid, lid, null);
+      else bmSetEdit(bmCurrentDate, pid, lid, v);
     }
   }
   bmRenderMatrix();
@@ -2470,13 +2459,13 @@ function bmOpenModal(pid, lid) {
   const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
   const p = products.find(x => x.id === pid);
   const loc = bmServerData.locations.find(x => x.id === lid);
-  const d = BM_DAYS.find(x => x.id === bmCurrentDay);
   const isBrown = bmServerData.products.brown.some(b => b.id === pid);
-  const productLabel = isBrown ? `${p.name}(玄米)` : `${p.name}(白米)`;
+  const productLabel = isBrown ? p.name + '(玄米)' : p.name + '(白米)';
   const hasSO = !!c.selloutTime;
+  const dowJa = bmServerData.dowJa || '';
 
-  document.getElementById('bm-modal-title').textContent = `${productLabel} @ ${loc.name}`;
-  document.getElementById('bm-modal-subtitle').textContent = `${d.label}曜 / 翌週提案の計算内訳`;
+  document.getElementById('bm-modal-title').textContent = productLabel + ' @ ' + loc.name;
+  document.getElementById('bm-modal-subtitle').textContent = bmFmtDateLabel(bmCurrentDate) + ' / 翌週提案の計算内訳';
   const head = document.getElementById('bm-modal-head');
   head.classList.toggle('bm-has-sellout', hasSO);
 
@@ -2486,39 +2475,39 @@ function bmOpenModal(pid, lid) {
     const h = c.hist[i];
     const isSO = (i === 0 && hasSO);
     const trCls = isSO ? 'bm-is-sellout' : '';
-    const mark = isSO ? `<span class="bm-sellout-mark-inline">🔴 ${c.selloutTime}完売</span>` : '';
-    histHtml += `<tr class="${trCls}"><td class="bm-h-label">${histLabels[i]}<br><span style="font-size:7.5pt;color:#888;font-weight:normal;">${h.date}</span></td><td class="bm-h-value">${h.value}個 ${mark}</td></tr>`;
+    const mark = isSO ? '<span class="bm-sellout-mark-inline">🔴 ' + c.selloutTime + '完売</span>' : '';
+    histHtml += '<tr class="' + trCls + '"><td class="bm-h-label">' + histLabels[i] + '<br><span style="font-size:7.5pt;color:#888;font-weight:normal;">' + h.date + '</span></td><td class="bm-h-value">' + h.value + '個 ' + mark + '</td></tr>';
   }
   histHtml += '</table>';
 
   const w = bmServerData.weights;
   const wAvg = c.weightedAvg.toFixed(1);
   let calcHtml = '<div class="bm-modal-calc">';
-  calcHtml += `<div class="bm-modal-calc-row"><span class="bm-modal-calc-label">加重平均(W1:${w.w1}/W2:${w.w2}/W3:${w.w3}/W4:${w.w4})</span><span class="bm-modal-calc-value">${wAvg}個</span></div>`;
+  calcHtml += '<div class="bm-modal-calc-row"><span class="bm-modal-calc-label">加重平均(W1:' + w.w1 + '/W2:' + w.w2 + '/W3:' + w.w3 + '/W4:' + w.w4 + ')</span><span class="bm-modal-calc-value">' + wAvg + '個</span></div>';
   if (hasSO) {
-    calcHtml += `<div class="bm-modal-calc-row"><span class="bm-modal-calc-label">🔴 完売増量(${c.selloutTime})</span><span class="bm-modal-calc-value bm-bonus">+${c.selloutBonus}個</span></div>`;
+    calcHtml += '<div class="bm-modal-calc-row"><span class="bm-modal-calc-label">🔴 完売増量(' + c.selloutTime + ')</span><span class="bm-modal-calc-value bm-bonus">+' + c.selloutBonus + '個</span></div>';
   } else {
-    calcHtml += `<div class="bm-modal-calc-row" style="color:#999;"><span class="bm-modal-calc-label">完売増量</span><span class="bm-modal-calc-value">+0個</span></div>`;
+    calcHtml += '<div class="bm-modal-calc-row" style="color:#999;"><span class="bm-modal-calc-label">完売増量</span><span class="bm-modal-calc-value">+0個</span></div>';
   }
-  calcHtml += `<div class="bm-modal-calc-row bm-final ${hasSO ? 'bm-has-sellout' : ''}"><span class="bm-modal-calc-label">翌週提案</span><span class="bm-modal-calc-value bm-final-value ${hasSO ? 'bm-has-sellout' : ''}">${c.proposed}個</span></div>`;
+  calcHtml += '<div class="bm-modal-calc-row bm-final ' + (hasSO ? 'bm-has-sellout' : '') + '"><span class="bm-modal-calc-label">翌週提案</span><span class="bm-modal-calc-value bm-final-value ' + (hasSO ? 'bm-has-sellout' : '') + '">' + c.proposed + '個</span></div>';
   calcHtml += '</div>';
   if (hasSO) {
-    calcHtml += `<div class="bm-modal-note">💡 完売は<b>直近の同曜日のみ</b>翌週に加算されます。それ以前の完売は加重平均に反映済のため追加加算しません。</div>`;
+    calcHtml += '<div class="bm-modal-note">💡 完売は<b>直近の同曜日のみ</b>翌週に加算されます。それ以前の完売は加重平均に反映済のため追加加算しません。</div>';
   }
 
   let weekInfo = '';
   if (c.isFallback) {
-    weekInfo = `<div class="bm-modal-note" style="background:#eceff1;border-left-color:#90a4ae;">📅 今週${d.label}曜(${bmServerData.thisWeekDate})は<b>未計上</b>のため、参考として先週${d.label}曜の販売数(${c.hist[0].value}個)を表示しています。</div>`;
+    weekInfo = '<div class="bm-modal-note" style="background:#eceff1;border-left-color:#90a4ae;">📅 ' + bmFmtDateLabel(bmCurrentDate) + ' は<b>未計上</b>のため、参考として先週同曜の販売数(' + c.hist[0].value + '個)を表示しています。</div>';
   } else {
     const sales = bmGetDisplaySales(pid, lid);
-    const edit = bmGetEdit(bmCurrentDay, pid, lid);
+    const edit = bmGetEdit(bmCurrentDate, pid, lid);
     const tag = (edit !== null && edit !== undefined) ? '(編集中)' : '';
-    weekInfo = `<div class="bm-modal-note" style="background:#e3f2fd;border-left-color:#1976d2;">📊 今週${d.label}曜(${bmServerData.thisWeekDate})の販売数: <b>${sales}個</b>${tag}</div>`;
+    weekInfo = '<div class="bm-modal-note" style="background:#e3f2fd;border-left-color:#1976d2;">📊 ' + bmFmtDateLabel(bmCurrentDate) + ' の販売数: <b>' + sales + '個</b>' + tag + '</div>';
   }
 
   let body = weekInfo;
-  body += `<div class="bm-modal-section"><div class="bm-modal-section-title">📅 過去4週の${d.label}曜販売実績</div>${histHtml}</div>`;
-  body += `<div class="bm-modal-section"><div class="bm-modal-section-title">🧮 計算内訳</div>${calcHtml}</div>`;
+  body += '<div class="bm-modal-section"><div class="bm-modal-section-title">📅 過去4週の' + dowJa + '曜販売実績</div>' + histHtml + '</div>';
+  body += '<div class="bm-modal-section"><div class="bm-modal-section-title">🧮 計算内訳</div>' + calcHtml + '</div>';
   document.getElementById('bm-modal-body').innerHTML = body;
   document.getElementById('bm-modal-overlay').classList.add('bm-show');
 }
@@ -2528,28 +2517,63 @@ function bmCloseModal(e) {
 }
 
 // 操作
-async function bmSetDay(dayId) {
-  if (dayId === bmCurrentDay && bmServerData) return;
-  bmCurrentDay = dayId;
-  await bmLoadDay(dayId);
+async function bmSetWeek(week) {
+  if (week === bmCurrentWeek) return;
+  bmCurrentWeek = week;
+  bmRenderWeekTabs();
+  // 切り替え先の週の最初の日付（または今日に最も近い日付）を選択
+  const dates = (week === 'next') ? bmNextWeekDates : bmThisWeekDates;
+  if (!dates || dates.length === 0) {
+    bmRenderDayTabs();
+    return;
+  }
+  // this 週なら「今日」or 今日より過去の最終日 or 月曜
+  // next 週なら最初の日（月曜）
+  let target = dates[0];
+  if (week === 'this') {
+    const today = bmTodayStr();
+    if (dates.indexOf(today) >= 0) target = today;
+    else {
+      // 今日が日付配列に無いなら最も近い日（過去寄り）を選ぶ
+      for (let i = dates.length - 1; i >= 0; i--) {
+        if (dates[i] <= today) { target = dates[i]; break; }
+      }
+    }
+  }
+  await bmSetDate(target);
 }
 
-async function bmLoadDay(dayId) {
+async function bmSetDate(dateStr) {
+  if (dateStr === bmCurrentDate && bmServerData) return;
+  bmCurrentDate = dateStr;
+  // 週の自動切替
+  if (bmNextWeekDates.indexOf(dateStr) >= 0) bmCurrentWeek = 'next';
+  else if (bmThisWeekDates.indexOf(dateStr) >= 0) bmCurrentWeek = 'this';
+  await bmLoadDate(dateStr);
+}
+
+async function bmLoadDate(dateStr) {
   const wrap = document.getElementById('bm-matrix-wrap');
   wrap.innerHTML = '<div class="bm-loading">基本数マスタを読み込み中...</div>';
   document.getElementById('bm-calc-info').innerHTML = '';
-  const r = await bmFetchMatrix(dayId);
+  const r = await bmFetchMatrix(dateStr);
   if (!r.ok) {
-    wrap.innerHTML = `<div class="bm-error">取得エラー: ${bmEscape(r.error || '不明')}</div>`;
+    wrap.innerHTML = '<div class="bm-error">取得エラー: ' + bmEscape(r.error || '不明') + '</div>';
     return;
   }
   bmServerData = r;
-  bmLoadedDays.add(dayId);
+  bmLoadedDates.add(dateStr);
+  // サーバーから受け取った表示対象日付配列を保存
+  if (r.thisWeekDates) bmThisWeekDates = r.thisWeekDates;
+  if (r.nextWeekDates) bmNextWeekDates = r.nextWeekDates;
+  // 古い編集キャッシュを掃除（範囲外日付）
+  const allDates = bmThisWeekDates.concat(bmNextWeekDates);
+  bmPurgeOldEdits(allDates);
   bmRenderAll();
 }
 
 async function bmReload() {
-  await bmLoadDay(bmCurrentDay);
+  await bmLoadDate(bmCurrentDate);
 }
 
 // 確定／推奨／全拠点確定
@@ -2558,66 +2582,64 @@ async function bmConfirmLoc(lid) {
   if (bmIsLocConfirmed(lid)) {
     // 解除
     const locName = (bmServerData.locations.find(l => l.id === lid) || {}).name || lid;
-    if (!confirm(`${locName} の確定を解除しますか？\n(G列をクリアします)`)) return;
-    const r = await bmPostAction('unconfirmBasicMasterLocation', { dayId: bmCurrentDay, locId: lid });
+    if (!confirm(locName + ' の確定を解除しますか？\n(G列をクリアします)')) return;
+    const r = await bmPostAction('unconfirmBasicMasterLocation', { date: bmCurrentDate, locId: lid });
     if (!r.ok) { alert('解除失敗: ' + (r.error || '')); return; }
-    await bmLoadDay(bmCurrentDay);
+    await bmLoadDate(bmCurrentDate);
     return;
   }
   // 確定：編集値を items に集約
   const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
   const items = {};
   for (const p of products) {
-    const e = bmGetEdit(bmCurrentDay, p.id, lid);
+    const e = bmGetEdit(bmCurrentDate, p.id, lid);
     if (e !== null && e !== undefined) items[p.id] = Number(e);
   }
-  const r = await bmPostAction('confirmBasicMasterLocation', { dayId: bmCurrentDay, locId: lid, items });
+  const r = await bmPostAction('confirmBasicMasterLocation', { date: bmCurrentDate, locId: lid, items });
   if (!r.ok) { alert('確定失敗: ' + (r.error || '')); return; }
-  // 編集値クリア（G列に反映済）
-  bmClearEditsForLoc(bmCurrentDay, lid);
-  await bmLoadDay(bmCurrentDay);
+  bmClearEditsForLoc(bmCurrentDate, lid);
+  await bmLoadDate(bmCurrentDate);
 }
 
 async function bmRecommendLoc(lid) {
   if (!bmServerData) return;
   const locName = (bmServerData.locations.find(l => l.id === lid) || {}).name || lid;
-  if (!confirm(`${locName} の全商品を提案値で確定します。編集値があれば破棄されます。よろしいですか？`)) return;
-  const r = await bmPostAction('recommendBasicMasterLocation', { dayId: bmCurrentDay, locId: lid });
+  if (!confirm(locName + ' の全商品を提案値で確定します。編集値があれば破棄されます。よろしいですか？')) return;
+  const r = await bmPostAction('recommendBasicMasterLocation', { date: bmCurrentDate, locId: lid });
   if (!r.ok) { alert('推奨失敗: ' + (r.error || '')); return; }
-  bmClearEditsForLoc(bmCurrentDay, lid);
-  await bmLoadDay(bmCurrentDay);
+  bmClearEditsForLoc(bmCurrentDate, lid);
+  await bmLoadDate(bmCurrentDate);
 }
 
 async function bmConfirmAll() {
   if (!bmServerData) return;
+  const dateLabel = bmFmtDateLabel(bmCurrentDate);
   if (bmIsAllConfirmed()) {
-    if (!confirm(`${bmCurrentDay}曜の全25拠点の確定を解除しますか？\n(G列をすべてクリアします)`)) return;
-    // 全拠点の G列クリア（順次）
+    if (!confirm(dateLabel + ' の全25拠点の確定を解除しますか？\n(G列をすべてクリアします)')) return;
     for (const loc of bmServerData.locations) {
-      await bmPostAction('unconfirmBasicMasterLocation', { dayId: bmCurrentDay, locId: loc.id });
+      await bmPostAction('unconfirmBasicMasterLocation', { date: bmCurrentDate, locId: loc.id });
     }
-    bmEditsCache[bmCurrentDay] = {};
+    bmEditsCache[bmCurrentDate] = {};
     bmSaveEdits();
-    await bmLoadDay(bmCurrentDay);
+    await bmLoadDate(bmCurrentDate);
     return;
   }
-  if (!confirm(`${bmCurrentDay}曜の全25拠点を確定します。\n(編集値あれば編集値、なければ提案値をG列に保存)\nよろしいですか？`)) return;
-  // 編集値を itemsByLoc に集約
+  if (!confirm(dateLabel + ' の全25拠点を確定します。\n(編集値あれば編集値、なければ提案値をG列に保存)\nよろしいですか？')) return;
   const itemsByLoc = {};
   const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
   for (const loc of bmServerData.locations) {
     const locItems = {};
     for (const p of products) {
-      const e = bmGetEdit(bmCurrentDay, p.id, loc.id);
+      const e = bmGetEdit(bmCurrentDate, p.id, loc.id);
       if (e !== null && e !== undefined) locItems[p.id] = Number(e);
     }
     if (Object.keys(locItems).length > 0) itemsByLoc[loc.id] = locItems;
   }
-  const r = await bmPostAction('confirmBasicMasterAll', { dayId: bmCurrentDay, itemsByLoc });
+  const r = await bmPostAction('confirmBasicMasterAll', { date: bmCurrentDate, itemsByLoc });
   if (!r.ok) { alert('全拠点確定失敗: ' + (r.error || '')); return; }
-  bmEditsCache[bmCurrentDay] = {};
+  bmEditsCache[bmCurrentDate] = {};
   bmSaveEdits();
-  await bmLoadDay(bmCurrentDay);
+  await bmLoadDate(bmCurrentDate);
 }
 
 function bmEscape(s) {
@@ -2625,17 +2647,37 @@ function bmEscape(s) {
 }
 
 // 初期化（tab-master を開いた時にトリガー）
-function bmInitIfNeeded() {
+async function bmInitIfNeeded() {
   if (bmInitialized) return;
   bmInitialized = true;
   bmLoadEdits();
-  bmRenderDayTabs();
-  // 今日の曜日に自動で合わせる（土日は月曜）
-  const dow = new Date().getDay();
-  const map = { 0:'mon', 1:'mon', 2:'tue', 3:'wed', 4:'thu', 5:'fri', 6:'mon' };
-  bmCurrentDay = map[dow] || 'mon';
-  bmLoadDay(bmCurrentDay);
+  // 初期日付：今日
+  const today = bmTodayStr();
+  bmCurrentDate = today;
+  bmCurrentWeek = 'this';
+  // 初回ロード：サーバーから visibleDates を取得する
+  await bmLoadDate(today);
+  // サーバー応答後に thisWeekDates が空（今日が土日など）の場合は、可能なら月曜にフォールバック
+  if (bmServerData && bmServerData.thisWeekDates && bmServerData.thisWeekDates.length > 0) {
+    if (bmServerData.thisWeekDates.indexOf(today) < 0) {
+      // 今日が土日等で範囲外 → 今週月曜（thisWeekDates[0]）に切替
+      await bmSetDate(bmServerData.thisWeekDates[0]);
+    }
+  }
 }
+
+// タブ切替フック：master タブを開いたら初期化
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  if (btn.dataset.tab === 'master') {
+    btn.addEventListener('click', () => { bmInitIfNeeded(); });
+  }
+});
+
+// ESC でモーダル閉じる
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') bmCloseModal();
+});
+
 
 // タブ切替フック：master タブを開いたら初期化
 document.querySelectorAll('.tab-btn').forEach(btn => {
