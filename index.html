@@ -576,6 +576,48 @@ const state = {
 };
 
 // ═══════════════════════════════════════════════════════════════
+// 案B Phase-2：シフト提出 localStorage キャッシュ（v2026-05-18 B案）
+//   - 登録チェック（userName）：30日 TTL（販売員の名前は頻繁に変わらない）
+//   - 来週日付（dates）：5分 TTL
+//   - 既提出（myShift）：5分 TTL
+// ═══════════════════════════════════════════════════════════════
+const IDX_USER_CACHE_KEY    = 'oedo_index_user_cache_v1';
+const IDX_DATES_CACHE_KEY   = 'oedo_index_dates_cache_v1';
+const IDX_MYSHIFT_CACHE_KEY = 'oedo_index_myshift_cache_v1';
+const IDX_USER_TTL_MS    = 30 * 24 * 60 * 60 * 1000;  // 30日
+const IDX_DATES_TTL_MS   = 5 * 60 * 1000;             // 5分
+const IDX_MYSHIFT_TTL_MS = 5 * 60 * 1000;             // 5分
+
+function _idxLoadCache(key, ttl) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
+    if (!obj || !obj.savedAt) return null;
+    if (Date.now() - obj.savedAt > ttl) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    return obj.data || null;
+  } catch(e) {
+    console.warn('idx cache load error:', key, e);
+    return null;
+  }
+}
+function _idxSaveCache(key, data) {
+  try {
+    localStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), data: data }));
+  } catch(e) { console.warn('idx cache save error:', key, e); }
+}
+
+function loadIdxUserCache()    { return _idxLoadCache(IDX_USER_CACHE_KEY,    IDX_USER_TTL_MS); }
+function saveIdxUserCache(data){ _idxSaveCache(IDX_USER_CACHE_KEY, data); }
+function loadIdxDatesCache()   { return _idxLoadCache(IDX_DATES_CACHE_KEY,   IDX_DATES_TTL_MS); }
+function saveIdxDatesCache(data){ _idxSaveCache(IDX_DATES_CACHE_KEY, data); }
+function loadIdxMyShiftCache() { return _idxLoadCache(IDX_MYSHIFT_CACHE_KEY, IDX_MYSHIFT_TTL_MS); }
+function saveIdxMyShiftCache(data){ _idxSaveCache(IDX_MYSHIFT_CACHE_KEY, data); }
+
+// ═══════════════════════════════════════════════════════════════
 // SCREEN CONTROL
 // ═══════════════════════════════════════════════════════════════
 function showScreen(name) {
@@ -652,13 +694,42 @@ async function init() {
       state.displayName = profile.displayName || '';
     }
 
-    // 登録チェック
+    // ─────────────────────────────────────────────────────────
+    // Phase A：登録チェックキャッシュから即復元（v2026-05-18 案B Phase-2）
+    //   キャッシュの userId が一致すれば、check API待たずに日付選択画面へ
+    // ─────────────────────────────────────────────────────────
+    const cachedUser = loadIdxUserCache();
+    let prevName = null;
+    if (cachedUser && cachedUser.userId === state.userId && cachedUser.name) {
+      state.userName = cachedUser.name;
+      prevName = cachedUser.name;
+      // 登録済として日付選択画面へ即進行（内部でさらにdates/myShiftキャッシュチェック）
+      loadDatesAndShowSelect();
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // Phase B：登録チェックAPIをバックグラウンド実行（差分検出）
+    // ─────────────────────────────────────────────────────────
     const checkRes = await apiGet({ action: 'check', userId: state.userId });
     if (checkRes.status === 'ok' && checkRes.name) {
       state.userName = checkRes.name;
-      await loadDatesAndShowSelect();
+      saveIdxUserCache({ userId: state.userId, name: checkRes.name });
+
+      if (prevName === null) {
+        // キャッシュなし：通常通り日付画面へ
+        await loadDatesAndShowSelect();
+      } else if (prevName !== checkRes.name) {
+        // キャッシュと違う＝管理側で名前変更があった。silent反映。
+        console.log('[案B] 登録名変更検出（旧 ' + prevName + ' → 新 ' + checkRes.name + '）');
+      }
     } else {
-      // 未登録 → 登録画面へ
+      // 未登録
+      if (prevName !== null) {
+        // キャッシュは登録済だがサーバーは未登録 → 削除済の可能性
+        localStorage.removeItem(IDX_USER_CACHE_KEY);
+        localStorage.removeItem(IDX_DATES_CACHE_KEY);
+        localStorage.removeItem(IDX_MYSHIFT_CACHE_KEY);
+      }
       document.getElementById('register-name').value = state.displayName || '';
       showScreen('register');
     }
@@ -688,6 +759,7 @@ document.getElementById('btn-register').addEventListener('click', async () => {
     const res = await apiGet({ action: 'register', userId: state.userId, name });
     if (res.status === 'error') throw new Error(res.message || '登録に失敗しました');
     state.userName = name;
+    saveIdxUserCache({ userId: state.userId, name: name });
     toast('登録しました');
     setTimeout(async () => {
       await loadDatesAndShowSelect();
@@ -703,35 +775,109 @@ document.getElementById('btn-register').addEventListener('click', async () => {
 // 日付取得 & 既提出チェック
 // ═══════════════════════════════════════════════════════════════
 async function loadDatesAndShowSelect() {
-  showScreen('loading');
+  // ─────────────────────────────────────────────────────────
+  // Phase A：localStorage キャッシュから先描画
+  // ─────────────────────────────────────────────────────────
+  const cachedDates   = loadIdxDatesCache();
+  const cachedMyShift = loadIdxMyShiftCache();
+  let renderedFromCache = false;
+  let prevSnapshot = null;
+
+  if (cachedDates && Array.isArray(cachedDates.dates) && cachedDates.dates.length > 0) {
+    state.dates = cachedDates.dates.map(label => ({ label, selected: false }));
+    let submittedFromCache = [];
+    if (cachedMyShift && cachedMyShift.userId === state.userId &&
+        Array.isArray(cachedMyShift.dates) && cachedMyShift.dates.length > 0) {
+      state.alreadySubmitted = true;
+      submittedFromCache = cachedMyShift.dates;
+      const submittedSet = new Set(cachedMyShift.dates.map(s => String(s).trim()));
+      state.dates.forEach(d => {
+        if (submittedSet.has(d.label)) d.selected = true;
+      });
+    } else {
+      state.alreadySubmitted = false;
+    }
+    try {
+      renderSelectScreen();
+      showScreen('select');
+      renderedFromCache = true;
+      prevSnapshot = {
+        datesJson:     JSON.stringify(cachedDates.dates),
+        submittedJson: JSON.stringify(submittedFromCache),
+      };
+    } catch(e) { console.warn('cache render error:', e); }
+  }
+
+  if (!renderedFromCache) {
+    showScreen('loading');
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // Phase B：API取得（dates → myShift の逐次・getMyShiftはdatesに依存しない）
+  // ─────────────────────────────────────────────────────────
   try {
-    // 来週の平日を取得（GASのデフォルトGET）
-    const res = await apiGet({});
-    const dates = res.dates || [];
+    // 来週の平日と既提出を並列取得
+    const [datesRes, myRes] = await Promise.all([
+      apiGet({}),
+      apiGet({ action: 'getMyShift', userId: state.userId }).catch(e => {
+        console.warn('getMyShift 未対応もしくはエラー:', e.message);
+        return null;
+      }),
+    ]);
+
+    const dates = (datesRes && datesRes.dates) || [];
     if (dates.length === 0) {
+      if (renderedFromCache) {
+        // キャッシュ表示中にAPIエラー → 既存表示を維持
+        console.warn('日程取得失敗（キャッシュ表示維持）');
+        return;
+      }
       showError('来週の日程を取得できませんでした。');
       return;
     }
     state.dates = dates.map(label => ({ label, selected: false }));
 
-    // 既提出チェック（API: getMyShift）
-    try {
-      const myRes = await apiGet({ action: 'getMyShift', userId: state.userId });
-      if (myRes && myRes.status === 'ok' && Array.isArray(myRes.dates) && myRes.dates.length > 0) {
-        state.alreadySubmitted = true;
-        const submittedSet = new Set(myRes.dates.map(s => String(s).trim()));
-        state.dates.forEach(d => {
-          if (submittedSet.has(d.label)) d.selected = true;
-        });
-      }
-    } catch (e) {
-      // getMyShift がGAS未実装でも続行（新規提出として扱う）
-      console.warn('getMyShift 未対応もしくはエラー:', e.message);
+    let myShiftDates = [];
+    if (myRes && myRes.status === 'ok' && Array.isArray(myRes.dates) && myRes.dates.length > 0) {
+      state.alreadySubmitted = true;
+      myShiftDates = myRes.dates;
+      const submittedSet = new Set(myRes.dates.map(s => String(s).trim()));
+      state.dates.forEach(d => {
+        if (submittedSet.has(d.label)) d.selected = true;
+      });
+    } else {
+      state.alreadySubmitted = false;
     }
 
-    renderSelectScreen();
-    showScreen('select');
+    // キャッシュ保存
+    saveIdxDatesCache({ dates: dates });
+    saveIdxMyShiftCache({ userId: state.userId, dates: myShiftDates });
+
+    // ─────────────────────────────────────────────────────────
+    // Phase C：差分検出して silent 再描画（先描画していた場合のみ）
+    // ─────────────────────────────────────────────────────────
+    if (renderedFromCache && prevSnapshot) {
+      const newSnapshot = {
+        datesJson:     JSON.stringify(dates),
+        submittedJson: JSON.stringify(myShiftDates),
+      };
+      const changed = (
+        prevSnapshot.datesJson     !== newSnapshot.datesJson ||
+        prevSnapshot.submittedJson !== newSnapshot.submittedJson
+      );
+      if (changed) {
+        console.log('[案B] index 差分検出 → 再描画');
+        renderSelectScreen();
+      }
+    } else {
+      renderSelectScreen();
+      showScreen('select');
+    }
   } catch (e) {
+    if (renderedFromCache) {
+      console.warn('loadDates error (cache fallback):', e);
+      return;
+    }
     showError(`日程取得エラー：${e.message}`);
   }
 }
@@ -841,6 +987,9 @@ async function submitShift() {
       dates: selected,
     });
     if (res.status === 'error') throw new Error(res.message || '送信に失敗しました');
+
+    // myShiftキャッシュも更新（次回起動時の整合）
+    saveIdxMyShiftCache({ userId: state.userId, dates: selected });
 
     // 完了画面
     const completeDates = document.getElementById('complete-dates');
