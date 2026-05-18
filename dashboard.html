@@ -2055,7 +2055,21 @@ function renderRealtime() {
     renderDailySummary(reported);
   }
 
-  renderRanking(reported);
+  // ─────────────────────────────────────────────────────────
+  // ランキング対象（v2026-05-18 修正）
+  //   最終報告 + 中間販売中で完売率が数値のものを含める
+  //   （販売中の進捗もベスト/ワーストに反映するため）
+  // ─────────────────────────────────────────────────────────
+  const rankingTargets = allData.filter(r => {
+    if (!r) return false;
+    if (r.reported) return true;                    // 最終報告
+    if (r.isIntermediate) {
+      const rateNum = Number(r.sellRate);
+      return !isNaN(rateNum) && r.sellRate !== '—'; // 中間販売中で完売率が数値
+    }
+    return false;
+  });
+  renderRanking(rankingTargets);
   renderLocationTable();
 
   document.getElementById('reported-count').textContent = `${reported.length}/${totalLocs}拠点 報告済み`;
