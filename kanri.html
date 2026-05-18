@@ -175,6 +175,26 @@ body {
   text-align: left; padding-left: 8px;
   height: 16px; line-height: 16px;
 }
+.matrix-table td.cell-section-cat {
+  background: #1565c0; color: white;
+  font-weight: bold; font-size: 8pt;
+  text-align: left; padding-left: 8px;
+  height: 16px; line-height: 16px;
+}
+/* カテゴリー合計行：カテゴリー色の行背景 */
+.matrix-table tr.cat-blue   td.cell-data,
+.matrix-table tr.cat-blue   td.cell-sub,
+.matrix-table tr.cat-blue   td.cell-tot { background: #bbdefb; }
+.matrix-table tr.cat-green  td.cell-data,
+.matrix-table tr.cat-green  td.cell-sub,
+.matrix-table tr.cat-green  td.cell-tot { background: #c8e6c9; }
+.matrix-table tr.cat-yellow td.cell-data,
+.matrix-table tr.cat-yellow td.cell-sub,
+.matrix-table tr.cat-yellow td.cell-tot { background: #fff59d; }
+.matrix-table tr.cat-gray   td.cell-data,
+.matrix-table tr.cat-gray   td.cell-sub,
+.matrix-table tr.cat-gray   td.cell-tot { background: #e0e0e0; }
+.matrix-table tr.cat-row td.cell-name { font-weight: bold; padding-left: 6px; }
 
 /* 商品グループ色（白米） */
 .matrix-table tr.g-blue  td.cell-data { background: #e3f2fd; }
@@ -695,6 +715,12 @@ body {
   #tab-sheet1 .ref-table td {
     height: 14px;
     line-height: 14px;
+  }
+  /* カテゴリー合計セクション見出し（印刷時の高さ調整） */
+  #tab-sheet1 .matrix-table td.cell-section-cat {
+    height: 18px;
+    line-height: 18px;
+    font-size: 9pt;
   }
 
   /* ════════ シート2：縦用紙上で横長に回転（A案） ════════ */
@@ -1469,9 +1495,70 @@ function renderSheet1(data) {
     return html;
   }
 
+  // ▼ カテゴリー別合計ブロック（白米＋玄米 合算・マトリクス末尾）
+  function buildCategoryTotalsHTML(rice, brown, locIds, subtotalSplit) {
+    const allRows = [].concat(rice || [], brown || []);
+    if (allRows.length === 0) return '';
+
+    // 集計
+    const totals = {};  // { [category]: { byLocation:{}, subtotal, total } }
+    allRows.forEach(row => {
+      if (!row.total) return;
+      const cat = row.category || 'その他';
+      if (!totals[cat]) {
+        totals[cat] = { byLocation: {}, subtotal: 0, total: 0 };
+        locIds.forEach(lid => { totals[cat].byLocation[lid] = 0; });
+      }
+      locIds.forEach(lid => {
+        totals[cat].byLocation[lid] += Number(row.byLocation[lid] || 0);
+      });
+      totals[cat].subtotal += Number(row.subtotal || 0);
+      totals[cat].total    += Number(row.total    || 0);
+    });
+
+    const presentCats = Object.keys(totals);
+    if (presentCats.length === 0) return '';
+
+    // 表示順：定義順 → その他
+    const order = ['海苔弁系', '満腹系', '全六', '他社商品', '全'];
+    const orderedCats = order.filter(c => presentCats.indexOf(c) >= 0)
+      .concat(presentCats.filter(c => order.indexOf(c) < 0));
+
+    // カテゴリー → 行クラス
+    function catRowClass(cat) {
+      const c = CATEGORY_COLOR[cat];
+      if (c === 'blue')   return 'cat-row cat-blue';
+      if (c === 'green')  return 'cat-row cat-green';
+      if (c === 'yellow') return 'cat-row cat-yellow';
+      return 'cat-row cat-gray';
+    }
+
+    const colspan = 1 + locIds.length + 1 + 1;
+    let html = '';
+    html += `<tr><td colspan="${colspan}" class="cell-section-cat">▼ カテゴリー別合計（白米＋玄米）</td></tr>`;
+
+    orderedCats.forEach(cat => {
+      const data = totals[cat];
+      html += `<tr class="${catRowClass(cat)}">`;
+      html += `<td class="cell-name">${escHtml(cat)}</td>`;
+      locIds.forEach((lid, idx) => {
+        if (idx === subtotalSplit) {
+          html += `<td class="cell-sub">${data.subtotal || ''}</td>`;
+        }
+        const q = data.byLocation[lid];
+        html += `<td class="cell-data">${q ? q : ''}</td>`;
+      });
+      html += `<td class="cell-tot">${data.total || ''}</td>`;
+      html += '</tr>';
+    });
+
+    return html;
+  }
+
   const tableHTML = '<table class="matrix-table">'
     + buildTableHTML(rice,  false)
     + buildTableHTML(brown, true)
+    + buildCategoryTotalsHTML(rice, brown, locIds, subtotalSplit)
     + '</table>';
 
   let refHTML = '<table class="ref-table">'
