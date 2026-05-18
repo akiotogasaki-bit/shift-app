@@ -1025,7 +1025,7 @@ body {
   <button class="tab-btn" data-tab="sheet3">🚚 午後便盛り出し</button>
   <button class="tab-btn" data-tab="sheet4">🍳 仕込み</button>
   <button class="tab-btn" data-tab="order">📋 発注</button>
-  <button class="tab-btn" data-tab="master">📐 基本数マスタ</button>
+  <button class="tab-btn" data-tab="master">📐 配分調整</button>
   <button class="tab-btn" disabled data-tab="settings">設定 <small>準備中</small></button>
 </div>
 
@@ -1104,13 +1104,13 @@ body {
   <div class="bm-page">
     <div class="bm-title-bar">
       <div class="bm-title-left">
-        <div class="bm-title">📐 基本数マスタ</div>
+        <div class="bm-title">📐 配分調整</div>
         <div class="bm-subtitle" id="bm-subtitle">読み込み中...</div>
       </div>
       <div class="bm-title-right">
         <div class="bm-week-tabs" id="bm-week-tabs">
-          <button class="bm-week-tab bm-active" data-week="this" onclick="bmSetWeek('this')">今週</button>
-          <button class="bm-week-tab" data-week="next" onclick="bmSetWeek('next')">翌週</button>
+          <button class="bm-week-tab bm-active" data-week="this" onclick="bmSetWeek('this')">今週配分</button>
+          <button class="bm-week-tab" data-week="next" onclick="bmSetWeek('next')">翌週配分</button>
         </div>
         <div class="bm-day-tabs" id="bm-day-tabs"></div>
         <div class="bm-legend">
@@ -1126,7 +1126,7 @@ body {
     </div>
     <div class="bm-calc-info" id="bm-calc-info"></div>
     <div id="bm-matrix-wrap">
-      <div class="bm-loading">基本数マスタを読み込み中...</div>
+      <div class="bm-loading">配分調整を読み込み中...</div>
     </div>
   </div>
 </div>
@@ -2554,7 +2554,7 @@ async function bmSetDate(dateStr) {
 
 async function bmLoadDate(dateStr) {
   const wrap = document.getElementById('bm-matrix-wrap');
-  wrap.innerHTML = '<div class="bm-loading">基本数マスタを読み込み中...</div>';
+  wrap.innerHTML = '<div class="bm-loading">配分調整を読み込み中...</div>';
   document.getElementById('bm-calc-info').innerHTML = '';
   const r = await bmFetchMatrix(dateStr);
   if (!r.ok) {
