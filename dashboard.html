@@ -1459,6 +1459,43 @@ font-family: inherit;
   color: var(--ink-soft);
   margin-bottom: 16px;
 }
+  .profit-day-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 3px 4px;
+}
+.profit-day-nav-btn {
+  background: transparent;
+  border: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  font-size: 14px;
+  cursor: pointer;
+  color: var(--ink-soft);
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.profit-day-nav-btn:hover { background: var(--cream); }
+.profit-day-nav-btn:disabled { opacity: .3; cursor: not-allowed; }
+.profit-day-input {
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--ink);
+  text-align: center;
+  padding: 4px 2px;
+  min-width: 130px;
+  cursor: pointer;
+}
+.profit-day-input:focus { outline: none; }
 </style>
 
 </head>
@@ -1673,14 +1710,13 @@ font-family: inherit;
  
   <!-- 期間切替 -->
   <div class="profit-period-selector">
-    <button class="profit-period-btn active" data-period="today" onclick="selectProfitPeriod('today', this)">当日</button>
+    <div class="profit-day-nav" id="profit-day-nav">
+      <button class="profit-day-nav-btn" onclick="shiftProfitDay(-1)" title="前日">◀</button>
+      <input type="date" id="profit-date-input" class="profit-day-input" onchange="onProfitDateChange(this.value)">
+      <button class="profit-day-nav-btn" onclick="shiftProfitDay(1)" title="翌日">▶</button>
+    </div>
     <button class="profit-period-btn" data-period="1w"    onclick="selectProfitPeriod('1w', this)">1週</button>
     <button class="profit-period-btn" data-period="month" onclick="selectProfitPeriod('month', this)">1ヶ月</button>
-  </div>
- 
-  <div class="loading-wrap" id="profit-loading" style="display:none;">
-    <div class="loader"></div>
-    <p>集計中...</p>
   </div>
  
   <div id="profit-content"></div>
@@ -3756,17 +3792,41 @@ document.getElementById('memo-complete-modal').addEventListener('click', functio
 // ═══════════════════════════════════════════════════════════════
 // 粗利タブ
 // ═══════════════════════════════════════════════════════════════
-let _profitCurrentPeriod = 'today';
-let _profitCurrentSort   = 'id';      // 'id' or 'profit'
-let _profitData          = null;      // 直近取得データ
+let _profitCurrentPeriod = 'day';                    // 'day' / '1w' / 'month'
+let _profitCurrentDate   = todayDateStr();           // 'YYYY-MM-DD' （periodが'day'時に使用）
+let _profitCurrentSort   = 'id';                     // 'id' or 'profit'
+let _profitData          = null;                     // 直近取得データ
+let _profitInitialized   = false;                    // 初期化済みフラグ
+ 
+function todayDateStr() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dd}`;
+}
+ 
+function initProfitTab() {
+  if (_profitInitialized) return;
+  _profitInitialized = true;
+  const input = document.getElementById('profit-date-input');
+  if (input) {
+    input.value = _profitCurrentDate;
+    input.max = todayDateStr();  // 未来日は選べないように
+  }
+}
  
 async function loadProfit() {
+  initProfitTab();
   const loadingEl = document.getElementById('profit-loading');
   const contentEl = document.getElementById('profit-content');
   loadingEl.style.display = 'block';
   contentEl.innerHTML = '';
   try {
-    const url = `${GAS_URL}?action=getProfitData&period=${encodeURIComponent(_profitCurrentPeriod)}`;
+    let url = `${GAS_URL}?action=getProfitData&period=${encodeURIComponent(_profitCurrentPeriod)}`;
+    if (_profitCurrentPeriod === 'day') {
+      url += `&date=${encodeURIComponent(_profitCurrentDate)}`;
+    }
     const res = await fetchJSON(url);
     if (!res || !res.success) {
       contentEl.innerHTML = `<p style="color:var(--red);font-size:13px;">取得エラー：${(res && res.error) || '不明'}</p>`;
@@ -3775,6 +3835,7 @@ async function loadProfit() {
     }
     _profitData = res;
     renderProfit();
+    updateProfitDayNavState();
   } catch (e) {
     contentEl.innerHTML = `<p style="color:var(--red);font-size:13px;">通信エラー：${e.message}</p>`;
   }
@@ -3783,9 +3844,54 @@ async function loadProfit() {
  
 function selectProfitPeriod(period, btn) {
   _profitCurrentPeriod = period;
+  // 1w / month ボタンの active 切替
   document.querySelectorAll('.profit-period-btn').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
+  // 日付ナビの active 切替
+  const dayNav = document.getElementById('profit-day-nav');
+  if (dayNav) dayNav.classList.remove('active');
   loadProfit();
+}
+ 
+function onProfitDateChange(dateStr) {
+  if (!dateStr) return;
+  _profitCurrentPeriod = 'day';
+  _profitCurrentDate = dateStr;
+  // ボタンのactive状態を更新
+  document.querySelectorAll('.profit-period-btn').forEach(b => b.classList.remove('active'));
+  const dayNav = document.getElementById('profit-day-nav');
+  if (dayNav) dayNav.classList.add('active');
+  loadProfit();
+}
+ 
+function shiftProfitDay(delta) {
+  // delta: -1 で前日、+1 で翌日
+  const cur = new Date(_profitCurrentDate + 'T00:00:00');
+  cur.setDate(cur.getDate() + delta);
+  const y = cur.getFullYear();
+  const m = String(cur.getMonth() + 1).padStart(2, '0');
+  const dd = String(cur.getDate()).padStart(2, '0');
+  const newDate = `${y}-${m}-${dd}`;
+  // 未来日チェック
+  if (newDate > todayDateStr()) return;
+  _profitCurrentDate = newDate;
+  const input = document.getElementById('profit-date-input');
+  if (input) input.value = newDate;
+  onProfitDateChange(newDate);
+}
+ 
+function updateProfitDayNavState() {
+  // 翌日ボタンを今日以降で無効化
+  const navBtns = document.querySelectorAll('#profit-day-nav .profit-day-nav-btn');
+  if (navBtns.length >= 2) {
+    const nextBtn = navBtns[1];
+    nextBtn.disabled = (_profitCurrentDate >= todayDateStr());
+  }
+}
+ 
+function selectProfitSort(sort) {
+  _profitCurrentSort = sort;
+  renderProfit();
 }
  
 function selectProfitSort(sort) {
@@ -3818,7 +3924,11 @@ function renderProfit() {
  
   const summaryHtml = `
     <div class="profit-summary">
-      <div class="profit-summary-title">期間合計（${escapeHtml(data.dateRange.start)} 〜 ${escapeHtml(data.dateRange.end)})</div>
+      <div class="profit-summary-title">${
+        data.period === 'day' || data.period === 'today'
+          ? escapeHtml(data.dateRange.start) + ' の合計'
+          : '期間合計（' + escapeHtml(data.dateRange.start) + ' 〜 ' + escapeHtml(data.dateRange.end) + '）'
+      }</div>
       <div class="profit-summary-grid">
         <div class="profit-summary-item">
           <div class="label">売上</div>
