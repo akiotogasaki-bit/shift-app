@@ -1950,10 +1950,25 @@ function closeApp() {
 // ─────────────────────────────────────
 // DELIVERY
 // ─────────────────────────────────────
-let deliveryDates    = [];
+llet deliveryDates    = [];
 let selectedDelivery = '';
 const deliveryCache  = {};
-
+ 
+// 住所をGoogleマップで開く（LIFFブラウザ内では外部アプリ起動）
+function openMapByEncoded(encodedAddr) {
+  if (!encodedAddr) return;
+  const url = 'https://www.google.com/maps/search/?api=1&query=' + encodedAddr;
+  try {
+    if (typeof liff !== 'undefined' && liff.openWindow) {
+      liff.openWindow({ url: url, external: true });
+    } else {
+      window.open(url, '_blank');
+    }
+  } catch(e) {
+    window.open(url, '_blank');
+  }
+}
+ 
 async function initDelivery() {
   const loadingEl = document.getElementById('dv-loading');
   const contentEl = document.getElementById('dv-content');
@@ -2036,8 +2051,18 @@ function renderDeliveryOrders(orders, date) {
 
     var hdr = document.createElement('div');
     hdr.style.cssText = 'background:#1A3C5E;color:white;padding:10px 14px;';
+    var hasAddr = o.address && String(o.address).trim() !== '';
+    var encAddr = hasAddr ? encodeURIComponent(o.address) : '';
+    var mapBtn  = hasAddr
+      ? '<button onclick="openMapByEncoded(\'' + encAddr + '\')" style="background:rgba(255,255,255,0.25);border:none;color:white;padding:3px 9px;border-radius:8px;font-size:11px;font-family:inherit;cursor:pointer;flex-shrink:0;line-height:1.4;" aria-label="Googleマップで開く">🗺 マップ</button>'
+      : '';
+    var hasAddr = o.address && String(o.address).trim() !== '';
+    var encAddr = hasAddr ? encodeURIComponent(o.address) : '';
+    var mapBtn  = hasAddr
+      ? '<button onclick="openMapByEncoded(\'' + encAddr + '\')" style="background:rgba(255,255,255,0.25);border:none;color:white;padding:3px 9px;border-radius:8px;font-size:11px;font-family:inherit;cursor:pointer;flex-shrink:0;line-height:1.4;" aria-label="Googleマップで開く">🗺 マップ</button>'
+      : '';
     hdr.innerHTML = '<div style="font-size:13px;font-weight:bold;margin-bottom:2px;">' + (o.time || '時間未定') + '</div>'
-      + '<div style="font-size:12px;opacity:0.85;">' + (o.address || '住所未定') + '</div>'
+      + '<div style="font-size:12px;opacity:0.85;display:flex;align-items:center;gap:8px;"><span style="flex:1;min-width:0;">' + (o.address || '住所未定') + '</span>' + mapBtn + '</div>'
       + '<div style="font-size:10px;opacity:0.6;margin-top:2px;">' + (o.orderNo || '') + '</div>';
     card.appendChild(hdr);
 
