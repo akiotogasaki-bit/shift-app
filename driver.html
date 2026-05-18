@@ -566,7 +566,7 @@ const GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5A
 
 const STORAGE_KEY_REMINDERS = 'oedo_driver_reminders';
 const SELF_ACTION_GRACE_MS = 5000;       // 自操作後5秒はサーバー同期を抑制（A3）
-const DRIVER_STATE_POLL_MS = 30000;      // 30秒間隔ポーリング（A3）
+const DRIVER_STATE_POLL_MS = 10000;      // 10秒間隔ポーリング（A3）
 
 const state = {
   userId: '',
@@ -586,15 +586,15 @@ const state = {
 // 案B Phase-2：ドライバー localStorage キャッシュ（v2026-05-18 C案フル）
 //   - マスタ（locations/products）：24h TTL
 //   - 拠点別レポート状況（reportsByLoc）：5分 TTL
-//   - 回収・休止状態（collected/inactive）：30秒 TTL（ポーリング間隔と整合）
-//   - 起動時のみキャッシュから先描画。30秒ポーリング・自操作時にキャッシュ更新
+//   - 回収・休止状態（collected/inactive）：10秒 TTL（ポーリング間隔と整合）
+//   - 起動時のみキャッシュから先描画。10秒ポーリング・自操作時にキャッシュ更新
 // ═══════════════════════════════════════════════════════════════
 const DRV_MASTER_CACHE_KEY      = 'oedo_driver_master_cache_v1';
 const DRV_REPORTS_CACHE_KEY     = 'oedo_driver_reports_cache_v1';
 const DRV_DRIVERSTATE_CACHE_KEY = 'oedo_driver_drvstate_cache_v1';
 const DRV_MASTER_TTL_MS      = 24 * 60 * 60 * 1000;  // 24時間
 const DRV_REPORTS_TTL_MS     = 5 * 60 * 1000;        // 5分
-const DRV_DRIVERSTATE_TTL_MS = 30 * 1000;            // 30秒
+const DRV_DRIVERSTATE_TTL_MS = 10 * 1000;            // 10秒
 
 function _drvLoadCache(key, ttl) {
   try {
@@ -806,7 +806,7 @@ async function init() {
       showScreen('main');
     }
 
-    // ★ A3：ドライバー状態の常時ポーリング開始（30秒）
+    // ★ A3：ドライバー状態の常時ポーリング開始（10秒）
     startDriverStateTimer();
 
   } catch (e) {
@@ -847,7 +847,7 @@ async function syncDriverState() {
       changed = true;
     }
     if (changed) renderCollectionList();
-    // ポーリング成功時は常にキャッシュ更新（30秒以内の鮮度を保つ）
+    // ポーリング成功時は常にキャッシュ更新（10秒以内の鮮度を保つ）
     persistDrvDriverStateFromState();
   } catch(e) {
     console.warn('syncDriverState error:', e);
