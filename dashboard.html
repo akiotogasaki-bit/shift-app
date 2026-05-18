@@ -1718,6 +1718,10 @@ font-family: inherit;
     <button class="profit-period-btn" data-period="1w"    onclick="selectProfitPeriod('1w', this)">1週</button>
     <button class="profit-period-btn" data-period="month" onclick="selectProfitPeriod('month', this)">1ヶ月</button>
   </div>
+  <div class="loading-wrap" id="profit-loading" style="display:none;">    <!-- ★ここを追加 -->
+    <div class="loader"></div>                                            <!-- ★ -->
+    <p>集計中...</p>                                                      <!-- ★ -->
+  </div>    
  
   <div id="profit-content"></div>
 </div>
