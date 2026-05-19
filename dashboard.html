@@ -7,7 +7,4118 @@
 <title>お江戸弁当 社員ダッシュボード</title>
 <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
+:root {<!DOCTYPE html>
+
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>お江戸弁当 社員ダッシュボード</title>
+<script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<style>
 :root {
+  --red: #C0392B;
+  --red-dark: #922B21;
+  --gold: #B8860B;
+  --gold-light: #F9F0D0;
+  --ink: #1C1C1C;
+  --ink-soft: #4A4A4A;
+  --ink-mute: #8A8A8A;
+  --cream: #FDF8F0;
+  --cream-dark: #F0E8D8;
+  --white: #FFFFFF;
+  --border: #E0D5C5;
+  --green: #27AE60;
+  --green-light: #D5F5E3;
+  --orange: #E67E22;
+  --blue: #2980B9;
+  --blue-light: #D6EAF8;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', sans-serif;
+background: var(--cream);
+color: var(--ink);
+min-height: 100vh;
+}
+
+/* ── HEADER ── */
+.header {
+background: var(--red);
+color: var(--white);
+padding: 16px 20px;
+display: flex;
+align-items: center;
+justify-content: space-between;
+position: sticky;
+top: 0;
+z-index: 100;
+box-shadow: 0 2px 12px rgba(0,0,0,.2);
+}
+.header-left h1 { font-size: 18px; font-weight: 700; letter-spacing: .05em; }
+.header-left p { font-size: 11px; opacity: .75; margin-top: 2px; }
+.header-right { display: flex; align-items: center; gap: 12px; }
+.update-time { font-size: 11px; opacity: .7; }
+.refresh-btn {
+background: rgba(255,255,255,.2);
+border: 1px solid rgba(255,255,255,.3);
+color: #FFF;
+padding: 6px 14px;
+border-radius: 20px;
+font-size: 12px;
+cursor: pointer;
+font-family: inherit;
+}
+.refresh-btn:hover { background: rgba(255,255,255,.3); }
+
+/* ── NAV TABS ── */
+.nav-tabs {
+background: var(--white);
+border-bottom: 1px solid var(--border);
+display: flex;
+overflow-x: auto;
+-webkit-overflow-scrolling: touch;
+scrollbar-width: none;
+}
+.nav-tabs::-webkit-scrollbar { display: none; }
+.tab-btn {
+padding: 12px 20px;
+font-size: 13px;
+font-weight: 500;
+color: var(--ink-mute);
+border: none;
+background: none;
+cursor: pointer;
+white-space: nowrap;
+border-bottom: 3px solid transparent;
+font-family: inherit;
+transition: all .15s;
+position: relative;
+}
+.tab-btn.active { color: var(--red); border-bottom-color: var(--red); font-weight: 700; }
+.tab-btn .badge {
+display: inline-block;
+background: var(--red);
+color: #FFF;
+font-size: 10px;
+font-weight: 700;
+min-width: 18px;
+height: 18px;
+line-height: 18px;
+padding: 0 5px;
+border-radius: 9px;
+margin-left: 6px;
+vertical-align: middle;
+}
+.tab-btn.active .badge { background: var(--gold); }
+
+/* ── CONTENT ── */
+.content { padding: 16px; max-width: 900px; margin: 0 auto; }
+
+/* ── TAB PANELS ── */
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* ── KPI ROW ── */
+.kpi-grid {
+display: grid;
+grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+gap: 12px;
+margin-bottom: 20px;
+}
+.kpi-card {
+background: var(--white);
+border: 1px solid var(--border);
+border-radius: 12px;
+padding: 16px;
+text-align: center;
+position: relative;
+overflow: hidden;
+}
+.kpi-card::before {
+content: '';
+position: absolute;
+top: 0; left: 0; right: 0;
+height: 3px;
+}
+.kpi-card.red::before { background: var(--red); }
+.kpi-card.gold::before { background: var(--gold); }
+.kpi-card.green::before { background: var(--green); }
+.kpi-card.blue::before { background: var(--blue); }
+.kpi-label { font-size: 11px; color: var(--ink-mute); letter-spacing: .08em; margin-bottom: 6px; }
+.kpi-value { font-size: 24px; font-weight: 700; color: var(--ink); line-height: 1; }
+.kpi-value span { font-size: 13px; font-weight: 400; color: var(--ink-mute); }
+.kpi-sub { font-size: 11px; color: var(--ink-mute); margin-top: 4px; }
+
+/* ── SECTION TITLE ── */
+.section-title {
+font-size: 12px;
+font-weight: 700;
+color: var(--ink-mute);
+letter-spacing: .1em;
+margin-bottom: 10px;
+display: flex;
+align-items: center;
+gap: 8px;
+}
+.section-title::after {
+content: '';
+flex: 1;
+height: 1px;
+background: var(--border);
+}
+
+/* ── RANKING CARDS ── */
+.rank-grid {
+display: grid;
+grid-template-columns: 1fr 1fr;
+gap: 12px;
+margin-bottom: 20px;
+}
+@media(max-width: 480px) { .rank-grid { grid-template-columns: 1fr; } }
+
+.rank-card {
+background: var(--white);
+border: 1px solid var(--border);
+border-radius: 12px;
+overflow: hidden;
+}
+.rank-card-header {
+padding: 10px 14px;
+font-size: 12px;
+font-weight: 700;
+letter-spacing: .05em;
+}
+.rank-card-header.best { background: var(--green-light); color: #1A7A42; }
+.rank-card-header.worst { background: #FDEDEC; color: var(--red-dark); }
+.rank-item {
+display: flex;
+align-items: center;
+padding: 10px 14px;
+border-bottom: 1px solid #F5F0E8;
+cursor: pointer;
+transition: background .1s;
+}
+.rank-item:last-child { border-bottom: none; }
+.rank-item:hover { background: var(--cream); }
+.rank-num {
+width: 24px;
+height: 24px;
+border-radius: 50%;
+display: flex;
+align-items: center;
+justify-content: center;
+font-size: 12px;
+font-weight: 700;
+margin-right: 10px;
+flex-shrink: 0;
+}
+.rank-num.gold { background: #FFF0B3; color: #7D6500; }
+.rank-num.silver { background: #F0F0F0; color: #555; }
+.rank-num.bronze { background: #FFE8D6; color: #8B4513; }
+.rank-num.bad { background: #FDEDEC; color: var(--red); }
+.rank-name { font-size: 14px; flex: 1; }
+.rank-staff { font-size: 11px; color: var(--ink-mute); }
+.rank-rate {
+font-size: 16px;
+font-weight: 700;
+min-width: 50px;
+text-align: right;
+}
+.rank-rate.high { color: var(--green); }
+.rank-rate.low { color: var(--red); }
+.rate-bar-wrap { width: 60px; height: 4px; background: #EEE; border-radius: 2px; margin-left: 8px; }
+.rate-bar { height: 100%; border-radius: 2px; }
+.rate-bar.high { background: var(--green); }
+.rate-bar.low { background: var(--red); }
+
+/* ── FULL LIST ── */
+.list-controls {
+display: flex;
+align-items: center;
+justify-content: space-between;
+margin-bottom: 10px;
+}
+.sort-btns { display: flex; gap: 6px; }
+.sort-btn {
+padding: 5px 12px;
+border-radius: 20px;
+border: 1px solid var(--border);
+background: var(--white);
+font-size: 12px;
+cursor: pointer;
+font-family: inherit;
+color: var(--ink-soft);
+}
+.sort-btn.active { background: var(--red); color: #FFF; border-color: var(--red); }
+
+.location-table {
+width: 100%;
+border-collapse: collapse;
+background: var(--white);
+border: 1px solid var(--border);
+border-radius: 12px;
+overflow: hidden;
+font-size: 13px;
+}
+.location-table th {
+background: var(--ink);
+color: #FFF;
+padding: 10px 12px;
+text-align: left;
+font-weight: 500;
+font-size: 12px;
+}
+.location-table td {
+padding: 10px 12px;
+border-bottom: 1px solid #F0EDE5;
+cursor: pointer;
+}
+.location-table tr:last-child td { border-bottom: none; }
+.location-table tr:hover td { background: var(--cream); }
+.location-table .rate-cell { font-weight: 700; }
+.location-table .rate-cell.high { color: var(--green); }
+.location-table .rate-cell.low { color: var(--red); }
+.location-table .not-reported { color: var(--ink-mute); font-style: italic; }
+
+/* ── INACTIVE LOCATION (休止拠点) ── */
+.location-table tr.inactive td {
+background: #F5F2EC;
+color: var(--ink-mute);
+}
+.location-table tr.inactive td:first-child {
+text-decoration: line-through;
+text-decoration-color: var(--ink-mute);
+}
+.status-badge.inactive { background: #E8E3D8; color: #6B6258; }
+.rank-item.inactive { opacity: .45; }
+
+/* ── DETAIL MODAL ── */
+.modal-bg {
+position: fixed;
+inset: 0;
+background: rgba(0,0,0,.5);
+z-index: 200;
+display: flex;
+align-items: flex-end;
+opacity: 0;
+pointer-events: none;
+transition: opacity .2s;
+}
+.modal-bg.show { opacity: 1; pointer-events: all; }
+.modal-sheet {
+background: var(--white);
+width: 100%;
+max-width: 600px;
+margin: 0 auto;
+border-radius: 16px 16px 0 0;
+max-height: 85vh;
+overflow-y: auto;
+transform: translateY(100%);
+transition: transform .25s cubic-bezier(.32,0,.15,1);
+}
+.modal-bg.show .modal-sheet { transform: translateY(0); }
+.modal-header {
+background: var(--red);
+color: #FFF;
+padding: 16px 20px;
+position: sticky;
+top: 0;
+}
+.modal-header h2 { font-size: 16px; font-weight: 700; }
+.modal-header p { font-size: 12px; opacity: .75; margin-top: 2px; }
+.modal-close {
+position: absolute;
+top: 16px; right: 16px;
+background: rgba(255,255,255,.2);
+border: none;
+color: #FFF;
+width: 28px; height: 28px;
+border-radius: 50%;
+font-size: 16px;
+cursor: pointer;
+display: flex; align-items: center; justify-content: center;
+}
+.modal-body { padding: 16px; }
+
+.product-row {
+display: flex;
+align-items: center;
+padding: 10px 0;
+border-bottom: 1px solid var(--border);
+gap: 10px;
+}
+.product-row:last-child { border-bottom: none; }
+.product-row-name { font-size: 13px; flex: 1; color: var(--ink-soft); }
+.product-row-nums { font-size: 12px; color: var(--ink-mute); white-space: nowrap; }
+.product-row-rate { font-size: 14px; font-weight: 700; min-width: 45px; text-align: right; }
+.product-rate-bar { flex: 1; max-width: 100px; height: 6px; background: #EEE; border-radius: 3px; }
+.product-rate-fill { height: 100%; border-radius: 3px; background: var(--green); }
+
+/* ── DAILY SUMMARY (16時以降) ── */
+.daily-summary {
+background: var(--ink);
+color: #FFF;
+border-radius: 12px;
+padding: 20px;
+margin-bottom: 20px;
+}
+.daily-summary-title {
+font-size: 12px;
+color: rgba(255,255,255,.5);
+letter-spacing: .1em;
+margin-bottom: 16px;
+display: flex;
+align-items: center;
+gap: 8px;
+}
+.daily-summary-title::after { content: ''; flex: 1; height: 1px; background: rgba(255,255,255,.1); }
+.daily-kpi-grid {
+display: grid;
+grid-template-columns: repeat(2, 1fr);
+gap: 12px;
+}
+@media(min-width: 600px) { .daily-kpi-grid { grid-template-columns: repeat(4, 1fr); } }
+.daily-kpi {
+background: rgba(255,255,255,.08);
+border-radius: 8px;
+padding: 12px;
+text-align: center;
+}
+.daily-kpi-label { font-size: 10px; color: rgba(255,255,255,.5); margin-bottom: 6px; letter-spacing: .08em; }
+.daily-kpi-value { font-size: 20px; font-weight: 700; }
+.daily-kpi-value.gold { color: #F4C430; }
+.daily-kpi-value.green { color: #58D68D; }
+.daily-kpi-value.red { color: #EC7063; }
+.daily-kpi-value.blue { color: #85C1E9; }
+
+/* ── WEATHER ── */
+.weather-bar {
+background: var(--blue-light);
+border: 1px solid #AED6F1;
+border-radius: 10px;
+padding: 10px 14px;
+display: flex;
+align-items: center;
+gap: 16px;
+margin-bottom: 16px;
+font-size: 13px;
+color: var(--blue);
+}
+.weather-item { display: flex; align-items: center; gap: 4px; }
+
+/* ── REPORT STATUS ── */
+.status-badge {
+display: inline-block;
+font-size: 10px;
+font-weight: 700;
+padding: 2px 8px;
+border-radius: 10px;
+}
+.status-badge.done { background: var(--green-light); color: #1A7A42; }
+.status-badge.pending { background: #FEF9E7; color: #7D6608; }
+.status-badge.none { background: #F5F5F5; color: var(--ink-mute); }
+
+/* ── LOADING ── */
+.loading-wrap {
+text-align: center;
+padding: 60px 20px;
+color: var(--ink-mute);
+}
+.loader {
+width: 32px; height: 32px;
+border: 3px solid var(--border);
+border-top-color: var(--red);
+border-radius: 50%;
+animation: spin .8s linear infinite;
+margin: 0 auto 16px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── WEEKLY/MONTHLY ── */
+.period-selector {
+display: flex;
+gap: 8px;
+margin-bottom: 16px;
+flex-wrap: wrap;
+}
+.period-btn {
+padding: 6px 16px;
+border-radius: 20px;
+border: 1px solid var(--border);
+background: var(--white);
+font-size: 13px;
+cursor: pointer;
+font-family: inherit;
+color: var(--ink-soft);
+}
+.period-btn.active { background: var(--red); color: #FFF; border-color: var(--red); }
+
+.stats-table {
+width: 100%;
+border-collapse: collapse;
+background: var(--white);
+border: 1px solid var(--border);
+border-radius: 12px;
+overflow: hidden;
+font-size: 13px;
+margin-bottom: 16px;
+}
+.stats-table th {
+background: var(--red);
+color: #FFF;
+padding: 10px 12px;
+text-align: left;
+font-weight: 500;
+font-size: 12px;
+}
+.stats-table td {
+padding: 10px 12px;
+border-bottom: 1px solid #F0EDE5;
+}
+.stats-table tr:last-child td { border-bottom: none; }
+.stats-table tr:nth-child(even) td { background: #FAFAF8; }
+.stats-table td:first-child { font-weight: 700; color: var(--ink); }
+
+/* ── CASH TABLE ── */
+.cash-table {
+width: 100%;
+border-collapse: collapse;
+background: var(--white);
+border: 1px solid var(--border);
+border-radius: 12px;
+overflow: hidden;
+font-size: 13px;
+}
+.cash-table th {
+background: var(--ink);
+color: #FFF;
+padding: 10px 12px;
+text-align: left;
+font-weight: 500;
+font-size: 12px;
+}
+.cash-table th.gold-header { background: var(--gold); }
+.cash-table td {
+padding: 10px 12px;
+border-bottom: 1px solid #F0EDE5;
+}
+.cash-table tr:last-child td { border-bottom: none; }
+.cash-table tr:hover td { background: var(--cream); }
+.cash-table .total-row td {
+background: var(--cream-dark);
+font-weight: 700;
+border-top: 2px solid var(--border);
+}
+
+/* ===== Task-3 現金有高 ===== */
+.cash-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.cash-summary-card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  text-align: center;
+}
+.cash-summary-card .label {
+  font-size: 11px;
+  color: var(--ink-mute);
+  margin-bottom: 6px;
+  letter-spacing: 0.04em;
+}
+.cash-summary-card .value {
+  font-size: 22px;
+  font-weight: 700;
+  font-family: 'Courier New', monospace;
+}
+.cash-summary-card.expected .value { color: var(--ink); }
+.cash-summary-card.actual   .value { color: var(--gold); }
+.cash-summary-card.diff-ok    .value { color: var(--ink-mute); }
+.cash-summary-card.diff-plus  .value { color: var(--blue); }
+.cash-summary-card.diff-minus .value { color: var(--red); }
+
+.cash-actual-input {
+  width: 100px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  text-align: right;
+  font-size: 13px;
+  font-family: inherit;
+  background: var(--cream);
+}
+.cash-actual-input:focus {
+  outline: 2px solid var(--gold);
+  outline-offset: -1px;
+  background: var(--white);
+}
+.cash-diff-cell { font-weight: 700; font-family: 'Courier New', monospace; }
+.cash-diff-cell.ok    { color: var(--ink-mute); }
+.cash-diff-cell.plus  { color: var(--blue); }
+.cash-diff-cell.minus { color: var(--red); }
+
+/* ===== ヒートマップ＋粗利ランキング ===== */
+.dashboard-section {
+background: #fff;
+border-radius: 8px;
+padding: 20px;
+margin: 20px 0;
+box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+.section-header {
+display: flex; justify-content: space-between; align-items: center;
+margin-bottom: 16px; flex-wrap: wrap; gap: 12px;
+}
+.section-header h2 { font-size: 18px; margin: 0; color: #333; }
+.period-switch {
+display: flex; gap: 4px; background: #f0f0f0;
+border-radius: 6px; padding: 3px;
+}
+.period-switch .period-btn {
+padding: 6px 14px; border: none; background: transparent;
+border-radius: 4px; cursor: pointer; font-size: 13px; color: #666;
+transition: all 0.15s;
+}
+.period-switch .period-btn.active {
+background: #fff; color: #333;
+box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+.legend {
+display: flex; flex-wrap: wrap; gap: 14px;
+margin-bottom: 16px; font-size: 12px; color: #666;
+}
+.legend-item { display: flex; align-items: center; gap: 6px; }
+.legend-color {
+display: inline-block; width: 14px; height: 14px;
+border-radius: 3px; flex-shrink: 0;
+}
+.heatmap-container { overflow-x: auto; margin-bottom: 24px; }
+.heatmap-table {
+border-collapse: separate; border-spacing: 2px; font-size: 12px;
+}
+.heatmap-table th, .heatmap-table td {
+padding: 6px 8px; text-align: center; white-space: nowrap;
+}
+.heatmap-table th {
+background: #f8f9fa; font-weight: 500; color: #666;
+}
+.heatmap-table th.location-header { text-align: left; min-width: 180px; }
+.heatmap-table td.location-cell {
+text-align: left; background: #f8f9fa; font-weight: 500;
+padding: 8px 12px;
+}
+.heatmap-table .location-meta {
+font-size: 10px; color: #999; font-weight: normal; margin-top: 2px;
+}
+.heatmap-table .heat-cell {
+width: 36px; height: 36px; border-radius: 4px; cursor: default;
+}
+.heatmap-table .heat-cell.empty {
+background: transparent; border: 1px dashed #ddd;
+}
+.ranking-title {
+margin: 24px 0 12px; font-size: 16px; color: #333;
+}
+.ranking-container { overflow-x: auto; }
+.ranking-table {
+width: 100%; border-collapse: collapse; font-size: 13px;
+}
+.ranking-table th, .ranking-table td {
+padding: 8px 12px; text-align: left; border-bottom: 1px solid #eee;
+}
+.ranking-table th { background: #f8f9fa; font-weight: 500; color: #666; }
+.ranking-table .col-rank { width: 50px; text-align: center; }
+.ranking-table .col-amount { text-align: right; }
+.placeholder-msg {
+padding: 40px; text-align: center; color: #999;
+background: #f8f9fa; border-radius: 6px;
+}
+.dashboard-loading {
+padding: 40px; text-align: center; color: #999;
+}
+
+/* ===== 商品管理タブ ===== */
+.pm-notice {
+background: var(--gold-light);
+border-left: 3px solid var(--gold);
+padding: 10px 14px;
+border-radius: 0 8px 8px 0;
+font-size: 12px;
+color: var(--ink-soft);
+margin-bottom: 16px;
+}
+.pm-summary-grid {
+display: grid;
+grid-template-columns: repeat(3, 1fr);
+gap: 12px;
+margin-bottom: 20px;
+}
+.pm-summary-card {
+background: var(--white);
+border: 1px solid var(--border);
+border-radius: 12px;
+padding: 14px;
+text-align: center;
+}
+.pm-summary-label {
+font-size: 10px;
+color: var(--ink-mute);
+letter-spacing: .08em;
+margin-bottom: 6px;
+}
+.pm-summary-value {
+font-size: 22px;
+font-weight: 700;
+line-height: 1;
+}
+.pm-summary-value.green { color: var(--green); }
+.pm-summary-value.red { color: var(--red); }
+.pm-summary-value span {
+font-size: 11px;
+font-weight: 400;
+color: var(--ink-mute);
+margin-left: 2px;
+}
+.pm-list {
+background: var(--white);
+border: 1px solid var(--border);
+border-radius: 12px;
+overflow: hidden;
+}
+.pm-row {
+display: flex;
+align-items: center;
+padding: 14px 16px;
+border-bottom: 1px solid #F0EDE5;
+gap: 12px;
+transition: background .1s;
+}
+.pm-row:last-child { border-bottom: none; }
+.pm-row.stopped { background: #FDF5F4; }
+.pm-row-id {
+font-size: 11px;
+color: var(--ink-mute);
+font-weight: 500;
+min-width: 44px;
+font-family: 'SF Mono', Menlo, monospace;
+}
+.pm-row-name {
+flex: 1;
+font-size: 14px;
+color: var(--ink);
+}
+.pm-row.stopped .pm-row-name {
+color: var(--ink-mute);
+text-decoration: line-through;
+}
+.pm-row-status {
+font-size: 10px;
+font-weight: 700;
+padding: 3px 8px;
+border-radius: 10px;
+white-space: nowrap;
+}
+.pm-row-status.active { background: var(--green-light); color: #1A7A42; }
+.pm-row-status.stopped { background: #FDEDEC; color: var(--red-dark); }
+.pm-toggle {
+position: relative;
+width: 48px;
+height: 26px;
+border-radius: 13px;
+background: var(--green);
+cursor: pointer;
+flex-shrink: 0;
+transition: background .2s;
+border: none;
+padding: 0;
+}
+.pm-toggle.off { background: #BDC3C7; }
+.pm-toggle::after {
+content: '';
+position: absolute;
+top: 2px; left: 2px;
+width: 22px; height: 22px;
+background: #FFF;
+border-radius: 50%;
+transition: transform .2s;
+box-shadow: 0 1px 3px rgba(0,0,0,.2);
+}
+.pm-toggle.off::after { transform: translateX(22px); }
+.pm-toggle:disabled { opacity: .5; cursor: wait; }
+
+/* 確認モーダル（中央表示） */
+.pm-confirm-bg {
+position: fixed;
+inset: 0;
+background: rgba(0,0,0,.5);
+z-index: 300;
+display: flex;
+align-items: center;
+justify-content: center;
+opacity: 0;
+pointer-events: none;
+transition: opacity .2s;
+padding: 20px;
+}
+.pm-confirm-bg.show { opacity: 1; pointer-events: all; }
+.pm-confirm-card {
+background: var(--white);
+border-radius: 16px;
+width: 100%;
+max-width: 380px;
+overflow: hidden;
+transform: scale(.9);
+transition: transform .2s;
+max-height: 85vh;
+display: flex;
+flex-direction: column;
+}
+.pm-confirm-bg.show .pm-confirm-card { transform: scale(1); }
+.pm-confirm-header {
+padding: 16px 20px;
+color: #FFF;
+font-size: 14px;
+font-weight: 700;
+flex-shrink: 0;
+}
+.pm-confirm-header.stop { background: var(--red); }
+.pm-confirm-header.resume { background: var(--green); }
+.pm-confirm-body {
+padding: 20px;
+font-size: 14px;
+color: var(--ink-soft);
+line-height: 1.6;
+overflow-y: auto;
+flex: 1;
+}
+.pm-confirm-product {
+background: var(--cream);
+border-radius: 8px;
+padding: 10px 14px;
+margin: 12px 0;
+font-weight: 700;
+color: var(--ink);
+font-size: 13px;
+}
+.pm-confirm-product-list {
+background: var(--cream);
+border-radius: 8px;
+padding: 10px 14px;
+margin: 12px 0;
+max-height: 200px;
+overflow-y: auto;
+}
+.pm-confirm-product-list-item {
+padding: 4px 0;
+font-size: 13px;
+color: var(--ink);
+border-bottom: 1px dashed var(--border);
+}
+.pm-confirm-product-list-item:last-child { border-bottom: none; }
+.pm-confirm-buttons {
+display: flex;
+gap: 8px;
+padding: 0 20px 20px;
+flex-shrink: 0;
+}
+.pm-confirm-btn {
+flex: 1;
+padding: 12px;
+border-radius: 10px;
+border: none;
+font-size: 14px;
+font-weight: 700;
+cursor: pointer;
+font-family: inherit;
+transition: opacity .15s;
+}
+.pm-confirm-btn.cancel {
+background: #ECF0F1;
+color: var(--ink-soft);
+}
+.pm-confirm-btn.confirm-stop {
+background: var(--red);
+color: #FFF;
+}
+.pm-confirm-btn.confirm-resume {
+background: var(--green);
+color: #FFF;
+}
+.pm-confirm-btn:disabled { opacity: .5; cursor: wait; }
+
+/* トースト通知 */
+.pm-toast {
+position: fixed;
+bottom: 24px;
+left: 50%;
+transform: translateX(-50%) translateY(100px);
+background: var(--ink);
+color: #FFF;
+padding: 12px 20px;
+border-radius: 24px;
+font-size: 13px;
+z-index: 400;
+opacity: 0;
+transition: all .3s;
+box-shadow: 0 4px 12px rgba(0,0,0,.3);
+pointer-events: none;
+}
+.pm-toast.show {
+opacity: 1;
+transform: translateX(-50%) translateY(0);
+}
+.pm-toast.error { background: var(--red); }
+.pm-toast.success { background: var(--green); }
+
+/* ===== 商品管理タブ 一括選択対応（v2026-05-11 NEW） ===== */
+.pm-batch-bar {
+background: var(--white);
+border: 1px solid var(--border);
+border-radius: 12px;
+padding: 12px 14px;
+margin-bottom: 12px;
+display: flex;
+align-items: center;
+gap: 12px;
+flex-wrap: wrap;
+box-shadow: 0 1px 3px rgba(0,0,0,.04);
+}
+.pm-batch-checkbox-wrap {
+display: flex;
+align-items: center;
+gap: 6px;
+cursor: pointer;
+font-size: 13px;
+font-weight: 700;
+color: var(--ink);
+user-select: none;
+}
+.pm-batch-checkbox {
+width: 18px;
+height: 18px;
+cursor: pointer;
+accent-color: var(--red);
+margin: 0;
+}
+.pm-batch-count {
+font-size: 12px;
+color: var(--ink-mute);
+margin-left: auto;
+white-space: nowrap;
+}
+.pm-batch-actions {
+display: flex;
+gap: 8px;
+flex-wrap: wrap;
+}
+.pm-batch-btn {
+border: none;
+padding: 9px 14px;
+border-radius: 8px;
+font-size: 13px;
+font-weight: 700;
+cursor: pointer;
+font-family: inherit;
+white-space: nowrap;
+color: #FFF;
+transition: opacity .15s;
+}
+.pm-batch-btn.stop { background: var(--red); }
+.pm-batch-btn.resume { background: var(--green); }
+.pm-batch-btn:hover:not(:disabled) { opacity: .85; }
+.pm-batch-btn:disabled { opacity: .4; cursor: not-allowed; }
+.pm-row-checkbox-wrap {
+display: flex;
+align-items: center;
+margin-right: 4px;
+cursor: pointer;
+padding: 4px;
+}
+.pm-row-checkbox {
+width: 18px;
+height: 18px;
+cursor: pointer;
+accent-color: var(--red);
+margin: 0;
+}
+.pm-row.selected {
+background: #FFF8F0;
+box-shadow: inset 3px 0 0 var(--red);
+}
+.pm-row.selected.stopped {
+background: #FDF0EE;
+}
+
+/* ===== 申し送り確認タブ（基本） ===== */
+.memo-board {
+display: flex;
+flex-direction: column;
+gap: 12px;
+}
+.memo-card-item {
+background: var(--white);
+border: 1px solid var(--border);
+border-radius: 12px;
+overflow: hidden;
+transition: box-shadow .15s, background .15s, border-color .15s;
+position: relative;
+}
+.memo-card-item:hover {
+box-shadow: 0 2px 8px rgba(0,0,0,.06);
+}
+.memo-card-top {
+background: var(--ink);
+color: #FFF;
+padding: 10px 14px;
+padding-right: 44px;
+display: flex;
+justify-content: space-between;
+align-items: flex-start;
+gap: 8px;
+}
+.memo-card-top-left {
+flex: 1;
+min-width: 0;
+}
+.memo-card-meta {
+font-size: 10px;
+opacity: .65;
+margin-bottom: 3px;
+}
+.memo-card-loc {
+font-size: 14px;
+font-weight: 700;
+}
+.memo-card-staff {
+font-size: 11px;
+opacity: .8;
+margin-top: 2px;
+}
+.memo-card-reply-count {
+background: var(--green);
+color: #FFF;
+font-size: 10px;
+font-weight: 700;
+padding: 3px 8px;
+border-radius: 10px;
+white-space: nowrap;
+flex-shrink: 0;
+}
+.memo-card-reply-count.zero {
+background: rgba(255,255,255,.15);
+color: rgba(255,255,255,.7);
+}
+.memo-card-body {
+padding: 14px;
+background: var(--gold-light);
+border-left: 4px solid var(--gold);
+font-size: 14px;
+color: var(--ink-soft);
+white-space: pre-wrap;
+word-break: break-word;
+}
+.memo-card-replies {
+background: #FAFAF8;
+padding: 0 14px;
+max-height: 0;
+overflow: hidden;
+transition: max-height .3s, padding .3s;
+}
+.memo-card-replies.expanded {
+max-height: 1500px;
+padding: 12px 14px;
+}
+.memo-reply-row {
+background: var(--white);
+border: 1px solid var(--border);
+border-radius: 8px;
+padding: 8px 12px;
+margin-bottom: 6px;
+font-size: 12px;
+}
+.memo-reply-row:last-child { margin-bottom: 0; }
+.memo-reply-row-header {
+display: flex;
+justify-content: space-between;
+font-size: 11px;
+margin-bottom: 4px;
+}
+.memo-reply-row-name {
+font-weight: 700;
+color: var(--green);
+}
+.memo-reply-row-time {
+color: var(--ink-mute);
+}
+.memo-reply-row-content {
+color: var(--ink-soft);
+white-space: pre-wrap;
+word-break: break-word;
+}
+.memo-card-actions {
+display: flex;
+gap: 8px;
+padding: 10px 14px;
+border-top: 1px solid var(--border);
+}
+.memo-action-btn {
+flex: 1;
+padding: 9px;
+border-radius: 8px;
+border: none;
+font-size: 13px;
+font-weight: 700;
+cursor: pointer;
+font-family: inherit;
+transition: opacity .15s;
+}
+.memo-action-btn.reply {
+background: var(--red);
+color: #FFF;
+}
+.memo-action-btn.complete {
+background: var(--green);
+color: #FFF;
+}
+.memo-action-btn.toggle {
+background: #ECF0F1;
+color: var(--ink-soft);
+flex: 0 0 auto;
+padding: 9px 14px;
+}
+.memo-action-btn:disabled { opacity: .5; cursor: wait; }
+
+.memo-empty {
+background: var(--white);
+border: 1px dashed var(--border);
+border-radius: 12px;
+padding: 40px 20px;
+text-align: center;
+color: var(--ink-mute);
+font-size: 13px;
+}
+
+/* ===== 申し送りタブ v2（一括完了対応） ===== */
+
+.memo-batch-bar {
+background: var(--white);
+border: 1px solid var(--border);
+border-radius: 12px;
+padding: 12px 14px;
+margin-bottom: 12px;
+display: flex;
+align-items: center;
+gap: 12px;
+box-shadow: 0 1px 3px rgba(0,0,0,.04);
+}
+.memo-batch-checkbox-wrap {
+display: flex;
+align-items: center;
+gap: 6px;
+cursor: pointer;
+font-size: 13px;
+font-weight: 700;
+color: var(--ink);
+user-select: none;
+}
+.memo-batch-checkbox {
+width: 18px;
+height: 18px;
+cursor: pointer;
+accent-color: var(--green);
+margin: 0;
+}
+.memo-batch-count {
+font-size: 12px;
+color: var(--ink-mute);
+margin-left: auto;
+white-space: nowrap;
+}
+.memo-batch-btn {
+background: var(--green);
+color: #FFF;
+border: none;
+padding: 9px 16px;
+border-radius: 8px;
+font-size: 13px;
+font-weight: 700;
+cursor: pointer;
+font-family: inherit;
+transition: opacity .15s;
+white-space: nowrap;
+}
+.memo-batch-btn:hover:not(:disabled) {
+opacity: .85;
+}
+.memo-batch-btn:disabled {
+opacity: .4;
+cursor: not-allowed;
+}
+
+.memo-card-checkbox-wrap {
+position: absolute;
+top: 10px;
+right: 10px;
+z-index: 10;
+background: rgba(0,0,0,.25);
+padding: 4px;
+border-radius: 6px;
+cursor: pointer;
+display: flex;
+align-items: center;
+justify-content: center;
+}
+.memo-card-checkbox {
+width: 20px;
+height: 20px;
+cursor: pointer;
+accent-color: var(--green);
+margin: 0;
+display: block;
+}
+
+.memo-card-item.has-replies {
+background: #F5F5F0;
+}
+.memo-card-item.has-replies .memo-card-top {
+background: #5A5A5A;
+}
+.memo-card-item.has-replies .memo-card-body {
+background: #EFEFE8;
+border-left-color: #999;
+color: var(--ink-mute);
+}
+
+.memo-card-item.selected {
+border-color: var(--green);
+box-shadow: 0 0 0 2px rgba(39, 174, 96, .15);
+}
+
+/* ===== 申し送りタブ v3（履歴表示対応） ===== */
+.memo-card-item.is-history {
+opacity: 0.65;
+background: #ECECE6;
+}
+.memo-card-item.is-history .memo-card-top {
+background: #888;
+padding-left: 80px;
+padding-right: 14px;
+}
+.memo-card-item.is-history .memo-card-body {
+background: #E5E5DD;
+border-left-color: #999;
+}
+.memo-history-badge {
+position: absolute;
+top: 10px;
+left: 10px;
+z-index: 10;
+background: var(--green);
+color: #FFF;
+font-size: 11px;
+font-weight: 700;
+padding: 4px 10px;
+border-radius: 6px;
+display: inline-flex;
+align-items: center;
+gap: 4px;
+}
+.memo-card-item.is-history .memo-card-checkbox-wrap {
+display: none;
+}
+.memo-history-footer {
+background: #DDD;
+padding: 8px 14px;
+font-size: 11px;
+color: #555;
+border-top: 1px solid #CCC;
+display: flex;
+align-items: center;
+gap: 6px;
+}
+.memo-history-footer-icon {
+color: var(--green);
+font-weight: 700;
+}
+.memo-section-divider {
+display: flex;
+align-items: center;
+gap: 8px;
+margin: 16px 0 8px;
+font-size: 11px;
+font-weight: 700;
+color: var(--ink-mute);
+letter-spacing: .08em;
+}
+.memo-section-divider::before,
+.memo-section-divider::after {
+content: '';
+flex: 1;
+height: 1px;
+background: var(--border);
+}
+
+/* ===== 拒否画面 ===== */
+.access-denied {
+display: none;
+text-align: center;
+padding: 60px 20px;
+background: var(--cream);
+min-height: 100vh;
+}
+.access-denied.show { display: block; }
+.access-denied-icon {
+font-size: 64px;
+margin-bottom: 20px;
+}
+.access-denied-title {
+font-size: 20px;
+font-weight: 700;
+color: var(--ink);
+margin-bottom: 12px;
+}
+.access-denied-message {
+font-size: 14px;
+color: var(--ink-soft);
+line-height: 1.7;
+margin-bottom: 24px;
+}
+.access-denied-message .role-tag {
+display: inline-block;
+background: var(--cream-dark);
+border: 1px solid var(--border);
+border-radius: 6px;
+padding: 2px 10px;
+margin-left: 4px;
+font-size: 12px;
+color: var(--ink-soft);
+}
+.access-denied-btn {
+background: var(--red);
+color: #FFF;
+border: none;
+padding: 12px 32px;
+border-radius: 24px;
+font-size: 14px;
+font-weight: 700;
+cursor: pointer;
+font-family: inherit;
+}
+  /* ===== 粗利タブ ===== */
+.profit-period-selector {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.profit-period-btn {
+  padding: 7px 18px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--white);
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--ink-soft);
+}
+.profit-period-btn.active {
+  background: var(--red);
+  color: #FFF;
+  border-color: var(--red);
+}
+ 
+.profit-summary {
+  background: var(--ink);
+  color: #FFF;
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-bottom: 16px;
+}
+.profit-summary-title {
+  font-size: 11px;
+  color: rgba(255,255,255,.5);
+  letter-spacing: .1em;
+  margin-bottom: 12px;
+}
+.profit-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  gap: 8px;
+}
+@media(max-width: 1000px) {
+  .profit-summary-grid { grid-template-columns: repeat(5, 1fr); }
+}
+@media(max-width: 600px) {
+  .profit-summary-grid { grid-template-columns: repeat(3, 1fr); }
+}
+@media(max-width: 380px) {
+  .profit-summary-grid { grid-template-columns: repeat(2, 1fr); }
+}
+/* その他経費の合算列を視覚的に区別 */
+.profit-summary-item.other-total {
+  background: rgba(244, 196, 48, .12);
+}
+.profit-summary-item.other-total .value {
+  color: #F4C430;
+}
+.profit-table td.other-total-cell {
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+.profit-summary-item {
+  background: rgba(255,255,255,.08);
+  border-radius: 8px;
+  padding: 10px 8px;
+  text-align: center;
+}
+.profit-summary-item .label {
+  font-size: 10px;
+  color: rgba(255,255,255,.55);
+  margin-bottom: 5px;
+  letter-spacing: .05em;
+}
+.profit-summary-item .value {
+  font-size: 16px;
+  font-weight: 700;
+  font-family: 'Courier New', monospace;
+}
+.profit-summary-item.profit .value { color: #F4C430; }
+.profit-summary-item.profit.minus .value { color: #EC7063; }
+.profit-summary-item.rate .value { color: #85C1E9; }
+ 
+.profit-sort-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.profit-sort-btns {
+  display: flex;
+  gap: 6px;
+}
+.profit-sort-btn {
+  padding: 5px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--white);
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--ink-soft);
+}
+.profit-sort-btn.active {
+  background: var(--red);
+  color: #FFF;
+  border-color: var(--red);
+}
+.profit-meta {
+  font-size: 11px;
+  color: var(--ink-mute);
+}
+ 
+.profit-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  font-size: 12px;
+}
+.profit-table th {
+  background: var(--ink);
+  color: #FFF;
+  padding: 9px 8px;
+  text-align: left;
+  font-weight: 500;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.profit-table th.num { text-align: right; }
+.profit-table td {
+  padding: 9px 8px;
+  border-bottom: 1px solid #F0EDE5;
+  white-space: nowrap;
+}
+.profit-table td.num {
+  text-align: right;
+  font-family: 'Courier New', monospace;
+}
+.profit-table td.id-cell {
+  color: var(--ink-mute);
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+}
+.profit-table td.name-cell {
+  font-weight: 700;
+}
+.profit-table tr:last-child td { border-bottom: none; }
+.profit-table tr:nth-child(even) td { background: #FAFAF8; }
+.profit-table td.profit-cell {
+  font-weight: 700;
+  color: var(--ink);
+}
+.profit-table td.profit-cell.minus { color: var(--red); }
+.profit-table td.rate-cell { font-weight: 700; }
+.profit-table td.rate-cell.minus { color: var(--red); }
+.profit-table td.no-report {
+  color: var(--ink-mute);
+  font-style: italic;
+}
+ 
+.profit-placeholder {
+  background: var(--gold-light);
+  border-left: 3px solid var(--gold);
+  padding: 14px 18px;
+  border-radius: 0 8px 8px 0;
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin-bottom: 16px;
+}
+  .profit-day-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 3px 4px;
+}
+.profit-day-nav-btn {
+  background: transparent;
+  border: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  font-size: 14px;
+  cursor: pointer;
+  color: var(--ink-soft);
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.profit-day-nav-btn:hover { background: var(--cream); }
+.profit-day-nav-btn:disabled { opacity: .3; cursor: not-allowed; }
+.profit-day-input {
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--ink);
+  text-align: center;
+  padding: 4px 2px;
+  min-width: 130px;
+  cursor: pointer;
+}
+.profit-day-input:focus { outline: none; }
+</style>
+
+</head>
+<body>
+
+<!-- ─── 起動時LIFFローディング ─── -->
+
+<div id="liff-loading" class="loading-wrap" style="min-height:100vh;">
+  <div class="loader"></div>
+  <p>認証中...</p>
+</div>
+
+<!-- ─── アクセス拒否画面（社員以外） ─── -->
+
+<div id="access-denied" class="access-denied">
+  <div class="access-denied-icon">🚫</div>
+  <div class="access-denied-title">このページは社員専用です</div>
+  <div class="access-denied-message">
+    社員ダッシュボードへのアクセス権がありません。<br>
+    あなたの属性：<span class="role-tag" id="user-role-tag">—</span>
+  </div>
+  <button class="access-denied-btn" onclick="closeApp()">LINEに戻る</button>
+</div>
+
+<!-- ─── メインアプリ（社員のみ表示） ─── -->
+
+<div id="app-main" style="display:none;">
+
+  <!-- HEADER -->
+
+  <div class="header">
+    <div class="header-left">
+      <h1>🍱 お江戸弁当</h1>
+      <p>社員ダッシュボード</p>
+    </div>
+    <div class="header-right">
+      <span class="update-time" id="update-time">--:--</span>
+      <button class="refresh-btn" onclick="loadAll()">🔄 更新</button>
+    </div>
+  </div>
+
+  <!-- NAV TABS -->
+
+  <div class="nav-tabs">
+    <button class="tab-btn active" onclick="switchTab('realtime')">リアルタイム</button>
+    <button class="tab-btn" onclick="switchTab('weekly')">週報</button>
+    <button class="tab-btn" onclick="switchTab('monthly')">月報</button>
+    <button class="tab-btn" onclick="switchTab('delivery')">配達</button>
+    <button class="tab-btn" onclick="switchTab('cash')">現金有高</button>
+    <button class="tab-btn" onclick="switchTab('heatmap')">ヒートマップ</button>
+    <button class="tab-btn" onclick="switchTab('profit')">粗利</button>
+    <button class="tab-btn" onclick="switchTab('products')">商品管理</button>
+    <button class="tab-btn" onclick="switchTab('memos')">申し送り<span class="badge" id="memo-badge" style="display:none;">0</span></button>
+  </div>
+
+  <!-- CONTENT -->
+
+  <div class="content">
+
+<!-- REALTIME TAB -->
+<div id="tab-realtime" class="tab-panel active">
+  <div class="loading-wrap" id="rt-loading">
+    <div class="loader"></div>
+    <p>データを読み込み中...</p>
+  </div>
+  <div id="rt-content" style="display:none;">
+
+    <!-- 天気 -->
+    <div class="weather-bar" id="weather-bar">
+      <span>🌤</span>
+      <span class="weather-item" id="w-condition">--</span>
+      <span class="weather-item">🌡 <span id="w-temp">--</span>℃</span>
+      <span class="weather-item">💨 <span id="w-wind">--</span>m/s</span>
+    </div>
+
+    <!-- KPI -->
+    <div class="kpi-grid" id="kpi-grid"></div>
+
+    <!-- 16時以降のまとめ -->
+    <div id="daily-summary-wrap" style="display:none;">
+      <div class="daily-summary" id="daily-summary"></div>
+    </div>
+
+    <!-- ベスト・ワースト -->
+    <div class="section-title">完売率ランキング</div>
+    <div class="rank-grid" id="rank-grid"></div>
+
+    <!-- 全拠点一覧 -->
+    <div class="section-title">全拠点一覧</div>
+    <div class="list-controls">
+      <div class="sort-btns">
+        <button class="sort-btn active" onclick="sortLocations('rate_desc')" id="sort-best">ベスト順</button>
+        <button class="sort-btn" onclick="sortLocations('rate_asc')" id="sort-worst">ワースト順</button>
+        <button class="sort-btn" onclick="sortLocations('id')" id="sort-id">ID順</button>
+      </div>
+      <span style="font-size:12px;color:var(--ink-mute);" id="reported-count"></span>
+    </div>
+    <table class="location-table" id="location-table">
+      <thead>
+        <tr>
+          <th>拠点名</th>
+          <th>担当者</th>
+          <th>販売数</th>
+          <th>完売率</th>
+          <th>売上</th>
+          <th>状況</th>
+        </tr>
+      </thead>
+      <tbody id="location-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- WEEKLY TAB -->
+<div id="tab-weekly" class="tab-panel">
+  <div class="loading-wrap" id="wk-loading" style="display:none;">
+    <div class="loader"></div>
+    <p>集計中...</p>
+  </div>
+  <div id="wk-content">
+    <div class="period-selector" id="week-selector"></div>
+    <div id="weekly-data"></div>
+  </div>
+</div>
+
+<!-- MONTHLY TAB -->
+<div id="tab-monthly" class="tab-panel">
+  <div class="loading-wrap" id="mo-loading" style="display:none;">
+    <div class="loader"></div>
+    <p>集計中...</p>
+  </div>
+  <div id="mo-content">
+    <div class="period-selector" id="month-selector"></div>
+    <div id="monthly-data"></div>
+  </div>
+</div>
+
+<!-- DELIVERY TAB -->
+<div id="tab-delivery" class="tab-panel">
+  <div class="loading-wrap" id="dv-loading" style="display:none;">
+    <div class="loader"></div>
+    <p>読み込み中...</p>
+  </div>
+  <div id="dv-content"></div>
+</div>
+
+<!-- CASH TAB -->
+<div id="tab-cash" class="tab-panel">
+  <p style="font-size:12px;color:var(--ink-mute);margin-bottom:12px;">
+    想定額 ＝ レジ最終金額 − 本日合計ギャラ。実額入力で誤差を自動計算（±¥100以内は通知なし／超過時は販売員と管理者にLINE通知）
+  </p>
+
+  <!-- サマリー：想定／実際／誤差 -->
+  <div class="cash-summary" id="cash-summary"></div>
+
+  <table class="cash-table">
+    <thead>
+      <tr>
+        <th>拠点名</th>
+        <th>販売員名</th>
+        <th>レジ最終</th>
+        <th>本日ギャラ</th>
+        <th class="gold-header">想定額</th>
+        <th>実際の現金</th>
+        <th>誤差</th>
+      </tr>
+    </thead>
+    <tbody id="cash-tbody">
+      <tr><td colspan="7" style="text-align:center;color:var(--ink-mute);padding:24px;">読み込み中...</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- HEATMAP TAB -->
+<div id="tab-heatmap" class="tab-panel">
+  <section id="heatmap-section" class="dashboard-section">
+    <div class="section-header">
+      <h2>ヒートマップ</h2>
+      <div class="period-switch">
+        <button class="period-btn active" data-period="1w">1週</button>
+        <button class="period-btn" data-period="2w">2週</button>
+        <button class="period-btn" data-period="4w">4週</button>
+        <button class="period-btn" data-period="month">月</button>
+      </div>
+    </div>
+
+    <div class="legend">
+      <span class="legend-item"><span class="legend-color" style="background:#E74C3C"></span>早すぎ (〜12:00)</span>
+      <span class="legend-item"><span class="legend-color" style="background:#F39C12"></span>早い (12:00〜12:10)</span>
+      <span class="legend-item"><span class="legend-color" style="background:#85C1E9"></span>合格 (12:10〜終業-20分)</span>
+      <span class="legend-item"><span class="legend-color" style="background:#27AE60"></span>理想 (終業-20分〜終業)</span>
+      <span class="legend-item"><span class="legend-color" style="background:#BDC3C7"></span>完売せず</span>
+    </div>
+
+    <div id="heatmap-container" class="heatmap-container">
+      <div class="dashboard-loading">読み込み中...</div>
+    </div>
+
+    <h3 class="ranking-title">粗利ランキング（全拠点）</h3>
+    <div id="ranking-container" class="ranking-container">
+      <div class="dashboard-loading">読み込み中...</div>
+    </div>
+  </section>
+</div>
+
+<!-- PRODUCTS MANAGEMENT TAB -->
+    <!-- PROFIT TAB -->
+<div id="tab-profit" class="tab-panel">
+  <p style="font-size:12px;color:var(--ink-mute);margin-bottom:12px;">
+    粗利 ＝ 売上 − 原価 − ギャラ。原価は単価マスタの「原価（円）」列を参照します。
+  </p>
+ 
+  <!-- 期間切替 -->
+  <div class="profit-period-selector">
+    <div class="profit-day-nav" id="profit-day-nav">
+      <button class="profit-day-nav-btn" onclick="shiftProfitDay(-1)" title="前日">◀</button>
+      <input type="date" id="profit-date-input" class="profit-day-input" onchange="onProfitDateChange(this.value)">
+      <button class="profit-day-nav-btn" onclick="shiftProfitDay(1)" title="翌日">▶</button>
+    </div>
+    <button class="profit-period-btn" data-period="1w"    onclick="selectProfitPeriod('1w', this)">1週</button>
+    <button class="profit-period-btn" data-period="month" onclick="selectProfitPeriod('month', this)">1ヶ月</button>
+  </div>
+  <div class="loading-wrap" id="profit-loading" style="display:none;">    <!-- ★ここを追加 -->
+    <div class="loader"></div>                                            <!-- ★ -->
+    <p>集計中...</p>                                                      <!-- ★ -->
+  </div>    
+ 
+  <div id="profit-content"></div>
+</div>
+<div id="tab-products" class="tab-panel">
+  <div class="pm-notice">
+    ※毎日20時に自動リセットされます（停止中の商品が翌日には全て稼働状態に戻ります）<br>
+    <strong>複数まとめて停止／再開する場合は左のチェックボックスで選択してください。</strong>
+  </div>
+  <div class="pm-summary-grid" id="pm-summary">
+    <div class="pm-summary-card">
+      <div class="pm-summary-label">全商品</div>
+      <div class="pm-summary-value">—<span>件</span></div>
+    </div>
+    <div class="pm-summary-card">
+      <div class="pm-summary-label">稼働中</div>
+      <div class="pm-summary-value green">—<span>件</span></div>
+    </div>
+    <div class="pm-summary-card">
+      <div class="pm-summary-label">停止中</div>
+      <div class="pm-summary-value red">—<span>件</span></div>
+    </div>
+  </div>
+  <div id="pm-list-wrap">
+    <div class="loading-wrap">
+      <div class="loader"></div>
+      <p>商品リストを読み込み中...</p>
+    </div>
+  </div>
+</div>
+
+<!-- MEMOS TAB -->
+<div id="tab-memos" class="tab-panel">
+  <div class="pm-notice">
+    販売員からの申し送り（直近7日分）。返信するとLINEで通知されます。完了済みでも返信があるものは履歴として表示されます。
+  </div>
+  <div id="memo-list-wrap">
+    <div class="loading-wrap">
+      <div class="loader"></div>
+      <p>申し送りを読み込み中...</p>
+    </div>
+  </div>
+</div>
+  </div>
+
+</div>
+
+<!-- DETAIL MODAL -->
+
+<div class="modal-bg" id="detail-modal">
+  <div class="modal-sheet">
+    <div class="modal-header" style="position:relative;">
+      <h2 id="modal-location-name">拠点名</h2>
+      <p id="modal-location-sub">担当者</p>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<!-- 商品管理 確認モーダル -->
+
+<div class="pm-confirm-bg" id="pm-confirm-modal">
+  <div class="pm-confirm-card">
+    <div class="pm-confirm-header" id="pm-confirm-header">商品の停止</div>
+    <div class="pm-confirm-body" id="pm-confirm-body">—</div>
+    <div class="pm-confirm-buttons">
+      <button class="pm-confirm-btn cancel" onclick="cancelProductMgmt()">キャンセル</button>
+      <button class="pm-confirm-btn confirm-stop" id="pm-confirm-action" onclick="executePmConfirm()">確定</button>
+    </div>
+  </div>
+</div>
+
+<!-- 申し送り対応完了 確認モーダル -->
+
+<div class="pm-confirm-bg" id="memo-complete-modal">
+  <div class="pm-confirm-card">
+    <div class="pm-confirm-header resume">対応完了</div>
+    <div class="pm-confirm-body" id="memo-complete-body">—</div>
+    <div class="pm-confirm-buttons">
+      <button class="pm-confirm-btn cancel" onclick="cancelMemoComplete()">キャンセル</button>
+      <button class="pm-confirm-btn confirm-resume" id="memo-complete-action" onclick="executeMemoComplete()">完了にする</button>
+    </div>
+  </div>
+</div>
+
+<!-- トースト通知 -->
+
+<div class="pm-toast" id="pm-toast"></div>
+
+<script>
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5AawPDc7aluPokONkYz6f2ikwl0S487JvhKdKh6QSp1xhEhA/exec';
+const LIFF_ID_DASHBOARD = '2009637457-gAFKfT6y';
+
+let allData     = [];
+let masterData  = { locations: [], products: [] };
+let currentSort = 'rate_desc';
+let inactiveLocationIds = new Set();  // 本日の休止拠点ID（driver.htmlで「営業しない」設定）
+let isFirstLoad = true;  // 案B Phase-2：初回起動判定（キャッシュ先描画用）
+
+// ═══════════════════════════════════════════════════════════════
+// 案B Phase-2：ダッシュボード localStorage キャッシュ（v2026-05-18）
+//   - マスタ系：24h TTL（拠点・商品・スタッフ・インセンティブ等）
+//   - リアルタイム拠点データ：5分 TTL（allData・inactiveLocationIds）
+//   - 起動時のみキャッシュから先描画。5分間隔の setInterval 更新時はキャッシュ無視
+// ═══════════════════════════════════════════════════════════════
+const DASH_MASTER_CACHE_KEY    = 'oedo_dashboard_master_cache_v1';
+const DASH_REALTIME_CACHE_KEY  = 'oedo_dashboard_realtime_cache_v1';
+const DASH_MASTER_TTL_MS       = 24 * 60 * 60 * 1000;  // 24時間
+const DASH_REALTIME_TTL_MS     = 5 * 60 * 1000;        // 5分
+
+function loadDashMasterCache() {
+  try {
+    const raw = localStorage.getItem(DASH_MASTER_CACHE_KEY);
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
+    if (!obj || !obj.savedAt) return null;
+    if (Date.now() - obj.savedAt > DASH_MASTER_TTL_MS) {
+      localStorage.removeItem(DASH_MASTER_CACHE_KEY);
+      return null;
+    }
+    return obj.data || null;
+  } catch(e) {
+    console.warn('loadDashMasterCache error:', e);
+    return null;
+  }
+}
+
+function saveDashMasterCache(data) {
+  try {
+    localStorage.setItem(DASH_MASTER_CACHE_KEY, JSON.stringify({
+      savedAt: Date.now(),
+      data: data,
+    }));
+  } catch(e) { console.warn('saveDashMasterCache error:', e); }
+}
+
+function loadDashRealtimeCache() {
+  try {
+    const raw = localStorage.getItem(DASH_REALTIME_CACHE_KEY);
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
+    if (!obj || !obj.savedAt) return null;
+    if (Date.now() - obj.savedAt > DASH_REALTIME_TTL_MS) {
+      localStorage.removeItem(DASH_REALTIME_CACHE_KEY);
+      return null;
+    }
+    return obj.data || null;
+  } catch(e) {
+    console.warn('loadDashRealtimeCache error:', e);
+    return null;
+  }
+}
+
+function saveDashRealtimeCache(data) {
+  try {
+    localStorage.setItem(DASH_REALTIME_CACHE_KEY, JSON.stringify({
+      savedAt: Date.now(),
+      data: data,
+    }));
+  } catch(e) { console.warn('saveDashRealtimeCache error:', e); }
+}
+
+// ─────────────────────────────────────
+// LIFF初期化＋権限チェック
+// ─────────────────────────────────────
+let userProfile = null;  // {userId, displayName, role}
+
+window.addEventListener('load', async function() {
+  try {
+    await liff.init({ liffId: LIFF_ID_DASHBOARD });
+
+    if (!liff.isLoggedIn()) {
+      liff.login({ redirectUri: window.location.href });
+      return;
+    }
+
+    const profile = await liff.getProfile();
+    const roleRes = await fetchJSON(GAS_URL + '?action=getRole&userId=' + encodeURIComponent(profile.userId));
+    const role = (roleRes && roleRes.role) || '';
+
+    userProfile = {
+      userId:      profile.userId,
+      displayName: profile.displayName,
+      role:        role,
+    };
+
+    if (role !== '社員') {
+      // アクセス拒否画面
+      document.getElementById('liff-loading').style.display = 'none';
+      document.getElementById('user-role-tag').textContent = role || '未登録';
+      document.getElementById('access-denied').classList.add('show');
+      return;
+    }
+
+    // 社員：メインアプリ表示
+    document.getElementById('liff-loading').style.display = 'none';
+    document.getElementById('app-main').style.display = 'block';
+
+    // URLハッシュからタブ初期値を判定
+    const hash = window.location.hash;
+    if (hash === '#tab=memos') {
+      switchTab('memos');
+    }
+
+    loadAll();
+    loadMemoBadge();  // 申し送り未対応件数を取得（バッジ表示用）
+
+    // 5分ごとに更新
+    setInterval(loadAll, 5 * 60 * 1000);
+    setInterval(loadMemoBadge, 5 * 60 * 1000);
+
+  } catch(e) {
+    document.getElementById('liff-loading').innerHTML =
+      '<p style="color:var(--red);">起動エラー：' + e.message + '</p>';
+  }
+});
+
+function closeApp() {
+  if (liff.isInClient && liff.isInClient()) {
+    liff.closeWindow();
+  } else {
+    window.location.href = 'https://line.me/';
+  }
+}
+
+// ─────────────────────────────────────
+// DELIVERY
+// ─────────────────────────────────────
+let deliveryDates    = [];
+let selectedDelivery = '';
+const deliveryCache  = {};
+ 
+// 住所をGoogleマップで開く（LIFFブラウザ内では外部アプリ起動）
+function openMapByEncoded(encodedAddr) {
+  if (!encodedAddr) return;
+  const url = 'https://www.google.com/maps/search/?api=1&query=' + encodedAddr;
+  try {
+    if (typeof liff !== 'undefined' && liff.openWindow) {
+      liff.openWindow({ url: url, external: true });
+    } else {
+      window.open(url, '_blank');
+    }
+  } catch(e) {
+    window.open(url, '_blank');
+  }
+}
+ 
+async function initDelivery() {
+  const loadingEl = document.getElementById('dv-loading');
+  const contentEl = document.getElementById('dv-content');
+  loadingEl.style.display = 'block';
+  contentEl.innerHTML = '';
+  try {
+    const res  = await fetchJSON(GAS_URL + '?action=getDeliveryOrders');
+    deliveryDates = res.availableDates || [];
+    if (deliveryDates.length > 0) {
+      const now      = new Date();
+      const todayStr = now.getFullYear() + '/' + String(now.getMonth()+1).padStart(2,'0') + '/' + String(now.getDate()).padStart(2,'0');
+      const future   = deliveryDates.filter(function(d){ return d >= todayStr; });
+      const defaultDate = future.length > 0 ? future[0] : deliveryDates[deliveryDates.length - 1];
+      await selectDeliveryDate(defaultDate);
+    } else {
+      contentEl.innerHTML = '<p style="color:#9A9A9A;font-size:13px;padding:20px;">配達データがありません</p>';
+    }
+  } catch(e) {
+    contentEl.innerHTML = '<p style="color:#C0392B;font-size:13px;padding:20px;">取得エラー：' + e.message + '</p>';
+  }
+  loadingEl.style.display = 'none';
+}
+
+function renderDeliveryDateSelector() {
+  const sel = document.getElementById('delivery-date-selector');
+  if (!sel) return;
+  sel.innerHTML = deliveryDates.map(d => {
+    const dt = new Date(d.replace(/\//g, '-'));
+    const dayNames = ['日','月','火','水','木','金','土'];
+    const label = `${d.slice(5)}（${dayNames[dt.getDay()]}）`;
+    return `<option value="${d}">${label}</option>`;
+  }).join('');
+  if (selectedDelivery) sel.value = selectedDelivery;
+}
+
+async function selectDeliveryDate(date) {
+  selectedDelivery = date;
+  const sel = document.getElementById('delivery-date-selector');
+  if (sel) sel.value = date;
+
+  if (deliveryCache[date]) {
+    renderDeliveryOrders(deliveryCache[date], date);
+    return;
+  }
+
+  document.getElementById('dv-loading').style.display = 'block';
+  try {
+    const res    = await fetchJSON(`${GAS_URL}?action=getDeliveryOrders&date=${encodeURIComponent(date)}`);
+    const orders = res.orders || [];
+    deliveryCache[date] = orders;
+    renderDeliveryOrders(orders, date);
+  } catch(e) {
+    document.getElementById('dv-content').innerHTML = `<p style="color:var(--red);">取得エラー：${e.message}</p>`;
+  }
+  document.getElementById('dv-loading').style.display = 'none';
+}
+
+function renderDeliveryOrders(orders, date) {
+  const dt = new Date(date.replace(/\//g, '-'));
+  const dayNames = ['日','月','火','水','木','金','土'];
+
+  let html = '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">'
+    + '<select id="delivery-date-selector" onchange="selectDeliveryDate(this.value)" style="flex:1;padding:10px 12px;border:1.5px solid #D5D8DC;border-radius:10px;font-size:14px;font-family:inherit;background:white;color:#1C1C1C;"></select>'
+    + '<span style="font-size:13px;color:#9A9A9A;white-space:nowrap;">' + orders.length + '件</span>'
+    + '</div>';
+
+  setTimeout(() => renderDeliveryDateSelector(), 0);
+
+  if (orders.length === 0) {
+    html += '<p style="color:#9A9A9A;font-size:13px;text-align:center;padding:30px 0;">この日の配達はありません</p>';
+    document.getElementById('dv-content').innerHTML = html;
+    return;
+  }
+
+  orders.sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+
+  orders.forEach(function(o) {
+    var card = document.createElement('div');
+    card.style.cssText = 'background:white;border:1px solid #D5D8DC;border-radius:12px;overflow:hidden;margin-bottom:12px;';
+
+    var hdr = document.createElement('div');
+    hdr.style.cssText = 'background:#1A3C5E;color:white;padding:10px 14px;';
+    var hasAddr = o.address && String(o.address).trim() !== '';
+    var encAddr = hasAddr ? encodeURIComponent(o.address) : '';
+    var mapBtn  = hasAddr
+      ? '<button onclick="openMapByEncoded(\'' + encAddr + '\')" style="background:rgba(255,255,255,0.25);border:none;color:white;padding:3px 9px;border-radius:8px;font-size:11px;font-family:inherit;cursor:pointer;flex-shrink:0;line-height:1.4;" aria-label="Googleマップで開く">🗺 マップ</button>'
+      : '';
+    var hasAddr = o.address && String(o.address).trim() !== '';
+    var encAddr = hasAddr ? encodeURIComponent(o.address) : '';
+    var mapBtn  = hasAddr
+      ? '<button onclick="openMapByEncoded(\'' + encAddr + '\')" style="background:rgba(255,255,255,0.25);border:none;color:white;padding:3px 9px;border-radius:8px;font-size:11px;font-family:inherit;cursor:pointer;flex-shrink:0;line-height:1.4;" aria-label="Googleマップで開く">🗺 マップ</button>'
+      : '';
+    hdr.innerHTML = '<div style="font-size:13px;font-weight:bold;margin-bottom:2px;">' + (o.time || '時間未定') + '</div>'
+      + '<div style="font-size:12px;opacity:0.85;display:flex;align-items:center;gap:8px;"><span style="flex:1;min-width:0;">' + (o.address || '住所未定') + '</span>' + mapBtn + '</div>'
+      + '<div style="font-size:10px;opacity:0.6;margin-top:2px;">' + (o.orderNo || '') + '</div>';
+    card.appendChild(hdr);
+
+    if (o.detail) {
+      var det = document.createElement('div');
+      det.style.cssText = 'padding:8px 14px;background:#F8F4EE;font-size:12px;color:#4A4A4A;';
+      det.textContent = '📍 ' + o.detail;
+      card.appendChild(det);
+    }
+
+    var body = document.createElement('div');
+    body.style.cssText = 'padding:6px 14px;';
+    var rows = [
+      ['受取担当者', o.contact, false],
+      ['当日連絡先', o.phone, true],
+      ['注文内容', o.order, false],
+      ['会計種別', o.payment, false],
+      ['当日帳票', o.doc, false],
+    ];
+    rows.forEach(function(r) {
+      if (!r[1]) return;
+      var row = document.createElement('div');
+      row.style.cssText = 'display:flex;gap:8px;padding:5px 0;border-bottom:1px solid #F5F0E8;font-size:13px;align-items:flex-start;';
+      var label = document.createElement('span');
+      label.style.cssText = 'color:#9A9A9A;min-width:80px;flex-shrink:0;padding-top:2px;font-size:12px;';
+      label.textContent = r[0];
+      row.appendChild(label);
+      var val = document.createElement('span');
+      val.style.cssText = 'color:#1C1C1C;flex:1;';
+      if (r[0] === '注文内容') {
+        val.innerHTML = r[1].split(/\n|\r\n|\r/).filter(function(l){return l.trim();}).map(function(l){return '<div>' + l.trim() + '</div>';}).join('');
+      } else if (r[2]) {
+        val.innerHTML = '<a href="tel:' + r[1] + '" style="color:#2471A3;font-weight:bold;">' + r[1] + '</a>';
+      } else {
+        val.textContent = r[1];
+      }
+      row.appendChild(val);
+      body.appendChild(row);
+    });
+
+    if (o.note) {
+      var noteDiv = document.createElement('div');
+      noteDiv.style.cssText = 'margin-top:6px;background:#FFF8DC;border-left:3px solid #B8860B;padding:8px 10px;border-radius:0 6px 6px 0;font-size:12px;color:#666;';
+      noteDiv.innerHTML = '<span style="font-size:10px;font-weight:bold;color:#B8860B;display:block;margin-bottom:2px;">備考</span>' + o.note;
+      body.appendChild(noteDiv);
+    }
+
+    if (o.collectYN || o.collect) {
+      var colDiv = document.createElement('div');
+      colDiv.style.cssText = 'margin-top:6px;background:#F0FAF4;border-left:3px solid #27AE60;padding:8px 10px;border-radius:0 6px 6px 0;font-size:12px;color:#1A7A42;';
+      colDiv.innerHTML = '<span style="font-size:10px;font-weight:bold;display:block;margin-bottom:2px;">回収</span>' + (o.collectYN || '') + (o.collect ? '　' + o.collect : '');
+      body.appendChild(colDiv);
+    }
+
+    body.style.paddingBottom = '8px';
+    card.appendChild(body);
+    html += card.outerHTML;
+  });
+
+  document.getElementById('dv-content').innerHTML = html;
+}
+
+// ─────────────────────────────────────
+// INIT
+// ─────────────────────────────────────
+async function loadAll() {
+  updateTime();
+
+  // ─────────────────────────────────────────────────────────
+  // Phase A：初回のみ localStorage キャッシュから先描画（v2026-05-18 案B Phase-2）
+  //   2回目以降（5分間隔の自動更新）はキャッシュ無視で素通り
+  // ─────────────────────────────────────────────────────────
+  let prevSnapshot = null;
+  if (isFirstLoad) {
+    const cachedMaster   = loadDashMasterCache();
+    const cachedRealtime = loadDashRealtimeCache();
+    let renderedFromCache = false;
+
+    if (cachedMaster) {
+      masterData = cachedMaster;
+    }
+    if (cachedRealtime) {
+      allData = cachedRealtime.allData || [];
+      inactiveLocationIds = new Set(cachedRealtime.inactiveIds || []);
+      if (allData.length > 0) {
+        try {
+          renderRealtime();
+          if (document.getElementById('tab-cash').classList.contains('active')) {
+            renderCashTable();
+          }
+          renderedFromCache = true;
+        } catch(e) { console.warn('cache render error:', e); }
+      }
+    }
+
+    if (renderedFromCache) {
+      prevSnapshot = {
+        masterJson:   JSON.stringify(masterData || {}),
+        allDataJson:  JSON.stringify(allData || []),
+        inactiveJson: JSON.stringify(Array.from(inactiveLocationIds || [])),
+      };
+    }
+  }
+
+  try {
+    const [master, reports, intermediate, driverState] = await Promise.all([
+      fetchJSON(`${GAS_URL}?action=getMaster`),
+      fetchJSON(`${GAS_URL}?action=getTodayReports`),
+      fetchJSON(`${GAS_URL}?action=getTodayIntermediate`),
+      fetchJSON(`${GAS_URL}?action=getDriverState`).catch(() => ({ inactive: [] })),
+    ]);
+    masterData = master;
+    // 本日の休止拠点IDをSetで保持
+    inactiveLocationIds = new Set(
+      (driverState.inactive || []).map(x => String(x.locationId || '').trim())
+    );
+    const finalMap = {};
+    (reports.data || []).forEach(r => { finalMap[r.locationId] = r; });
+    const merged = [...(reports.data || [])];
+    (intermediate.data || []).forEach(r => {
+      if (!finalMap[r.locationId]) merged.push(r);
+    });
+    allData = merged;
+
+    // ─────────────────────────────────────────────────────────
+    // キャッシュ保存（マスタ・リアルタイム両方）
+    // ─────────────────────────────────────────────────────────
+    saveDashMasterCache(master);
+    saveDashRealtimeCache({
+      allData: merged,
+      inactiveIds: Array.from(inactiveLocationIds),
+    });
+
+    // ─────────────────────────────────────────────────────────
+    // Phase C：差分検出して silent 再描画（先描画していた場合のみ）
+    //   先描画していない場合は通常通り renderRealtime を呼ぶ
+    // ─────────────────────────────────────────────────────────
+    if (prevSnapshot) {
+      const newSnapshot = {
+        masterJson:   JSON.stringify(masterData || {}),
+        allDataJson:  JSON.stringify(allData || []),
+        inactiveJson: JSON.stringify(Array.from(inactiveLocationIds || [])),
+      };
+      const changed = (
+        prevSnapshot.masterJson   !== newSnapshot.masterJson   ||
+        prevSnapshot.allDataJson  !== newSnapshot.allDataJson  ||
+        prevSnapshot.inactiveJson !== newSnapshot.inactiveJson
+      );
+      if (changed) {
+        console.log('[案B] ダッシュボード差分検出 → 再描画');
+        renderRealtime();
+        if (document.getElementById('tab-cash').classList.contains('active')) {
+          renderCashTable();
+        }
+      }
+    } else {
+      renderRealtime();
+      if (document.getElementById('tab-cash').classList.contains('active')) {
+        renderCashTable();
+      }
+    }
+
+    isFirstLoad = false;
+  } catch (e) {
+    // キャッシュから既に描画済みなら、エラー画面に塗りつぶさず警告のみ
+    if (prevSnapshot) {
+      console.warn('loadAll error (cache fallback):', e);
+      return;
+    }
+    document.getElementById('rt-loading').innerHTML =
+      `<p style="color:var(--red);">データ取得エラー：${e.message}</p>`;
+  }
+}
+
+async function fetchJSON(url) {
+  const res  = await fetch(url, { redirect: 'follow' });
+  const text = await res.text();
+  return JSON.parse(text);
+}
+
+function updateTime() {
+  const now = new Date();
+  document.getElementById('update-time').textContent =
+    `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')} 更新`;
+}
+
+// ─────────────────────────────────────
+// REALTIME
+// ─────────────────────────────────────
+function renderRealtime() {
+  document.getElementById('rt-loading').style.display = 'none';
+  document.getElementById('rt-content').style.display = 'block';
+
+  const now = new Date();
+  const isAfter16 = now.getHours() >= 16;
+
+  const latestWithWeather = allData.find(r => r.weather);
+  if (latestWithWeather) {
+    document.getElementById('w-condition').textContent = latestWithWeather.weather;
+    document.getElementById('w-temp').textContent      = latestWithWeather.temperature;
+    document.getElementById('w-wind').textContent      = latestWithWeather.windspeed;
+  }
+
+  const reported   = allData.filter(r => r.reported);
+  const totalLocs  = masterData.locations.length;
+  const totalSold  = reported.reduce((s, r) => s + (r.soldCount || 0), 0);
+  const totalSales = reported.reduce((s, r) => s + (r.totalSales || 0), 0);
+  const avgRate    = reported.length > 0
+    ? Math.round(reported.reduce((s, r) => s + (r.sellRate || 0), 0) / reported.length * 10) / 10
+    : 0;
+
+  document.getElementById('kpi-grid').innerHTML = `
+    <div class="kpi-card red">
+      <div class="kpi-label">報告完了</div>
+      <div class="kpi-value">${reported.length}<span> / ${totalLocs}</span></div>
+      <div class="kpi-sub">拠点</div>
+    </div>
+    <div class="kpi-card gold">
+      <div class="kpi-label">総販売数</div>
+      <div class="kpi-value">${totalSold}<span> 個</span></div>
+    </div>
+    <div class="kpi-card green">
+      <div class="kpi-label">平均完売率</div>
+      <div class="kpi-value">${avgRate}<span> %</span></div>
+    </div>
+    <div class="kpi-card blue">
+      <div class="kpi-label">売上合計</div>
+      <div class="kpi-value" style="font-size:18px;">¥${totalSales.toLocaleString()}</div>
+    </div>
+  `;
+
+  if (isAfter16 && reported.length > 0) {
+    renderDailySummary(reported);
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // ランキング対象（v2026-05-18 修正）
+  //   最終報告 + 中間販売中で完売率が数値のものを含める
+  //   （販売中の進捗もベスト/ワーストに反映するため）
+  // ─────────────────────────────────────────────────────────
+  const rankingTargets = allData.filter(r => {
+    if (!r) return false;
+    if (r.reported) return true;                    // 最終報告
+    if (r.isIntermediate) {
+      const rateNum = Number(r.sellRate);
+      return !isNaN(rateNum) && r.sellRate !== '—'; // 中間販売中で完売率が数値
+    }
+    return false;
+  });
+  renderRanking(rankingTargets);
+  renderLocationTable();
+
+  document.getElementById('reported-count').textContent = `${reported.length}/${totalLocs}拠点 報告済み`;
+}
+
+function renderDailySummary(reported) {
+  const wrap = document.getElementById('daily-summary-wrap');
+  wrap.style.display = 'block';
+
+  const cashTotal   = reported.reduce((s, r) => s + (r.cashSales || 0), 0);
+  const paypayTotal = reported.reduce((s, r) => s + (r.paypayAmount || 0), 0);
+  const couponTotal = reported.reduce((s, r) => s + (r.couponCount || 0), 0);
+  const laborTotal  = reported.reduce((s, r) => s + (r.totalSalary || 0), 0);
+
+  document.getElementById('daily-summary').innerHTML = `
+    <div class="daily-summary-title">本日の最終集計</div>
+    <div class="daily-kpi-grid">
+      <div class="daily-kpi">
+        <div class="daily-kpi-label">現金売上</div>
+        <div class="daily-kpi-value gold">¥${cashTotal.toLocaleString()}</div>
+      </div>
+      <div class="daily-kpi">
+        <div class="daily-kpi-label">PayPay売上</div>
+        <div class="daily-kpi-value blue">¥${paypayTotal.toLocaleString()}</div>
+      </div>
+      <div class="daily-kpi">
+        <div class="daily-kpi-label">クーポン使用</div>
+        <div class="daily-kpi-value green">${couponTotal}<span style="font-size:14px;"> 枚</span></div>
+      </div>
+      <div class="daily-kpi">
+        <div class="daily-kpi-label">人件費合計</div>
+        <div class="daily-kpi-value red">¥${laborTotal.toLocaleString()}</div>
+      </div>
+    </div>
+  `;
+}
+
+function renderRanking(reported) {
+  // 休止拠点は完売率ランキングから除外
+  const activeReported = reported.filter(r =>
+    !inactiveLocationIds.has(String(r.locationId || '').trim())
+  );
+
+  if (activeReported.length === 0) {
+    document.getElementById('rank-grid').innerHTML =
+      '<p style="color:var(--ink-mute);font-size:13px;grid-column:1/-1;">まだ報告がありません</p>';
+    return;
+  }
+
+  // 文字列で来る可能性に備えて Number 化（NaN対策）
+  const sorted = [...activeReported].sort(
+    (a, b) => (Number(b.sellRate) || 0) - (Number(a.sellRate) || 0)
+  );
+  const best3  = sorted.slice(0, 3);
+  const worst3 = [...sorted].reverse().slice(0, 3);
+
+  const rankNumClass = (i) => i === 0 ? 'gold' : i === 1 ? 'silver' : 'bronze';
+
+  const renderItems = (items, isBest) => items.map((r, i) => {
+    const rate = Number(r.sellRate) || 0;
+    return `
+      <div class="rank-item" onclick="openModal('${r.locationId}')">
+        <div class="rank-num ${isBest ? rankNumClass(i) : 'bad'}">${i + 1}</div>
+        <div>
+          <div class="rank-name">${r.locationName}</div>
+          <div class="rank-staff">${r.userName}</div>
+        </div>
+        <div class="rate-bar-wrap">
+          <div class="rate-bar ${isBest ? 'high' : 'low'}" style="width:${rate}%"></div>
+        </div>
+        <div class="rank-rate ${isBest ? 'high' : 'low'}">${rate}%</div>
+      </div>
+    `;
+  }).join('');
+
+  document.getElementById('rank-grid').innerHTML = `
+    <div class="rank-card">
+      <div class="rank-card-header best">🏆 完売率ベスト3</div>
+      ${renderItems(best3, true)}
+    </div>
+    <div class="rank-card">
+      <div class="rank-card-header worst">⚠️ 完売率ワースト3</div>
+      ${renderItems(worst3, false)}
+    </div>
+  `;
+}
+
+function renderLocationTable() {
+  const locations = masterData.locations || [];
+  const dataMap   = {};
+  allData.forEach(r => { if (r.locationId) dataMap[r.locationId] = r; });
+
+  // 各行に sellRate(数値化済)と休止フラグを付与してから並び替え
+  let rows = locations.map(loc => {
+    const r = dataMap[loc.id];
+    const isInactive = inactiveLocationIds.has(String(loc.id || '').trim());
+    const rateNum = r ? (Number(r.sellRate) || 0) : null;  // null=未報告
+    return { loc, r, isInactive, rateNum };
+  });
+
+  // 並び替え（未報告は常に末尾、休止拠点はその更に下）
+  if (currentSort === 'rate_desc') {
+    rows.sort((a, b) => {
+      if (a.isInactive !== b.isInactive) return a.isInactive ? 1 : -1;
+      if (a.rateNum === null && b.rateNum === null) return 0;
+      if (a.rateNum === null) return 1;
+      if (b.rateNum === null) return -1;
+      return b.rateNum - a.rateNum;
+    });
+  } else if (currentSort === 'rate_asc') {
+    rows.sort((a, b) => {
+      if (a.isInactive !== b.isInactive) return a.isInactive ? 1 : -1;
+      if (a.rateNum === null && b.rateNum === null) return 0;
+      if (a.rateNum === null) return 1;
+      if (b.rateNum === null) return -1;
+      return a.rateNum - b.rateNum;
+    });
+  } else {
+    // ID順（自然順：L02 < L9 < L10 を正しく並べる）
+    rows.sort((a, b) =>
+      String(a.loc.id).localeCompare(String(b.loc.id), 'ja', { numeric: true })
+    );
+  }
+
+  document.getElementById('location-tbody').innerHTML = rows.map(({ loc, r, isInactive }) => {
+    // 休止拠点（営業しない設定あり）
+    if (isInactive) {
+      return `
+        <tr class="inactive">
+          <td>${loc.name}</td>
+          <td class="not-reported">—</td>
+          <td class="not-reported">—</td>
+          <td class="not-reported">—</td>
+          <td class="not-reported">—</td>
+          <td><span class="status-badge inactive">営業休止</span></td>
+        </tr>`;
+    }
+    if (!r) {
+      return `
+        <tr>
+          <td>${loc.name}</td>
+          <td class="not-reported">未報告</td>
+          <td class="not-reported">—</td>
+          <td class="not-reported">—</td>
+          <td class="not-reported">—</td>
+          <td><span class="status-badge none">未報告</span></td>
+        </tr>`;
+    }
+    const rateNum   = Number(r.sellRate) || 0;
+    const rateClass = rateNum >= 80 ? 'high' : rateNum >= 50 ? '' : 'low';
+    const totalSales = r.isIntermediate
+      ? (r.cashSales || 0) + (r.paypayAmount || 0)
+      : (r.totalSales || 0);
+    const teaIds = (masterData.products || []).filter(p => p.name.includes('お茶')).map(p => p.id);
+    const delivery = r.deliveryCount ? Object.entries(r.deliveryCount).filter(([id]) => !teaIds.includes(id)).reduce((s,[,v])=>s+Number(v),0) : 0;
+    // リアルタイム時は productSalesJson からお茶分を引いて分子に
+    let nonTeaSoldRT = r.soldCount || 0;
+    if (r.isIntermediate && r.productSalesJson) {
+      try {
+        const psObj = JSON.parse(r.productSalesJson || '{}');
+        let teaSoldRT = 0;
+        teaIds.forEach(id => { teaSoldRT += Number(psObj[id] || 0); });
+        nonTeaSoldRT = Math.max(0, (r.soldCount || 0) - teaSoldRT);
+      } catch(e) {}
+    }
+    const sellRate = r.isIntermediate
+      ? (delivery > 0 ? Math.round(nonTeaSoldRT / delivery * 1000) / 10 : '—')
+      : rateNum;
+    const rateStr  = r.isIntermediate ? (sellRate === '—' ? '—' : sellRate + '%') : rateNum + '%';
+    const badge    = r.isIntermediate
+      ? '<span class="status-badge pending">販売中</span>'
+      : '<span class="status-badge done">報告済</span>';
+    return `
+      <tr onclick="openModal('${loc.id}')">
+        <td>${loc.name}</td>
+        <td>${r.userName || '—'}</td>
+        <td>${r.soldCount || 0}個</td>
+        <td class="rate-cell ${typeof sellRate === 'number' ? rateClass : ''}">${rateStr}</td>
+        <td>¥${totalSales.toLocaleString()}</td>
+        <td>${badge}</td>
+      </tr>`;
+  }).join('');
+}
+
+function sortLocations(type) {
+  currentSort = type;
+  ['best','worst','id'].forEach(k => {
+    document.getElementById(`sort-${k}`)?.classList.toggle('active',
+      (k === 'best' && type === 'rate_desc') ||
+      (k === 'worst' && type === 'rate_asc') ||
+      (k === 'id' && type === 'id')
+    );
+  });
+  renderLocationTable();
+}
+
+// ─────────────────────────────────────
+// CASH TABLE
+// ─────────────────────────────────────
+function renderCashTable() {
+  const reported = allData.filter(r => r.reported);
+
+  if (reported.length === 0) {
+    document.getElementById('cash-summary').innerHTML = '';
+    document.getElementById('cash-tbody').innerHTML =
+      '<tr><td colspan="7" style="text-align:center;color:var(--ink-mute);padding:24px;">まだ報告がありません</td></tr>';
+    return;
+  }
+
+  const sorted = [...reported].sort((a, b) =>
+    a.locationName.localeCompare(b.locationName, 'ja')
+  );
+
+  // 集計
+  let totalEnd      = 0;
+  let totalGig      = 0;
+  let totalExpected = 0;
+  let totalActual   = 0;
+  let totalDiff     = 0;
+  let hasAnyActual  = false;
+
+  sorted.forEach(r => {
+    const expected = (r.registerEnd || 0) - (r.totalSalary || 0);
+    totalEnd      += (r.registerEnd  || 0);
+    totalGig      += (r.totalSalary  || 0);
+    totalExpected += expected;
+    if (hasActualValue(r.actualCash)) {
+      const actual = Number(r.actualCash) || 0;
+      totalActual += actual;
+      totalDiff   += (actual - expected);
+      hasAnyActual = true;
+    }
+  });
+
+  // ── サマリーカード ──
+  const summaryDiffClass = !hasAnyActual ? 'diff-ok'
+    : (Math.abs(totalDiff) <= 100 ? 'diff-ok'
+    : (totalDiff > 0 ? 'diff-plus' : 'diff-minus'));
+  document.getElementById('cash-summary').innerHTML = `
+    <div class="cash-summary-card expected">
+      <div class="label">想定額 合計</div>
+      <div class="value">¥${totalExpected.toLocaleString()}</div>
+    </div>
+    <div class="cash-summary-card actual">
+      <div class="label">実額 合計${hasAnyActual ? '' : '（未入力）'}</div>
+      <div class="value">${hasAnyActual ? '¥' + totalActual.toLocaleString() : '—'}</div>
+    </div>
+    <div class="cash-summary-card ${summaryDiffClass}">
+      <div class="label">誤差 合計</div>
+      <div class="value">${hasAnyActual ? formatDiff(totalDiff) : '—'}</div>
+    </div>
+  `;
+
+  // ── テーブル ──
+  const rowsHtml = sorted.map(r => {
+    const expected  = (r.registerEnd || 0) - (r.totalSalary || 0);
+    const hasActual = hasActualValue(r.actualCash);
+    const actual    = hasActual ? Number(r.actualCash) : null;
+    const diff      = hasActual ? actual - expected   : null;
+    const diffClass = !hasActual ? '' : diffClassFor(diff);
+    const diffText  = !hasActual ? '—' : formatDiff(diff);
+    return `
+      <tr>
+        <td>${r.locationName}</td>
+        <td>${r.userName || '—'}</td>
+        <td>¥${(r.registerEnd || 0).toLocaleString()}</td>
+        <td style="color:var(--red);">−¥${(r.totalSalary || 0).toLocaleString()}</td>
+        <td style="font-weight:700;color:var(--gold);">¥${expected.toLocaleString()}</td>
+        <td><input type="number" inputmode="numeric" class="cash-actual-input"
+                   id="actual-${r.locationId}" value="${hasActual ? actual : ''}"
+                   placeholder="—"
+                   onblur="saveActualCash('${r.locationId}', this.value)"></td>
+        <td class="cash-diff-cell ${diffClass}">${diffText}</td>
+      </tr>`;
+  }).join('');
+
+  const totalDiffClass = !hasAnyActual ? '' : diffClassFor(totalDiff);
+  const totalDiffText  = !hasAnyActual ? '—' : formatDiff(totalDiff);
+  document.getElementById('cash-tbody').innerHTML = rowsHtml + `
+    <tr class="total-row">
+      <td colspan="2">合計</td>
+      <td>¥${totalEnd.toLocaleString()}</td>
+      <td style="color:var(--red);">−¥${totalGig.toLocaleString()}</td>
+      <td style="color:var(--gold);font-size:15px;">¥${totalExpected.toLocaleString()}</td>
+      <td style="font-weight:700;color:var(--gold);">${hasAnyActual ? '¥' + totalActual.toLocaleString() : '—'}</td>
+      <td class="cash-diff-cell ${totalDiffClass}">${totalDiffText}</td>
+    </tr>`;
+}
+
+// ── ヘルパー（現金有高） ──
+function hasActualValue(v) {
+  return v !== null && v !== undefined && v !== '' && !isNaN(Number(v));
+}
+function diffClassFor(diff) {
+  if (Math.abs(diff) <= 100) return 'ok';
+  return diff > 0 ? 'plus' : 'minus';
+}
+function formatDiff(diff) {
+  if (diff === 0) return '±¥0';
+  if (diff > 0)   return '+¥' + diff.toLocaleString();
+  return '−¥' + Math.abs(diff).toLocaleString();
+}
+
+// onblurハンドラ：入力値を検証してGAS送信
+function saveActualCash(locationId, value) {
+  const trimmed = String(value).trim();
+  if (trimmed === '') {
+    sendActualCash(locationId, null);
+    return;
+  }
+  const num = Number(trimmed);
+  if (isNaN(num) || num < 0) {
+    alert('実額は0以上の数値で入力してください');
+    // 入力値をリセット
+    const r = allData.find(d => d.locationId === locationId);
+    const input = document.getElementById('actual-' + locationId);
+    if (input) input.value = hasActualValue(r?.actualCash) ? r.actualCash : '';
+    return;
+  }
+  sendActualCash(locationId, num);
+}
+
+// GASに保存（誤差計算と通知はGAS側）
+async function sendActualCash(locationId, actualCash) {
+  try {
+    const r = allData.find(d => d.locationId === locationId);
+    if (!r) return;
+    // 即座にUI反映
+    r.actualCash = actualCash;
+    renderCashTable();
+    // GAS送信
+    const payload = {
+      action:       'saveActualCash',
+      locationId:   locationId,
+      locationName: r.locationName,
+      actualCash:   actualCash,
+      operatorId:   userProfile?.userId || '',
+      operatorName: userProfile?.displayName || '',
+      timestamp:    new Date().toISOString(),
+    };
+    await fetch(GAS_URL, {
+      method: 'POST',
+      body:   JSON.stringify(payload),
+    });
+  } catch(e) {
+    console.warn('saveActualCash error:', e);
+  }
+}
+
+// ─────────────────────────────────────
+// DETAIL MODAL
+// ─────────────────────────────────────
+function openModal(locationId) {
+  const loc = (masterData.locations || []).find(l => l.id === locationId);
+  const r   = allData.find(d => d.locationId === locationId);
+  if (!loc || !r) return;
+
+  document.getElementById('modal-location-name').textContent = loc.name;
+  document.getElementById('modal-location-sub').textContent  = `担当：${r.userName || '—'}`;
+
+  const products = masterData.products || [];
+  const delivery = JSON.parse(r.deliveryCountJson || '{}');
+  const sales    = JSON.parse(r.productSalesJson  || '{}');
+  const soldOutTimes = JSON.parse(r.soldOutTimesJson || '{}');
+
+  let bodyHtml = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+      <div class="kpi-card green"><div class="kpi-label">販売数</div><div class="kpi-value">${r.soldCount || 0}<span> 個</span></div></div>
+      <div class="kpi-card gold"><div class="kpi-label">完売率</div><div class="kpi-value">${r.sellRate || 0}<span> %</span></div></div>
+      <div class="kpi-card red"><div class="kpi-label">売上合計</div><div class="kpi-value" style="font-size:16px;">¥${(r.totalSales||0).toLocaleString()}</div></div>
+      <div class="kpi-card blue"><div class="kpi-label">本日ギャラ</div><div class="kpi-value" style="font-size:16px;">¥${(r.totalSalary||0).toLocaleString()}</div></div>
+    </div>
+    <div style="font-size:12px;font-weight:700;color:var(--ink-mute);letter-spacing:.1em;margin-bottom:10px;">商品別完売率</div>
+  `;
+
+  const modalTeaIds = (masterData.products || []).filter(p => p.name.includes('お茶')).map(p => p.id);
+  products.filter(p => !modalTeaIds.includes(p.id)).forEach(p => {
+    const d    = Number(delivery[p.id] || 0);
+    const s    = Number(sales[p.id]    || 0);
+    const rate = d > 0 ? Math.round(s / d * 100) : null;
+    const rateStr = rate !== null ? `${rate}%` : '—';
+    const barW    = rate !== null ? rate : 0;
+    const soldOutTime = soldOutTimes[p.id];
+    const soldOutBadge = soldOutTime
+      ? `<span style="display:inline-block;background:var(--red);color:#FFF;font-size:10px;font-weight:700;padding:2px 6px;border-radius:6px;margin-left:6px;white-space:nowrap;">完売 ${soldOutTime}</span>`
+      : '';
+    bodyHtml += `
+      <div class="product-row">
+        <div class="product-row-name">${p.name}${soldOutBadge}</div>
+        <div class="product-row-nums">${s}/${d}個</div>
+        <div class="product-rate-bar"><div class="product-rate-fill" style="width:${barW}%"></div></div>
+        <div class="product-row-rate" style="color:${barW >= 80 ? 'var(--green)' : barW > 0 ? 'var(--gold)' : 'var(--ink-mute)'}">${rateStr}</div>
+      </div>`;
+  });
+
+  if (r.memo) {
+    bodyHtml += `
+      <div style="margin-top:16px;background:var(--gold-light);border-left:3px solid var(--gold);padding:10px 14px;border-radius:0 8px 8px 0;font-size:13px;color:var(--ink-soft);">
+        <div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:4px;">申し送り</div>
+        ${escapeHtml(r.memo)}
+      </div>`;
+  }
+
+  document.getElementById('modal-body').innerHTML = bodyHtml;
+  document.getElementById('detail-modal').classList.add('show');
+}
+
+function closeModal() {
+  document.getElementById('detail-modal').classList.remove('show');
+}
+document.getElementById('detail-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+
+// ─────────────────────────────────────
+// WEEKLY
+// ─────────────────────────────────────
+async function loadWeekly(weekStart) {
+  document.getElementById('wk-loading').style.display = 'block';
+  document.getElementById('weekly-data').innerHTML = '';
+  try {
+    const res = await fetchJSON(`${GAS_URL}?action=getWeeklyReport&weekStart=${weekStart}`);
+    renderWeeklyData(res.data || []);
+  } catch (e) {
+    document.getElementById('weekly-data').innerHTML = `<p style="color:var(--red);">取得エラー</p>`;
+  }
+  document.getElementById('wk-loading').style.display = 'none';
+}
+
+function renderWeeklyData(data) {
+  if (!data.length) {
+    document.getElementById('weekly-data').innerHTML = '<p style="color:var(--ink-mute);font-size:13px;">この週のデータがありません</p>';
+    return;
+  }
+
+  const products = masterData.products || [];
+  const teaIds   = products.filter(p => p.name.includes('お茶')).map(p => p.id);
+
+  const productDelivery = {};
+  const productSales    = {};
+  products.forEach(p => { productDelivery[p.id] = 0; productSales[p.id] = 0; });
+
+  const byLocation = {};
+  data.forEach(r => {
+    if (!byLocation[r.locationName]) {
+      byLocation[r.locationName] = { sold: 0, soldNoTea: 0, sales: 0, count: 0, rates: [] };
+    }
+    byLocation[r.locationName].sold  += r.soldCount || 0;
+    byLocation[r.locationName].sales += r.totalSales || 0;
+    byLocation[r.locationName].count++;
+    if (r.sellRate) byLocation[r.locationName].rates.push(r.sellRate);
+
+    const delivery = JSON.parse(r.deliveryCountJson || '{}');
+    const sales    = JSON.parse(r.productSalesJson  || '{}');
+    let teaSold = 0;
+    products.forEach(p => {
+      productDelivery[p.id] += Number(delivery[p.id] || 0);
+      productSales[p.id]    += Number(sales[p.id]    || 0);
+      if (teaIds.includes(p.id)) teaSold += Number(sales[p.id] || 0);
+    });
+    byLocation[r.locationName].soldNoTea += (r.soldCount || 0) - teaSold;
+  });
+
+  const rows = Object.entries(byLocation)
+    .map(([name, d]) => ({
+      name,
+      sold: d.sold,
+      soldNoTea: d.soldNoTea,
+      sales: d.sales,
+      days: d.count,
+      avgRate:   d.rates.length > 0 ? Math.round(d.rates.reduce((a,b)=>a+b,0)/d.rates.length*10)/10 : 0,
+      avgPerDay: d.count > 0 ? Math.round(d.soldNoTea / d.count) : 0,
+    }))
+    .sort((a, b) => b.sales - a.sales);
+
+  const totalSales = rows.reduce((s, r) => s + r.sales, 0);
+  const totalSold  = rows.reduce((s, r) => s + r.sold, 0);
+  const operDays   = new Set(data.map(r => r.date)).size;
+
+  const productRows = products
+    .filter(p => !teaIds.includes(p.id))
+    .map(p => {
+      const d    = productDelivery[p.id] || 0;
+      const s    = productSales[p.id]    || 0;
+      const rate = d > 0 ? Math.round(s / d * 100) : null;
+      return { name: p.name, d, s, rate };
+    }).filter(p => p.d > 0);
+
+  document.getElementById('weekly-data').innerHTML = `
+    <div class="kpi-grid" style="margin-bottom:16px;">
+      <div class="kpi-card red"><div class="kpi-label">週間売上</div><div class="kpi-value" style="font-size:18px;">¥${totalSales.toLocaleString()}</div></div>
+      <div class="kpi-card gold"><div class="kpi-label">週間販売数</div><div class="kpi-value">${totalSold}<span> 個</span></div></div>
+      <div class="kpi-card green"><div class="kpi-label">営業日数</div><div class="kpi-value">${operDays}<span> 日</span></div></div>
+    </div>
+
+    <div class="section-title">商品別完売率(週間合計)</div>
+    <table class="stats-table" style="margin-bottom:16px;">
+      <thead><tr><th>商品名</th><th>納品数</th><th>販売数</th><th>完売率</th></tr></thead>
+      <tbody>${productRows.map(p => {
+        const rateStr   = p.rate !== null ? `${p.rate}%` : '—';
+        const rateColor = p.rate >= 80 ? 'var(--green)' : p.rate >= 50 ? 'var(--gold)' : 'var(--red)';
+        return `<tr>
+          <td>${p.name}</td>
+          <td>${p.d}個</td>
+          <td>${p.s}個</td>
+          <td style="font-weight:700;color:${rateColor}">${rateStr}</td>
+        </tr>`;
+      }).join('')}
+      </tbody>
+    </table>
+
+    <div class="section-title">拠点別集計</div>
+    <table class="stats-table">
+      <thead><tr><th>拠点名</th><th>営業日数</th><th>1日平均販売数<br><small style="font-weight:400;opacity:.7;">お茶除く</small></th><th>平均完売率</th><th>売上合計</th></tr></thead>
+      <tbody>${rows.map(r => `
+        <tr>
+          <td>${r.name}</td>
+          <td>${r.days}日</td>
+          <td>${r.avgPerDay}個</td>
+          <td>${r.avgRate}%</td>
+          <td>¥${r.sales.toLocaleString()}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+// ─────────────────────────────────────
+// MONTHLY
+// ─────────────────────────────────────
+async function loadMonthly(yearMonth) {
+  document.getElementById('mo-loading').style.display = 'block';
+  document.getElementById('monthly-data').innerHTML = '';
+  try {
+    const res = await fetchJSON(`${GAS_URL}?action=getMonthlyReport&yearMonth=${yearMonth}`);
+    renderMonthlyData(res.data || [], yearMonth);
+  } catch (e) {
+    document.getElementById('monthly-data').innerHTML = `<p style="color:var(--red);">取得エラー</p>`;
+  }
+  document.getElementById('mo-loading').style.display = 'none';
+}
+
+function renderMonthlyData(data, yearMonth) {
+  if (!data.length) {
+    document.getElementById('monthly-data').innerHTML = '<p style="color:var(--ink-mute);font-size:13px;">この月のデータがありません</p>';
+    return;
+  }
+
+  const byDay = { '月':{sold:0,count:0}, '火':{sold:0,count:0}, '水':{sold:0,count:0}, '木':{sold:0,count:0}, '金':{sold:0,count:0} };
+  data.forEach(r => {
+    if (byDay[r.dayOfWeek]) {
+      byDay[r.dayOfWeek].sold  += r.soldCount || 0;
+      byDay[r.dayOfWeek].count++;
+    }
+  });
+
+  const byWeather = {};
+  data.forEach(r => {
+    if (!r.weather) return;
+    if (!byWeather[r.weather]) byWeather[r.weather] = { sold: 0, count: 0 };
+    byWeather[r.weather].sold  += r.soldCount || 0;
+    byWeather[r.weather].count++;
+  });
+
+  const totalSales = data.reduce((s, r) => s + (r.totalSales||0), 0);
+  const totalSold  = data.reduce((s, r) => s + (r.soldCount||0), 0);
+  const avgRate    = data.length > 0 ? Math.round(data.reduce((s,r)=>s+(r.sellRate||0),0)/data.length*10)/10 : 0;
+
+  document.getElementById('monthly-data').innerHTML = `
+    <div class="kpi-grid" style="margin-bottom:16px;">
+      <div class="kpi-card red"><div class="kpi-label">月間売上</div><div class="kpi-value" style="font-size:18px;">¥${totalSales.toLocaleString()}</div></div>
+      <div class="kpi-card gold"><div class="kpi-label">月間販売数</div><div class="kpi-value">${totalSold}<span> 個</span></div></div>
+      <div class="kpi-card green"><div class="kpi-label">平均完売率</div><div class="kpi-value">${avgRate}<span> %</span></div></div>
+    </div>
+
+    <div class="section-title">曜日別平均販売数</div>
+    <table class="stats-table" style="margin-bottom:16px;">
+      <thead><tr><th>曜日</th><th>営業日数</th><th>平均販売数</th></tr></thead>
+      <tbody>${Object.entries(byDay).map(([day, d]) => `
+        <tr>
+          <td>${day}曜日</td>
+          <td>${d.count}日</td>
+          <td>${d.count > 0 ? Math.round(d.sold/d.count) : '—'}個</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+
+    <div class="section-title">天気別平均販売数</div>
+    <table class="stats-table">
+      <thead><tr><th>天気</th><th>日数</th><th>平均販売数</th></tr></thead>
+      <tbody>${Object.entries(byWeather).map(([weather, d]) => `
+        <tr>
+          <td>${weather}</td>
+          <td>${d.count}日</td>
+          <td>${Math.round(d.sold/d.count)}個</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+// ─────────────────────────────────────
+// TABS
+// ─────────────────────────────────────
+function switchTab(tab) {
+  const tabNames = ['realtime','weekly','monthly','delivery','cash','heatmap','profit','products','memos'];
+  document.querySelectorAll('.tab-btn').forEach((b, i) => {
+    b.classList.toggle('active', tabNames[i] === tab);
+  });
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById(`tab-${tab}`).classList.add('active');
+ 
+  if (tab === 'weekly')   initWeekSelector();
+  if (tab === 'monthly')  initMonthSelector();
+  if (tab === 'delivery') initDelivery();
+  if (tab === 'cash')     renderCashTable();
+  if (tab === 'heatmap')  loadHeatmapData();
+  if (tab === 'profit')   loadProfit();
+  if (tab === 'products') loadProductMgmt();
+  if (tab === 'memos')    loadMemos();
+}
+
+function initWeekSelector() {
+  const selector = document.getElementById('week-selector');
+  if (selector.innerHTML) return;
+  const weeks = [];
+  const now = new Date();
+  for (let i = 0; i < 8; i++) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - d.getDay() + 1 - i * 7);
+    const label = `${d.getMonth()+1}/${d.getDate()}週`;
+    const val   = d.toISOString().split('T')[0];
+    weeks.push({ label, val });
+  }
+  selector.innerHTML = weeks.map((w, i) => `
+    <button class="period-btn ${i===0?'active':''}" onclick="selectWeek('${w.val}', this)">${w.label}</button>
+  `).join('');
+  loadWeekly(weeks[0].val);
+}
+
+function selectWeek(val, btn) {
+  document.querySelectorAll('#week-selector .period-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  loadWeekly(val);
+}
+
+function initMonthSelector() {
+  const selector = document.getElementById('month-selector');
+  if (selector.innerHTML) return;
+  const months = [];
+  const now = new Date();
+  for (let i = 0; i < 6; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const label = `${d.getFullYear()}年${d.getMonth()+1}月`;
+    const val   = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    months.push({ label, val });
+  }
+  selector.innerHTML = months.map((m, i) => `
+    <button class="period-btn ${i===0?'active':''}" onclick="selectMonth('${m.val}', this)">${m.label}</button>
+  `).join('');
+  loadMonthly(months[0].val);
+}
+
+function selectMonth(val, btn) {
+  document.querySelectorAll('#month-selector .period-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  loadMonthly(val);
+}
+
+// ===== ヒートマップ＋粗利ランキング =====
+const HEATMAP_GAS_URL = GAS_URL;
+const HEATMAP_BUCKET_LABELS = {
+  too_early: '早すぎ', early: '早い', pass: '合格', ideal: '理想', not_sold: '完売せず'
+};
+const HEATMAP_BUCKET_COLORS = {
+  too_early: '#E74C3C', early: '#F39C12', pass: '#85C1E9',
+  ideal: '#27AE60', not_sold: '#BDC3C7'
+};
+let heatmapCurrentPeriod = '1w';
+
+document.addEventListener('DOMContentLoaded', () => {
+  const heatmapSection = document.getElementById('heatmap-section');
+  if (!heatmapSection) return;
+
+  heatmapSection.querySelectorAll('.period-switch .period-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      heatmapSection.querySelectorAll('.period-switch .period-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      heatmapCurrentPeriod = btn.dataset.period;
+      loadHeatmapData();
+    });
+  });
+});
+
+async function loadHeatmapData() {
+  const heatmapEl = document.getElementById('heatmap-container');
+  const rankingEl = document.getElementById('ranking-container');
+  if (!heatmapEl || !rankingEl) return;
+  heatmapEl.innerHTML = '<div class="dashboard-loading">読み込み中...</div>';
+  rankingEl.innerHTML = '<div class="dashboard-loading">読み込み中...</div>';
+
+  try {
+    const url = `${HEATMAP_GAS_URL}?action=getDashboardData&period=${heatmapCurrentPeriod}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (!data.success) {
+      heatmapEl.innerHTML = `<div class="placeholder-msg">エラー: ${data.error || '不明'}</div>`;
+      rankingEl.innerHTML = '';
+      return;
+    }
+    renderHeatmap(data.heatmap);
+    renderHeatmapRanking(data.profitRanking);
+  } catch (e) {
+    heatmapEl.innerHTML = `<div class="placeholder-msg">通信エラー: ${e.message}</div>`;
+    rankingEl.innerHTML = '';
+  }
+}
+
+function renderHeatmap(heatmap) {
+  const container = document.getElementById('heatmap-container');
+  if (!heatmap.locations || heatmap.locations.length === 0) {
+    container.innerHTML = '<div class="placeholder-msg">この期間に売上のあった拠点がありません</div>';
+    return;
+  }
+  let html = '<table class="heatmap-table"><thead><tr><th class="location-header">拠点</th>';
+  heatmap.dateList.forEach(d => {
+    const dateLabel = d.date.slice(5).replace('-', '/');
+    html += `<th>${dateLabel}<br><span style="font-weight:normal;color:#999">${d.dayOfWeek}</span></th>`;
+  });
+  html += '</tr></thead><tbody>';
+
+  heatmap.locations.forEach(loc => {
+    html += `<tr><td class="location-cell"><div>${escapeHtml(loc.name)}</div><div class="location-meta">終業 ${loc.endTime} / 平均 ${loc.avgDelivery}個</div></td>`;
+    loc.cells.forEach(cell => {
+      if (!cell.bucket) {
+        html += '<td><div class="heat-cell empty"></div></td>';
+      } else {
+        const color = HEATMAP_BUCKET_COLORS[cell.bucket];
+        const label = HEATMAP_BUCKET_LABELS[cell.bucket];
+        const tooltip = cell.soldOutTime ? `${label} (完売 ${cell.soldOutTime})` : label;
+        html += `<td><div class="heat-cell" style="background:${color}" title="${tooltip}"></div></td>`;
+      }
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+function renderHeatmapRanking(ranking) {
+  const container = document.getElementById('ranking-container');
+  if (ranking.placeholder) {
+    container.innerHTML = `<div class="placeholder-msg">${ranking.message}</div>`;
+    return;
+  }
+  if (!ranking.rows || ranking.rows.length === 0) {
+    container.innerHTML = '<div class="placeholder-msg">データがありません</div>';
+    return;
+  }
+  let html = '<table class="ranking-table"><thead><tr><th class="col-rank">順位</th><th>拠点名</th><th class="col-amount">粗利</th><th class="col-amount">平均納品数</th></tr></thead><tbody>';
+  ranking.rows.forEach(row => {
+    const profit = row.profit !== null ? `¥${row.profit.toLocaleString()}` : 'ー';
+    html += `<tr><td class="col-rank">${row.hasData ? row.rank : 'ー'}</td><td>${escapeHtml(row.name)}</td><td class="col-amount">${profit}</td><td class="col-amount">${row.avgDelivery}</td></tr>`;
+  });
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+// 共通HTMLエスケープ
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ★ 商品管理タブ（v2026-05-11 一括選択対応）
+// ═══════════════════════════════════════════════════════════════
+let _pmProducts = [];
+let _pmStoppedIds = new Set();
+let _pmPending = null;          // 単発操作用 {id, name, willStop}
+let _pmBatchPending = null;     // 一括操作用 {action: 'stop'|'resume', items: [...]}
+let _pmSelected = new Set();    // チェック済み商品ID
+let _pmLoaded = false;
+
+async function loadProductMgmt() {
+  const wrap = document.getElementById('pm-list-wrap');
+  if (!_pmLoaded) {
+    wrap.innerHTML = '<div class="loading-wrap"><div class="loader"></div><p>商品リストを読み込み中...</p></div>';
+  }
+  try {
+    const [products, stopped] = await Promise.all([
+      fetchJSON(`${GAS_URL}?action=getProducts`),
+      fetchJSON(`${GAS_URL}?action=getProductSwitches`)
+    ]);
+    _pmProducts = Array.isArray(products) ? products : [];
+    _pmStoppedIds = new Set(Array.isArray(stopped) ? stopped : []);
+    _pmLoaded = true;
+    renderProductMgmt();
+  } catch (e) {
+    wrap.innerHTML = `<p style="color:var(--red);font-size:13px;padding:20px;text-align:center;">取得エラー：${e.message}</p>`;
+  }
+}
+
+function renderProductMgmt() {
+  // サマリー
+  const total = _pmProducts.length;
+  const stopped = _pmStoppedIds.size;
+  const active = total - stopped;
+  document.getElementById('pm-summary').innerHTML = `
+    <div class="pm-summary-card">
+      <div class="pm-summary-label">全商品</div>
+      <div class="pm-summary-value">${total}<span>件</span></div>
+    </div>
+    <div class="pm-summary-card">
+      <div class="pm-summary-label">稼働中</div>
+      <div class="pm-summary-value green">${active}<span>件</span></div>
+    </div>
+    <div class="pm-summary-card">
+      <div class="pm-summary-label">停止中</div>
+      <div class="pm-summary-value red">${stopped}<span>件</span></div>
+    </div>
+  `;
+
+  const wrap = document.getElementById('pm-list-wrap');
+  if (_pmProducts.length === 0) {
+    wrap.innerHTML = '<p style="color:var(--ink-mute);font-size:13px;padding:20px;text-align:center;">商品データがありません</p>';
+    return;
+  }
+
+  // 既に消えた商品IDを選択リストから除外
+  const validIds = new Set(_pmProducts.map(p => p.id));
+  Array.from(_pmSelected).forEach(id => {
+    if (!validIds.has(id)) _pmSelected.delete(id);
+  });
+
+  // 選択中の集計
+  const selectedActive = [];
+  const selectedStopped = [];
+  _pmSelected.forEach(id => {
+    if (_pmStoppedIds.has(id)) selectedStopped.push(id);
+    else selectedActive.push(id);
+  });
+  const selectedCount = _pmSelected.size;
+  const allSelected = total > 0 && selectedCount === total;
+  const someSelected = selectedCount > 0 && !allSelected;
+
+  // 一括操作バー
+  const stopBtn = selectedActive.length > 0
+    ? `<button class="pm-batch-btn stop" onclick="confirmBatchProductMgmt('stop')">稼働中${selectedActive.length}件を停止</button>`
+    : '';
+  const resumeBtn = selectedStopped.length > 0
+    ? `<button class="pm-batch-btn resume" onclick="confirmBatchProductMgmt('resume')">停止中${selectedStopped.length}件を再開</button>`
+    : '';
+
+  const batchBarHtml = `
+    <div class="pm-batch-bar">
+      <label class="pm-batch-checkbox-wrap">
+        <input type="checkbox"
+               class="pm-batch-checkbox"
+               id="pm-select-all"
+               ${allSelected ? 'checked' : ''}
+               onchange="toggleSelectAllProducts(this.checked)">
+        <span>全選択</span>
+      </label>
+      <span class="pm-batch-count">${selectedCount}件選択中</span>
+      <div class="pm-batch-actions">${stopBtn}${resumeBtn}</div>
+    </div>
+  `;
+
+  // 商品リスト
+  const listHtml = '<div class="pm-list">' + _pmProducts.map(p => {
+    const isStopped = _pmStoppedIds.has(p.id);
+    const isSelected = _pmSelected.has(p.id);
+    const rowClass = `pm-row ${isStopped ? 'stopped' : ''} ${isSelected ? 'selected' : ''}`;
+    return `
+      <div class="${rowClass}" id="pm-row-${p.id}">
+        <label class="pm-row-checkbox-wrap">
+          <input type="checkbox"
+                 class="pm-row-checkbox"
+                 ${isSelected ? 'checked' : ''}
+                 onchange="toggleProductSelect('${p.id}', this.checked)">
+        </label>
+        <div class="pm-row-id">${p.id}</div>
+        <div class="pm-row-name">${escapeHtml(p.name)}</div>
+        <span class="pm-row-status ${isStopped ? 'stopped' : 'active'}">${isStopped ? '停止中' : '稼働中'}</span>
+        <button class="pm-toggle ${isStopped ? 'off' : ''}" onclick="onProductToggle('${p.id}')" aria-label="トグル"></button>
+      </div>`;
+  }).join('') + '</div>';
+
+  wrap.innerHTML = batchBarHtml + listHtml;
+
+  // インデターミネート状態を反映
+  const selectAllEl = document.getElementById('pm-select-all');
+  if (selectAllEl) {
+    selectAllEl.indeterminate = someSelected;
+  }
+}
+
+function toggleProductSelect(productId, checked) {
+  if (checked) _pmSelected.add(productId);
+  else _pmSelected.delete(productId);
+  renderProductMgmt();
+}
+
+function toggleSelectAllProducts(checked) {
+  if (checked) _pmProducts.forEach(p => _pmSelected.add(p.id));
+  else _pmSelected.clear();
+  renderProductMgmt();
+}
+
+// 単発操作
+function onProductToggle(productId) {
+  const product = _pmProducts.find(p => p.id === productId);
+  if (!product) return;
+  const isStopped = _pmStoppedIds.has(productId);
+  const willStop = !isStopped;
+
+  _pmPending = { id: productId, name: product.name, willStop };
+  _pmBatchPending = null;  // 単発モードに切替
+
+  const header = document.getElementById('pm-confirm-header');
+  const body = document.getElementById('pm-confirm-body');
+  const action = document.getElementById('pm-confirm-action');
+
+  if (willStop) {
+    header.textContent = '商品の停止';
+    header.className = 'pm-confirm-header stop';
+    body.innerHTML = `
+      以下の商品を停止しますか？
+      <div class="pm-confirm-product">${escapeHtml(product.name)}</div>
+      停止すると、レジアプリで販売できなくなります。<br>
+      <span style="font-size:11px;color:var(--ink-mute);">※20時に自動で稼働状態に戻ります</span>
+    `;
+    action.textContent = '停止する';
+    action.className = 'pm-confirm-btn confirm-stop';
+  } else {
+    header.textContent = '商品の再開';
+    header.className = 'pm-confirm-header resume';
+    body.innerHTML = `
+      以下の商品を再開しますか？
+      <div class="pm-confirm-product">${escapeHtml(product.name)}</div>
+      再開すると、レジアプリで販売可能になります。
+    `;
+    action.textContent = '再開する';
+    action.className = 'pm-confirm-btn confirm-resume';
+  }
+
+  document.getElementById('pm-confirm-modal').classList.add('show');
+}
+
+// 一括操作の確認
+function confirmBatchProductMgmt(action) {
+  // action: 'stop' or 'resume'
+  const selectedIds = Array.from(_pmSelected);
+  const targetIds = selectedIds.filter(id =>
+    action === 'stop' ? !_pmStoppedIds.has(id) : _pmStoppedIds.has(id)
+  );
+  if (targetIds.length === 0) return;
+
+  const targetProducts = targetIds.map(id => _pmProducts.find(p => p.id === id)).filter(Boolean);
+  _pmBatchPending = { action, items: targetProducts };
+  _pmPending = null;  // 一括モードに切替
+
+  const header = document.getElementById('pm-confirm-header');
+  const body = document.getElementById('pm-confirm-body');
+  const actionBtn = document.getElementById('pm-confirm-action');
+
+  const isStop = action === 'stop';
+  const productListHtml = '<div class="pm-confirm-product-list">' +
+    targetProducts.map(p => `<div class="pm-confirm-product-list-item">${escapeHtml(p.name)}</div>`).join('') +
+    '</div>';
+
+  if (isStop) {
+    header.textContent = `${targetProducts.length}件の商品を停止`;
+    header.className = 'pm-confirm-header stop';
+    body.innerHTML = `
+      以下の${targetProducts.length}件を停止しますか？
+      ${productListHtml}
+      停止すると、レジアプリで販売できなくなります。<br>
+      <span style="font-size:11px;color:var(--ink-mute);">※20時に自動で稼働状態に戻ります</span>
+    `;
+    actionBtn.textContent = `${targetProducts.length}件を停止する`;
+    actionBtn.className = 'pm-confirm-btn confirm-stop';
+  } else {
+    header.textContent = `${targetProducts.length}件の商品を再開`;
+    header.className = 'pm-confirm-header resume';
+    body.innerHTML = `
+      以下の${targetProducts.length}件を再開しますか？
+      ${productListHtml}
+      再開すると、レジアプリで販売可能になります。
+    `;
+    actionBtn.textContent = `${targetProducts.length}件を再開する`;
+    actionBtn.className = 'pm-confirm-btn confirm-resume';
+  }
+
+  document.getElementById('pm-confirm-modal').classList.add('show');
+}
+
+// 確認ボタン共通ディスパッチャー（HTMLのonclickから呼ばれる）
+async function executePmConfirm() {
+  if (_pmBatchPending) {
+    await executeBatchProductMgmt();
+  } else if (_pmPending) {
+    await confirmProductMgmt();
+  }
+}
+
+function cancelProductMgmt() {
+  _pmPending = null;
+  _pmBatchPending = null;
+  document.getElementById('pm-confirm-modal').classList.remove('show');
+}
+
+// 単発実行（既存）
+async function confirmProductMgmt() {
+  if (!_pmPending) return;
+  const { id, name, willStop } = _pmPending;
+  const status = willStop ? '停止' : '稼働';
+
+  const actionBtn = document.getElementById('pm-confirm-action');
+  const cancelBtn = document.querySelector('#pm-confirm-modal .pm-confirm-btn.cancel');
+  actionBtn.disabled = true;
+  cancelBtn.disabled = true;
+  actionBtn.textContent = '処理中...';
+
+  try {
+    const params = new URLSearchParams();
+    params.append('action', 'setProductSwitch');
+    params.append('productId', id);
+    params.append('status', status);
+
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      body: params,
+      redirect: 'follow'
+    });
+
+    if (!res.ok) {
+      throw new Error('サーバーエラー: ' + res.status);
+    }
+
+    if (willStop) {
+      _pmStoppedIds.add(id);
+    } else {
+      _pmStoppedIds.delete(id);
+    }
+
+    document.getElementById('pm-confirm-modal').classList.remove('show');
+    _pmPending = null;
+    renderProductMgmt();
+    showPmToast(`「${name}」を${willStop ? '停止' : '再開'}しました`, 'success');
+  } catch (e) {
+    showPmToast('エラー：' + e.message, 'error');
+  } finally {
+    actionBtn.disabled = false;
+    cancelBtn.disabled = false;
+  }
+}
+
+// 一括実行
+async function executeBatchProductMgmt() {
+  if (!_pmBatchPending) return;
+  const { action, items } = _pmBatchPending;
+  const isStop = action === 'stop';
+  const status = isStop ? '停止' : '稼働';
+
+  const actionBtn = document.getElementById('pm-confirm-action');
+  const cancelBtn = document.querySelector('#pm-confirm-modal .pm-confirm-btn.cancel');
+  const originalText = actionBtn.textContent;
+  actionBtn.disabled = true;
+  cancelBtn.disabled = true;
+
+  let completed = 0;
+  let succeeded = 0;
+  const failed = [];
+
+  const updateProgress = () => {
+    actionBtn.textContent = `処理中... (${completed}/${items.length})`;
+  };
+  updateProgress();
+
+  // 1件ずつ送信する関数
+  const sendOne = async (product) => {
+    try {
+      const params = new URLSearchParams();
+      params.append('action', 'setProductSwitch');
+      params.append('productId', product.id);
+      params.append('status', status);
+      const res = await fetch(GAS_URL, {
+        method: 'POST',
+        body: params,
+        redirect: 'follow'
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      // ローカル状態を更新（GAS側書き込み成功と仮定）
+      if (isStop) _pmStoppedIds.add(product.id);
+      else _pmStoppedIds.delete(product.id);
+      succeeded++;
+    } catch (e) {
+      failed.push({ product, error: e.message });
+    } finally {
+      completed++;
+      updateProgress();
+    }
+  };
+
+  // 並列実行（5件ずつバッチ）
+  const BATCH_SIZE = 5;
+  for (let i = 0; i < items.length; i += BATCH_SIZE) {
+    const batch = items.slice(i, i + BATCH_SIZE);
+    await Promise.all(batch.map(sendOne));
+  }
+
+  // 結果反映
+  document.getElementById('pm-confirm-modal').classList.remove('show');
+  _pmBatchPending = null;
+  _pmSelected.clear();
+  renderProductMgmt();
+
+  if (failed.length === 0) {
+    showPmToast(`${succeeded}件を${isStop ? '停止' : '再開'}しました`, 'success');
+  } else if (succeeded > 0) {
+    showPmToast(`${succeeded}件成功 / ${failed.length}件失敗`, 'error');
+  } else {
+    showPmToast(`全件失敗：${failed[0]?.error || '不明なエラー'}`, 'error');
+  }
+
+  actionBtn.disabled = false;
+  cancelBtn.disabled = false;
+  actionBtn.textContent = originalText;
+}
+
+document.getElementById('pm-confirm-modal').addEventListener('click', function(e) {
+  if (e.target === this) cancelProductMgmt();
+});
+
+function showPmToast(message, type) {
+  const toast = document.getElementById('pm-toast');
+  toast.textContent = message;
+  toast.className = 'pm-toast show ' + (type || '');
+  setTimeout(() => {
+    toast.className = 'pm-toast';
+  }, 2800);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 申し送りタブ
+// ═══════════════════════════════════════════════════════════════
+let _memoData = { pending: [], history: [] };
+let _memoExpanded = new Set();
+let _memoSelected = new Set();
+let _memoCompletePending = null;  // {ids: [...]}
+
+async function loadMemoBadge() {
+  // getMemoReports を流用して未対応件数を派生計算
+  try {
+    const res = await fetchJSON(`${GAS_URL}?action=getMemoReports`);
+    const memos = (res && res.memos) || [];
+    const count = memos.filter(m => !m.isCompleted).length;
+    const badge = document.getElementById('memo-badge');
+    if (count > 0) {
+      badge.textContent = count;
+      badge.style.display = '';
+    } else {
+      badge.style.display = 'none';
+    }
+  } catch (e) {
+    console.warn('memo badge fetch failed', e);
+  }
+}
+
+async function loadMemos() {
+  const wrap = document.getElementById('memo-list-wrap');
+  wrap.innerHTML = '<div class="loading-wrap"><div class="loader"></div><p>申し送りを読み込み中...</p></div>';
+  try {
+    const res = await fetchJSON(`${GAS_URL}?action=getMemoReports`);
+    const memos = (res && res.memos) || [];
+
+    // isCompleted で pending / history に仕分け
+    // GAS の completedInfo { date, time, completerName } を
+    // フロント表示用 completedBy / completedAt にマッピング
+    const pending = [];
+    const history = [];
+    memos.forEach(m => {
+      const mapped = Object.assign({}, m, {
+        completedBy: m.completedInfo ? (m.completedInfo.completerName || '') : '',
+        completedAt: m.completedInfo
+          ? `${m.completedInfo.date || ''} ${m.completedInfo.time || ''}`.trim()
+          : '',
+      });
+      if (m.isCompleted) history.push(mapped);
+      else pending.push(mapped);
+    });
+
+    _memoData = { pending, history };
+    renderMemos();
+    // バッジも同時に更新（追加リクエストを節約）
+    const badge = document.getElementById('memo-badge');
+    if (badge) {
+      if (pending.length > 0) {
+        badge.textContent = pending.length;
+        badge.style.display = '';
+      } else {
+        badge.style.display = 'none';
+      }
+    }
+  } catch (e) {
+    wrap.innerHTML = `<p style="color:var(--red);font-size:13px;padding:20px;text-align:center;">取得エラー：${e.message}</p>`;
+  }
+}
+
+function makeMemoKey(memo) {
+  return `${memo.locationId}_${memo.date}_${memo.timestamp || ''}`;
+}
+
+function renderMemos() {
+  const wrap = document.getElementById('memo-list-wrap');
+  const pending = _memoData.pending || [];
+  const history = _memoData.history || [];
+
+  if (pending.length === 0 && history.length === 0) {
+    wrap.innerHTML = '<div class="memo-empty">📝 直近7日間に申し送りはありません</div>';
+    return;
+  }
+
+  // 既に消えた申し送りを選択リストから除外
+  const validKeys = new Set(pending.map(m => makeMemoKey(m)));
+  Array.from(_memoSelected).forEach(k => {
+    if (!validKeys.has(k)) _memoSelected.delete(k);
+  });
+
+  let html = '';
+
+  // ── 未対応セクション ──
+  if (pending.length > 0) {
+    const selectedCount = _memoSelected.size;
+    const allSelected = selectedCount === pending.length;
+    const someSelected = selectedCount > 0 && !allSelected;
+
+    html += `
+      <div class="memo-section-divider">未対応 (${pending.length}件)</div>
+      <div class="memo-batch-bar">
+        <label class="memo-batch-checkbox-wrap">
+          <input type="checkbox"
+                 class="memo-batch-checkbox"
+                 id="memo-select-all"
+                 ${allSelected ? 'checked' : ''}
+                 onchange="toggleSelectAllMemos(this.checked)">
+          <span>全選択</span>
+        </label>
+        <span class="memo-batch-count">${selectedCount}件選択中</span>
+        ${selectedCount > 0
+          ? `<button class="memo-batch-btn" onclick="confirmBatchComplete()">選択した${selectedCount}件を完了</button>`
+          : ''}
+      </div>
+      <div class="memo-board">
+        ${pending.map(m => renderMemoCard(m, false)).join('')}
+      </div>
+    `;
+  }
+
+  // ── 履歴セクション ──
+  if (history.length > 0) {
+    html += `
+      <div class="memo-section-divider">対応済み履歴 (${history.length}件)</div>
+      <div class="memo-board">
+        ${history.map(m => renderMemoCard(m, true)).join('')}
+      </div>
+    `;
+  }
+
+  wrap.innerHTML = html;
+
+  const selectAllEl = document.getElementById('memo-select-all');
+  if (selectAllEl) {
+    const pCount = pending.length;
+    const sCount = _memoSelected.size;
+    selectAllEl.indeterminate = sCount > 0 && sCount < pCount;
+  }
+}
+
+function renderMemoCard(memo, isHistory) {
+  const key = makeMemoKey(memo);
+  const replies = memo.replies || [];
+  const replyCount = replies.length;
+  const isExpanded = _memoExpanded.has(key);
+  const isSelected = _memoSelected.has(key);
+
+  const bodyHtml = escapeHtml(memo.memo || '').replace(/\n/g, '<br>');
+
+  const repliesHtml = replies.map(r => `
+    <div class="memo-reply-row">
+      <div class="memo-reply-row-header">
+        <span class="memo-reply-row-name">${escapeHtml(r.userName || '社員')}</span>
+        <span class="memo-reply-row-time">${escapeHtml(r.timestamp || '')}</span>
+      </div>
+      <div class="memo-reply-row-content">${escapeHtml(r.content || '').replace(/\n/g, '<br>')}</div>
+    </div>
+  `).join('');
+
+  const cardClasses = ['memo-card-item'];
+  if (replyCount > 0) cardClasses.push('has-replies');
+  if (isHistory) cardClasses.push('is-history');
+  if (isSelected) cardClasses.push('selected');
+
+  const checkboxHtml = isHistory ? '' : `
+    <div class="memo-card-checkbox-wrap" onclick="event.stopPropagation();">
+      <input type="checkbox"
+             class="memo-card-checkbox"
+             ${isSelected ? 'checked' : ''}
+             onchange="toggleMemoSelect('${key}', this.checked)">
+    </div>
+  `;
+
+  const historyBadge = isHistory ? '<div class="memo-history-badge">✓ 完了</div>' : '';
+
+  const replyCountClass = replyCount > 0 ? '' : 'zero';
+  const replyCountHtml = replyCount > 0
+    ? `<span class="memo-card-reply-count" onclick="event.stopPropagation(); toggleMemoReplies('${key}')">💬 ${replyCount}</span>`
+    : `<span class="memo-card-reply-count zero">💬 0</span>`;
+
+  // 履歴の場合のフッター
+  const historyFooter = isHistory && memo.completedBy ? `
+    <div class="memo-history-footer">
+      <span class="memo-history-footer-icon">✓</span>
+      ${escapeHtml(memo.completedBy)}が${escapeHtml(memo.completedAt || '')}に完了
+    </div>
+  ` : '';
+
+  // アクションボタン（履歴では非表示）
+  const actionsHtml = isHistory ? '' : `
+    <div class="memo-card-actions">
+      ${replyCount > 0 ? `<button class="memo-action-btn toggle" onclick="toggleMemoReplies('${key}')">${isExpanded ? '返信を閉じる' : `返信を見る(${replyCount})`}</button>` : ''}
+      <button class="memo-action-btn reply" onclick="openMemoReply('${memo.locationId}', '${memo.date}')">返信する</button>
+    </div>
+  `;
+
+  return `
+    <div class="${cardClasses.join(' ')}" data-key="${key}">
+      ${historyBadge}
+      ${checkboxHtml}
+      <div class="memo-card-top">
+        <div class="memo-card-top-left">
+          <div class="memo-card-meta">${escapeHtml(memo.date || '')}</div>
+          <div class="memo-card-loc">${escapeHtml(memo.locationName || '—')}</div>
+          <div class="memo-card-staff">${escapeHtml(memo.userName || '—')}</div>
+        </div>
+        ${replyCountHtml}
+      </div>
+      <div class="memo-card-body">${bodyHtml}</div>
+      ${replyCount > 0 ? `<div class="memo-card-replies ${isExpanded ? 'expanded' : ''}" id="replies-${key}">${repliesHtml}</div>` : ''}
+      ${historyFooter}
+      ${actionsHtml}
+    </div>
+  `;
+}
+
+function toggleMemoReplies(key) {
+  if (_memoExpanded.has(key)) _memoExpanded.delete(key);
+  else _memoExpanded.add(key);
+  renderMemos();
+}
+
+function toggleMemoSelect(key, checked) {
+  if (checked) _memoSelected.add(key);
+  else _memoSelected.delete(key);
+  renderMemos();
+}
+
+function toggleSelectAllMemos(checked) {
+  const pending = _memoData.pending || [];
+  if (checked) pending.forEach(m => _memoSelected.add(makeMemoKey(m)));
+  else _memoSelected.clear();
+  renderMemos();
+}
+
+function openMemoReply(locationId, date) {
+  // memo-reply.htmlへ遷移（クエリパラメータ付き）
+  // memo-reply.html は locId / date / uid を必須、locName / uname / memo を任意で受け取る
+  const memo = (_memoData.pending || []).concat(_memoData.history || [])
+    .find(m => m.locationId === locationId && m.date === date);
+  if (!memo) {
+    alert('申し送り情報が見つかりません');
+    return;
+  }
+  const url = `memo-reply.html?locId=${encodeURIComponent(locationId)}`
+    + `&date=${encodeURIComponent(date)}`
+    + `&uid=${encodeURIComponent(memo.userId || '')}`
+    + `&locName=${encodeURIComponent(memo.locationName || '')}`
+    + `&uname=${encodeURIComponent(memo.userName || '')}`
+    + `&memo=${encodeURIComponent(memo.memo || '')}`;
+  window.location.href = url;
+}
+
+function confirmBatchComplete() {
+  const selectedKeys = Array.from(_memoSelected);
+  if (selectedKeys.length === 0) return;
+
+  const targets = (_memoData.pending || []).filter(m => selectedKeys.includes(makeMemoKey(m)));
+  if (targets.length === 0) return;
+
+  _memoCompletePending = { items: targets };
+
+  const body = document.getElementById('memo-complete-body');
+  const actionBtn = document.getElementById('memo-complete-action');
+
+  const listHtml = '<div class="pm-confirm-product-list">' +
+    targets.map(m => `<div class="pm-confirm-product-list-item">${escapeHtml(m.locationName)} (${escapeHtml(m.date)})</div>`).join('') +
+    '</div>';
+
+  body.innerHTML = `
+    以下の${targets.length}件の申し送りを「対応完了」にしますか？
+    ${listHtml}
+    対応完了にすると、未対応リストから外れます（履歴には残ります）。
+  `;
+  actionBtn.textContent = `${targets.length}件を完了にする`;
+  document.getElementById('memo-complete-modal').classList.add('show');
+}
+
+function cancelMemoComplete() {
+  _memoCompletePending = null;
+  document.getElementById('memo-complete-modal').classList.remove('show');
+}
+
+async function executeMemoComplete() {
+  if (!_memoCompletePending) return;
+  const { items } = _memoCompletePending;
+
+  const actionBtn = document.getElementById('memo-complete-action');
+  const cancelBtn = document.querySelector('#memo-complete-modal .pm-confirm-btn.cancel');
+  const originalText = actionBtn.textContent;
+  actionBtn.disabled = true;
+  cancelBtn.disabled = true;
+
+  let completed = 0;
+  let succeeded = 0;
+  const failed = [];
+
+  const updateProgress = () => {
+    actionBtn.textContent = `処理中... (${completed}/${items.length})`;
+  };
+  updateProgress();
+
+  const userId = userProfile?.userId || '';
+  const userName = userProfile?.displayName || '社員';
+
+  const sendOne = async (memo) => {
+    try {
+      // GAS側 markMemoComplete のpayload構造に合わせる
+      // target* = 申し送りを書いた販売員側情報 / completerName = 自分（社員）
+      const params = new URLSearchParams();
+      params.append('action', 'markMemoComplete');
+      params.append('targetDate',         memo.date || '');
+      params.append('targetLocationId',   memo.locationId || '');
+      params.append('targetLocationName', memo.locationName || '');
+      params.append('targetUserId',       memo.userId || '');
+      params.append('targetUserName',     memo.userName || '');
+      params.append('completerName',      userName);
+      const res = await fetch(GAS_URL, {
+        method: 'POST',
+        body: params,
+        redirect: 'follow'
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      succeeded++;
+    } catch (e) {
+      failed.push({ memo, error: e.message });
+    } finally {
+      completed++;
+      updateProgress();
+    }
+  };
+
+  // 並列実行（5件ずつバッチ）
+  const BATCH_SIZE = 5;
+  for (let i = 0; i < items.length; i += BATCH_SIZE) {
+    const batch = items.slice(i, i + BATCH_SIZE);
+    await Promise.all(batch.map(sendOne));
+  }
+
+  // 結果反映
+  document.getElementById('memo-complete-modal').classList.remove('show');
+  _memoCompletePending = null;
+  _memoSelected.clear();
+
+  if (failed.length === 0) {
+    showPmToast(`${succeeded}件を完了にしました`, 'success');
+  } else if (succeeded > 0) {
+    showPmToast(`${succeeded}件成功 / ${failed.length}件失敗`, 'error');
+  } else {
+    showPmToast(`全件失敗：${failed[0]?.error || '不明なエラー'}`, 'error');
+  }
+
+  actionBtn.disabled = false;
+  cancelBtn.disabled = false;
+  actionBtn.textContent = originalText;
+
+  // 再読込
+  await loadMemos();
+}
+
+document.getElementById('memo-complete-modal').addEventListener('click', function(e) {
+  if (e.target === this) cancelMemoComplete();
+});
+// ═══════════════════════════════════════════════════════════════
+// 粗利タブ
+// ═══════════════════════════════════════════════════════════════
+let _profitCurrentPeriod = 'day';                    // 'day' / '1w' / 'month'
+let _profitCurrentDate   = todayDateStr();           // 'YYYY-MM-DD' （periodが'day'時に使用）
+let _profitCurrentSort   = 'id';                     // 'id' or 'profit'
+let _profitData          = null;                     // 直近取得データ
+let _profitInitialized   = false;                    // 初期化済みフラグ
+ 
+function todayDateStr() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dd}`;
+}
+ 
+function initProfitTab() {
+  if (_profitInitialized) return;
+  _profitInitialized = true;
+  const input = document.getElementById('profit-date-input');
+  if (input) {
+    input.value = _profitCurrentDate;
+    input.max = todayDateStr();  // 未来日は選べないように
+  }
+}
+ 
+async function loadProfit() {
+  initProfitTab();
+  const loadingEl = document.getElementById('profit-loading');
+  const contentEl = document.getElementById('profit-content');
+  loadingEl.style.display = 'block';
+  contentEl.innerHTML = '';
+  try {
+    let url = `${GAS_URL}?action=getProfitData&period=${encodeURIComponent(_profitCurrentPeriod)}`;
+    if (_profitCurrentPeriod === 'day') {
+      url += `&date=${encodeURIComponent(_profitCurrentDate)}`;
+    }
+    const res = await fetchJSON(url);
+    if (!res || !res.success) {
+      contentEl.innerHTML = `<p style="color:var(--red);font-size:13px;">取得エラー：${(res && res.error) || '不明'}</p>`;
+      loadingEl.style.display = 'none';
+      return;
+    }
+    _profitData = res;
+    renderProfit();
+    updateProfitDayNavState();
+  } catch (e) {
+    contentEl.innerHTML = `<p style="color:var(--red);font-size:13px;">通信エラー：${e.message}</p>`;
+  }
+  loadingEl.style.display = 'none';
+}
+ 
+function selectProfitPeriod(period, btn) {
+  _profitCurrentPeriod = period;
+  // 1w / month ボタンの active 切替
+  document.querySelectorAll('.profit-period-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  // 日付ナビの active 切替
+  const dayNav = document.getElementById('profit-day-nav');
+  if (dayNav) dayNav.classList.remove('active');
+  loadProfit();
+}
+ 
+function onProfitDateChange(dateStr) {
+  if (!dateStr) return;
+  _profitCurrentPeriod = 'day';
+  _profitCurrentDate = dateStr;
+  // ボタンのactive状態を更新
+  document.querySelectorAll('.profit-period-btn').forEach(b => b.classList.remove('active'));
+  const dayNav = document.getElementById('profit-day-nav');
+  if (dayNav) dayNav.classList.add('active');
+  loadProfit();
+}
+ 
+function shiftProfitDay(delta) {
+  // delta: -1 で前日、+1 で翌日
+  const cur = new Date(_profitCurrentDate + 'T00:00:00');
+  cur.setDate(cur.getDate() + delta);
+  const y = cur.getFullYear();
+  const m = String(cur.getMonth() + 1).padStart(2, '0');
+  const dd = String(cur.getDate()).padStart(2, '0');
+  const newDate = `${y}-${m}-${dd}`;
+  // 未来日チェック
+  if (newDate > todayDateStr()) return;
+  _profitCurrentDate = newDate;
+  const input = document.getElementById('profit-date-input');
+  if (input) input.value = newDate;
+  onProfitDateChange(newDate);
+}
+ 
+function updateProfitDayNavState() {
+  // 翌日ボタンを今日以降で無効化
+  const navBtns = document.querySelectorAll('#profit-day-nav .profit-day-nav-btn');
+  if (navBtns.length >= 2) {
+    const nextBtn = navBtns[1];
+    nextBtn.disabled = (_profitCurrentDate >= todayDateStr());
+  }
+}
+ 
+function selectProfitSort(sort) {
+  _profitCurrentSort = sort;
+  renderProfit();
+}
+ 
+function selectProfitSort(sort) {
+  _profitCurrentSort = sort;
+  renderProfit();
+}
+ 
+function renderProfit() {
+  const contentEl = document.getElementById('profit-content');
+  if (!_profitData) {
+    contentEl.innerHTML = '';
+    return;
+  }
+
+  const data = _profitData;
+
+  // 原価未入力の場合はプレースホルダー
+  if (!data.hasCostData) {
+    contentEl.innerHTML = `
+      <div class="profit-placeholder">
+        単価マスタの「原価(円)」列が未入力です。原価を入力すると粗利が表示されます。
+      </div>
+    `;
+    return;
+  }
+
+  const t = data.totals || {};
+  const totalProfitMinus = (t.profit || 0) < 0;
+  const totalRateMinus   = (t.profitRate || 0) < 0;
+
+  // 月別経費単価が未設定の場合の注意バナー
+  const expenseNoticeHtml = !data.hasExpenseRates ? `
+    <div class="profit-placeholder" style="margin-bottom:12px;">
+      「月別経費単価」シートが未設定です。GAS エディタで <code>ensureExpenseRateSheet</code> を一度実行し、シートに当月の「その他人件費単価」「固定費単価」を入力してください(1個あたりの金額)。未設定中は その他経費 ¥0 で計算されます。
+    </div>
+  ` : '';
+
+  const summaryHtml = `
+    <div class="profit-summary">
+      <div class="profit-summary-title">${
+        data.period === 'day' || data.period === 'today'
+          ? escapeHtml(data.dateRange.start) + ' の合計'
+          : '期間合計(' + escapeHtml(data.dateRange.start) + ' 〜 ' + escapeHtml(data.dateRange.end) + ')'
+      }</div>
+      <div class="profit-summary-grid">
+        <div class="profit-summary-item">
+          <div class="label">売上</div>
+          <div class="value">¥${(t.revenue || 0).toLocaleString()}</div>
+        </div>
+        <div class="profit-summary-item">
+          <div class="label">原価</div>
+          <div class="value">¥${(t.cost || 0).toLocaleString()}</div>
+        </div>
+        <div class="profit-summary-item">
+          <div class="label">ギャラ</div>
+          <div class="value">¥${(t.wage || 0).toLocaleString()}</div>
+        </div>
+        <div class="profit-summary-item">
+          <div class="label">その他人件費</div>
+          <div class="value">¥${(t.otherLabor || 0).toLocaleString()}</div>
+        </div>
+        <div class="profit-summary-item">
+          <div class="label">固定費</div>
+          <div class="value">¥${(t.fixed || 0).toLocaleString()}</div>
+        </div>
+        <div class="profit-summary-item other-total">
+          <div class="label">その他経費合計</div>
+          <div class="value">¥${(t.otherTotal || 0).toLocaleString()}</div>
+        </div>
+        <div class="profit-summary-item profit ${totalProfitMinus ? 'minus' : ''}">
+          <div class="label">粗利</div>
+          <div class="value">${formatProfit(t.profit || 0)}</div>
+        </div>
+        <div class="profit-summary-item rate ${totalRateMinus ? 'minus' : ''}">
+          <div class="label">粗利率</div>
+          <div class="value">${(t.profitRate || 0).toFixed(1)}%</div>
+        </div>
+        <div class="profit-summary-item rate">
+          <div class="label">完売率</div>
+          <div class="value">${(t.sellRate || 0).toFixed(1)}%</div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // ソート
+  const rows = (data.rows || []).slice();
+  if (_profitCurrentSort === 'profit') {
+    rows.sort((a, b) => (b.profit || 0) - (a.profit || 0));
+  } else {
+    rows.sort((a, b) =>
+      String(a.locationId).localeCompare(String(b.locationId), 'ja', { numeric: true })
+    );
+  }
+
+  const reportedCount = rows.filter(r => r.hasReport).length;
+  const sortBarHtml = `
+    <div class="profit-sort-bar">
+      <div class="profit-sort-btns">
+        <button class="profit-sort-btn ${_profitCurrentSort === 'id' ? 'active' : ''}" onclick="selectProfitSort('id')">拠点ID順</button>
+        <button class="profit-sort-btn ${_profitCurrentSort === 'profit' ? 'active' : ''}" onclick="selectProfitSort('profit')">粗利順</button>
+      </div>
+      <span class="profit-meta">${reportedCount}/${rows.length} 拠点 報告済</span>
+    </div>
+  `;
+
+  const tableRowsHtml = rows.map(r => {
+    if (!r.hasReport) {
+      return `
+        <tr>
+          <td class="id-cell">${escapeHtml(r.locationId)}</td>
+          <td class="name-cell">${escapeHtml(r.locationName)}</td>
+          <td class="num no-report">—</td>
+          <td class="num no-report">—</td>
+          <td class="num no-report">—</td>
+          <td class="num no-report">—</td>
+          <td class="num no-report">—</td>
+          <td class="num no-report">—</td>
+          <td class="num no-report">—</td>
+          <td class="num no-report">—</td>
+          <td class="num no-report">—</td>
+        </tr>`;
+    }
+    const profitMinus = r.profit < 0;
+    const rateMinus   = r.profitRate < 0;
+    return `
+      <tr>
+        <td class="id-cell">${escapeHtml(r.locationId)}</td>
+        <td class="name-cell">${escapeHtml(r.locationName)}</td>
+        <td class="num">¥${r.revenue.toLocaleString()}</td>
+        <td class="num">¥${r.cost.toLocaleString()}</td>
+        <td class="num">¥${r.wage.toLocaleString()}</td>
+        <td class="num">¥${(r.otherLabor || 0).toLocaleString()}</td>
+        <td class="num">¥${(r.fixed || 0).toLocaleString()}</td>
+        <td class="num other-total-cell">¥${(r.otherTotal || 0).toLocaleString()}</td>
+        <td class="num profit-cell ${profitMinus ? 'minus' : ''}">${formatProfit(r.profit)}</td>
+        <td class="num rate-cell ${rateMinus ? 'minus' : ''}">${r.profitRate.toFixed(1)}%</td>
+        <td class="num rate-cell">${(r.sellRate || 0).toFixed(1)}%</td>
+      </tr>`;
+  }).join('');
+
+  const tableHtml = `
+    <table class="profit-table">
+      <thead>
+        <tr>
+          <th>拠点ID</th>
+          <th>拠点名</th>
+          <th class="num">売上</th>
+          <th class="num">原価</th>
+          <th class="num">ギャラ</th>
+          <th class="num">その他人件費</th>
+          <th class="num">固定費</th>
+          <th class="num">その他経費合計</th>
+          <th class="num">粗利</th>
+          <th class="num">粗利率</th>
+          <th class="num">完売率</th>
+        </tr>
+      </thead>
+      <tbody>${tableRowsHtml}</tbody>
+    </table>
+  `;
+
+  contentEl.innerHTML = expenseNoticeHtml + summaryHtml + sortBarHtml + tableHtml;
+}
+ 
+function formatProfit(v) {
+  if (v === 0) return '¥0';
+  if (v > 0)   return '¥' + v.toLocaleString();
+  return '−¥' + Math.abs(v).toLocaleString();
+}
+
+</script>
+
+</body>
+</html>
   --red: #C0392B;
   --red-dark: #922B21;
   --gold: #B8860B;
