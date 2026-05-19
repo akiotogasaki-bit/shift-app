@@ -1340,14 +1340,28 @@ font-family: inherit;
 }
 .profit-summary-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(8, 1fr);
   gap: 8px;
+}
+@media(max-width: 900px) {
+  .profit-summary-grid { grid-template-columns: repeat(4, 1fr); }
 }
 @media(max-width: 600px) {
   .profit-summary-grid { grid-template-columns: repeat(3, 1fr); }
 }
 @media(max-width: 380px) {
   .profit-summary-grid { grid-template-columns: repeat(2, 1fr); }
+}
+/* その他経費の合算列を視覚的に区別 */
+.profit-summary-item.other-total {
+  background: rgba(244, 196, 48, .12);
+}
+.profit-summary-item.other-total .value {
+  color: #F4C430;
+}
+.profit-table td.other-total-cell {
+  font-weight: 700;
+  color: var(--ink-soft);
 }
 .profit-summary-item {
   background: rgba(255,255,255,.08);
@@ -3946,6 +3960,140 @@ function renderProfit() {
     `;
     return;
   }
+ 
+  const t = data.totals || {};
+  const totalProfitMinus = (t.profit || 0) < 0;
+  const totalRateMinus   = (t.profitRate || 0) < 0;
+ 
+  // 月別経費単価が未設定の場合の注意バナー
+  const expenseNoticeHtml = !data.hasExpenseRates ? `
+    <div class="profit-placeholder" style="margin-bottom:12px;">
+      「月別経費単価」シートが未設定です。GAS エディタで <code>ensureExpenseRateSheet</code> を一度実行し、
+      シートに当月の「その他人件費単価」「固定費単価」を入力してください（1個あたりの金額）。
+      未設定中は その他経費 ¥0 で計算されます。
+    </div>
+  ` : '';
+ 
+  const summaryHtml = `
+    <div class="profit-summary">
+      <div class="profit-summary-title">${
+        data.period === 'day' || data.period === 'today'
+          ? escapeHtml(data.dateRange.start) + ' の合計'
+          : '期間合計（' + escapeHtml(data.dateRange.start) + ' 〜 ' + escapeHtml(data.dateRange.end) + '）'
+      }</div>
+      <div class="profit-summary-grid">
+        <div class="profit-summary-item">
+          <div class="label">売上</div>
+          <div class="value">¥${(t.revenue || 0).toLocaleString()}</div>
+        </div>
+        <div class="profit-summary-item">
+          <div class="label">原価</div>
+          <div class="value">¥${(t.cost || 0).toLocaleString()}</div>
+        </div>
+        <div class="profit-summary-item">
+          <div class="label">ギャラ</div>
+          <div class="value">¥${(t.wage || 0).toLocaleString()}</div>
+        </div>
+        <div class="profit-summary-item">
+          <div class="label">その他人件費</div>
+          <div class="value">¥${(t.otherLabor || 0).toLocaleString()}</div>
+        </div>
+        <div class="profit-summary-item">
+          <div class="label">固定費</div>
+          <div class="value">¥${(t.fixed || 0).toLocaleString()}</div>
+        </div>
+        <div class="profit-summary-item other-total">
+          <div class="label">その他経費合計</div>
+          <div class="value">¥${(t.otherTotal || 0).toLocaleString()}</div>
+        </div>
+        <div class="profit-summary-item profit ${totalProfitMinus ? 'minus' : ''}">
+          <div class="label">粗利</div>
+          <div class="value">${formatProfit(t.profit || 0)}</div>
+        </div>
+        <div class="profit-summary-item rate ${totalRateMinus ? 'minus' : ''}">
+          <div class="label">粗利率</div>
+          <div class="value">${(t.profitRate || 0).toFixed(1)}%</div>
+        </div>
+      </div>
+    </div>
+  `;
+ 
+  // ソート
+  const rows = (data.rows || []).slice();
+  if (_profitCurrentSort === 'profit') {
+    rows.sort((a, b) => (b.profit || 0) - (a.profit || 0));
+  } else {
+    rows.sort((a, b) =>
+      String(a.locationId).localeCompare(String(b.locationId), 'ja', { numeric: true })
+    );
+  }
+ 
+  const reportedCount = rows.filter(r => r.hasReport).length;
+  const sortBarHtml = `
+    <div class="profit-sort-bar">
+      <div class="profit-sort-btns">
+        <button class="profit-sort-btn ${_profitCurrentSort === 'id' ? 'active' : ''}" onclick="selectProfitSort('id')">拠点ID順</button>
+        <button class="profit-sort-btn ${_profitCurrentSort === 'profit' ? 'active' : ''}" onclick="selectProfitSort('profit')">粗利順</button>
+      </div>
+      <span class="profit-meta">${reportedCount}/${rows.length} 拠点 報告済</span>
+    </div>
+  `;
+ 
+  const tableRowsHtml = rows.map(r => {
+    if (!r.hasReport) {
+      return `
+        <tr>
+          <td class="id-cell">${escapeHtml(r.locationId)}</td>
+          <td class="name-cell">${escapeHtml(r.locationName)}</td>
+          <td class="num no-report">—</td>
+          <td class="num no-report">—</td>
+          <td class="num no-report">—</td>
+          <td class="num no-report">—</td>
+          <td class="num no-report">—</td>
+          <td class="num no-report">—</td>
+          <td class="num no-report">—</td>
+          <td class="num no-report">—</td>
+        </tr>`;
+    }
+    const profitMinus = r.profit < 0;
+    const rateMinus   = r.profitRate < 0;
+    return `
+      <tr>
+        <td class="id-cell">${escapeHtml(r.locationId)}</td>
+        <td class="name-cell">${escapeHtml(r.locationName)}</td>
+        <td class="num">¥${r.revenue.toLocaleString()}</td>
+        <td class="num">¥${r.cost.toLocaleString()}</td>
+        <td class="num">¥${r.wage.toLocaleString()}</td>
+        <td class="num">¥${(r.otherLabor || 0).toLocaleString()}</td>
+        <td class="num">¥${(r.fixed || 0).toLocaleString()}</td>
+        <td class="num other-total-cell">¥${(r.otherTotal || 0).toLocaleString()}</td>
+        <td class="num profit-cell ${profitMinus ? 'minus' : ''}">${formatProfit(r.profit)}</td>
+        <td class="num rate-cell ${rateMinus ? 'minus' : ''}">${r.profitRate.toFixed(1)}%</td>
+      </tr>`;
+  }).join('');
+ 
+  const tableHtml = `
+    <table class="profit-table">
+      <thead>
+        <tr>
+          <th>拠点ID</th>
+          <th>拠点名</th>
+          <th class="num">売上</th>
+          <th class="num">原価</th>
+          <th class="num">ギャラ</th>
+          <th class="num">その他人件費</th>
+          <th class="num">固定費</th>
+          <th class="num">その他経費合計</th>
+          <th class="num">粗利</th>
+          <th class="num">粗利率</th>
+        </tr>
+      </thead>
+      <tbody>${tableRowsHtml}</tbody>
+    </table>
+  `;
+ 
+  contentEl.innerHTML = expenseNoticeHtml + summaryHtml + sortBarHtml + tableHtml;
+}
  
   const t = data.totals || {};
   const totalProfitMinus = (t.profit || 0) < 0;
