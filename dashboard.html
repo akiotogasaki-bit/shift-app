@@ -1889,117 +1889,18 @@ function saveDashRealtimeCache(data) {
 // ─────────────────────────────────────
 let userProfile = null;  // {userId, displayName, role}
 
-// ─────────────────────────────────────
-// 🐛 デバッグ用ユーティリティ（?debug=1 でON）
-// ─────────────────────────────────────
-const IS_DEBUG = new URLSearchParams(location.search).get('debug') === '1';
-let _debugEl = null;
-function _ensureDebugEl() {
-  if (!IS_DEBUG || _debugEl) return;
-  _debugEl = document.createElement('div');
-  _debugEl.id = 'debug-log';
-  _debugEl.style.cssText =
-    'position:fixed; bottom:0; left:0; right:0; max-height:55vh; overflow-y:auto;' +
-    'padding:10px 12px; background:rgba(0,0,0,0.92); color:#0f0;' +
-    "font-family:Menlo,Monaco,'Courier New',monospace; font-size:11px;" +
-    'white-space:pre-wrap; word-break:break-all; z-index:99999;' +
-    'line-height:1.5; border-top:2px solid #0f0;';
-  if (document.body) {
-    document.body.appendChild(_debugEl);
-  } else {
-    document.addEventListener('DOMContentLoaded', () => document.body.appendChild(_debugEl));
-  }
-}
-function dbgLog(msg) {
-  const time = new Date().toTimeString().slice(0, 8);
-  const line = '[' + time + '] ' + msg;
-  try { console.log(line); } catch(_) {}
-  _ensureDebugEl();
-  if (_debugEl) {
-    _debugEl.textContent += line + '\n';
-    _debugEl.scrollTop = _debugEl.scrollHeight;
-  }
-}
-// タイムアウト付きfetch（AbortController使用、未対応時はsetTimeoutでフォールバック）
-async function fetchWithTimeout(url, timeoutMs) {
-  if (typeof AbortController === 'undefined') {
-    return Promise.race([
-      fetchJSON(url),
-      new Promise((_, rej) =>
-        setTimeout(() => rej(new Error('timeout ' + timeoutMs + 'ms (no AbortController)')), timeoutMs)
-      ),
-    ]);
-  }
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-  try {
-    const res = await fetch(url, { signal: ctrl.signal, redirect: 'follow' });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    return await res.json();
-  } catch (e) {
-    if (e && e.name === 'AbortError') {
-      throw new Error('timeout ' + timeoutMs + 'ms');
-    }
-    throw e;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 window.addEventListener('load', async function() {
-  dbgLog('=== dashboard debug v1 起動 ===');
-  dbgLog('URL: ' + location.href);
-  dbgLog('UA: ' + (navigator.userAgent || '').slice(0, 100));
-
   try {
-    // STEP 1: LIFF SDK ロード確認
-    dbgLog('STEP 1: LIFF SDK ロード確認');
-    if (typeof liff === 'undefined') {
-      throw new Error('LIFF SDK が読み込まれていません (liff is undefined)');
-    }
-    dbgLog('  ✓ LIFF SDK OK (version: ' + (liff.getVersion ? liff.getVersion() : '不明') + ')');
-
-    // STEP 2: liff.init
-    dbgLog('STEP 2: liff.init({ liffId: "' + LIFF_ID_DASHBOARD + '" })');
-    const t2 = Date.now();
     await liff.init({ liffId: LIFF_ID_DASHBOARD });
-    dbgLog('  ✓ liff.init 成功 (' + (Date.now() - t2) + 'ms)');
 
-    // STEP 3: isLoggedIn
-    dbgLog('STEP 3: liff.isLoggedIn() チェック');
-    const loggedIn = liff.isLoggedIn();
-    dbgLog('  isLoggedIn = ' + loggedIn);
-    if (!loggedIn) {
-      dbgLog('  → liff.login() を呼び出し（LINE側へリダイレクト）');
+    if (!liff.isLoggedIn()) {
       liff.login({ redirectUri: window.location.href });
       return;
     }
 
-    // STEP 4: getProfile
-    dbgLog('STEP 4: liff.getProfile()');
-    const t4 = Date.now();
     const profile = await liff.getProfile();
-    dbgLog('  ✓ getProfile 成功 (' + (Date.now() - t4) + 'ms)');
-    dbgLog('  userId = ' + profile.userId);
-    dbgLog('  displayName = ' + (profile.displayName || ''));
-
-    // STEP 5: getRole API（10秒タイムアウト）
-    const apiUrl = GAS_URL + '?action=getRole&userId=' + encodeURIComponent(profile.userId);
-    dbgLog('STEP 5: getRole API 呼び出し（タイムアウト 10秒）');
-    dbgLog('  URL = ' + apiUrl);
-    const t5 = Date.now();
-    let roleRes;
-    try {
-      roleRes = await fetchWithTimeout(apiUrl, 10000);
-      dbgLog('  ✓ API応答 (' + (Date.now() - t5) + 'ms): ' + JSON.stringify(roleRes));
-    } catch (apiErr) {
-      dbgLog('  ✗ API失敗 (' + (Date.now() - t5) + 'ms): ' + apiErr.message);
-      throw new Error('getRole API: ' + apiErr.message);
-    }
-
-    // STEP 6: role判定
+    const roleRes = await fetchJSON(GAS_URL + '?action=getRole&userId=' + encodeURIComponent(profile.userId));
     const role = (roleRes && roleRes.role) || '';
-    dbgLog('STEP 6: role 判定 → "' + role + '"');
 
     userProfile = {
       userId:      profile.userId,
@@ -2009,7 +1910,6 @@ window.addEventListener('load', async function() {
 
     if (role !== '社員') {
       // アクセス拒否画面
-      dbgLog('STEP 7: 社員ではない → アクセス拒否画面表示');
       document.getElementById('liff-loading').style.display = 'none';
       document.getElementById('user-role-tag').textContent = role || '未登録';
       document.getElementById('access-denied').classList.add('show');
@@ -2017,7 +1917,6 @@ window.addEventListener('load', async function() {
     }
 
     // 社員：メインアプリ表示
-    dbgLog('STEP 7: 社員 → メインアプリ表示');
     document.getElementById('liff-loading').style.display = 'none';
     document.getElementById('app-main').style.display = 'block';
 
@@ -2027,19 +1926,16 @@ window.addEventListener('load', async function() {
       switchTab('memos');
     }
 
-    dbgLog('STEP 8: loadAll() / loadMemoBadge() 実行');
     loadAll();
     loadMemoBadge();  // 申し送り未対応件数を取得（バッジ表示用）
 
     // 5分ごとに更新
     setInterval(loadAll, 5 * 60 * 1000);
     setInterval(loadMemoBadge, 5 * 60 * 1000);
-    dbgLog('=== 起動完了 ===');
 
   } catch(e) {
-    dbgLog('✗✗✗ 例外発生: ' + (e && e.message ? e.message : String(e)));
     document.getElementById('liff-loading').innerHTML =
-      '<p style="color:var(--red);">起動エラー：' + (e && e.message ? e.message : String(e)) + '</p>';
+      '<p style="color:var(--red);">起動エラー：' + e.message + '</p>';
   }
 });
 
