@@ -1453,12 +1453,12 @@ function renderSheet1(data) {
   // カテゴリー集計用：白米+玄米を結合してお茶を除外
   const allRows = [].concat(rice || [], brown || []).filter(r => !isTea(r));
 
-  // シート1用カテゴリー定義
+  // シート1用カテゴリー定義（match に複数の表記揺れを許容）
   const SHEET1_CATEGORIES = [
-    { label: '海苔弁系',     match: '海苔弁系',     color: 'blue'   },
-    { label: '満腹シリーズ', match: '満腹シリーズ', color: 'green'  },
-    { label: '全六',         match: '全六',         color: 'purple' },
-    { label: '他社製品',     match: '他社製品',     color: 'yellow' }
+    { label: '海苔弁系', matches: ['海苔弁系'],                   color: 'blue'   },
+    { label: '満腹系',   matches: ['満腹系', '満腹シリーズ'],     color: 'green'  },
+    { label: '全六',     matches: ['全六', '全'],                 color: 'yellow' },
+    { label: '他社商品', matches: ['他社商品', '他社製品', 'other'], color: 'yellow' }
   ];
 
   function buildTableHTML(rows, isBrown) {
@@ -1512,7 +1512,7 @@ function renderSheet1(data) {
     html += `<tr><td colspan="${colspan}" class="cell-section-cat">▼ カテゴリー別合計</td></tr>`;
 
     SHEET1_CATEGORIES.forEach(cat => {
-      const catRows = allRows.filter(r => r.category === cat.match);
+      const catRows = allRows.filter(r => cat.matches.indexOf(r.category) >= 0);
       if (catRows.length === 0) return;
 
       // 拠点ごとの合計を計算
