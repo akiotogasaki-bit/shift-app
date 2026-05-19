@@ -175,6 +175,16 @@ body {
   text-align: left; padding-left: 8px;
   height: 16px; line-height: 16px;
 }
+.matrix-table td.cell-section-cat {
+  background: #1565c0; color: white;
+  font-weight: bold; font-size: 8pt;
+  text-align: left; padding-left: 8px;
+  height: 16px; line-height: 16px;
+}
+.matrix-table tr.cat-row td { background:#e3f2fd; font-weight:bold; }
+.matrix-table tr.cat-row td.cat-label { background:#fff3e0; text-align:left; padding-left:5px; }
+.matrix-table tr.cat-grand td { background:#fce4ec; font-weight:bold; }
+.matrix-table tr.cat-grand td.cat-label { background:#f8bbd0; text-align:left; padding-left:5px; }
 
 /* 商品グループ色（白米） */
 .matrix-table tr.g-blue  td.cell-data { background: #e3f2fd; }
@@ -1437,6 +1447,20 @@ function renderSheet1(data) {
   const { dateLabel, locations, rice, brown, subtotalSplit } = data;
   const locIds = locations.map(l => l.id);
 
+  // お茶判定（商品名に「お茶」を含む行を除外）
+  const isTea = (r) => r && r.baseName && r.baseName.indexOf('お茶') >= 0;
+
+  // カテゴリー集計用：白米+玄米を結合してお茶を除外
+  const allRows = [].concat(rice || [], brown || []).filter(r => !isTea(r));
+
+  // シート1用カテゴリー定義
+  const SHEET1_CATEGORIES = [
+    { label: '海苔弁系',     match: '海苔弁系',     color: 'blue'   },
+    { label: '満腹シリーズ', match: '満腹シリーズ', color: 'green'  },
+    { label: '全六',         match: '全六',         color: 'purple' },
+    { label: '他社製品',     match: '他社製品',     color: 'yellow' }
+  ];
+
   function buildTableHTML(rows, isBrown) {
     if (!rows || rows.length === 0) return '';
     const sectionClass = isBrown ? 'cell-section-brown' : 'cell-section-rice';
@@ -1462,6 +1486,7 @@ function renderSheet1(data) {
 
     rows.forEach(row => {
       if (!row.total) return;
+      if (isTea(row)) return;  // お茶を除外
       const color  = getColor(row.category, row.baseName);
       const trCls  = `g-${color}${rowClass ? ' ' + rowClass : ''}`;
       html += `<tr class="${trCls}">`;
@@ -1480,9 +1505,69 @@ function renderSheet1(data) {
     return html;
   }
 
+  // カテゴリー別合計行（白米+玄米合算、お茶除外）
+  function buildCategoryRowsHTML() {
+    const colspan = 1 + locIds.length + 1 + 1;
+    let html = '';
+    html += `<tr><td colspan="${colspan}" class="cell-section-cat">▼ カテゴリー別合計</td></tr>`;
+
+    SHEET1_CATEGORIES.forEach(cat => {
+      const catRows = allRows.filter(r => r.category === cat.match);
+      if (catRows.length === 0) return;
+
+      // 拠点ごとの合計を計算
+      const byLocation = {};
+      let subtotal = 0, total = 0;
+      locIds.forEach((lid, idx) => {
+        let sum = 0;
+        catRows.forEach(r => { sum += Number(r.byLocation[lid]) || 0; });
+        byLocation[lid] = sum;
+        total += sum;
+        if (idx < subtotalSplit) subtotal += sum;
+      });
+      if (total === 0) return;  // 全拠点ゼロなら行ごと省略
+
+      html += `<tr class="cat-row g-${cat.color}">`;
+      html += `<td class="cell-name cat-label">${cat.label}</td>`;
+      locIds.forEach((lid, idx) => {
+        if (idx === subtotalSplit) {
+          html += `<td class="cell-sub">${subtotal || ''}</td>`;
+        }
+        const v = byLocation[lid];
+        html += `<td class="cell-data">${v || ''}</td>`;
+      });
+      html += `<td class="cell-tot">${total}</td>`;
+      html += '</tr>';
+    });
+
+    // 拠点合計行（全カテゴリー合算）
+    const grandByLoc = {};
+    let grandSub = 0, grandTotal = 0;
+    locIds.forEach((lid, idx) => {
+      let sum = 0;
+      allRows.forEach(r => { sum += Number(r.byLocation[lid]) || 0; });
+      grandByLoc[lid] = sum;
+      grandTotal += sum;
+      if (idx < subtotalSplit) grandSub += sum;
+    });
+    html += '<tr class="cat-row cat-grand">';
+    html += '<td class="cell-name cat-label">拠点合計</td>';
+    locIds.forEach((lid, idx) => {
+      if (idx === subtotalSplit) {
+        html += `<td class="cell-sub">${grandSub || ''}</td>`;
+      }
+      html += `<td class="cell-data">${grandByLoc[lid] || ''}</td>`;
+    });
+    html += `<td class="cell-tot">${grandTotal}</td>`;
+    html += '</tr>';
+
+    return html;
+  }
+
   const tableHTML = '<table class="matrix-table">'
     + buildTableHTML(rice,  false)
     + buildTableHTML(brown, true)
+    + buildCategoryRowsHTML()
     + '</table>';
 
   let refHTML = '<table class="ref-table">'
@@ -2234,15 +2319,12 @@ function bmRenderCalcInfo() {
       if (c.proposed !== sales && c.proposed > 0) diffCount++;
     }
   }
-  const dowJa = bmServerData.dowJa || '';
+  // 反映元（= 先週同曜の日付 = histDates[0]）
+  const sourceDate = (bmServerData.histDates && bmServerData.histDates[0]) ? bmServerData.histDates[0] : '';
   let html = '';
   html += '<span><b>計算式:</b> W1:' + w.w1 + ' / W2:' + w.w2 + ' / W3:' + w.w3 + ' / W4:' + w.w4 + '</span>';
-  if (bmServerData.isPastOrToday) {
-    html += '<span><b>' + bmFmtDateLabel(bmServerData.thisWeekDate) + ':</b> 実績</span>';
-  } else {
-    html += '<span><b>' + bmFmtDateLabel(bmServerData.thisWeekDate) + ':</b> <span style="color:#999;">未計上(先週分グレー)</span></span>';
-  }
-  html += '<span><b>反映先:</b> ' + bmFmtDateLabel(bmServerData.nextReflectDate) + '</span>';
+  html += '<span><b>反映元:</b> ' + bmFmtDateLabel(sourceDate) + '</span>';
+  html += '<span><b>配達日:</b> ' + bmFmtDateLabel(bmServerData.thisWeekDate) + '</span>';
   html += '<span class="bm-diff-summary">変動: ' + diffCount + '件</span>';
   html += '<span class="bm-sellout-summary">🔴 完売: ' + selloutCount + '件</span>';
   html += '<span class="bm-progress-summary">確定: ' + confirmedCount + '/' + bmServerData.locations.length + '拠点</span>';
