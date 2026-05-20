@@ -810,6 +810,119 @@ html, body { overscroll-behavior-y: contain; }
   text-align: right;
 }
 
+
+/* ===== 金種入力UI (v3.0 / 2026-05-21) ===== */
+.cash-breakdown-section {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+}
+.cash-breakdown-divider {
+  font-size: 11px;
+  color: var(--ink-mute);
+  text-align: center;
+  margin-bottom: 10px;
+  letter-spacing: 0.05em;
+}
+.cash-breakdown-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.cash-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cash-col-title {
+  font-size: 11px;
+  color: var(--ink-mute);
+  font-weight: 700;
+  text-align: center;
+  padding: 4px 0;
+  background: var(--cream);
+  border-radius: 6px;
+  margin-bottom: 2px;
+  letter-spacing: 0.08em;
+}
+.cash-row {
+  display: grid;
+  grid-template-columns: 44px 1fr 18px;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+}
+.cash-row .cash-label {
+  text-align: right;
+  font-weight: 700;
+  color: var(--ink);
+  font-family: 'Courier New', monospace;
+}
+.cash-row .cash-input {
+  width: 100%;
+  padding: 6px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  text-align: right;
+  font-size: 14px;
+  font-family: inherit;
+  background: var(--white);
+}
+.cash-row .cash-input:focus {
+  outline: 2px solid var(--gold);
+  outline-offset: -1px;
+  background: #FFFEF5;
+}
+.cash-row .cash-unit {
+  font-size: 10px;
+  color: var(--ink-mute);
+}
+.cash-row .cash-amount {
+  grid-column: 1 / -1;
+  text-align: right;
+  font-size: 10px;
+  color: var(--ink-mute);
+  font-family: 'Courier New', monospace;
+  margin-top: -2px;
+  padding-right: 22px;
+  min-height: 12px;
+}
+.cash-row .cash-amount.has-value { color: var(--gold); font-weight: 700; }
+.cash-total-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: var(--ink);
+  border-radius: 8px;
+  color: #FFF;
+}
+.cash-total-label {
+  font-size: 12px;
+  letter-spacing: 0.05em;
+}
+.cash-total-amount {
+  font-size: 18px;
+  font-weight: 700;
+  font-family: 'Courier New', monospace;
+  color: #F4C430;
+  flex: 1;
+  text-align: right;
+  margin: 0 10px;
+}
+.cash-clear-btn {
+  padding: 6px 12px;
+  font-size: 11px;
+  background: rgba(255,255,255,0.15);
+  color: #FFF;
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.cash-clear-btn:active { background: rgba(255,255,255,0.3); }
+
 </style>
 </head>
 <body>
@@ -874,6 +987,82 @@ html, body { overscroll-behavior-y: contain; }
         <span class="form-label">開始金額</span>
         <input type="number" class="form-input" id="register-start" placeholder="0" inputmode="numeric">
         <span class="form-unit">円</span>
+      </div>
+      <div class="cash-breakdown-section">
+        <div class="cash-breakdown-divider">— または 金種から入力（自動合計） —</div>
+        <div class="cash-breakdown-grid">
+          <div class="cash-col">
+            <div class="cash-col-title">紙幣</div>
+          <div class="cash-row">
+            <span class="cash-label">10,000</span>
+            <input type="number" inputmode="numeric" class="cash-input" id="start-d-10000" oninput="calcCashBreakdown('start')" placeholder="0" min="0">
+            <span class="cash-unit">枚</span>
+            <span class="cash-amount" id="start-a-10000"></span>
+          </div>
+          <div class="cash-row">
+            <span class="cash-label">5,000</span>
+            <input type="number" inputmode="numeric" class="cash-input" id="start-d-5000" oninput="calcCashBreakdown('start')" placeholder="0" min="0">
+            <span class="cash-unit">枚</span>
+            <span class="cash-amount" id="start-a-5000"></span>
+          </div>
+          <div class="cash-row">
+            <span class="cash-label">2,000</span>
+            <input type="number" inputmode="numeric" class="cash-input" id="start-d-2000" oninput="calcCashBreakdown('start')" placeholder="0" min="0">
+            <span class="cash-unit">枚</span>
+            <span class="cash-amount" id="start-a-2000"></span>
+          </div>
+          <div class="cash-row">
+            <span class="cash-label">1,000</span>
+            <input type="number" inputmode="numeric" class="cash-input" id="start-d-1000" oninput="calcCashBreakdown('start')" placeholder="0" min="0">
+            <span class="cash-unit">枚</span>
+            <span class="cash-amount" id="start-a-1000"></span>
+          </div>
+          </div>
+          <div class="cash-col">
+            <div class="cash-col-title">硬貨</div>
+          <div class="cash-row">
+            <span class="cash-label">500</span>
+            <input type="number" inputmode="numeric" class="cash-input" id="start-d-500" oninput="calcCashBreakdown('start')" placeholder="0" min="0">
+            <span class="cash-unit">枚</span>
+            <span class="cash-amount" id="start-a-500"></span>
+          </div>
+          <div class="cash-row">
+            <span class="cash-label">100</span>
+            <input type="number" inputmode="numeric" class="cash-input" id="start-d-100" oninput="calcCashBreakdown('start')" placeholder="0" min="0">
+            <span class="cash-unit">枚</span>
+            <span class="cash-amount" id="start-a-100"></span>
+          </div>
+          <div class="cash-row">
+            <span class="cash-label">50</span>
+            <input type="number" inputmode="numeric" class="cash-input" id="start-d-50" oninput="calcCashBreakdown('start')" placeholder="0" min="0">
+            <span class="cash-unit">枚</span>
+            <span class="cash-amount" id="start-a-50"></span>
+          </div>
+          <div class="cash-row">
+            <span class="cash-label">10</span>
+            <input type="number" inputmode="numeric" class="cash-input" id="start-d-10" oninput="calcCashBreakdown('start')" placeholder="0" min="0">
+            <span class="cash-unit">枚</span>
+            <span class="cash-amount" id="start-a-10"></span>
+          </div>
+          <div class="cash-row">
+            <span class="cash-label">5</span>
+            <input type="number" inputmode="numeric" class="cash-input" id="start-d-5" oninput="calcCashBreakdown('start')" placeholder="0" min="0">
+            <span class="cash-unit">枚</span>
+            <span class="cash-amount" id="start-a-5"></span>
+          </div>
+          <div class="cash-row">
+            <span class="cash-label">1</span>
+            <input type="number" inputmode="numeric" class="cash-input" id="start-d-1" oninput="calcCashBreakdown('start')" placeholder="0" min="0">
+            <span class="cash-unit">枚</span>
+            <span class="cash-amount" id="start-a-1"></span>
+          </div>
+          </div>
+        </div>
+        <div class="cash-total-row">
+          <span class="cash-total-label">金種合計</span>
+          <span class="cash-total-amount" id="start-cash-total">¥0</span>
+          <button type="button" class="cash-clear-btn" onclick="clearCashBreakdown('start')">クリア</button>
+        </div>
       </div>
     </div>
   </div>
@@ -974,6 +1163,82 @@ html, body { overscroll-behavior-y: contain; }
         <span class="form-label">最終金額</span>
         <input type="number" class="form-input" id="register-end" placeholder="0" inputmode="numeric" oninput="saveState()">
         <span class="form-unit">円</span>
+      </div>
+      <div class="cash-breakdown-section">
+        <div class="cash-breakdown-divider">— または 金種から入力（自動合計） —</div>
+        <div class="cash-breakdown-grid">
+          <div class="cash-col">
+            <div class="cash-col-title">紙幣</div>
+          <div class="cash-row">
+            <span class="cash-label">10,000</span>
+            <input type="number" inputmode="numeric" class="cash-input" id="end-d-10000" oninput="calcCashBreakdown('end')" placeholder="0" min="0">
+            <span class="cash-unit">枚</span>
+            <span class="cash-amount" id="end-a-10000"></span>
+          </div>
+          <div class="cash-row">
+            <span class="cash-label">5,000</span>
+            <input type="number" inputmode="numeric" class="cash-input" id="end-d-5000" oninput="calcCashBreakdown('end')" placeholder="0" min="0">
+            <span class="cash-unit">枚</span>
+            <span class="cash-amount" id="end-a-5000"></span>
+          </div>
+          <div class="cash-row">
+            <span class="cash-label">2,000</span>
+            <input type="number" inputmode="numeric" class="cash-input" id="end-d-2000" oninput="calcCashBreakdown('end')" placeholder="0" min="0">
+            <span class="cash-unit">枚</span>
+            <span class="cash-amount" id="end-a-2000"></span>
+          </div>
+          <div class="cash-row">
+            <span class="cash-label">1,000</span>
+            <input type="number" inputmode="numeric" class="cash-input" id="end-d-1000" oninput="calcCashBreakdown('end')" placeholder="0" min="0">
+            <span class="cash-unit">枚</span>
+            <span class="cash-amount" id="end-a-1000"></span>
+          </div>
+          </div>
+          <div class="cash-col">
+            <div class="cash-col-title">硬貨</div>
+          <div class="cash-row">
+            <span class="cash-label">500</span>
+            <input type="number" inputmode="numeric" class="cash-input" id="end-d-500" oninput="calcCashBreakdown('end')" placeholder="0" min="0">
+            <span class="cash-unit">枚</span>
+            <span class="cash-amount" id="end-a-500"></span>
+          </div>
+          <div class="cash-row">
+            <span class="cash-label">100</span>
+            <input type="number" inputmode="numeric" class="cash-input" id="end-d-100" oninput="calcCashBreakdown('end')" placeholder="0" min="0">
+            <span class="cash-unit">枚</span>
+            <span class="cash-amount" id="end-a-100"></span>
+          </div>
+          <div class="cash-row">
+            <span class="cash-label">50</span>
+            <input type="number" inputmode="numeric" class="cash-input" id="end-d-50" oninput="calcCashBreakdown('end')" placeholder="0" min="0">
+            <span class="cash-unit">枚</span>
+            <span class="cash-amount" id="end-a-50"></span>
+          </div>
+          <div class="cash-row">
+            <span class="cash-label">10</span>
+            <input type="number" inputmode="numeric" class="cash-input" id="end-d-10" oninput="calcCashBreakdown('end')" placeholder="0" min="0">
+            <span class="cash-unit">枚</span>
+            <span class="cash-amount" id="end-a-10"></span>
+          </div>
+          <div class="cash-row">
+            <span class="cash-label">5</span>
+            <input type="number" inputmode="numeric" class="cash-input" id="end-d-5" oninput="calcCashBreakdown('end')" placeholder="0" min="0">
+            <span class="cash-unit">枚</span>
+            <span class="cash-amount" id="end-a-5"></span>
+          </div>
+          <div class="cash-row">
+            <span class="cash-label">1</span>
+            <input type="number" inputmode="numeric" class="cash-input" id="end-d-1" oninput="calcCashBreakdown('end')" placeholder="0" min="0">
+            <span class="cash-unit">枚</span>
+            <span class="cash-amount" id="end-a-1"></span>
+          </div>
+          </div>
+        </div>
+        <div class="cash-total-row">
+          <span class="cash-total-label">金種合計</span>
+          <span class="cash-total-amount" id="end-cash-total">¥0</span>
+          <button type="button" class="cash-clear-btn" onclick="clearCashBreakdown('end')">クリア</button>
+        </div>
       </div>
     </div>
     <div class="form-card">
@@ -2505,6 +2770,64 @@ function sendIntermediateSale(method, amount, items, paypayReceived) {
   };
   fetch(state.GAS_URL, { method: 'POST', body: JSON.stringify(payload) })
     .catch(e => console.warn('intermediate sale sync error:', e));
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 金種入力 (v3.0 / 2026-05-21)
+// 紙幣4種＋硬貨6種 → 合計を register-start / register-end に自動セット
+// 仕様：合計のみGAS送信（金種は画面上の補助／逆算なし）
+// ═══════════════════════════════════════════════════════════════
+const CASH_DENOMINATIONS = [10000, 5000, 2000, 1000, 500, 100, 50, 10, 5, 1];
+
+function calcCashBreakdown(prefix) {
+  let total = 0;
+  CASH_DENOMINATIONS.forEach(d => {
+    const inp = document.getElementById(`${prefix}-d-${d}`);
+    if (!inp) return;
+    const count = parseInt(inp.value) || 0;
+    const sub = d * count;
+    total += sub;
+    const amt = document.getElementById(`${prefix}-a-${d}`);
+    if (amt) {
+      if (sub > 0) {
+        amt.textContent = `¥${sub.toLocaleString()}`;
+        amt.classList.add('has-value');
+      } else {
+        amt.textContent = '';
+        amt.classList.remove('has-value');
+      }
+    }
+  });
+  const tot = document.getElementById(`${prefix}-cash-total`);
+  if (tot) tot.textContent = `¥${total.toLocaleString()}`;
+
+  // 総額入力欄に自動反映（>0なら値をセット／0なら空にする）
+  const targetId = prefix === 'start' ? 'register-start' : 'register-end';
+  const target = document.getElementById(targetId);
+  if (target) {
+    target.value = total > 0 ? total : '';
+    if (prefix === 'end' && typeof saveState === 'function') saveState();
+  }
+}
+
+function clearCashBreakdown(prefix) {
+  CASH_DENOMINATIONS.forEach(d => {
+    const inp = document.getElementById(`${prefix}-d-${d}`);
+    if (inp) inp.value = '';
+    const amt = document.getElementById(`${prefix}-a-${d}`);
+    if (amt) {
+      amt.textContent = '';
+      amt.classList.remove('has-value');
+    }
+  });
+  const tot = document.getElementById(`${prefix}-cash-total`);
+  if (tot) tot.textContent = '¥0';
+  const targetId = prefix === 'start' ? 'register-start' : 'register-end';
+  const target = document.getElementById(targetId);
+  if (target) {
+    target.value = '';
+    if (prefix === 'end' && typeof saveState === 'function') saveState();
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
