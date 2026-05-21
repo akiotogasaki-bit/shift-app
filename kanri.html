@@ -1054,6 +1054,19 @@ body {
 }
 #tab-master .bm-copy-btn:hover { background: #fff3e0; color: #ef6c00; }
 
+/* ── F1/F2 0クリアボタン「🗑」 ── */
+#tab-master .bm-clear-btn {
+  display: inline-block;
+  margin-left: 2px;
+  padding: 0 4px;
+  font-size: 9pt;
+  color: #888;
+  cursor: pointer;
+  border-radius: 2px;
+  user-select: none;
+}
+#tab-master .bm-clear-btn:hover { background: #ffebee; color: #c62828; }
+
 /* ── F3 範囲選択ハイライト ── */
 #tab-master .bm-cell-sales.bm-selected {
   background: #b3e5fc !important;
@@ -2709,7 +2722,8 @@ function bmRenderMatrix() {
   for (const loc of bmServerData.locations) {
     const cf = bmIsLocConfirmed(loc.id) ? 'bm-loc-confirmed-h' : '';
     const copyBtn = '<span class="bm-copy-btn" onclick="event.stopPropagation();bmCopyLocationCol(\'' + loc.id + '\')" title="この拠点の列をコピー">⧉</span>';
-    html += '<th class="bm-loc-name-h ' + cf + '">' + bmEscape(loc.name) + copyBtn + '</th>';
+    const clearBtn = '<span class="bm-clear-btn" onclick="event.stopPropagation();bmClearLocationCol(\'' + loc.id + '\')" title="この拠点の全商品を0にする">🗑</span>';
+    html += '<th class="bm-loc-name-h ' + cf + '">' + bmEscape(loc.name) + copyBtn + clearBtn + '</th>';
   }
   html += '</tr></thead>';
 
@@ -2764,7 +2778,8 @@ function bmRenderMatrix() {
 
 function bmRenderRow(p) {
   const copyBtn = '<span class="bm-copy-btn" onclick="event.stopPropagation();bmCopyProductRow(\'' + p.id + '\')" title="この商品の行をコピー">⧉</span>';
-  let html = '<tr><td class="bm-product-cell">' + bmEscape(p.name) + copyBtn + '</td>';
+  const clearBtn = '<span class="bm-clear-btn" onclick="event.stopPropagation();bmClearProductRow(\'' + p.id + '\')" title="この商品の全拠点を0にする">🗑</span>';
+  let html = '<tr><td class="bm-product-cell">' + bmEscape(p.name) + copyBtn + clearBtn + '</td>';
   let total = 0;
   for (const loc of bmServerData.locations) {
     total += bmGetDisplaySales(p.id, loc.id);
@@ -3475,6 +3490,41 @@ function bmActionPaste() {
   bmClearSelection();
 }
 
+
+// ============================================================
+// 🗑 商品行・拠点列 一括0クリア（v3.1 追加）
+// ============================================================
+function bmClearProductRow(pid) {
+  if (!bmServerData) return;
+  const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
+  const p = products.find(x => x.id === pid);
+  const pname = p ? p.name : pid;
+  if (!confirm('「' + pname + '」の全拠点を 0 にしますか？\n（Ctrl+Z で元に戻せます）')) return;
+  const changes = [];
+  for (const loc of bmServerData.locations) {
+    changes.push({ date: bmCurrentDate, pid: pid, lid: loc.id, newVal: 0 });
+  }
+  const n = bmSetEditsBulk(changes);
+  bmRenderMatrix();
+  bmRenderCalcInfo();
+  wpToast('「' + pname + '」を' + n + '拠点で0にしました', 'success');
+}
+
+function bmClearLocationCol(lid) {
+  if (!bmServerData) return;
+  const loc = bmServerData.locations.find(x => x.id === lid);
+  const lname = loc ? loc.name : lid;
+  if (!confirm('「' + lname + '」の全商品を 0 にしますか？\n（Ctrl+Z で元に戻せます）')) return;
+  const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
+  const changes = [];
+  for (const p of products) {
+    changes.push({ date: bmCurrentDate, pid: p.id, lid: lid, newVal: 0 });
+  }
+  const n = bmSetEditsBulk(changes);
+  bmRenderMatrix();
+  bmRenderCalcInfo();
+  wpToast('「' + lname + '」を' + n + '商品で0にしました', 'success');
+}
 
 // ============================================================
 // F1 商品行コピペ
