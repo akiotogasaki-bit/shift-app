@@ -105,6 +105,80 @@ body {
 .tab-panel { display: none; padding-bottom: 100px; }
 .tab-panel.active { display: block; }
 
+/* ── 翌日のルート タブ（v1.0 NEW）── */
+.nextroute-header {
+  padding: 12px 16px 8px;
+  background: var(--cream);
+}
+.nextroute-title { font-size: 14px; font-weight: 700; color: var(--ink); }
+.nextroute-date { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+
+.nextroute-list { padding: 0 12px; }
+
+.nextroute-item {
+  background: var(--card-bg, var(--white));
+  color: var(--card-fg, var(--ink));
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+}
+.nextroute-row1 { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.nextroute-loc-name { flex: 1; font-size: 13px; font-weight: 700; }
+.nextroute-select {
+  flex: 1.3;
+  background: rgba(255,255,255,.88);
+  border: 1.5px solid rgba(0,0,0,.15);
+  border-radius: 5px;
+  padding: 6px 8px;
+  font-size: 13px;
+  color: #000;
+  font-family: inherit;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.nextroute-item[data-dark="1"] .nextroute-select {
+  background: rgba(255,255,255,.92);
+  border-color: rgba(255,255,255,.4);
+}
+.nextroute-row2 { display: flex; align-items: center; gap: 6px; font-size: 10px; }
+.nextroute-main-label { opacity: .65; }
+.nextroute-item[data-dark="1"] .nextroute-main-label { opacity: .75; }
+.role-pill {
+  background: #E67E22;
+  color: #fff;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-weight: 500;
+  font-size: 10px;
+}
+
+.save-route-btn {
+  width: 100%;
+  padding: 14px;
+  background: var(--blue);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+}
+.save-route-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+/* ── 回収タブ：カード全体色対応（v1.0 NEW）── */
+.location-item[style*="--card-bg"] {
+  background: var(--card-bg);
+  color: var(--card-fg, var(--ink));
+}
+.location-item[data-dark="1"] .location-name { color: #fff; }
+.location-item[data-dark="1"] .location-amount { color: #fff; }
+.location-item[data-dark="1"] .check-circle { border-color: rgba(255,255,255,.6); }
+.location-item.collected[style*="--card-bg"] {
+  border-color: var(--green);
+}
+
 .section-label {
   font-size: 11px;
   font-weight: 700;
@@ -509,6 +583,9 @@ body {
     <button class="tab-btn" id="tab-btn-residual" onclick="switchTab('residual')">
       📦 残数入力
     </button>
+    <button class="tab-btn" id="tab-btn-nextroute" onclick="switchTab('nextroute')">
+      📅 翌日のルート
+    </button>
   </div>
 
   <div id="tab-collection" class="tab-panel active">
@@ -541,6 +618,16 @@ body {
     <div class="product-list" id="product-list"></div>
   </div>
 
+  <div id="tab-nextroute" class="tab-panel">
+    <div class="nextroute-header">
+      <div class="nextroute-title">翌日のルート</div>
+      <div class="nextroute-date" id="nextroute-date">--</div>
+    </div>
+    <div class="nextroute-list" id="nextroute-list">
+      <p style="text-align:center;color:var(--ink-mute);font-size:13px;padding:30px 16px;">読み込み中…</p>
+    </div>
+  </div>
+
   <div class="sticky-bottom" id="sticky-collection">
     <button class="btn-primary" onclick="switchTab('residual')">
       📦 残数入力へ切り替え
@@ -548,6 +635,9 @@ body {
   </div>
   <div class="sticky-bottom" id="sticky-residual" style="display:none;">
     <button class="btn-primary" onclick="submitReport()">報告を送信する</button>
+  </div>
+  <div class="sticky-bottom" id="sticky-nextroute" style="display:none;">
+    <button class="save-route-btn" id="save-nextroute-btn" onclick="saveNextDayRoute()" disabled>変更を保存</button>
   </div>
 </div>
 
@@ -573,6 +663,9 @@ const state = {
   userName: '',
   locations: [],
   products: [],
+  staffList: [],                        // ★ NEW（v1.0 翌日のルート）
+  driverColors: {},                     // ★ NEW（v1.0 userId→色）
+  todayAssignment: {},                  // ★ NEW（v1.0 locId→{color,name,type}）
   collectedIds: new Set(),
   inactiveIds: new Set(),               // ★ NEW（A2/A3）
   reportsByLoc: {},
@@ -580,6 +673,12 @@ const state = {
   pendingReminderId: null,
   pendingInactiveId: null,              // ★ NEW（A2）
   lastUserActionAt: 0,                  // ★ NEW（A3）
+  nextRoute: {                          // ★ NEW（v1.0 翌日のルート）
+    loaded: false,
+    date: '',
+    locations: [],
+    modified: {},
+  },
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -738,16 +837,29 @@ async function init() {
     }
 
     // ─────────────────────────────────────────────────────────
-    // Phase B：4API完全並列で取得
+    // Phase B：6API完全並列で取得（v1.0：色連動2APIを追加）
     // ─────────────────────────────────────────────────────────
-    const [masterRes, reportsRes, intermediateRes, driverStateRes] = await Promise.all([
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const [masterRes, reportsRes, intermediateRes, driverStateRes, assignmentRes, colorsRes] = await Promise.all([
       fetch(`${GAS_URL}?action=getMaster`,             { redirect: 'follow' }).then(r => r.json()),
       fetch(`${GAS_URL}?action=getTodayReports`,        { redirect: 'follow' }).then(r => r.json()).catch(() => ({ data: [] })),
       fetch(`${GAS_URL}?action=getTodayIntermediate`,   { redirect: 'follow' }).then(r => r.json()).catch(() => ({ data: [] })),
       fetch(`${GAS_URL}?action=getDriverState`,         { redirect: 'follow' }).then(r => r.json()).catch(() => ({ collected: [], inactive: [] })),
+      fetch(`${GAS_URL}?action=getLocationsWithAssignment&date=${todayStr}`, { redirect: 'follow' }).then(r => r.json()).catch(() => []),
+      fetch(`${GAS_URL}?action=getDriverColors`,        { redirect: 'follow' }).then(r => r.json()).catch(() => ({})),
     ]);
     state.locations = masterRes.locations || [];
     state.products  = masterRes.products  || [];
+    state.staffList = masterRes.staffList || [];               // ★ NEW
+    state.driverColors = colorsRes || {};                      // ★ NEW
+    state.todayAssignment = {};                                // ★ NEW
+    (assignmentRes || []).forEach(a => {
+      state.todayAssignment[a.locationId] = {
+        color: a.color || '',
+        name:  a.name  || '',
+        type:  a.type  || '',
+      };
+    });
 
     // 拠点ごとにレポート状況をまとめる（最終報告 > 中間 > 未報告 の順で優先）
     state.reportsByLoc = {};
@@ -969,8 +1081,15 @@ function renderLocationItem(loc, isCollected) {
     ? `<button class="inactive-icon-btn" onclick="event.stopPropagation();openInactiveModal('${loc.id}')" aria-label="休止トグル">⏸</button>`
     : '';
 
+  // ★ NEW（v1.0）：当日担当の色をカード背景に適用
+  const assign = state.todayAssignment[loc.id];
+  const cardColor = (assign && assign.color) ? assign.color : '';
+  const isDark = cardColor ? isDarkColor_(cardColor) : false;
+  const colorStyle = cardColor ? `--card-bg:${cardColor};` : '';
+  const darkAttr = (cardColor && isDark) ? ' data-dark="1"' : '';
+
   return `
-    <div class="location-item ${extraClass}" onclick="${onclickAction}">
+    <div class="location-item ${extraClass}" style="${colorStyle}" ${darkAttr} onclick="${onclickAction}">
       <div class="check-circle">${checkContent}</div>
       <span class="location-name">${loc.name}</span>
       ${reminderHtml}
@@ -1267,10 +1386,19 @@ function switchTab(tab) {
 
   document.getElementById('tab-collection').classList.toggle('active', tab === 'collection');
   document.getElementById('tab-residual').classList.toggle('active', tab === 'residual');
+  document.getElementById('tab-nextroute').classList.toggle('active', tab === 'nextroute');
   document.getElementById('tab-btn-collection').classList.toggle('active', tab === 'collection');
   document.getElementById('tab-btn-residual').classList.toggle('active', tab === 'residual');
+  document.getElementById('tab-btn-nextroute').classList.toggle('active', tab === 'nextroute');
   document.getElementById('sticky-collection').style.display = tab === 'collection' ? 'block' : 'none';
   document.getElementById('sticky-residual').style.display   = tab === 'residual'   ? 'block' : 'none';
+  document.getElementById('sticky-nextroute').style.display  = tab === 'nextroute'  ? 'block' : 'none';
+
+  // ★ NEW（v1.0）：翌日のルートタブ初回タップでロード
+  if (tab === 'nextroute' && !state.nextRoute.loaded) {
+    loadNextDayRoute();
+  }
+
   window.scrollTo(0, 0);
 }
 
@@ -1365,6 +1493,186 @@ function openBreakdown() {
 
 function closeBreakdown() {
   document.getElementById('breakdown-modal').classList.remove('show');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 翌日のルート タブ（v1.0 NEW）
+// ═══════════════════════════════════════════════════════════════
+
+function _esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+}
+
+function isDarkColor_(hex) {
+  if (!hex || typeof hex !== 'string') return false;
+  const h = hex.replace('#', '');
+  if (h.length !== 6) return false;
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  // 相対輝度（0-255スケールで簡易計算）
+  const luma = (0.299 * r + 0.587 * g + 0.114 * b);
+  return luma < 140;  // 140未満を暗色と判定
+}
+
+function getTomorrowDateStr_() {
+  const t = new Date();
+  t.setDate(t.getDate() + 1);
+  const yyyy = t.getFullYear();
+  const mm = String(t.getMonth() + 1).padStart(2, '0');
+  const dd = String(t.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function getTomorrowLabel_() {
+  const t = new Date();
+  t.setDate(t.getDate() + 1);
+  const dayNames = ['日','月','火','水','木','金','土'];
+  return `${t.getMonth() + 1}/${t.getDate()}(${dayNames[t.getDay()]})`;
+}
+
+async function loadNextDayRoute() {
+  const date = getTomorrowDateStr_();
+  state.nextRoute.date = date;
+
+  try {
+    const res = await fetch(`${GAS_URL}?action=getLocationsWithAssignment&date=${date}`, { redirect: 'follow' });
+    const data = await res.json();
+    state.nextRoute.locations = Array.isArray(data) ? data : [];
+    state.nextRoute.modified = {};
+    state.nextRoute.loaded = true;
+    renderNextDayRoute();
+  } catch (e) {
+    console.error('loadNextDayRoute error:', e);
+    document.getElementById('nextroute-list').innerHTML =
+      `<p style="text-align:center;color:var(--red);font-size:13px;padding:20px;">読み込みエラー：${_esc(e.message || e)}</p>`;
+  }
+}
+
+function renderNextDayRoute() {
+  document.getElementById('nextroute-date').textContent = '翌日：' + getTomorrowLabel_();
+
+  // ドロップダウン候補：ドライバー＋社員
+  const candidates = (state.staffList || []).filter(s =>
+    s.role === 'ドライバー' || s.role === '社員'
+  );
+
+  const html = state.nextRoute.locations.map(loc => {
+    // 主担当の情報
+    const mainDriver = (loc.allDrivers || []).find(d => d.type === '主担当');
+    const mainUserId = mainDriver ? mainDriver.userId : '';
+    const mainName   = mainDriver ? mainDriver.name   : '（未設定）';
+    const mainColor  = mainDriver ? mainDriver.color  : '';
+
+    // 現在選択中（modified が優先、なければサーバー値）
+    const mod = state.nextRoute.modified[loc.locationId];
+    const currentUserId = mod ? mod.userId : (loc.userId || mainUserId);
+
+    // カード背景色：常に主担当色（未設定はグレー）
+    const cardColor = mainColor || '#ADB5BD';
+    const isDark = isDarkColor_(cardColor);
+    const darkAttr = isDark ? ' data-dark="1"' : '';
+
+    // ドロップダウン options
+    const optsHtml = ['<option value="">（未割当）</option>']
+      .concat(candidates.map(c =>
+        `<option value="${_esc(c.userId)}"${c.userId === currentUserId ? ' selected' : ''}>${_esc(c.name)}</option>`
+      ))
+      .join('');
+
+    // 代理ピル（主担当≠現在選択 かつ 選択あり）
+    const isException = currentUserId && currentUserId !== mainUserId;
+    const pillHtml = isException
+      ? `<div style="flex:1;"></div><span class="role-pill">代理</span>`
+      : '';
+
+    return `
+      <div class="nextroute-item" style="--card-bg:${cardColor};"${darkAttr}>
+        <div class="nextroute-row1">
+          <div class="nextroute-loc-name">${_esc(loc.locationName)}</div>
+          <select class="nextroute-select" onchange="onDriverSelect('${_esc(loc.locationId)}', this.value)">
+            ${optsHtml}
+          </select>
+        </div>
+        <div class="nextroute-row2">
+          <span class="nextroute-main-label">主担当: ${_esc(mainName)}</span>
+          ${pillHtml}
+        </div>
+      </div>`;
+  }).join('');
+
+  document.getElementById('nextroute-list').innerHTML = html ||
+    `<p style="text-align:center;color:var(--ink-mute);font-size:13px;padding:30px 16px;">拠点データがありません</p>`;
+
+  updateSaveRouteButton();
+}
+
+function onDriverSelect(locId, userId) {
+  const loc = state.nextRoute.locations.find(l => l.locationId === locId);
+  if (!loc) return;
+
+  // 変更を記録
+  // type は「代理」固定（応援廃止）
+  state.nextRoute.modified[locId] = {
+    userId: userId,
+    type: userId ? '代理' : '',
+  };
+
+  renderNextDayRoute();
+}
+
+function updateSaveRouteButton() {
+  const btn = document.getElementById('save-nextroute-btn');
+  const count = Object.keys(state.nextRoute.modified).length;
+  if (count > 0) {
+    btn.textContent = `変更を保存（${count}件）`;
+    btn.disabled = false;
+  } else {
+    btn.textContent = '変更を保存';
+    btn.disabled = true;
+  }
+}
+
+async function saveNextDayRoute() {
+  const entries = Object.entries(state.nextRoute.modified);
+  if (entries.length === 0) return;
+
+  const btn = document.getElementById('save-nextroute-btn');
+  btn.disabled = true;
+  btn.textContent = '保存中…';
+
+  const items = entries.map(([locId, m]) => ({
+    locationId: locId,
+    userId: m.userId,
+    type: m.type,
+  }));
+
+  const payload = {
+    action: 'setDriverExceptionBatch',
+    date: state.nextRoute.date,
+    items: items,
+  };
+
+  try {
+    const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) });
+    const json = await res.json();
+    if (json.success) {
+      alert(`保存しました（${items.length}件）`);
+      state.nextRoute.modified = {};
+      state.nextRoute.loaded = false;  // 次回タブ表示時に再ロード
+      await loadNextDayRoute();
+    } else {
+      alert('保存エラー：' + (json.error || 'unknown'));
+      btn.disabled = false;
+      updateSaveRouteButton();
+    }
+  } catch (e) {
+    alert('通信エラー：' + e.message);
+    btn.disabled = false;
+    updateSaveRouteButton();
+  }
 }
 
 init();
