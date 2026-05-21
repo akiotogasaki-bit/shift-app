@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>🍱 納品管理</title>
+<!-- kanri.html v3.4 (2026-05-21) — ドライバー色連動 Phase 4：拠点配分タブ／配分調整タブの拠点名セル背景色 -->
 <style id="app-style">
 /* @page は全環境で確実に効く静的指定（用紙＝縦）。横向きはシート1・2をCSS回転で実現（A案） */
 @page { size: A4; margin: 3mm; }
@@ -1576,6 +1577,60 @@ body {
 // ─────────────────────────────────────────
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5AawPDc7aluPokONkYz6f2ikwl0S487JvhKdKh6QSp1xhEhA/exec';
 
+// ═══════════════════════════════════════════════════════════
+// ドライバー色連動 Phase 4（2026-05-21 v3.4 追加）
+// 拠点名セル背景色：代理 > 主担当 > 既定#E9ECEF
+// データソース：?action=getLocationsWithAssignment&date=YYYY-MM-DD
+// ═══════════════════════════════════════════════════════════
+const DRIVER_DEFAULT_BG = '#E9ECEF';
+const driverColorCache = {};  // { 'YYYY-MM-DD': { locationId: {color, name, type} } }
+
+async function loadDriverColorMap(dateStr) {
+  if (!dateStr) return {};
+  if (driverColorCache[dateStr]) return driverColorCache[dateStr];
+  try {
+    const res  = await fetch(GAS_URL + '?action=getLocationsWithAssignment&date=' + encodeURIComponent(dateStr));
+    const data = await res.json();
+    if (!Array.isArray(data)) {
+      console.warn('[driverColor] unexpected response:', data);
+      driverColorCache[dateStr] = {};
+      return {};
+    }
+    const map = {};
+    data.forEach(item => {
+      if (item && item.locationId) {
+        map[item.locationId] = {
+          color: item.color || '',
+          name:  item.name  || '',
+          type:  item.type  || '',
+        };
+      }
+    });
+    driverColorCache[dateStr] = map;
+    return map;
+  } catch (e) {
+    console.warn('[driverColor] fetch failed:', e);
+    driverColorCache[dateStr] = {};
+    return {};
+  }
+}
+
+// 拠点IDからinline style属性文字列を生成（先頭半角スペース含む）
+// 例: ' style="background-color:#FFF0D9 !important;"'
+function driverColorStyleAttr(locId, colorMap) {
+  if (!colorMap) return '';
+  const info = colorMap[locId];
+  const color = (info && info.color) ? info.color : DRIVER_DEFAULT_BG;
+  return ' style="background-color:' + color + ' !important;"';
+}
+
+// 拠点配分タブ・配分調整タブで共通利用するキャッシュ無効化
+// （将来GASでマスタ更新後に呼ぶ用途）
+function invalidateDriverColorCache(dateStr) {
+  if (dateStr) delete driverColorCache[dateStr];
+  else Object.keys(driverColorCache).forEach(k => delete driverColorCache[k]);
+}
+
 // ★ 単価マスタの「カテゴリー」列の実値に合わせて変更してください
 const CATEGORY_COLOR = {
   '海苔弁系': 'blue',
@@ -1847,10 +1902,15 @@ async function fetchSheet1() {
   s1SetStatus('取得中…');
   document.getElementById('sheet1-body').innerHTML = '';
   try {
-    const res  = await fetch(GAS_URL + '?action=getSheet1Data&date=' + dateVal);
+    // ドライバー色マップを並列取得（Phase 4）
+    const [res, colorMap] = await Promise.all([
+      fetch(GAS_URL + '?action=getSheet1Data&date=' + dateVal),
+      loadDriverColorMap(dateVal)
+    ]);
     const data = await res.json();
     if (!data.ok) { s1SetStatus(data.error || '取得エラー', true); return; }
     s1SetStatus('');
+    data._driverColorMap = colorMap;
     renderSheet1(data);
   } catch(e) {
     s1SetStatus('通信エラー: ' + e.message, true);
@@ -1861,6 +1921,7 @@ function renderSheet1(data) {
   const body = document.getElementById('sheet1-body');
   const { dateLabel, locations, rice, brown, subtotalSplit } = data;
   const locIds = locations.map(l => l.id);
+  const colorMap = data._driverColorMap || {};  // Phase 4: ドライバー色マップ
 
   // お茶判定（商品名に「お茶」を含む行を除外）
   const isTea = (r) => r && r.baseName && r.baseName.indexOf('お茶') >= 0;
@@ -1897,7 +1958,9 @@ function renderSheet1(data) {
       if (idx === subtotalSplit) {
         html += `<th class="cell-sub" title="中間計(前${subtotalSplit}拠点)">中計</th>`;
       }
-      html += `<th title="${escHtml(fullName)}">${escHtml(showName)}</th>`;
+      // Phase 4: ドライバー色を背景色として適用
+      const styleAttr = driverColorStyleAttr(lid, colorMap);
+      html += `<th title="${escHtml(fullName)}"${styleAttr}>${escHtml(showName)}</th>`;
     });
     html += '<th class="cell-tot">合計</th>';
     html += '</tr>';
@@ -1991,8 +2054,10 @@ function renderSheet1(data) {
   let refHTML = '<table class="ref-table">'
     + '<tr><th class="col-name">拠点名</th><th class="col-sp">販売員名</th></tr>';
   locations.forEach((loc) => {
+    // Phase 4: ref-panelの拠点名セルにもドライバー色を適用
+    const styleAttr = driverColorStyleAttr(loc.id, colorMap);
     refHTML += `<tr>`
-      + `<td class="col-name">${escHtml(loc.name)}</td>`
+      + `<td class="col-name"${styleAttr}>${escHtml(loc.name)}</td>`
       + `<td class="col-sp">${escHtml(loc.salesPerson || '')}</td>`
       + `</tr>`;
   });
@@ -2537,6 +2602,7 @@ let bmInitialized = false;
 let bmLoadedDates = new Set();
 let bmThisWeekDates = [];     // ['2026-05-19','2026-05-20',...]
 let bmNextWeekDates = [];
+let bmDriverColorMap = {};    // Phase 4: 現在表示中の日付のドライバー色マップ
 
 // localStorage 読込
 function bmLoadEdits() {
@@ -2769,7 +2835,9 @@ function bmRenderMatrix() {
     // 表示名優先（空なら拠点名）
     const showName = (loc.displayName && loc.displayName.length > 0) ? loc.displayName : loc.name;
     const titleAttr = (loc.displayName && loc.displayName !== loc.name) ? (' title="' + bmEscape(loc.name) + '"') : '';
-    html += '<th class="bm-loc-name-h ' + cf + '"' + titleAttr + '>' + bmEscape(showName) + copyBtn + clearBtn + '</th>';
+    // Phase 4: ドライバー色を背景色として適用（!importantで既存CSS上書き）
+    const styleAttr = driverColorStyleAttr(loc.id, bmDriverColorMap);
+    html += '<th class="bm-loc-name-h ' + cf + '"' + titleAttr + styleAttr + '>' + bmEscape(showName) + copyBtn + clearBtn + '</th>';
   }
   html += '</tr></thead>';
 
@@ -3069,12 +3137,17 @@ async function bmLoadDate(dateStr) {
   const wrap = document.getElementById('bm-matrix-wrap');
   wrap.innerHTML = '<div class="bm-loading">配分調整を読み込み中...</div>';
   document.getElementById('bm-calc-info').innerHTML = '';
-  const r = await bmFetchMatrix(dateStr);
+  // Phase 4: ドライバー色マップを並列取得
+  const [r, colorMap] = await Promise.all([
+    bmFetchMatrix(dateStr),
+    loadDriverColorMap(dateStr)
+  ]);
   if (!r.ok) {
     wrap.innerHTML = '<div class="bm-error">取得エラー: ' + bmEscape(r.error || '不明') + '</div>';
     return;
   }
   bmServerData = r;
+  bmDriverColorMap = colorMap || {};  // Phase 4
   bmLoadedDates.add(dateStr);
   // サーバーから受け取った表示対象日付配列を保存
   if (r.thisWeekDates) bmThisWeekDates = r.thisWeekDates;
