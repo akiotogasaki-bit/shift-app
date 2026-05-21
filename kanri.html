@@ -1021,6 +1021,352 @@ body {
 #tab-master .bm-loading { text-align: center; padding: 40px; color:#888; font-size: 13pt; }
 #tab-master .bm-error { text-align: center; padding: 40px; color:#c62828; font-size: 12pt; }
 
+/* ============================================================
+   配分表アプリ「翌週配分タブ改善」案B Phase 4-6 追加CSS
+   2026-05-21 Phase 4: F1〜F4, F7
+   2026-05-21 Phase 5: F5, F8
+   2026-05-21 Phase 6: F6
+   ============================================================ */
+
+/* ── F5 プリセット適用ボタン ── */
+#tab-master .bm-preset-btn {
+  padding: 4px 12px;
+  border: 1px solid #ef6c00;
+  background: #fff3e0;
+  color: #ef6c00;
+  cursor: pointer;
+  border-radius: 3px;
+  font-size: 9.5pt;
+  font-weight: bold;
+}
+#tab-master .bm-preset-btn:hover { background: #ffe0b2; }
+
+/* ── F1/F2 コピーボタン「⧉」 ── */
+#tab-master .bm-copy-btn {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 4px;
+  font-size: 9pt;
+  color: #555;
+  cursor: pointer;
+  border-radius: 2px;
+  user-select: none;
+}
+#tab-master .bm-copy-btn:hover { background: #fff3e0; color: #ef6c00; }
+
+/* ── F3 範囲選択ハイライト ── */
+#tab-master .bm-cell-sales.bm-selected {
+  background: #b3e5fc !important;
+  outline: 1px solid #0288d1;
+}
+
+/* ── F4 一括クリア用アクションバー ── */
+.bm-action-bar {
+  display: none;
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #263238;
+  color: white;
+  padding: 8px 14px;
+  border-radius: 24px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  z-index: 999;
+  gap: 10px;
+  align-items: center;
+  font-size: 10pt;
+}
+.bm-action-bar.bm-visible { display: flex; }
+.bm-action-bar .bm-action-count { font-weight: bold; color: #ffeb3b; }
+.bm-action-bar button {
+  padding: 4px 10px;
+  border: none;
+  background: #c62828;
+  color: white;
+  cursor: pointer;
+  border-radius: 12px;
+  font-size: 9pt;
+  font-weight: bold;
+}
+.bm-action-bar button:hover { background: #b71c1c; }
+.bm-action-bar .bm-action-close {
+  background: transparent;
+  color: #ccc;
+  padding: 2px 6px;
+  font-size: 14pt;
+}
+.bm-action-bar .bm-action-close:hover { background: transparent; color: white; }
+
+/* ── F7 Undo/Redo ボタン（ヘッダ） ── */
+#tab-master .bm-undo-btn, #tab-master .bm-redo-btn {
+  padding: 4px 8px;
+  border: 1px solid #888;
+  background: #fafafa;
+  cursor: pointer;
+  border-radius: 3px;
+  font-size: 10pt;
+}
+#tab-master .bm-undo-btn:disabled, #tab-master .bm-redo-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+#tab-master .bm-undo-btn:not(:disabled):hover,
+#tab-master .bm-redo-btn:not(:disabled):hover { background: #e0e0e0; }
+
+/* ── F5 プリセット選択モーダル ── */
+.wp-modal-overlay {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 1000;
+  justify-content: center;
+  align-items: center;
+}
+.wp-modal-overlay.wp-show { display: flex; }
+.wp-modal {
+  background: white;
+  border-radius: 8px;
+  max-width: 720px;
+  width: 92vw;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.wp-modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #fafafa;
+  border-bottom: 1px solid #ddd;
+}
+.wp-modal-title { font-size: 13pt; font-weight: bold; }
+.wp-modal-close {
+  background: transparent;
+  border: none;
+  font-size: 16pt;
+  cursor: pointer;
+  color: #888;
+}
+.wp-modal-close:hover { color: #000; }
+.wp-modal-body {
+  padding: 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+.wp-modal-foot {
+  padding: 12px 16px;
+  background: #fafafa;
+  border-top: 1px solid #ddd;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.wp-modal-foot button {
+  padding: 6px 14px;
+  border: 1px solid #888;
+  background: white;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 10pt;
+}
+.wp-modal-foot button.wp-primary {
+  background: #ef6c00;
+  color: white;
+  border-color: #ef6c00;
+  font-weight: bold;
+}
+.wp-modal-foot button.wp-primary:hover { background: #e65100; }
+.wp-modal-foot button.wp-danger {
+  background: #c62828;
+  color: white;
+  border-color: #c62828;
+}
+.wp-modal-foot button.wp-danger:hover { background: #b71c1c; }
+
+/* プリセット一覧（F5）*/
+.wp-preset-list { display: flex; flex-direction: column; gap: 8px; }
+.wp-preset-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.wp-preset-row:hover { background: #fff8e1; border-color: #ef6c00; }
+.wp-preset-row-name { font-size: 11pt; font-weight: bold; }
+.wp-preset-row-detail { font-size: 9pt; color: #666; margin-top: 2px; }
+.wp-preset-row-actions { display: flex; gap: 6px; }
+
+/* プリセット適用プレビュー */
+.wp-preview-info {
+  background: #fff3e0;
+  padding: 10px 14px;
+  border-radius: 4px;
+  border-left: 3px solid #ef6c00;
+  margin-bottom: 12px;
+  font-size: 10pt;
+}
+.wp-preview-info b { color: #e65100; }
+
+/* ── F6 プリセット編集UI（設定タブ）── */
+#tab-settings { padding: 12px 14px; background: #f5f5f5; }
+#tab-settings .wp-page {
+  background: white;
+  padding: 16px 20px;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+}
+#tab-settings .wp-section-title {
+  font-size: 14pt;
+  font-weight: bold;
+  margin-bottom: 12px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid #ef6c00;
+}
+#tab-settings .wp-section-desc {
+  color: #555;
+  font-size: 10pt;
+  margin-bottom: 16px;
+}
+#tab-settings .wp-add-btn {
+  padding: 6px 14px;
+  background: #2e7d32;
+  color: white;
+  border: none;
+  cursor: pointer;
+  border-radius: 4px;
+  font-weight: bold;
+  margin-bottom: 12px;
+}
+#tab-settings .wp-add-btn:hover { background: #1b5e20; }
+#tab-settings .wp-presets-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10pt;
+}
+#tab-settings .wp-presets-table th,
+#tab-settings .wp-presets-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #eee;
+  text-align: left;
+}
+#tab-settings .wp-presets-table th { background: #fafafa; font-weight: bold; }
+#tab-settings .wp-presets-table .wp-row-actions { text-align: right; }
+#tab-settings .wp-presets-table button {
+  padding: 4px 10px;
+  margin-left: 4px;
+  border: 1px solid #888;
+  background: white;
+  cursor: pointer;
+  border-radius: 3px;
+  font-size: 9pt;
+}
+#tab-settings .wp-presets-table .wp-btn-edit { color: #1976d2; }
+#tab-settings .wp-presets-table .wp-btn-del { color: #c62828; }
+
+/* プリセット編集モーダル（拠点×係数マトリクス） */
+.wp-edit-name-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #eee;
+}
+.wp-edit-name-row label { font-weight: bold; }
+.wp-edit-name-row input {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  font-size: 11pt;
+}
+.wp-edit-loc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10pt;
+}
+.wp-edit-loc-table th,
+.wp-edit-loc-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid #eee;
+}
+.wp-edit-loc-table th { background: #fafafa; font-weight: bold; font-size: 9pt; text-align: left; }
+.wp-edit-loc-table .wp-loc-name { width: 35%; }
+.wp-edit-loc-table .wp-loc-flag {
+  width: 70px;
+  text-align: center;
+  font-size: 8.5pt;
+  padding: 2px 6px;
+  border-radius: 10px;
+}
+.wp-edit-loc-table .wp-loc-flag.wp-outdoor { background: #ffe0b2; color: #e65100; }
+.wp-edit-loc-table .wp-loc-flag.wp-indoor { background: #c8e6c9; color: #2e7d32; }
+.wp-edit-loc-table .wp-ratio-input {
+  width: 70px;
+  padding: 4px 8px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  text-align: right;
+  font-size: 10pt;
+}
+.wp-edit-bulk-row {
+  background: #f5f5f5;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  border-radius: 4px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 9pt;
+}
+.wp-edit-bulk-row button {
+  padding: 3px 8px;
+  border: 1px solid #888;
+  background: white;
+  cursor: pointer;
+  border-radius: 3px;
+  font-size: 9pt;
+}
+.wp-edit-bulk-row button:hover { background: #e0e0e0; }
+.wp-edit-bulk-row input {
+  width: 50px;
+  padding: 3px 6px;
+  text-align: right;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+}
+
+/* トースト通知 */
+.wp-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 20px;
+  border-radius: 24px;
+  color: white;
+  font-size: 10pt;
+  font-weight: bold;
+  z-index: 1001;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+.wp-toast.wp-show { opacity: 1; }
+.wp-toast.wp-success { background: #2e7d32; }
+.wp-toast.wp-error { background: #c62828; }
+.wp-toast.wp-info { background: #1976d2; }
+
 </style>
 </head>
 <body>
@@ -1036,7 +1382,7 @@ body {
   <button class="tab-btn" data-tab="sheet4">🍳 仕込み</button>
   <button class="tab-btn" data-tab="order">📋 発注</button>
   <button class="tab-btn" data-tab="master">📐 配分調整</button>
-  <button class="tab-btn" disabled data-tab="settings">設定 <small>準備中</small></button>
+  <button class="tab-btn" data-tab="settings">⚙️ 設定</button>
 </div>
 
 <!-- シート1 -->
@@ -1129,6 +1475,9 @@ body {
           <span class="bm-sw" style="background:#ffe0b2;"></span>編集
           <span class="bm-sw" style="background:#e1f5fe;"></span>推奨
         </div>
+        <button class="bm-undo-btn" id="bm-undo-btn" onclick="bmDoUndo()" title="元に戻す (Ctrl+Z)" disabled>↶ 元に戻す</button>
+        <button class="bm-redo-btn" id="bm-redo-btn" onclick="bmDoRedo()" title="やり直す (Ctrl+Y)" disabled>↷ やり直す</button>
+        <button class="bm-preset-btn" onclick="wpOpenPresetSelector()" title="天候プリセットを適用">📋 プリセット</button>
         <button class="bm-confirm-all-btn" id="bm-confirm-all" onclick="bmConfirmAll()">✓ 全拠点確定</button>
         <button class="bm-reload-btn" onclick="bmReload()">🔄 再取得</button>
         <button class="bm-print-btn" onclick="window.print()">🖨 印刷</button>
@@ -1155,7 +1504,16 @@ body {
   </div>
 </div>
 
-<div class="tab-pane" id="tab-settings"><div class="placeholder-msg">設定画面は準備中です</div></div>
+<div class="tab-pane" id="tab-settings"></div>
+
+<!-- F4 アクションバー（範囲選択時に表示） -->
+<div class="bm-action-bar" id="bm-action-bar">
+  <span><span class="bm-action-count" id="bm-action-count">0</span> セル選択中</span>
+  <button onclick="bmActionClearZero()" title="Delete">🗑 0にする</button>
+  <button onclick="bmActionCopy()" title="Ctrl+C">📋 コピー</button>
+  <button onclick="bmActionPaste()" title="Ctrl+V">📄 ペースト</button>
+  <button class="bm-action-close" onclick="bmActionDeselect()" title="Esc">✕</button>
+</div>
 
 <script>
 'use strict';
@@ -1389,6 +1747,10 @@ document.querySelectorAll('.tab-btn:not(:disabled)').forEach(btn => {
     btn.classList.add('active');
     const pane = document.getElementById('tab-' + btn.dataset.tab);
     if (pane) pane.classList.add('active');
+    // 設定タブを開いたらプリセットUIを初期化
+    if (btn.dataset.tab === 'settings' && typeof wpEnsureSettingsLoaded === 'function') {
+      wpEnsureSettingsLoaded();
+    }
   });
 });
 
@@ -2346,7 +2708,8 @@ function bmRenderMatrix() {
   html += '<th rowspan="2" class="bm-total-col">合計</th></tr><tr>';
   for (const loc of bmServerData.locations) {
     const cf = bmIsLocConfirmed(loc.id) ? 'bm-loc-confirmed-h' : '';
-    html += '<th class="bm-loc-name-h ' + cf + '">' + bmEscape(loc.name) + '</th>';
+    const copyBtn = '<span class="bm-copy-btn" onclick="event.stopPropagation();bmCopyLocationCol(\'' + loc.id + '\')" title="この拠点の列をコピー">⧉</span>';
+    html += '<th class="bm-loc-name-h ' + cf + '">' + bmEscape(loc.name) + copyBtn + '</th>';
   }
   html += '</tr></thead>';
 
@@ -2400,7 +2763,8 @@ function bmRenderMatrix() {
 }
 
 function bmRenderRow(p) {
-  let html = '<tr><td class="bm-product-cell">' + bmEscape(p.name) + '</td>';
+  const copyBtn = '<span class="bm-copy-btn" onclick="event.stopPropagation();bmCopyProductRow(\'' + p.id + '\')" title="この商品の行をコピー">⧉</span>';
+  let html = '<tr><td class="bm-product-cell">' + bmEscape(p.name) + copyBtn + '</td>';
   let total = 0;
   for (const loc of bmServerData.locations) {
     total += bmGetDisplaySales(p.id, loc.id);
@@ -2441,9 +2805,10 @@ function bmRenderCell(pid, lid) {
   const badge = hasSO ? '<span class="bm-sellout-badge"></span>' : '';
 
   const editable = !isZero;
+  const rangeAttrs = ' onmousedown="bmOnCellMouseDown(event,\'' + pid + '\',\'' + lid + '\')" onmouseenter="bmOnCellMouseEnter(event,\'' + pid + '\',\'' + lid + '\')"';
   const editAttrs = editable
-    ? 'contenteditable="true" inputmode="numeric" data-pid="' + pid + '" data-lid="' + lid + '" onkeydown="bmOnSalesKey(event)" onblur="bmOnSalesBlur(this)" onfocus="bmOnSalesFocus(this)"'
-    : '';
+    ? 'contenteditable="true" inputmode="numeric" data-pid="' + pid + '" data-lid="' + lid + '" onkeydown="bmOnSalesKey(event)" onblur="bmOnSalesBlur(this)" onfocus="bmOnSalesFocus(this)"' + rangeAttrs
+    : 'data-pid="' + pid + '" data-lid="' + lid + '"' + rangeAttrs;
   const proClick = isZero ? '' : 'onclick="bmOpenModal(\'' + pid + '\',\'' + lid + '\')"';
 
   return '<td class="' + cls + '">'
@@ -2518,18 +2883,20 @@ function bmOnSalesBlur(el) {
   const lid = el.dataset.lid;
   const raw = (el.textContent || '').trim();
   const c = bmServerData.cells[pid + '_' + lid];
+  let newVal;
   if (raw === '') {
-    bmSetEdit(bmCurrentDate, pid, lid, null);
+    newVal = null;
   } else {
     const v = parseInt(raw, 10);
     if (isNaN(v) || v < 0) {
-      bmSetEdit(bmCurrentDate, pid, lid, null);
+      newVal = null;
     } else {
       const orig = c ? c.weekSales : 0;
-      if (v === orig) bmSetEdit(bmCurrentDate, pid, lid, null);
-      else bmSetEdit(bmCurrentDate, pid, lid, v);
+      newVal = (v === orig) ? null : v;
     }
   }
+  // Undo履歴付きで設定
+  bmSetEditWithHistory(bmCurrentDate, pid, lid, newVal);
   bmRenderMatrix();
   bmRenderCalcInfo();
 }
@@ -2772,6 +3139,842 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') bmCloseModal();
 });
+
+// ============================================================
+// 配分表アプリ「翌週配分タブ改善」案B Phase 4-6 追加JS
+// 2026-05-21 v1.0
+// 機能:
+//   F1 商品行コピペ / F2 拠点列コピペ / F3 範囲選択コピペ
+//   F4 一括クリア / F5 プリセット適用 / F6 プリセット編集
+//   F7 Undo/Redo (10手) / F8 カテゴリ違い警告
+// ============================================================
+
+// ── グローバル状態 ──
+let wpPresets = [];          // [{name, rows: [{locId, ratio, ...}]}]
+let wpLocations = [];        // [{id, name, outdoor}]
+let wpCurrentEditPreset = null; // 編集中のプリセット名
+
+// F3 範囲選択
+let bmSelectedCells = new Set(); // 'pid_lid'
+let bmRangeDragging = false;
+let bmRangeStart = null; // {pid, lid}
+
+// F7 Undo/Redo
+const BM_HISTORY_MAX = 10;
+let bmUndoStack = []; // [{actions: [{date, pid, lid, oldVal, newVal}, ...]}]
+let bmRedoStack = [];
+
+// F1/F2 コピー内容
+let bmCopyBuffer = null; // { type: 'row', pid, values: {lid: val} } | { type: 'col', lid, values: {pid: val} } | { type: 'range', cells: [{pid, lid, val}] }
+
+// ============================================================
+// ヘルパー
+// ============================================================
+function wpEsc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function wpToast(msg, type) {
+  type = type || 'info';
+  let t = document.getElementById('wp-toast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'wp-toast';
+    t.className = 'wp-toast';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.className = 'wp-toast wp-show wp-' + type;
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => {
+    t.className = 'wp-toast wp-' + type;
+  }, 2500);
+}
+
+async function wpFetch(action, params) {
+  const usp = new URLSearchParams();
+  usp.set('action', action);
+  if (params) {
+    for (const k of Object.keys(params)) {
+      usp.set(k, params[k]);
+    }
+  }
+  try {
+    const res = await fetch(GAS_URL + '?' + usp.toString());
+    return await res.json();
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
+// ============================================================
+// F7 Undo/Redo: 編集の履歴管理
+// ============================================================
+function bmPushHistory(actions) {
+  // actions: [{date, pid, lid, oldVal, newVal}]
+  if (!actions || actions.length === 0) return;
+  bmUndoStack.push({ actions: actions });
+  if (bmUndoStack.length > BM_HISTORY_MAX) bmUndoStack.shift();
+  bmRedoStack = []; // 新操作でRedo履歴クリア
+  bmUpdateUndoBtns();
+}
+
+function bmApplyHistoryActions(actions, isUndo) {
+  // isUndo=true → oldVal を適用、false → newVal を適用
+  for (const a of actions) {
+    const v = isUndo ? a.oldVal : a.newVal;
+    if (v === null || v === undefined) {
+      bmSetEdit(a.date, a.pid, a.lid, null);
+    } else {
+      bmSetEdit(a.date, a.pid, a.lid, v);
+    }
+  }
+}
+
+function bmDoUndo() {
+  if (bmUndoStack.length === 0) return;
+  const entry = bmUndoStack.pop();
+  bmApplyHistoryActions(entry.actions, true);
+  bmRedoStack.push(entry);
+  if (bmRedoStack.length > BM_HISTORY_MAX) bmRedoStack.shift();
+  bmRenderMatrix();
+  bmRenderCalcInfo();
+  bmUpdateUndoBtns();
+  wpToast('元に戻しました（' + entry.actions.length + '件）', 'info');
+}
+
+function bmDoRedo() {
+  if (bmRedoStack.length === 0) return;
+  const entry = bmRedoStack.pop();
+  bmApplyHistoryActions(entry.actions, false);
+  bmUndoStack.push(entry);
+  if (bmUndoStack.length > BM_HISTORY_MAX) bmUndoStack.shift();
+  bmRenderMatrix();
+  bmRenderCalcInfo();
+  bmUpdateUndoBtns();
+  wpToast('やり直しました（' + entry.actions.length + '件）', 'info');
+}
+
+function bmUpdateUndoBtns() {
+  const ub = document.getElementById('bm-undo-btn');
+  const rb = document.getElementById('bm-redo-btn');
+  if (ub) ub.disabled = (bmUndoStack.length === 0);
+  if (rb) rb.disabled = (bmRedoStack.length === 0);
+}
+
+// 編集を1件単位で履歴に積む（既存 bmSetEdit のラッパ）
+function bmSetEditWithHistory(date, pid, lid, newVal) {
+  const oldVal = bmGetEdit(date, pid, lid);
+  if (oldVal === newVal) return;
+  bmSetEdit(date, pid, lid, newVal);
+  bmPushHistory([{ date, pid, lid, oldVal, newVal }]);
+}
+
+// 複数編集をまとめて履歴に積む
+function bmSetEditsBulk(changes) {
+  // changes: [{date, pid, lid, newVal}]
+  const actions = [];
+  for (const c of changes) {
+    const oldVal = bmGetEdit(c.date, c.pid, c.lid);
+    if (oldVal === c.newVal) continue;
+    bmSetEdit(c.date, c.pid, c.lid, c.newVal);
+    actions.push({ date: c.date, pid: c.pid, lid: c.lid, oldVal: oldVal, newVal: c.newVal });
+  }
+  if (actions.length > 0) {
+    bmPushHistory(actions);
+  }
+  return actions.length;
+}
+
+// ============================================================
+// F3 範囲選択
+// ============================================================
+function bmCellKey(pid, lid) { return pid + '_' + lid; }
+function bmIsSelected(pid, lid) { return bmSelectedCells.has(bmCellKey(pid, lid)); }
+
+function bmClearSelection() {
+  bmSelectedCells.clear();
+  bmUpdateSelectionUI();
+  bmUpdateActionBar();
+}
+
+function bmAddToSelection(pid, lid) {
+  bmSelectedCells.add(bmCellKey(pid, lid));
+}
+
+function bmUpdateSelectionUI() {
+  // DOM上の選択状態を反映
+  const cells = document.querySelectorAll('#tab-master .bm-cell-sales[data-pid]');
+  cells.forEach(el => {
+    const k = bmCellKey(el.dataset.pid, el.dataset.lid);
+    if (bmSelectedCells.has(k)) el.classList.add('bm-selected');
+    else el.classList.remove('bm-selected');
+  });
+}
+
+function bmSelectRange(startPid, startLid, endPid, endLid) {
+  if (!bmServerData) return;
+  const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
+  const pids = products.map(p => p.id);
+  const lids = bmServerData.locations.map(l => l.id);
+  const pi1 = pids.indexOf(startPid), pi2 = pids.indexOf(endPid);
+  const li1 = lids.indexOf(startLid), li2 = lids.indexOf(endLid);
+  if (pi1 < 0 || pi2 < 0 || li1 < 0 || li2 < 0) return;
+  const pMin = Math.min(pi1, pi2), pMax = Math.max(pi1, pi2);
+  const lMin = Math.min(li1, li2), lMax = Math.max(li1, li2);
+  bmSelectedCells.clear();
+  for (let i = pMin; i <= pMax; i++) {
+    for (let j = lMin; j <= lMax; j++) {
+      bmAddToSelection(pids[i], lids[j]);
+    }
+  }
+  bmUpdateSelectionUI();
+  bmUpdateActionBar();
+}
+
+function bmOnCellMouseDown(e, pid, lid) {
+  if (e.button !== 0) return; // 左クリックのみ
+  // contenteditable のクリック編集を邪魔しないように、Shift/Ctrl 押下時のみ範囲動作
+  if (!e.shiftKey && !e.ctrlKey && !e.metaKey) return;
+  e.preventDefault();
+  if (e.shiftKey && bmRangeStart) {
+    // 範囲指定
+    bmSelectRange(bmRangeStart.pid, bmRangeStart.lid, pid, lid);
+  } else {
+    // 単一選択開始
+    bmRangeStart = { pid, lid };
+    bmSelectedCells.clear();
+    bmAddToSelection(pid, lid);
+    bmUpdateSelectionUI();
+    bmUpdateActionBar();
+    bmRangeDragging = true;
+  }
+}
+
+function bmOnCellMouseEnter(e, pid, lid) {
+  if (!bmRangeDragging || !bmRangeStart) return;
+  bmSelectRange(bmRangeStart.pid, bmRangeStart.lid, pid, lid);
+}
+
+function bmOnGlobalMouseUp() {
+  bmRangeDragging = false;
+}
+
+// ============================================================
+// F4 一括クリア用アクションバー
+// ============================================================
+function bmUpdateActionBar() {
+  let bar = document.getElementById('bm-action-bar');
+  if (!bar) return;
+  if (bmSelectedCells.size === 0) {
+    bar.classList.remove('bm-visible');
+  } else {
+    bar.classList.add('bm-visible');
+    const cnt = document.getElementById('bm-action-count');
+    if (cnt) cnt.textContent = bmSelectedCells.size;
+  }
+}
+
+function bmActionClearZero() {
+  if (bmSelectedCells.size === 0) return;
+  const changes = [];
+  for (const k of bmSelectedCells) {
+    const [pid, lid] = k.split('_');
+    changes.push({ date: bmCurrentDate, pid, lid, newVal: 0 });
+  }
+  const n = bmSetEditsBulk(changes);
+  bmRenderMatrix();
+  bmRenderCalcInfo();
+  wpToast(n + '件を0にしました', 'success');
+  bmClearSelection();
+}
+
+function bmActionDeselect() {
+  bmClearSelection();
+}
+
+function bmActionCopy() {
+  if (bmSelectedCells.size === 0) return;
+  const cells = [];
+  for (const k of bmSelectedCells) {
+    const [pid, lid] = k.split('_');
+    const v = bmGetDisplaySales(pid, lid);
+    cells.push({ pid, lid, val: v });
+  }
+  bmCopyBuffer = { type: 'range', cells: cells };
+  wpToast('コピーしました（' + cells.length + 'セル）', 'info');
+}
+
+function bmActionPaste() {
+  if (!bmCopyBuffer || bmCopyBuffer.type !== 'range' || bmSelectedCells.size === 0) {
+    wpToast('貼り付け先を選択してください', 'error');
+    return;
+  }
+  // 単純実装：選択範囲の左上に貼り付け（オフセット計算）
+  const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
+  const pids = products.map(p => p.id);
+  const lids = bmServerData.locations.map(l => l.id);
+
+  // コピー元の左上を求める
+  const srcPids = [...new Set(bmCopyBuffer.cells.map(c => c.pid))];
+  const srcLids = [...new Set(bmCopyBuffer.cells.map(c => c.lid))];
+  const srcPiMin = Math.min(...srcPids.map(p => pids.indexOf(p)));
+  const srcLiMin = Math.min(...srcLids.map(l => lids.indexOf(l)));
+
+  // 貼り付け先の左上を求める
+  const dstPids = [...new Set([...bmSelectedCells].map(k => k.split('_')[0]))];
+  const dstLids = [...new Set([...bmSelectedCells].map(k => k.split('_')[1]))];
+  const dstPiMin = Math.min(...dstPids.map(p => pids.indexOf(p)));
+  const dstLiMin = Math.min(...dstLids.map(l => lids.indexOf(l)));
+
+  const dPi = dstPiMin - srcPiMin;
+  const dLi = dstLiMin - srcLiMin;
+
+  // F8 カテゴリ違い警告
+  const srcCats = new Set();
+  const dstCats = new Set();
+  for (const c of bmCopyBuffer.cells) {
+    const p = products.find(x => x.id === c.pid);
+    if (p) srcCats.add(p.group || p.category || '');
+  }
+  for (const cell of bmCopyBuffer.cells) {
+    const srcPi = pids.indexOf(cell.pid);
+    const newPi = srcPi + dPi;
+    if (newPi < 0 || newPi >= pids.length) continue;
+    const p = products.find(x => x.id === pids[newPi]);
+    if (p) dstCats.add(p.group || p.category || '');
+  }
+  const srcCatArr = [...srcCats];
+  const dstCatArr = [...dstCats];
+  if (srcCatArr.length > 0 && dstCatArr.length > 0 &&
+      !srcCatArr.every(c => dstCatArr.includes(c))) {
+    if (!confirm('コピー元と貼り付け先のカテゴリが違います。\n続行しますか？')) return;
+  }
+
+  const changes = [];
+  for (const cell of bmCopyBuffer.cells) {
+    const srcPi = pids.indexOf(cell.pid);
+    const srcLi = lids.indexOf(cell.lid);
+    const newPi = srcPi + dPi;
+    const newLi = srcLi + dLi;
+    if (newPi < 0 || newPi >= pids.length) continue;
+    if (newLi < 0 || newLi >= lids.length) continue;
+    changes.push({
+      date: bmCurrentDate,
+      pid: pids[newPi],
+      lid: lids[newLi],
+      newVal: cell.val
+    });
+  }
+  const n = bmSetEditsBulk(changes);
+  bmRenderMatrix();
+  bmRenderCalcInfo();
+  wpToast(n + 'セルに貼り付けました', 'success');
+  bmClearSelection();
+}
+
+
+// ============================================================
+// F1 商品行コピペ
+// ============================================================
+function bmCopyProductRow(pid) {
+  if (!bmServerData) return;
+  const values = {};
+  for (const loc of bmServerData.locations) {
+    values[loc.id] = bmGetDisplaySales(pid, loc.id);
+  }
+  bmCopyBuffer = { type: 'row', pid: pid, values: values };
+  // 商品名取得
+  const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
+  const p = products.find(x => x.id === pid);
+  const pname = p ? p.name : pid;
+  wpToast('「' + pname + '」の行をコピー（' + Object.keys(values).length + '拠点）→ ⧉で貼付先選択', 'info');
+  bmOpenRowPasteModal(pid);
+}
+
+function bmOpenRowPasteModal(srcPid) {
+  if (!bmCopyBuffer || bmCopyBuffer.type !== 'row') return;
+  const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
+  const srcP = products.find(x => x.id === srcPid);
+  const srcCat = srcP ? (srcP.group || srcP.category || '') : '';
+  let html = '<div style="margin-bottom:10px;font-size:10pt;color:#555;">「<b>' + wpEsc(srcP.name) + '</b>」の値を貼り付ける商品を選んでください</div>';
+  html += '<div style="display:flex;flex-direction:column;gap:4px;max-height:50vh;overflow-y:auto;">';
+  for (const p of products) {
+    if (p.id === srcPid) continue;
+    const cat = p.group || p.category || '';
+    const warn = (cat !== srcCat) ? ' <span style="color:#c62828;font-size:8.5pt;">⚠️ カテゴリ違い</span>' : '';
+    html += '<label style="display:flex;align-items:center;gap:8px;padding:4px 8px;border:1px solid #eee;border-radius:3px;cursor:pointer;">'
+      + '<input type="checkbox" class="wp-paste-target" data-pid="' + wpEsc(p.id) + '" data-cat="' + wpEsc(cat) + '">'
+      + '<span>' + wpEsc(p.name) + '</span>'
+      + warn
+      + '</label>';
+  }
+  html += '</div>';
+  wpOpenModal('行コピー：貼付先選択', html, [
+    { label: 'キャンセル', onclick: 'wpCloseModal()' },
+    { label: '貼り付け', primary: true, onclick: 'bmExecRowPaste(\'' + srcPid + '\')' }
+  ]);
+}
+
+function bmExecRowPaste(srcPid) {
+  if (!bmCopyBuffer || bmCopyBuffer.type !== 'row') { wpCloseModal(); return; }
+  const targets = document.querySelectorAll('.wp-paste-target:checked');
+  if (targets.length === 0) { wpToast('貼付先を選んでください', 'error'); return; }
+  // カテゴリチェック
+  const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
+  const srcP = products.find(x => x.id === srcPid);
+  const srcCat = srcP ? (srcP.group || srcP.category || '') : '';
+  let hasCatMismatch = false;
+  for (const t of targets) {
+    if (t.dataset.cat !== srcCat) { hasCatMismatch = true; break; }
+  }
+  if (hasCatMismatch) {
+    if (!confirm('カテゴリ違いの貼付先があります。続行しますか？')) return;
+  }
+  const changes = [];
+  for (const t of targets) {
+    const dstPid = t.dataset.pid;
+    for (const lid of Object.keys(bmCopyBuffer.values)) {
+      changes.push({
+        date: bmCurrentDate,
+        pid: dstPid,
+        lid: lid,
+        newVal: bmCopyBuffer.values[lid]
+      });
+    }
+  }
+  const n = bmSetEditsBulk(changes);
+  bmRenderMatrix();
+  bmRenderCalcInfo();
+  wpCloseModal();
+  wpToast(targets.length + '商品 × ' + Object.keys(bmCopyBuffer.values).length + '拠点 = ' + n + '件を貼り付けました', 'success');
+}
+
+// ============================================================
+// F2 拠点列コピペ
+// ============================================================
+function bmCopyLocationCol(lid) {
+  if (!bmServerData) return;
+  const values = {};
+  const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
+  for (const p of products) {
+    values[p.id] = bmGetDisplaySales(p.id, lid);
+  }
+  bmCopyBuffer = { type: 'col', lid: lid, values: values };
+  const loc = bmServerData.locations.find(x => x.id === lid);
+  const lname = loc ? loc.name : lid;
+  wpToast('「' + lname + '」の列をコピー（' + Object.keys(values).length + '商品）→ ⧉で貼付先選択', 'info');
+  bmOpenColPasteModal(lid);
+}
+
+function bmOpenColPasteModal(srcLid) {
+  if (!bmCopyBuffer || bmCopyBuffer.type !== 'col') return;
+  const srcLoc = bmServerData.locations.find(x => x.id === srcLid);
+  let html = '<div style="margin-bottom:10px;font-size:10pt;color:#555;">「<b>' + wpEsc(srcLoc.name) + '</b>」の値を貼り付ける拠点を選んでください</div>';
+  html += '<div style="display:flex;flex-direction:column;gap:4px;max-height:50vh;overflow-y:auto;">';
+  for (const loc of bmServerData.locations) {
+    if (loc.id === srcLid) continue;
+    html += '<label style="display:flex;align-items:center;gap:8px;padding:4px 8px;border:1px solid #eee;border-radius:3px;cursor:pointer;">'
+      + '<input type="checkbox" class="wp-paste-target" data-lid="' + wpEsc(loc.id) + '">'
+      + '<span>' + wpEsc(loc.name) + '</span>'
+      + '</label>';
+  }
+  html += '</div>';
+  wpOpenModal('列コピー：貼付先選択', html, [
+    { label: 'キャンセル', onclick: 'wpCloseModal()' },
+    { label: '貼り付け', primary: true, onclick: 'bmExecColPaste(\'' + srcLid + '\')' }
+  ]);
+}
+
+function bmExecColPaste(srcLid) {
+  if (!bmCopyBuffer || bmCopyBuffer.type !== 'col') { wpCloseModal(); return; }
+  const targets = document.querySelectorAll('.wp-paste-target:checked');
+  if (targets.length === 0) { wpToast('貼付先を選んでください', 'error'); return; }
+  const changes = [];
+  for (const t of targets) {
+    const dstLid = t.dataset.lid;
+    for (const pid of Object.keys(bmCopyBuffer.values)) {
+      changes.push({
+        date: bmCurrentDate,
+        pid: pid,
+        lid: dstLid,
+        newVal: bmCopyBuffer.values[pid]
+      });
+    }
+  }
+  const n = bmSetEditsBulk(changes);
+  bmRenderMatrix();
+  bmRenderCalcInfo();
+  wpCloseModal();
+  wpToast(targets.length + '拠点 × ' + Object.keys(bmCopyBuffer.values).length + '商品 = ' + n + '件を貼り付けました', 'success');
+}
+
+// ============================================================
+// 汎用モーダル
+// ============================================================
+function wpOpenModal(title, bodyHtml, buttons) {
+  let overlay = document.getElementById('wp-modal-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'wp-modal-overlay';
+    overlay.className = 'wp-modal-overlay';
+    overlay.onclick = (e) => { if (e.target === overlay) wpCloseModal(); };
+    document.body.appendChild(overlay);
+  }
+  const btnsHtml = (buttons || []).map(b => {
+    const cls = b.primary ? 'wp-primary' : (b.danger ? 'wp-danger' : '');
+    return '<button class="' + cls + '" onclick="' + b.onclick + '">' + wpEsc(b.label) + '</button>';
+  }).join('');
+  overlay.innerHTML =
+    '<div class="wp-modal" onclick="event.stopPropagation()">' +
+      '<div class="wp-modal-head">' +
+        '<div class="wp-modal-title">' + wpEsc(title) + '</div>' +
+        '<button class="wp-modal-close" onclick="wpCloseModal()">✕</button>' +
+      '</div>' +
+      '<div class="wp-modal-body">' + bodyHtml + '</div>' +
+      (btnsHtml ? '<div class="wp-modal-foot">' + btnsHtml + '</div>' : '') +
+    '</div>';
+  overlay.classList.add('wp-show');
+}
+
+function wpCloseModal() {
+  const overlay = document.getElementById('wp-modal-overlay');
+  if (overlay) overlay.classList.remove('wp-show');
+}
+
+// ============================================================
+// F5 プリセット適用
+// ============================================================
+async function wpLoadPresets() {
+  const r = await wpFetch('getWeatherPresets');
+  if (!r.ok) {
+    wpToast('プリセット取得失敗: ' + (r.error || '不明'), 'error');
+    return false;
+  }
+  // ゴミデータ「プリセット名」を除外
+  wpPresets = (r.presets || []).filter(p => p.name && p.name !== 'プリセット名' && p.rows && p.rows.length > 1);
+  wpLocations = r.locations || [];
+  return true;
+}
+
+async function wpOpenPresetSelector() {
+  wpToast('プリセット読み込み中...', 'info');
+  const ok = await wpLoadPresets();
+  if (!ok) return;
+  if (wpPresets.length === 0) {
+    wpOpenModal('プリセット選択', '<div style="padding:20px;text-align:center;color:#888;">プリセットが登録されていません。<br>設定タブで作成してください。</div>',
+      [{ label: '閉じる', onclick: 'wpCloseModal()' }]);
+    return;
+  }
+  let html = '<div class="wp-preview-info">対象日：<b>' + wpEsc(bmCurrentDate) + '</b> に適用します（G列を上書き）</div>';
+  html += '<div class="wp-preset-list">';
+  for (const p of wpPresets) {
+    const valid = p.rows.filter(r => r.locId);
+    const off = valid.filter(r => r.ratio === 0).length;
+    const reduce = valid.filter(r => r.ratio > 0 && r.ratio < 100).length;
+    const keep = valid.filter(r => r.ratio === 100).length;
+    const inc = valid.filter(r => r.ratio > 100).length;
+    html += '<div class="wp-preset-row" onclick="wpPreviewPreset(\'' + wpEsc(p.name).replace(/'/g, "\\'") + '\')">';
+    html += '<div><div class="wp-preset-row-name">' + wpEsc(p.name) + '</div>';
+    html += '<div class="wp-preset-row-detail">' + valid.length + '拠点設定 / 0%:' + off + ' / 80%帯:' + reduce + ' / 100%:' + keep + ' / 増量:' + inc + '</div></div>';
+    html += '<div class="wp-preset-row-actions"><button class="wp-primary" style="padding:4px 12px;">適用 →</button></div>';
+    html += '</div>';
+  }
+  html += '</div>';
+  wpOpenModal('📋 プリセット選択', html, [
+    { label: '閉じる', onclick: 'wpCloseModal()' }
+  ]);
+}
+
+function wpPreviewPreset(presetName) {
+  const preset = wpPresets.find(p => p.name === presetName);
+  if (!preset) return;
+  // 影響を受ける拠点数を計算
+  let html = '<div class="wp-preview-info">';
+  html += '<b>' + wpEsc(presetName) + '</b> を <b>' + wpEsc(bmCurrentDate) + '</b> に適用します。<br>';
+  html += '基本数 × 係数(%) を <b>切上げ</b>で計算し、G列（現在値）に上書きします。<br>';
+  html += 'H列（翌週提案値）は変更されません。';
+  html += '</div>';
+  html += '<table style="width:100%;font-size:9.5pt;border-collapse:collapse;">';
+  html += '<thead><tr><th style="text-align:left;padding:4px 8px;background:#fafafa;">拠点</th><th style="padding:4px 8px;background:#fafafa;">係数</th><th style="padding:4px 8px;background:#fafafa;">区分</th></tr></thead>';
+  html += '<tbody>';
+  for (const r of preset.rows) {
+    if (!r.locId) continue;
+    const loc = wpLocations.find(l => l.id === r.locId);
+    const flagCls = loc && loc.outdoor === '屋外' ? 'wp-outdoor' : 'wp-indoor';
+    const flag = loc ? loc.outdoor : '?';
+    const ratioBg = r.ratio === 0 ? '#ffcdd2' : (r.ratio < 100 ? '#fff9c4' : (r.ratio > 100 ? '#c8e6c9' : '#f5f5f5'));
+    html += '<tr style="border-bottom:1px solid #eee;">';
+    html += '<td style="padding:4px 8px;">' + wpEsc(r.locName || r.locId) + '</td>';
+    html += '<td style="padding:4px 8px;text-align:center;background:' + ratioBg + ';font-weight:bold;">' + r.ratio + '%</td>';
+    html += '<td style="padding:4px 8px;text-align:center;"><span class="wp-loc-flag ' + flagCls + '">' + wpEsc(flag) + '</span></td>';
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  wpOpenModal('プレビュー：' + presetName, html, [
+    { label: '← 戻る', onclick: 'wpOpenPresetSelector()' },
+    { label: '✓ ' + presetName + ' を適用', primary: true, onclick: 'wpApplyPreset(\'' + presetName.replace(/'/g, "\\'") + '\')' }
+  ]);
+}
+
+async function wpApplyPreset(presetName) {
+  if (!confirm(presetName + ' を ' + bmCurrentDate + ' に適用しますか？')) return;
+  wpToast('適用中...', 'info');
+  const r = await wpFetch('applyWeatherPreset', { presetName: presetName, date: bmCurrentDate });
+  if (!r.ok) {
+    wpToast('適用失敗: ' + (r.error || '不明'), 'error');
+    return;
+  }
+  wpToast(r.message || '適用完了', 'success');
+  wpCloseModal();
+  // 編集キャッシュをクリア（サーバー側のG列が変わるため）
+  if (bmEditsCache[bmCurrentDate]) {
+    delete bmEditsCache[bmCurrentDate];
+    bmSaveEdits();
+  }
+  // Undo履歴クリア（サーバ側変更のため）
+  bmUndoStack = [];
+  bmRedoStack = [];
+  bmUpdateUndoBtns();
+  await bmReload();
+}
+
+// ============================================================
+// F6 設定タブ：プリセット編集UI
+// ============================================================
+async function wpRenderSettingsTab() {
+  const wrap = document.getElementById('tab-settings');
+  if (!wrap) return;
+  wrap.innerHTML = '<div class="wp-page"><div style="text-align:center;padding:30px;color:#888;">読み込み中...</div></div>';
+  const ok = await wpLoadPresets();
+  if (!ok) {
+    wrap.innerHTML = '<div class="wp-page"><div style="text-align:center;padding:30px;color:#c62828;">プリセット取得に失敗しました</div></div>';
+    return;
+  }
+  let html = '<div class="wp-page">';
+  html += '<div class="wp-section-title">🌤️ 天候プリセット管理</div>';
+  html += '<div class="wp-section-desc">雨天や猛暑日など、天候に応じて配分を一括変更するプリセットを管理します。「📋 プリセット」ボタンから単日に適用できます。</div>';
+  html += '<button class="wp-add-btn" onclick="wpOpenNewPresetEditor()">+ 新規プリセット</button>';
+  html += '<table class="wp-presets-table">';
+  html += '<thead><tr><th>プリセット名</th><th>登録拠点数</th><th>0%</th><th>増量</th><th class="wp-row-actions">操作</th></tr></thead><tbody>';
+  if (wpPresets.length === 0) {
+    html += '<tr><td colspan="5" style="text-align:center;padding:20px;color:#888;">プリセットがありません</td></tr>';
+  }
+  for (const p of wpPresets) {
+    const valid = p.rows.filter(r => r.locId);
+    const off = valid.filter(r => r.ratio === 0).length;
+    const inc = valid.filter(r => r.ratio > 100).length;
+    html += '<tr>';
+    html += '<td><b>' + wpEsc(p.name) + '</b></td>';
+    html += '<td>' + valid.length + '</td>';
+    html += '<td>' + (off > 0 ? off + '拠点' : '–') + '</td>';
+    html += '<td>' + (inc > 0 ? inc + '拠点' : '–') + '</td>';
+    html += '<td class="wp-row-actions">';
+    html += '<button class="wp-btn-edit" onclick="wpOpenEditPresetEditor(\'' + wpEsc(p.name).replace(/'/g, "\\'") + '\')">編集</button>';
+    html += '<button class="wp-btn-del" onclick="wpDeletePresetConfirm(\'' + wpEsc(p.name).replace(/'/g, "\\'") + '\')">削除</button>';
+    html += '</td>';
+    html += '</tr>';
+  }
+  html += '</tbody></table></div>';
+  wrap.innerHTML = html;
+}
+
+function wpOpenNewPresetEditor() {
+  const name = prompt('プリセット名を入力してください（例：🌧️ 雨天）');
+  if (!name || !name.trim()) return;
+  // 既存名チェック
+  if (wpPresets.some(p => p.name === name.trim())) {
+    alert('同名のプリセットが既に存在します');
+    return;
+  }
+  wpCurrentEditPreset = name.trim();
+  // 全拠点を100%で初期化した編集モーダルを開く
+  const newPreset = {
+    name: wpCurrentEditPreset,
+    rows: wpLocations.map(l => ({ locId: l.id, locName: l.name, ratio: 100, note: '' }))
+  };
+  wpRenderEditModal(newPreset, true);
+}
+
+function wpOpenEditPresetEditor(presetName) {
+  const p = wpPresets.find(x => x.name === presetName);
+  if (!p) return;
+  wpCurrentEditPreset = presetName;
+  // 拠点マスタの全拠点を反映（プリセットにない拠点は100%で補完）
+  const rows = wpLocations.map(l => {
+    const r = p.rows.find(x => x.locId === l.id);
+    return r ? { locId: l.id, locName: l.name, ratio: r.ratio, note: r.note || '' }
+             : { locId: l.id, locName: l.name, ratio: 100, note: '' };
+  });
+  wpRenderEditModal({ name: presetName, rows: rows }, false);
+}
+
+function wpRenderEditModal(preset, isNew) {
+  let html = '';
+  html += '<div class="wp-edit-name-row">';
+  html += '<label>プリセット名：</label>';
+  html += '<input type="text" id="wp-edit-name" value="' + wpEsc(preset.name) + '" ' + (isNew ? '' : 'readonly') + '>';
+  html += '</div>';
+  html += '<div class="wp-edit-bulk-row">';
+  html += '<b>一括設定：</b>';
+  html += '<button onclick="wpBulkSet(\'all\', 0)">全拠点 0%</button>';
+  html += '<button onclick="wpBulkSet(\'all\', 100)">全拠点 100%</button>';
+  html += '<button onclick="wpBulkSet(\'outdoor\', 0)">屋外のみ 0%</button>';
+  html += '<button onclick="wpBulkSet(\'indoor\', 80)">屋内のみ 80%</button>';
+  html += '<span style="margin-left:auto;">指定値で一括: <input type="number" id="wp-bulk-val" value="100" min="0" max="500"> %';
+  html += ' <button onclick="wpBulkSet(\'all\', null)">適用</button></span>';
+  html += '</div>';
+  html += '<table class="wp-edit-loc-table">';
+  html += '<thead><tr><th class="wp-loc-name">拠点</th><th style="width:80px;text-align:center;">区分</th><th style="text-align:center;">係数(%)</th></tr></thead>';
+  html += '<tbody>';
+  for (const r of preset.rows) {
+    const loc = wpLocations.find(l => l.id === r.locId);
+    const flagCls = loc && loc.outdoor === '屋外' ? 'wp-outdoor' : 'wp-indoor';
+    const flag = loc ? loc.outdoor : '屋内';
+    html += '<tr>';
+    html += '<td class="wp-loc-name">' + wpEsc(r.locName) + ' <span style="color:#888;font-size:8.5pt;">(' + wpEsc(r.locId) + ')</span></td>';
+    html += '<td style="text-align:center;"><span class="wp-loc-flag ' + flagCls + '" data-flag="' + wpEsc(flag) + '">' + wpEsc(flag) + '</span></td>';
+    html += '<td style="text-align:center;"><input type="number" class="wp-ratio-input" data-lid="' + wpEsc(r.locId) + '" value="' + r.ratio + '" min="0" max="500"></td>';
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+
+  const buttons = [
+    { label: 'キャンセル', onclick: 'wpCloseModal()' }
+  ];
+  if (!isNew) {
+    buttons.push({ label: '🗑 削除', danger: true, onclick: 'wpDeletePresetConfirm(\'' + preset.name.replace(/'/g, "\\'") + '\')' });
+  }
+  buttons.push({ label: '💾 保存', primary: true, onclick: 'wpSaveCurrentEdit()' });
+
+  wpOpenModal((isNew ? '新規プリセット作成' : 'プリセット編集：') + preset.name, html, buttons);
+}
+
+function wpBulkSet(scope, value) {
+  let val = value;
+  if (val === null) {
+    const inp = document.getElementById('wp-bulk-val');
+    val = parseInt(inp.value, 10);
+    if (isNaN(val) || val < 0) { alert('有効な数値を入力してください'); return; }
+  }
+  const inputs = document.querySelectorAll('.wp-ratio-input');
+  let n = 0;
+  inputs.forEach(inp => {
+    const lid = inp.dataset.lid;
+    const loc = wpLocations.find(l => l.id === lid);
+    const outdoor = loc ? loc.outdoor : '屋内';
+    if (scope === 'all' || (scope === 'outdoor' && outdoor === '屋外') || (scope === 'indoor' && outdoor === '屋内')) {
+      inp.value = val;
+      n++;
+    }
+  });
+  wpToast(n + '拠点を ' + val + '% に設定', 'info');
+}
+
+async function wpSaveCurrentEdit() {
+  const nameInp = document.getElementById('wp-edit-name');
+  const newName = nameInp.value.trim();
+  if (!newName) { alert('プリセット名を入力してください'); return; }
+
+  const inputs = document.querySelectorAll('.wp-ratio-input');
+  const rows = [];
+  inputs.forEach(inp => {
+    const lid = inp.dataset.lid;
+    const ratio = parseInt(inp.value, 10);
+    if (isNaN(ratio) || ratio < 0) return;
+    rows.push({ locId: lid, ratio: ratio, note: '' });
+  });
+  if (rows.length === 0) { alert('1拠点以上設定してください'); return; }
+
+  wpToast('保存中...', 'info');
+  // GET経由（URLが長くなる可能性あるがOK）
+  const usp = new URLSearchParams();
+  usp.set('action', 'saveWeatherPreset');
+  usp.set('presetName', newName);
+  usp.set('rows', JSON.stringify(rows));
+  try {
+    const res = await fetch(GAS_URL + '?' + usp.toString());
+    const r = await res.json();
+    if (!r.ok) { wpToast('保存失敗: ' + (r.error || '不明'), 'error'); return; }
+    wpToast(r.message || '保存完了', 'success');
+    wpCloseModal();
+    await wpRenderSettingsTab();
+  } catch (err) {
+    wpToast('保存失敗: ' + String(err), 'error');
+  }
+}
+
+async function wpDeletePresetConfirm(presetName) {
+  if (!confirm('プリセット「' + presetName + '」を削除しますか？\nこの操作は取り消せません。')) return;
+  const r = await wpFetch('deleteWeatherPreset', { presetName: presetName });
+  if (!r.ok) { wpToast('削除失敗: ' + (r.error || '不明'), 'error'); return; }
+  wpToast(r.message || '削除完了', 'success');
+  wpCloseModal();
+  await wpRenderSettingsTab();
+}
+
+// ============================================================
+// 初期化フック
+// ============================================================
+// マウスアップでドラッグ終了
+document.addEventListener('mouseup', bmOnGlobalMouseUp);
+
+// キーボードショートカット（既存handlerに追加）
+document.addEventListener('keydown', function(e) {
+  // tab-master がアクティブなときのみ
+  const tabMaster = document.getElementById('tab-master');
+  if (!tabMaster || !tabMaster.classList.contains('active')) return;
+  // 編集中（contenteditableにフォーカス）なら無視（Ctrl+Z/Yはブラウザに任せたほうが安全だが、選択範囲操作は別）
+  const isEditing = document.activeElement && document.activeElement.isContentEditable;
+  // Ctrl+Z / Cmd+Z → Undo
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'z' && !isEditing) {
+    e.preventDefault();
+    bmDoUndo();
+    return;
+  }
+  // Ctrl+Y or Ctrl+Shift+Z → Redo
+  if (((e.ctrlKey || e.metaKey) && e.key === 'y') ||
+      ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'z' || e.key === 'Z'))) {
+    if (isEditing) return;
+    e.preventDefault();
+    bmDoRedo();
+    return;
+  }
+  // Delete / Backspace → 範囲を0クリア
+  if ((e.key === 'Delete' || e.key === 'Backspace') && !isEditing && bmSelectedCells.size > 0) {
+    e.preventDefault();
+    bmActionClearZero();
+    return;
+  }
+  // Ctrl+C → 範囲コピー
+  if ((e.ctrlKey || e.metaKey) && e.key === 'c' && !isEditing && bmSelectedCells.size > 0) {
+    e.preventDefault();
+    bmActionCopy();
+    return;
+  }
+  // Ctrl+V → 範囲ペースト
+  if ((e.ctrlKey || e.metaKey) && e.key === 'v' && !isEditing && bmSelectedCells.size > 0) {
+    e.preventDefault();
+    bmActionPaste();
+    return;
+  }
+  // Escape → 選択解除
+  if (e.key === 'Escape' && !isEditing) {
+    bmClearSelection();
+    return;
+  }
+});
+
+// 設定タブ初回表示時にプリセット読み込み
+let wpSettingsLoaded = false;
+function wpEnsureSettingsLoaded() {
+  if (wpSettingsLoaded) return;
+  wpSettingsLoaded = true;
+  wpRenderSettingsTab();
+}
+
 
 </script>
 </body>
