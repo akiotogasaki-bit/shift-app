@@ -110,8 +110,36 @@ body {
   padding: 12px 16px 8px;
   background: var(--cream);
 }
-.nextroute-title { font-size: 14px; font-weight: 700; color: var(--ink); }
-.nextroute-date { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+.nextroute-title { font-size: 14px; font-weight: 700; color: var(--ink); margin-bottom: 8px; }
+.nextroute-date-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.nextroute-date-label {
+  font-size: 12px;
+  color: var(--ink-soft);
+  font-weight: 500;
+}
+.nextroute-date-picker {
+  flex: 1;
+  padding: 8px 10px;
+  font-size: 14px;
+  border: 1.5px solid var(--border);
+  border-radius: 6px;
+  background: var(--white);
+  color: var(--ink);
+  font-family: inherit;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.nextroute-date-weekday {
+  font-size: 13px;
+  color: var(--blue);
+  font-weight: 700;
+  min-width: 32px;
+  text-align: center;
+}
 
 .nextroute-list { padding: 0 12px; }
 
@@ -584,7 +612,7 @@ body {
       📦 残数入力
     </button>
     <button class="tab-btn" id="tab-btn-nextroute" onclick="switchTab('nextroute')">
-      📅 翌日のルート
+      📅 ルート設定
     </button>
   </div>
 
@@ -620,8 +648,12 @@ body {
 
   <div id="tab-nextroute" class="tab-panel">
     <div class="nextroute-header">
-      <div class="nextroute-title">翌日のルート</div>
-      <div class="nextroute-date" id="nextroute-date">--</div>
+      <div class="nextroute-title">ルート設定</div>
+      <div class="nextroute-date-row">
+        <label for="nextroute-date-picker" class="nextroute-date-label">対象日:</label>
+        <input type="date" id="nextroute-date-picker" class="nextroute-date-picker" onchange="onNextRouteDateChange(this.value)">
+        <span class="nextroute-date-weekday" id="nextroute-date-weekday">--</span>
+      </div>
     </div>
     <div class="nextroute-list" id="nextroute-list">
       <p style="text-align:center;color:var(--ink-mute);font-size:13px;padding:30px 16px;">読み込み中…</p>
@@ -673,9 +705,9 @@ const state = {
   pendingReminderId: null,
   pendingInactiveId: null,              // ★ NEW（A2）
   lastUserActionAt: 0,                  // ★ NEW（A3）
-  nextRoute: {                          // ★ NEW（v1.0 翌日のルート）
+  nextRoute: {                          // ★ NEW（v1.0 ルート設定）
     loaded: false,
-    date: '',
+    selectedDate: '',                   // ★ v1.1：選択中の日付（YYYY-MM-DD）
     locations: [],
     modified: {},
   },
@@ -1085,7 +1117,8 @@ function renderLocationItem(loc, isCollected) {
   const assign = state.todayAssignment[loc.id];
   const cardColor = (assign && assign.color) ? assign.color : '';
   const isDark = cardColor ? isDarkColor_(cardColor) : false;
-  const colorStyle = cardColor ? `--card-bg:${cardColor};` : '';
+  // inline背景指定でCSS優先（未報告/回収済の状態色を上書き）
+  const colorStyle = cardColor ? `--card-bg:${cardColor};background:${cardColor} !important;` : '';
   const darkAttr = (cardColor && isDark) ? ' data-dark="1"' : '';
 
   return `
@@ -1496,7 +1529,7 @@ function closeBreakdown() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// 翌日のルート タブ（v1.0 NEW）
+// ルート設定 タブ（v1.1：日付選択対応）
 // ═══════════════════════════════════════════════════════════════
 
 function _esc(s) {
@@ -1512,36 +1545,79 @@ function isDarkColor_(hex) {
   const r = parseInt(h.slice(0, 2), 16);
   const g = parseInt(h.slice(2, 4), 16);
   const b = parseInt(h.slice(4, 6), 16);
-  // 相対輝度（0-255スケールで簡易計算）
   const luma = (0.299 * r + 0.587 * g + 0.114 * b);
-  return luma < 140;  // 140未満を暗色と判定
+  return luma < 140;
 }
 
-function getTomorrowDateStr_() {
+function getDateStrOffset_(offsetDays) {
   const t = new Date();
-  t.setDate(t.getDate() + 1);
+  t.setDate(t.getDate() + offsetDays);
   const yyyy = t.getFullYear();
   const mm = String(t.getMonth() + 1).padStart(2, '0');
   const dd = String(t.getDate()).padStart(2, '0');
   return `${yyyy}-${mm}-${dd}`;
 }
 
-function getTomorrowLabel_() {
-  const t = new Date();
-  t.setDate(t.getDate() + 1);
-  const dayNames = ['日','月','火','水','木','金','土'];
-  return `${t.getMonth() + 1}/${t.getDate()}(${dayNames[t.getDay()]})`;
+function getWeekdayJa_(dateStr) {
+  // YYYY-MM-DD のローカル日付として解釈
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  return ['日','月','火','水','木','金','土'][dt.getDay()];
+}
+
+function initNextRouteDatePicker_() {
+  const picker = document.getElementById('nextroute-date-picker');
+  const today = getDateStrOffset_(0);
+  const max   = getDateStrOffset_(7);
+  picker.min = today;
+  picker.max = max;
+  // デフォルト：翌日
+  if (!state.nextRoute.selectedDate) {
+    state.nextRoute.selectedDate = getDateStrOffset_(1);
+  }
+  picker.value = state.nextRoute.selectedDate;
+  updateWeekdayDisplay_();
+}
+
+function updateWeekdayDisplay_() {
+  const el = document.getElementById('nextroute-date-weekday');
+  if (state.nextRoute.selectedDate) {
+    el.textContent = `(${getWeekdayJa_(state.nextRoute.selectedDate)})`;
+  } else {
+    el.textContent = '--';
+  }
+}
+
+async function onNextRouteDateChange(newDate) {
+  // 未保存変更がある場合は確認
+  const hasUnsaved = Object.keys(state.nextRoute.modified).length > 0;
+  if (hasUnsaved) {
+    const ok = confirm('未保存の変更があります。破棄しますか？');
+    if (!ok) {
+      // ピッカーを元の値に戻す
+      document.getElementById('nextroute-date-picker').value = state.nextRoute.selectedDate;
+      return;
+    }
+  }
+  state.nextRoute.selectedDate = newDate;
+  state.nextRoute.modified = {};
+  updateWeekdayDisplay_();
+  await loadNextDayRoute();
 }
 
 async function loadNextDayRoute() {
-  const date = getTomorrowDateStr_();
-  state.nextRoute.date = date;
+  // 初回ならピッカー初期化
+  if (!state.nextRoute.selectedDate) {
+    initNextRouteDatePicker_();
+  }
+  const date = state.nextRoute.selectedDate;
+  document.getElementById('nextroute-list').innerHTML =
+    `<p style="text-align:center;color:var(--ink-mute);font-size:13px;padding:30px 16px;">読み込み中…</p>`;
 
   try {
     const res = await fetch(`${GAS_URL}?action=getLocationsWithAssignment&date=${date}`, { redirect: 'follow' });
     const data = await res.json();
     state.nextRoute.locations = Array.isArray(data) ? data : [];
-    state.nextRoute.modified = {};
     state.nextRoute.loaded = true;
     renderNextDayRoute();
   } catch (e) {
@@ -1552,44 +1628,37 @@ async function loadNextDayRoute() {
 }
 
 function renderNextDayRoute() {
-  document.getElementById('nextroute-date').textContent = '翌日：' + getTomorrowLabel_();
-
   // ドロップダウン候補：ドライバー＋社員
   const candidates = (state.staffList || []).filter(s =>
     s.role === 'ドライバー' || s.role === '社員'
   );
 
   const html = state.nextRoute.locations.map(loc => {
-    // 主担当の情報
     const mainDriver = (loc.allDrivers || []).find(d => d.type === '主担当');
     const mainUserId = mainDriver ? mainDriver.userId : '';
     const mainName   = mainDriver ? mainDriver.name   : '（未設定）';
     const mainColor  = mainDriver ? mainDriver.color  : '';
 
-    // 現在選択中（modified が優先、なければサーバー値）
     const mod = state.nextRoute.modified[loc.locationId];
     const currentUserId = mod ? mod.userId : (loc.userId || mainUserId);
 
-    // カード背景色：常に主担当色（未設定はグレー）
     const cardColor = mainColor || '#ADB5BD';
     const isDark = isDarkColor_(cardColor);
     const darkAttr = isDark ? ' data-dark="1"' : '';
 
-    // ドロップダウン options
     const optsHtml = ['<option value="">（未割当）</option>']
       .concat(candidates.map(c =>
         `<option value="${_esc(c.userId)}"${c.userId === currentUserId ? ' selected' : ''}>${_esc(c.name)}</option>`
       ))
       .join('');
 
-    // 代理ピル（主担当≠現在選択 かつ 選択あり）
     const isException = currentUserId && currentUserId !== mainUserId;
     const pillHtml = isException
       ? `<div style="flex:1;"></div><span class="role-pill">代理</span>`
       : '';
 
     return `
-      <div class="nextroute-item" style="--card-bg:${cardColor};"${darkAttr}>
+      <div class="nextroute-item" style="--card-bg:${cardColor};background:${cardColor};"${darkAttr}>
         <div class="nextroute-row1">
           <div class="nextroute-loc-name">${_esc(loc.locationName)}</div>
           <select class="nextroute-select" onchange="onDriverSelect('${_esc(loc.locationId)}', this.value)">
@@ -1612,14 +1681,10 @@ function renderNextDayRoute() {
 function onDriverSelect(locId, userId) {
   const loc = state.nextRoute.locations.find(l => l.locationId === locId);
   if (!loc) return;
-
-  // 変更を記録
-  // type は「代理」固定（応援廃止）
   state.nextRoute.modified[locId] = {
     userId: userId,
     type: userId ? '代理' : '',
   };
-
   renderNextDayRoute();
 }
 
@@ -1651,7 +1716,7 @@ async function saveNextDayRoute() {
 
   const payload = {
     action: 'setDriverExceptionBatch',
-    date: state.nextRoute.date,
+    date: state.nextRoute.selectedDate,
     items: items,
   };
 
@@ -1661,7 +1726,6 @@ async function saveNextDayRoute() {
     if (json.success) {
       alert(`保存しました（${items.length}件）`);
       state.nextRoute.modified = {};
-      state.nextRoute.loaded = false;  // 次回タブ表示時に再ロード
       await loadNextDayRoute();
     } else {
       alert('保存エラー：' + (json.error || 'unknown'));
