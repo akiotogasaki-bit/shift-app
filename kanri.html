@@ -1888,13 +1888,16 @@ function renderSheet1(data) {
     html += '<tr>';
     html += '<th style="width:82px;text-align:left;padding-left:5px;">商品</th>';
     locIds.forEach((lid, idx) => {
-      const loc   = locations.find(l => l.id === lid);
-      const name  = loc ? loc.name : lid;
-      const short = name.slice(0, 2);   // 列見出し＝拠点名の先頭2文字
+      const loc      = locations.find(l => l.id === lid);
+      const fullName = loc ? loc.name : lid;
+      // 表示名優先、空なら拠点名の先頭2文字
+      const showName = (loc && loc.displayName && loc.displayName.length > 0)
+                        ? loc.displayName
+                        : fullName.slice(0, 2);
       if (idx === subtotalSplit) {
         html += `<th class="cell-sub" title="中間計(前${subtotalSplit}拠点)">中計</th>`;
       }
-      html += `<th title="${name}">${short}</th>`;
+      html += `<th title="${escHtml(fullName)}">${escHtml(showName)}</th>`;
     });
     html += '<th class="cell-tot">合計</th>';
     html += '</tr>';
@@ -2763,7 +2766,10 @@ function bmRenderMatrix() {
     const cf = bmIsLocConfirmed(loc.id) ? 'bm-loc-confirmed-h' : '';
     const copyBtn = '<span class="bm-copy-btn" onclick="event.stopPropagation();bmCopyLocationCol(\'' + loc.id + '\')" title="この拠点の列をコピー">⧉</span>';
     const clearBtn = '<span class="bm-clear-btn" onclick="event.stopPropagation();bmClearLocationCol(\'' + loc.id + '\')" title="この拠点の全商品を0にする">🗑</span>';
-    html += '<th class="bm-loc-name-h ' + cf + '">' + bmEscape(loc.name) + copyBtn + clearBtn + '</th>';
+    // 表示名優先（空なら拠点名）
+    const showName = (loc.displayName && loc.displayName.length > 0) ? loc.displayName : loc.name;
+    const titleAttr = (loc.displayName && loc.displayName !== loc.name) ? (' title="' + bmEscape(loc.name) + '"') : '';
+    html += '<th class="bm-loc-name-h ' + cf + '"' + titleAttr + '>' + bmEscape(showName) + copyBtn + clearBtn + '</th>';
   }
   html += '</tr></thead>';
 
@@ -3556,7 +3562,7 @@ function bmClearProductRow(pid) {
 function bmClearLocationCol(lid) {
   if (!bmServerData) return;
   const loc = bmServerData.locations.find(x => x.id === lid);
-  const lname = loc ? loc.name : lid;
+  const lname = loc ? ((loc.displayName && loc.displayName.length > 0) ? loc.displayName : loc.name) : lid;
   if (!confirm('「' + lname + '」の全商品を 0 にしますか？\n（Ctrl+Z で元に戻せます）')) return;
   const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
   const changes = [];
@@ -3659,7 +3665,7 @@ function bmCopyLocationCol(lid) {
   }
   bmCopyBuffer = { type: 'col', lid: lid, values: values };
   const loc = bmServerData.locations.find(x => x.id === lid);
-  const lname = loc ? loc.name : lid;
+  const lname = loc ? ((loc.displayName && loc.displayName.length > 0) ? loc.displayName : loc.name) : lid;
   wpToast('「' + lname + '」の列をコピー（' + Object.keys(values).length + '商品）→ ⧉で貼付先選択', 'info');
   bmOpenColPasteModal(lid);
 }
@@ -3667,13 +3673,15 @@ function bmCopyLocationCol(lid) {
 function bmOpenColPasteModal(srcLid) {
   if (!bmCopyBuffer || bmCopyBuffer.type !== 'col') return;
   const srcLoc = bmServerData.locations.find(x => x.id === srcLid);
-  let html = '<div style="margin-bottom:10px;font-size:10pt;color:#555;">「<b>' + wpEsc(srcLoc.name) + '</b>」の値を貼り付ける拠点を選んでください</div>';
+  const srcShowName = (srcLoc.displayName && srcLoc.displayName.length > 0) ? srcLoc.displayName : srcLoc.name;
+  let html = '<div style="margin-bottom:10px;font-size:10pt;color:#555;">「<b>' + wpEsc(srcShowName) + '</b>」の値を貼り付ける拠点を選んでください</div>';
   html += '<div style="display:flex;flex-direction:column;gap:4px;max-height:50vh;overflow-y:auto;">';
   for (const loc of bmServerData.locations) {
     if (loc.id === srcLid) continue;
+    const showName = (loc.displayName && loc.displayName.length > 0) ? loc.displayName : loc.name;
     html += '<label style="display:flex;align-items:center;gap:8px;padding:4px 8px;border:1px solid #eee;border-radius:3px;cursor:pointer;">'
       + '<input type="checkbox" class="wp-paste-target" data-lid="' + wpEsc(loc.id) + '">'
-      + '<span>' + wpEsc(loc.name) + '</span>'
+      + '<span>' + wpEsc(showName) + '</span>'
       + '</label>';
   }
   html += '</div>';
@@ -3802,7 +3810,7 @@ function wpPreviewPreset(presetName) {
     const flag = loc ? loc.outdoor : '?';
     const ratioBg = r.ratio === 0 ? '#ffcdd2' : (r.ratio < 100 ? '#fff9c4' : (r.ratio > 100 ? '#c8e6c9' : '#f5f5f5'));
     html += '<tr style="border-bottom:1px solid #eee;">';
-    html += '<td style="padding:4px 8px;">' + wpEsc(r.locName || r.locId) + '</td>';
+    html += '<td style="padding:4px 8px;">' + wpEsc((loc && loc.displayName && loc.displayName.length > 0) ? loc.displayName : (r.locName || r.locId)) + '</td>';
     html += '<td style="padding:4px 8px;text-align:center;background:' + ratioBg + ';font-weight:bold;">' + r.ratio + '%</td>';
     html += '<td style="padding:4px 8px;text-align:center;"><span class="wp-loc-flag ' + flagCls + '">' + wpEsc(flag) + '</span></td>';
     html += '</tr>';
@@ -3929,7 +3937,7 @@ function wpRenderEditModal(preset, isNew) {
     const flagCls = loc && loc.outdoor === '屋外' ? 'wp-outdoor' : 'wp-indoor';
     const flag = loc ? loc.outdoor : '屋内';
     html += '<tr>';
-    html += '<td class="wp-loc-name">' + wpEsc(r.locName) + ' <span style="color:#888;font-size:8.5pt;">(' + wpEsc(r.locId) + ')</span></td>';
+    html += '<td class="wp-loc-name">' + wpEsc((loc && loc.displayName && loc.displayName.length > 0) ? loc.displayName : r.locName) + ' <span style="color:#888;font-size:8.5pt;">(' + wpEsc(r.locId) + ')</span></td>';
     html += '<td style="text-align:center;"><span class="wp-loc-flag ' + flagCls + '" data-flag="' + wpEsc(flag) + '">' + wpEsc(flag) + '</span></td>';
     html += '<td style="text-align:center;"><input type="number" class="wp-ratio-input" data-lid="' + wpEsc(r.locId) + '" value="' + r.ratio + '" min="0" max="500"></td>';
     html += '</tr>';
