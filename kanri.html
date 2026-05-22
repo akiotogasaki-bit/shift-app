@@ -486,6 +486,81 @@ body {
 .order-date-lbl:hover { border-color: #64b5f6; }
 .order-date-lbl.checked { background: #1565c0; color: #fff; border-color: #1565c0; font-weight: bold; }
 .order-date-lbl input { display: none; }
+  .s4-ctrl {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.s4-week-btn {
+  padding: 6px 12px;
+  border: 1px solid #1976d2;
+  background: #e3f2fd;
+  color: #1976d2;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 10pt;
+}
+.s4-week-btn:hover { background: #bbdefb; }
+ 
+.s4-date-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.s4-date-lbl {
+  padding: 6px 10px;
+  border: 1px solid #aaa;
+  border-radius: 4px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 10pt;
+  background: #fafafa;
+  min-width: 48px;
+  text-align: center;
+}
+.s4-date-lbl:hover { border-color: #64b5f6; }
+.s4-date-lbl.checked {
+  background: #1565c0;
+  color: #fff;
+  border-color: #1565c0;
+  font-weight: bold;
+}
+.s4-date-lbl.disabled {
+  background: #eee;
+  color: #aaa;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.s4-date-lbl.today { border-color: #ef6c00; border-width: 2px; }
+.s4-date-lbl input { display: none; }
+ 
+.s4-sel-info {
+  font-size: 9.5pt;
+  color: #555;
+  margin-bottom: 10px;
+}
+ 
+.s4-meta {
+  font-size: 9pt;
+  color: #777;
+  margin: 8px 0 4px;
+}
+.s4-warn-box {
+  background: #fff8e1;
+  border: 1px solid #ffe082;
+  padding: 10px 14px;
+  border-radius: 4px;
+  margin-top: 12px;
+  font-size: 10pt;
+}
+.s4-warn-row {
+  margin: 4px 0;
+  line-height: 1.5;
+  word-break: break-all;
+}
 .order-sel-info { font-size: 12px; color: #555; margin-bottom: 10px; min-height: 18px; }
 .order-vendor-list { display: flex; flex-direction: column; gap: 10px; }
 .order-vendor-card { border: 2px solid #bbb; border-radius: 6px; overflow: hidden; background: white; }
@@ -1490,12 +1565,14 @@ body {
   <div id="sheet3-body"></div>
 </div>
 <div class="tab-pane" id="tab-sheet4">
-  <div class="ctrl-bar">
-    <label>日付：</label>
-    <input type="date" id="s4-date-input">
+  <div class="s4-ctrl">
+    <button class="s4-week-btn" id="s4-btn-week0">今週 月〜日</button>
+    <button class="s4-week-btn" id="s4-btn-week1">来週 月〜日</button>
     <button class="btn btn-primary" id="s4-btn-fetch">取得</button>
     <span class="status-msg" id="s4-status-msg"></span>
   </div>
+  <div class="s4-date-row" id="s4-date-row"></div>
+  <div class="s4-sel-info" id="s4-sel-info">日付を選択して取得ボタンを押してください</div>
   <div id="sheet4-body"></div>
 </div>
 <!-- 発注タブ -->
@@ -1674,69 +1751,183 @@ function getColor(category, baseName) {
 
 
 // ═══════════════════════════════════════
-// シート4（仕込み表）
+// シート4（仕込み表）Phase 3 v2 ─ 複数日対応
 // ═══════════════════════════════════════
-
+ 
 const s4Status = document.getElementById('s4-status-msg');
 function s4SetStatus(msg, isErr) {
   s4Status.textContent = msg;
   s4Status.className = 'status-msg' + (isErr ? ' err' : '');
 }
-
-document.getElementById('s4-btn-fetch').addEventListener('click', fetchSheet4);
-
+ 
+// 複数日選択の状態管理
+const s4SelectedDates = new Set();
+ 
+// 日付チェックボックス初期化（今週月〜日 + 来週月〜日 = 14日分）
+function initS4DateChecks() {
+  const jstNow = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);
+  const todayStr = jstNow.toISOString().slice(0, 10);
+  const DOW = ['日','月','火','水','木','金','土'];
+  const row = document.getElementById('s4-date-row');
+  row.innerHTML = '';
+  s4SelectedDates.clear();
+ 
+  // 今週月曜を起点に計算（JST）
+  const todayDow = jstNow.getDay();                          // 0=日, 1=月, ..., 6=土
+  const daysFromMonday = (todayDow === 0) ? 6 : todayDow - 1;
+  const thisMonday = new Date(jstNow);
+  thisMonday.setDate(thisMonday.getDate() - daysFromMonday);
+  thisMonday.setHours(0, 0, 0, 0);
+ 
+  // 今週月〜日 + 来週月〜日 = 14日分
+  for (let i = 0; i < 14; i++) {
+    const d = new Date(thisMonday);
+    d.setDate(d.getDate() + i);
+    const dateStr = d.toISOString().slice(0, 10);
+    const day = d.getDate();
+    const dow = d.getDay();
+    const isPast = dateStr < todayStr;
+    const isToday = dateStr === todayStr;
+    const wn = (i < 7) ? 0 : 1;   // 0=今週, 1=来週
+ 
+    const lbl = document.createElement('label');
+    let cls = 's4-date-lbl';
+    if (isPast)  cls += ' disabled';
+    if (isToday) cls += ' today';
+    lbl.className = cls;
+    lbl.dataset.date = dateStr;
+    lbl.dataset.week = wn;
+ 
+    if (isPast) {
+      // 過去日はチェック不可・ラベルのみ
+      lbl.innerHTML = `${DOW[dow]}${day}`;
+    } else {
+      const checked = isToday ? ' checked' : '';
+      lbl.innerHTML = `<input type="checkbox" value="${dateStr}"${checked}> ${DOW[dow]}${day}`;
+      if (isToday) {
+        lbl.classList.add('checked');
+        s4SelectedDates.add(dateStr);
+      }
+      lbl.querySelector('input').addEventListener('change', e => {
+        if (e.target.checked) {
+          s4SelectedDates.add(dateStr);
+          lbl.classList.add('checked');
+        } else {
+          s4SelectedDates.delete(dateStr);
+          lbl.classList.remove('checked');
+        }
+        updateS4SelInfo();
+      });
+    }
+    row.appendChild(lbl);
+  }
+  updateS4SelInfo();
+}
+ 
+// 週一括選択（0=今週 / 1=来週）— 過去日は除外
+function s4SelectWeek(wn) {
+  document.querySelectorAll('#s4-date-row .s4-date-lbl').forEach(lbl => {
+    if (lbl.classList.contains('disabled')) return;
+    const cb = lbl.querySelector('input');
+    if (!cb) return;
+    const dateStr = lbl.dataset.date;
+    if (parseInt(lbl.dataset.week) === wn) {
+      cb.checked = true;
+      s4SelectedDates.add(dateStr);
+      lbl.classList.add('checked');
+    } else {
+      cb.checked = false;
+      s4SelectedDates.delete(dateStr);
+      lbl.classList.remove('checked');
+    }
+  });
+  updateS4SelInfo();
+}
+ 
+// 選択情報の更新表示
+function updateS4SelInfo() {
+  const info = document.getElementById('s4-sel-info');
+  const dates = Array.from(s4SelectedDates).sort();
+  if (dates.length === 0) {
+    info.textContent = '日付を選択して取得ボタンを押してください';
+    return;
+  }
+  const DOW = ['日','月','火','水','木','金','土'];
+  const labels = dates.map(d => {
+    const dt = new Date(d.replace(/-/g, '/'));
+    return (dt.getMonth() + 1) + '/' + dt.getDate() + '(' + DOW[dt.getDay()] + ')';
+  });
+  info.textContent = `選択中: ${labels.join(' / ')} （${dates.length}日分）`;
+}
+ 
+// 取得ボタン押下時の処理
 async function fetchSheet4() {
-  const dateVal = document.getElementById('s4-date-input').value;
-  if (!dateVal) { s4SetStatus('日付を選択してください', true); return; }
+  const dates = Array.from(s4SelectedDates).sort();
+  if (dates.length === 0) {
+    s4SetStatus('日付を1日以上選択してください', true);
+    return;
+  }
   s4SetStatus('取得中…');
   document.getElementById('sheet4-body').innerHTML = '';
   try {
-    // ① 保存済み日替わり選択を取得
-    const kRes  = await fetch(GAS_URL + '?action=getKawariSelections&date=' + dateVal);
+    // ① 最初の日の保存済み日替わり選択を取得
+    const kRes  = await fetch(GAS_URL + '?action=getKawariSelections&date=' + dates[0]);
     const kData = await kRes.json();
     const kawari = (kData.ok && kData.selections) ? kData.selections : {};
-
-    // ② 仕込み表データを取得
+ 
+    // ② 仕込み表データを取得（複数日合算）
     const kawariJson = encodeURIComponent(JSON.stringify(kawari));
-    const res  = await fetch(GAS_URL + '?action=getSheet4Data&date=' + dateVal + '&kawari=' + kawariJson);
+    const res  = await fetch(GAS_URL + '?action=getSheet4Data&dates=' + dates.join(',') + '&kawari=' + kawariJson);
     const data = await res.json();
-    if (!data.ok) { s4SetStatus(data.error || '取得エラー', true); return; }
+    if (!data.ok) {
+      s4SetStatus(data.error || '取得エラー', true);
+      return;
+    }
     s4SetStatus('');
     renderSheet4(data);
-
-    // 保存済みバッジを表示（選択が1件でもあれば）
+ 
+    // 保存済みバッジ
     const hasSelection = Object.values(kawari).some(v => v !== '');
-    if (hasSelection) showS4SavedBadge(dateVal);
+    if (hasSelection) showS4SavedBadge(dates[0]);
   } catch(e) {
     s4SetStatus('通信エラー: ' + e.message, true);
   }
 }
-
+ 
+// 日替わり保存後の再計算
 async function onS4KawariSave() {
-  const dateVal    = document.getElementById('s4-date-input').value;
+  const dates = Array.from(s4SelectedDates).sort();
+  if (dates.length === 0) {
+    s4SetStatus('日付を1日以上選択してください', true);
+    return;
+  }
+  const targetDate = dates[0];   // 最初の日に保存
   const selections = getS4KawariSelections();
   s4SetStatus('保存中…');
   try {
     await fetch(GAS_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'saveKawariSelections', date: dateVal, selections })
+      body: JSON.stringify({ action: 'saveKawariSelections', date: targetDate, selections })
     });
-    showS4SavedBadge(dateVal);
-
-    // 仕込み表を選択内容で再計算
+    showS4SavedBadge(targetDate);
+ 
+    // 仕込み表を再計算
     const kawariJson = encodeURIComponent(JSON.stringify(selections));
-    const res  = await fetch(GAS_URL + '?action=getSheet4Data&date=' + dateVal + '&kawari=' + kawariJson);
+    const res  = await fetch(GAS_URL + '?action=getSheet4Data&dates=' + dates.join(',') + '&kawari=' + kawariJson);
     const data = await res.json();
-    if (!data.ok) { s4SetStatus(data.error || '更新エラー', true); return; }
+    if (!data.ok) {
+      s4SetStatus(data.error || '更新エラー', true);
+      return;
+    }
     s4SetStatus('');
     renderSheet4(data);
-    showS4SavedBadge(dateVal);
+    showS4SavedBadge(targetDate);
   } catch(e) {
     s4SetStatus('通信エラー: ' + e.message, true);
   }
 }
-
+ 
 function getS4KawariSelections() {
   return {
     '全六あり主菜1': document.getElementById('s4-zr-s1') ? document.getElementById('s4-zr-s1').value : '',
@@ -1745,7 +1936,7 @@ function getS4KawariSelections() {
     '全六なし主菜2': document.getElementById('s4-zn-s2') ? document.getElementById('s4-zn-s2').value : ''
   };
 }
-
+ 
 function showS4SavedBadge(dateVal) {
   const badge = document.getElementById('s4-save-badge');
   if (!badge) return;
@@ -1753,7 +1944,7 @@ function showS4SavedBadge(dateVal) {
   badge.textContent = '✓ ' + (d.getMonth()+1) + '/' + d.getDate() + ' 保存済み';
   badge.style.display = 'inline-flex';
 }
-
+ 
 function buildKawariSelect(id, cands, selected) {
   let html = `<select id="${id}" style="padding:5px 8px;border:1px solid #bbb;border-radius:4px;font-family:inherit;font-size:13px;">`;
   html += `<option value="">-- 未選択 --</option>`;
@@ -1763,18 +1954,28 @@ function buildKawariSelect(id, cands, selected) {
   html += '</select>';
   return html;
 }
-
+ 
+// 描画（Phase 3 v2 戻り値構造に対応）
 function renderSheet4(data) {
   const body = document.getElementById('sheet4-body');
-  const { dateLabel, rows, kaito, candidates, kawari } = data;
-
+  const { dates, dateLabels, dateCount, rows, kaito, candidates, kawari, warnings, meta } = data;
+ 
   const zrC = candidates['全六あり'] || [];
   const znC = candidates['全六なし'] || [];
-
+ 
+  // 日付ヘッダ
+  const dateHeader = (dateCount > 1)
+    ? `${dateLabels.join(' + ')}（${dateCount}日分 合算）`
+    : (dateLabels[0] || '');
+ 
   // 日替わり選択ボックス
+  const kawariTitle = (dateCount > 1)
+    ? `🔄 日替わり選択（最初の日「${dateLabels[0]}」基準で全日に適用）`
+    : `🔄 当日おかず選択（日替わり）`;
+ 
   const kawariHTML = `
     <div class="kawari-box">
-      <div class="kawari-title">🔄 当日おかず選択（日替わり）</div>
+      <div class="kawari-title">${kawariTitle}</div>
       <div class="kawari-grid">
         <div>
           <div class="kawari-sep">全六あり</div>
@@ -1792,12 +1993,13 @@ function renderSheet4(data) {
         <span id="s4-save-badge" class="save-badge"></span>
       </div>
     </div>`;
-
-  // 解凍セクション
+ 
+  // 解凍セクション（+2加算は1回のみ）
   const { cut, full, sum } = kaito;
+  const kaitoSubtitle = (dateCount > 1) ? `（${dateCount}日分合算・+2は1回のみ）` : '';
   const kaitoHTML = `
     <div class="kaito-box">
-      <span class="kaito-title">解凍</span>
+      <span class="kaito-title">解凍${kaitoSubtitle}</span>
       <div class="kaito-items">
         <div class="kaito-item">
           <span class="kaito-main">${cut.display}P</span>
@@ -1818,35 +2020,76 @@ function renderSheet4(data) {
         </div>
       </div>
     </div>`;
-
-  // 仕込み表
+ 
+  // 仕込み表（仕込みID単位）
   let tableContent;
-  if (rows.length === 0) {
-    tableContent = '<div class="no-delivery-msg">当日の仕込みデータがありません<br><small>食材マスタと単価マスタの食材ID列を確認してください</small></div>';
+  if (!rows || rows.length === 0) {
+    tableContent = '<div class="no-delivery-msg">該当日の仕込みデータがありません<br><small>単価マスタの仕込みID紐付けと基本数マスタを確認してください</small></div>';
   } else {
     let trs = '';
     rows.forEach(r => {
       trs += `<tr>
-        <td>${escHtml(r.name)}</td>
-        <td class="r">${r.total}</td>
-        <td class="r"><span class="pack-val">${r.packCount.toFixed(1)}P</span><span class="pack-ceil">→${r.packCeil}P</span></td>
+        <td>${escHtml(r.shikomiName)}</td>
+        <td class="r">${r.portion}</td>
+        <td>${escHtml(r.note || '')}</td>
       </tr>`;
     });
     tableContent = `<table class="prep-table">
-      <thead><tr><th>食材名</th><th class="r">必要量</th><th class="r">パック数</th></tr></thead>
+      <thead><tr><th>仕込み名</th><th class="r">必要人前</th><th>備考</th></tr></thead>
       <tbody>${trs}</tbody>
     </table>`;
   }
-
+ 
+  // メタ情報
+  const metaHTML = meta
+    ? `<div class="s4-meta">📊 拠点分集計: ${meta.kyotenItems}件 / 配達分集計: ${meta.deliveryItems}件</div>`
+    : '';
+ 
+  // 警告セクション
+  let warningHTML = '';
+  if (warnings) {
+    const wParts = [];
+    if (warnings.unmappedProducts && warnings.unmappedProducts.length > 0) {
+      const list = warnings.unmappedProducts.slice(0, 15).map(escHtml).join(' / ');
+      const more = warnings.unmappedProducts.length > 15 ? ' ...他' : '';
+      wParts.push(`<div class="s4-warn-row">⚠️ <b>仕込みID未紐付け商品 ${warnings.unmappedProducts.length}件</b>: ${list}${more}</div>`);
+    }
+    if (warnings.unmappedShikomiIds && warnings.unmappedShikomiIds.length > 0) {
+      const list = warnings.unmappedShikomiIds.slice(0, 15).map(escHtml).join(' / ');
+      const more = warnings.unmappedShikomiIds.length > 15 ? ' ...他' : '';
+      wParts.push(`<div class="s4-warn-row">⚠️ <b>仕込みマスタ未登録ID ${warnings.unmappedShikomiIds.length}件</b>: ${list}${more}</div>`);
+    }
+    if (warnings.unmappedDeliveryIds && warnings.unmappedDeliveryIds.length > 0) {
+      const list = warnings.unmappedDeliveryIds.slice(0, 15).map(escHtml).join(' / ');
+      const more = warnings.unmappedDeliveryIds.length > 15 ? ' ...他' : '';
+      wParts.push(`<div class="s4-warn-row">⚠️ <b>配達データ未登録商品ID ${warnings.unmappedDeliveryIds.length}件</b>: ${list}${more}</div>`);
+    }
+    if (wParts.length > 0) {
+      warningHTML = `<div class="s4-warn-box">${wParts.join('')}</div>`;
+    }
+  }
+ 
   body.innerHTML = `
-    <div class="page-title">🍳 ${escHtml(dateLabel)}　仕込み表</div>
+    <div class="page-title">🍳 ${escHtml(dateHeader)}　仕込み表</div>
     ${kawariHTML}
     ${kaitoHTML}
     <div class="s4-section-title">仕込み表</div>
-    ${tableContent}`;
-
+    ${tableContent}
+    ${metaHTML}
+    ${warningHTML}`;
+ 
   document.getElementById('s4-kawari-save').addEventListener('click', onS4KawariSave);
 }
+ 
+// ボタンイベント
+document.getElementById('s4-btn-fetch').addEventListener('click', fetchSheet4);
+document.getElementById('s4-btn-week0').addEventListener('click', () => s4SelectWeek(0));
+document.getElementById('s4-btn-week1').addEventListener('click', () => s4SelectWeek(1));
+ 
+// 初期化
+initS4DateChecks();
+────────────────────────────────────────────────────────────────
+
 
 document.querySelectorAll('.tab-btn:not(:disabled)').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -1874,7 +2117,6 @@ const TODAY = toJstDateStr();
 document.getElementById('s1-date-input').value = TODAY;
 document.getElementById('s2-date-input').value = TODAY;
 document.getElementById('s3-date-input').value = TODAY;
-document.getElementById('s4-date-input').value = TODAY;
 
 // ─────────────────────────────────────────
 // ユーティリティ
