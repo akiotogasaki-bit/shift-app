@@ -552,6 +552,12 @@ body {
 .order-date-lbl:hover { border-color: #64b5f6; }
 .order-date-lbl.checked { background: #1565c0; color: #fff; border-color: #1565c0; font-weight: bold; }
 .order-date-lbl input { display: none; }
+.order-date-lbl.disabled {
+  background: #eee;
+  color: #aaa;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
   .s4-ctrl {
   display: flex;
   gap: 8px;
@@ -1644,8 +1650,8 @@ body {
 <!-- 発注タブ -->
 <div class="tab-pane" id="tab-order">
   <div class="order-ctrl">
-    <button class="order-week-btn" id="order-btn-week0">今週 月〜金</button>
-    <button class="order-week-btn" id="order-btn-week1">来週 月〜金</button>
+    <button class="order-week-btn" id="order-btn-week0">今週 月〜日</button>
+    <button class="order-week-btn" id="order-btn-week1">来週 月〜日</button>
     <button class="btn btn-primary" id="order-btn-fetch">取得</button>
     <span class="status-msg" id="order-status-msg"></span>
   </div>
@@ -1829,33 +1835,30 @@ function s4SetStatus(msg, isErr) {
 // 複数日選択の状態管理
 const s4SelectedDates = new Set();
  
-// 日付チェックボックス初期化（今週月〜日 + 来週月〜日 = 14日分）
+// 日付チェックボックス初期化(今週月〜日 + 来週月〜日 = 14日分)
+// v2.1: タイムゾーンバグ修正(UTC date算術に統一)
 function initS4DateChecks() {
   const jstNow = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);
   const todayStr = jstNow.toISOString().slice(0, 10);
+  const [tYear, tMonth, tDay] = todayStr.split('-').map(Number);
+  const todayDow = jstNow.getUTCDay();
+  const daysFromMonday = (todayDow === 0) ? 6 : todayDow - 1;
+  const thisMondayUtc = new Date(Date.UTC(tYear, tMonth - 1, tDay - daysFromMonday));
+
   const DOW = ['日','月','火','水','木','金','土'];
   const row = document.getElementById('s4-date-row');
   row.innerHTML = '';
   s4SelectedDates.clear();
- 
-  // 今週月曜を起点に計算（JST）
-  const todayDow = jstNow.getDay();                          // 0=日, 1=月, ..., 6=土
-  const daysFromMonday = (todayDow === 0) ? 6 : todayDow - 1;
-  const thisMonday = new Date(jstNow);
-  thisMonday.setDate(thisMonday.getDate() - daysFromMonday);
-  thisMonday.setHours(0, 0, 0, 0);
- 
-  // 今週月〜日 + 来週月〜日 = 14日分
+
   for (let i = 0; i < 14; i++) {
-    const d = new Date(thisMonday);
-    d.setDate(d.getDate() + i);
+    const d = new Date(thisMondayUtc.getTime() + i * 86400000);
     const dateStr = d.toISOString().slice(0, 10);
-    const day = d.getDate();
-    const dow = d.getDay();
+    const dispDay = d.getUTCDate();
+    const dispDow = d.getUTCDay();
     const isPast = dateStr < todayStr;
     const isToday = dateStr === todayStr;
-    const wn = (i < 7) ? 0 : 1;   // 0=今週, 1=来週
- 
+    const wn = (i < 7) ? 0 : 1;
+
     const lbl = document.createElement('label');
     let cls = 's4-date-lbl';
     if (isPast)  cls += ' disabled';
@@ -1863,13 +1866,12 @@ function initS4DateChecks() {
     lbl.className = cls;
     lbl.dataset.date = dateStr;
     lbl.dataset.week = wn;
- 
+
     if (isPast) {
-      // 過去日はチェック不可・ラベルのみ
-      lbl.innerHTML = `${DOW[dow]}${day}`;
+      lbl.innerHTML = `${DOW[dispDow]}${dispDay}`;
     } else {
       const checked = isToday ? ' checked' : '';
-      lbl.innerHTML = `<input type="checkbox" value="${dateStr}"${checked}> ${DOW[dow]}${day}`;
+      lbl.innerHTML = `<input type="checkbox" value="${dateStr}"${checked}> ${DOW[dispDow]}${dispDay}`;
       if (isToday) {
         lbl.classList.add('checked');
         s4SelectedDates.add(dateStr);
@@ -1910,7 +1912,7 @@ function s4SelectWeek(wn) {
   updateS4SelInfo();
 }
  
-// 選択情報の更新表示
+// 選択情報の更新表示(v2.1: UTC基準でJST日付を正しく表示)
 function updateS4SelInfo() {
   const info = document.getElementById('s4-sel-info');
   const dates = Array.from(s4SelectedDates).sort();
@@ -1920,8 +1922,9 @@ function updateS4SelInfo() {
   }
   const DOW = ['日','月','火','水','木','金','土'];
   const labels = dates.map(d => {
-    const dt = new Date(d.replace(/-/g, '/'));
-    return (dt.getMonth() + 1) + '/' + dt.getDate() + '(' + DOW[dt.getDay()] + ')';
+    const [y, m, dd] = d.split('-').map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, dd));
+    return m + '/' + dd + '(' + DOW[dt.getUTCDay()] + ')';
   });
   info.textContent = `選択中: ${labels.join(' / ')} （${dates.length}日分）`;
 }
@@ -2006,8 +2009,8 @@ function getS4KawariSelections() {
 function showS4SavedBadge(dateVal) {
   const badge = document.getElementById('s4-save-badge');
   if (!badge) return;
-  const d = new Date(dateVal.replace(/-/g, '/'));
-  badge.textContent = '✓ ' + (d.getMonth()+1) + '/' + d.getDate() + ' 保存済み';
+  const [y, m, dd] = dateVal.split('-').map(Number);
+  badge.textContent = '✓ ' + m + '/' + dd + ' 保存済み';
   badge.style.display = 'inline-flex';
 }
  
@@ -2023,115 +2026,6 @@ function buildKawariSelect(id, cands, selected) {
  
 // 描画（Phase 3 v2 戻り値構造に対応）
 function renderSheet4(data) {
-  const main = document.getElementById('s4-main');
-  if (!main) return;
- 
-  if (!data || !data.ok) {
-    main.innerHTML = `<div class="s4-error">${escHtml(data && data.error || '取得失敗')}</div>`;
-    return;
-  }
- 
-  const dateLabel = (data.dateLabels || []).join(' / ');
-  const dateCount = data.dateCount || 0;
-  const rows = data.rows || [];
-  const kaito = data.kaito || { cut:{}, full:{}, sum:{} };
-  const warnings = data.warnings || {};
-  const meta = data.meta || {};
- 
-  // ヘッダー
-  let html = '';
-  html += `<div class="s4-header">🍳 ${escHtml(dateLabel)} 仕込み表`;
-  if (dateCount > 1) html += `<span class="s4-count">（${dateCount}日分合算）</span>`;
-  html += `</div>`;
- 
-  // 日替わり選択UI（candidatesがあれば）
-  if (data.candidates && Object.keys(data.candidates).length > 0) {
-    html += `<div class="s4-kawari">`;
-    html += `<div class="s4-kawari-title">🔄 当日おかず選択（日替わり）</div>`;
-    Object.keys(data.candidates).forEach(base => {
-      const cands = data.candidates[base];
-      ['主菜1', '主菜2'].forEach(slot => {
-        const cur = (data.kawari && data.kawari[base + slot]) || '';
-        let opts = '<option value="">-- 選択 --</option>';
-        cands.forEach(c => {
-          const sel = (c === cur) ? ' selected' : '';
-          opts += `<option value="${escHtml(c)}"${sel}>${escHtml(c)}</option>`;
-        });
-        html += `<div class="s4-kawari-row">
-          <span class="s4-kawari-label">${escHtml(base)} ${slot}:</span>
-          <select class="s4-kawari-sel" data-key="${escHtml(base + slot)}">${opts}</select>
-        </div>`;
-      });
-    });
-    html += `<button class="s4-save-btn" onclick="saveSheet4Kawari()">保存</button>`;
-    html += `<span class="s4-save-badge" id="s4-save-badge" style="display:none"></span>`;
-    html += `</div>`;
-  }
- 
-  // 解凍セクション
-  html += `<div class="s4-kaito">`;
-  html += `<div class="s4-kaito-title">❄ 解凍</div>`;
-  html += `<div class="s4-kaito-row">`;
-  html += `<span>カット <strong>${kaito.cut.display}P</strong> <small>(実${kaito.cut.packCeil}P)</small></span>`;
-  html += `<span>正肉 <strong>${kaito.full.display}P</strong> <small>(実${kaito.full.packCeil}P)</small></span>`;
-  html += `<span>合計 <strong>${kaito.sum.display}P</strong> <small>(実${kaito.sum.packCeil}P)</small></span>`;
-  html += `</div></div>`;
- 
-  // 仕込み表（グループ展開）
-  if (!rows.length) {
-    html += `<div class="no-delivery-msg">仕込み対象がありません</div>`;
-  } else {
-    html += `<div class="prep-list">`;
-    let directSectionStarted = false;
-    rows.forEach(r => {
-      if (r.type === 'shikomi_header') {
-        html += `<div class="prep-header">${escHtml(r.shikomiName)}<span class="prep-portion">(${r.portion}人前)</span></div>`;
-      } else if (r.type === 'shikomi_ing') {
-        const amt = (r.amount != null) ? (r.amount + (r.unit || '')) : '–';
-        html += `<div class="prep-ing">
-          <span class="prep-ing-name">${escHtml(r.ingName)}</span>
-          <span class="prep-ing-amt">${escHtml(amt)}</span>
-        </div>`;
-      } else if (r.type === 'direct') {
-        if (!directSectionStarted) {
-          html += `<div class="prep-direct-section">───── 食材直接 ─────</div>`;
-          directSectionStarted = true;
-        }
-        const amt = (r.amount != null) ? (r.amount + (r.unit || '')) : '–';
-        const pack = (r.packCeil != null) ? (r.packCeil + 'P') : '–';
-        html += `<div class="prep-direct">
-          <span class="prep-direct-name">${escHtml(r.ingName)}</span>
-          <span class="prep-direct-order">${r.orderCount}人前</span>
-          <span class="prep-direct-amt">${escHtml(amt)}</span>
-          <span class="prep-direct-pack">${escHtml(pack)}</span>
-        </div>`;
-      }
-    });
-    html += `</div>`;
-  }
- 
-  // メタ情報
-  html += `<div class="s4-meta">📊 拠点分: ${meta.kyotenItems || 0}件 / 配達分: ${meta.deliveryItems || 0}件</div>`;
- 
-  // 警告
-  if (warnings.unmappedProducts && warnings.unmappedProducts.length > 0) {
-    html += `<div class="s4-warn">⚠️ 仕込みID/食材ID未紐付け商品 ${warnings.unmappedProducts.length}件:<br>`;
-    html += warnings.unmappedProducts.slice(0, 20).map(escHtml).join(', ');
-    if (warnings.unmappedProducts.length > 20) html += ` ...他${warnings.unmappedProducts.length - 20}件`;
-    html += `</div>`;
-  }
- 
-  main.innerHTML = html;
- 
-  // 日替わり選択リスナー
-  main.querySelectorAll('.s4-kawari-sel').forEach(sel => {
-    sel.addEventListener('change', () => {
-      const k = sel.dataset.key;
-      if (!s4KawariDraft) s4KawariDraft = {};
-      s4KawariDraft[k] = sel.value;
-    });
-  });
-}function renderSheet4(data) {
   const main = document.getElementById('s4-main');
   if (!main) return;
  
@@ -2771,55 +2665,71 @@ function saveOrderDoneFlags() {
 // 選択日セット
 const orderSelectedDates = new Set();
 
-// 日付チェックボックス初期化（翌日から10平日分 = 今週+来週）
+// 日付チェックボックス初期化（翌日から月〜日・14日分・今日以前はdisabled）
+// v2.1: 土日含む対応＋タイムゾーンバグ修正（UTC算術で統一）
 function initOrderDateChecks() {
-  const jst = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);
+  const jstNow = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);
+  const todayStr = jstNow.toISOString().slice(0, 10);
+  const [tYear, tMonth, tDay] = todayStr.split('-').map(Number);
+
+  const startUtc = new Date(Date.UTC(tYear, tMonth - 1, tDay + 1));
+  const startDow = startUtc.getUTCDay();
+  const daysFromMonday = (startDow === 0) ? 6 : startDow - 1;
+  const thisMondayUtc = new Date(startUtc.getTime() - daysFromMonday * 86400000);
+
   const DOW = ['日','月','火','水','木','金','土'];
   const row = document.getElementById('order-date-row');
   row.innerHTML = '';
   orderSelectedDates.clear();
 
-  // 翌日から14日先まで走査して平日を収集
-  let weekCounter = 0; // 0=今週, 1=来週
-  let prevMonday = null;
-  for (let i = 1; i <= 14; i++) {
-    const d = new Date(jst);
-    d.setDate(d.getDate() + i);
-    const dow = d.getDay();
-    if (dow === 0 || dow === 6) continue;
-    // 月曜日が来たら週番号を上げる
-    if (dow === 1) {
-      if (prevMonday !== null) weekCounter++;
-      prevMonday = d.toISOString().slice(0, 10);
-    } else if (prevMonday === null) {
-      // 今週の途中から始まる場合
-      weekCounter = 0;
-    }
+  for (let i = 0; i < 14; i++) {
+    const d = new Date(thisMondayUtc.getTime() + i * 86400000);
     const dateStr = d.toISOString().slice(0, 10);
-    const m = d.getMonth() + 1, day = d.getDate();
-    const wn = weekCounter;
+    const dispDay = d.getUTCDate();
+    const dispMonth = d.getUTCMonth() + 1;
+    const dispDow = d.getUTCDay();
+    const isDisabled = dateStr <= todayStr;
+    const wn = (i < 7) ? 0 : 1;
 
     const lbl = document.createElement('label');
-    lbl.className = 'order-date-lbl';
+    let cls = 'order-date-lbl';
+    if (isDisabled) cls += ' disabled';
+    lbl.className = cls;
     lbl.dataset.date = dateStr;
     lbl.dataset.week = wn;
-    lbl.innerHTML = `<input type="checkbox" value="${dateStr}"> ${m}/${day}(${DOW[dow]})`;
-    lbl.querySelector('input').addEventListener('change', e => {
-      if (e.target.checked) { orderSelectedDates.add(dateStr); lbl.classList.add('checked'); }
-      else { orderSelectedDates.delete(dateStr); lbl.classList.remove('checked'); }
-    });
+
+    if (isDisabled) {
+      lbl.innerHTML = `${dispMonth}/${dispDay}(${DOW[dispDow]})`;
+    } else {
+      lbl.innerHTML = `<input type="checkbox" value="${dateStr}"> ${dispMonth}/${dispDay}(${DOW[dispDow]})`;
+      lbl.querySelector('input').addEventListener('change', e => {
+        if (e.target.checked) {
+          orderSelectedDates.add(dateStr);
+          lbl.classList.add('checked');
+        } else {
+          orderSelectedDates.delete(dateStr);
+          lbl.classList.remove('checked');
+        }
+      });
+    }
     row.appendChild(lbl);
   }
 }
 
 function orderSelectWeek(wn) {
   document.querySelectorAll('#order-date-row .order-date-lbl').forEach(lbl => {
+    if (lbl.classList.contains('disabled')) return;
     const cb = lbl.querySelector('input');
+    if (!cb) return;
     const dateStr = lbl.dataset.date;
     if (parseInt(lbl.dataset.week) === wn) {
-      cb.checked = true; orderSelectedDates.add(dateStr); lbl.classList.add('checked');
+      cb.checked = true;
+      orderSelectedDates.add(dateStr);
+      lbl.classList.add('checked');
     } else {
-      cb.checked = false; orderSelectedDates.delete(dateStr); lbl.classList.remove('checked');
+      cb.checked = false;
+      orderSelectedDates.delete(dateStr);
+      lbl.classList.remove('checked');
     }
   });
 }
