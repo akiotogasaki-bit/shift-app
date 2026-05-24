@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>🍱 納品管理</title>
-<!-- kanri.html v3.6 (2026-05-24) — 発注タブ大改修 Phase 4：必要量＋パック数表示／業者別グループ化／お茶除外／未マッピング警告 -->
+<!-- kanri.html v3.7 (2026-05-24) — 発注タブ Phase 4 + 仕込みタブに白米/玄米セクション追加（解凍の上、目立つ位置） -->
 <style id="app-style">
 /* @page は全環境で確実に効く静的指定（用紙＝縦）。横向きはシート1・2をCSS回転で実現（A案） */
 @page { size: A4; margin: 3mm; }
@@ -392,6 +392,67 @@ body {
   align-items: center;
   gap: 16px;
 }
+/* ── 米セクション（解凍の上、最も目立つ位置） ── */
+.rice-box {
+  background: linear-gradient(135deg, #fff8e1 0%, #ffecb3 100%);
+  border: 2px solid #f9a825;
+  border-radius: 10px;
+  padding: 12px 18px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  box-shadow: 0 2px 6px rgba(249,168,37,0.25);
+}
+.rice-title {
+  font-size: 22px;
+  font-weight: bold;
+  color: #e65100;
+  white-space: nowrap;
+  letter-spacing: 0.5px;
+}
+.rice-items {
+  display: flex;
+  gap: 18px;
+  flex: 1;
+}
+.rice-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  background: rgba(255,255,255,0.7);
+  border-radius: 8px;
+  padding: 8px 6px;
+  border: 1px solid rgba(249,168,37,0.4);
+}
+.rice-name {
+  font-size: 16px;
+  font-weight: bold;
+  color: #5d4037;
+  margin-bottom: 4px;
+  letter-spacing: 1px;
+}
+.rice-order {
+  font-size: 24px;
+  font-weight: bold;
+  color: #bf360c;
+  line-height: 1.1;
+}
+.rice-order-sub { font-size: 12px; color: #6d4c41; margin-top: 1px; }
+.rice-amount {
+  font-size: 14px;
+  font-weight: bold;
+  color: #4e342e;
+  margin-top: 4px;
+}
+.rice-pack {
+  font-size: 18px;
+  font-weight: bold;
+  color: #1565c0;
+  margin-top: 2px;
+}
+.rice-pack-sub { font-size: 11px; color: #888; font-weight: normal; }
 .kaito-title {
   font-size: 12px;
   font-weight: bold;
@@ -2100,6 +2161,35 @@ function renderSheet4(data) {
       </div>
     </div>`;
 
+  // 米セクション（解凍の上、最も目立つ位置）
+  const rice = data.rice || { hakumai: { orderCount:0, amount:0, unit:'', packCeil:0 }, genmai: { orderCount:0, amount:0, unit:'', packCeil:0 } };
+  function fmtRiceAmount(amt, unit) {
+    if (!amt) return '0' + (unit || '');
+    const u = String(unit || '').trim();
+    if (u === 'g' && amt >= 1000)  return (Math.round(amt / 100) / 10) + 'kg';
+    if (u === 'ml' && amt >= 1000) return (Math.round(amt / 100) / 10) + 'L';
+    const r = Math.round(amt * 10) / 10;
+    return (r === Math.floor(r) ? String(Math.floor(r)) : r.toFixed(1)) + u;
+  }
+  const riceHTML = `
+    <div class="rice-box">
+      <span class="rice-title">🍚 米</span>
+      <div class="rice-items">
+        <div class="rice-item">
+          <div class="rice-name">白米</div>
+          <div class="rice-order">${rice.hakumai.orderCount || 0}<span class="rice-order-sub">人前</span></div>
+          <div class="rice-amount">${fmtRiceAmount(rice.hakumai.amount, rice.hakumai.unit)}</div>
+          <div class="rice-pack">${rice.hakumai.packCeil || 0}P<span class="rice-pack-sub">（袋）</span></div>
+        </div>
+        <div class="rice-item">
+          <div class="rice-name">玄米</div>
+          <div class="rice-order">${rice.genmai.orderCount || 0}<span class="rice-order-sub">人前</span></div>
+          <div class="rice-amount">${fmtRiceAmount(rice.genmai.amount, rice.genmai.unit)}</div>
+          <div class="rice-pack">${rice.genmai.packCeil || 0}P<span class="rice-pack-sub">（袋）</span></div>
+        </div>
+      </div>
+    </div>`;
+
   // 解凍セクション
   const { cut, full, sum } = kaito;
   const kaitoHTML = `
@@ -2178,6 +2268,7 @@ function renderSheet4(data) {
   body.innerHTML = `
     <div class="page-title">🍳 ${escHtml(dateLabel)}　仕込み表${dateCount > 1 ? ' (' + dateCount + '日分合算)' : ''}</div>
     ${kawariHTML}
+    ${riceHTML}
     ${kaitoHTML}
     <div class="s4-section-title">仕込み表</div>
     ${tableContent}
