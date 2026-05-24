@@ -2113,7 +2113,7 @@ function renderSheet4(data) {
         listHtml += `<div class="prep-header">${escHtml(r.shikomiName)}<span class="prep-portion">(${r.portion}人前)</span></div>`;
       } else if (r.type === 'shikomi_ing') {
         const amt = (r.amount != null) ? (r.amount + (r.unit || '')) : '–';
-        const pack = (r.packCeil != null) ? (r.packCeil + 'P') : '';
+        const pack = (r.packCount != null) ? (r.packCount.toFixed(1) + 'P') : '';
         listHtml += `<div class="prep-ing">
           <span class="prep-ing-name">${escHtml(r.ingName)}</span>
           <span class="prep-ing-amt">${escHtml(amt)}</span>
@@ -2125,7 +2125,7 @@ function renderSheet4(data) {
           directSectionStarted = true;
         }
         const amt = (r.amount != null) ? (r.amount + (r.unit || '')) : '–';
-        const pack = (r.packCeil != null) ? (r.packCeil + 'P') : '–';
+        const pack = (r.packCount != null) ? (r.packCount.toFixed(1) + 'P') : '–';
         listHtml += `<div class="prep-direct">
           <span class="prep-direct-name">${escHtml(r.ingName)}</span>
           <span class="prep-direct-order">${r.orderCount}人前</span>
