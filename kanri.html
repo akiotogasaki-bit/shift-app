@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>🍱 納品管理</title>
-<!-- kanri.html v3.9 (2026-05-25) — 拠点配分タブ・配分調整タブに拠点グループ区切り線（太字3pxブラック）を追加。1〜12は3拠点ごと、13-14は2拠点、15以降は4拠点ごとにグループ化 -->
+<title>🍱 配分表</title>
+<!-- kanri.html v3.10 (2026-05-25) — 一括印刷ボタン追加。sheet1日付を全シートに同期→拠点配分(2部)→午前便→(午後便あれば)→仕込み の順で afterprint 連鎖印刷 -->
 <style id="app-style">
 /* @page は全環境で確実に効く静的指定（用紙＝縦）。横向きはシート1・2をCSS回転で実現（A案） */
 @page { size: A4; margin: 3mm; }
@@ -1715,6 +1715,7 @@ body {
     <input type="date" id="s1-date-input">
     <button class="btn btn-primary" id="s1-btn-fetch">取得</button>
     <button class="btn btn-print" onclick="window.print()">🖨 印刷</button>
+    <button class="btn btn-print" id="s1-btn-print-all" onclick="printAllForDay()" style="background:#ef6c00;color:#fff;border-color:#ef6c00;font-weight:bold;">📚 一括印刷</button>
     <span class="status-msg" id="s1-status-msg"></span>
   </div>
   <div id="sheet1-body"></div>
@@ -4794,6 +4795,178 @@ function wpEnsureSettingsLoaded() {
   if (wpSettingsLoaded) return;
   wpSettingsLoaded = true;
   wpRenderSettingsTab();
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// 一括印刷機能 (v3.10 NEW 2026-05-25)
+// sheet1の日付を全シートに同期 → 拠点配分(2部) → 午前便 → (午後便あれば) → 仕込み
+// の順に afterprint イベントで連鎖印刷
+// ═══════════════════════════════════════════════════════════════
+let _printAllQueue = [];      // 印刷順序の配列 例: ['sheet1','sheet1','sheet2','sheet3','sheet4']
+let _printAllIdx = 0;          // 現在の印刷インデックス
+let _printAllBound = false;    // afterprint ハンドラ登録済みフラグ
+
+async function printAllForDay() {
+  // ① sheet1日付取得
+  const dateVal = document.getElementById('s1-date-input').value;
+  if (!dateVal) {
+    alert('sheet1で日付を選択してください');
+    return;
+  }
+  // 既に一括印刷中なら拒否
+  if (_printAllQueue.length > 0) {
+    alert('既に一括印刷が進行中です');
+    return;
+  }
+  // ② 事前確認
+  const okConfirm = confirm(
+    dateVal + ' の一括印刷を開始します。\n\n' +
+    '印刷ダイアログが順番に 4〜5 回開きます。\n' +
+    '各ダイアログで「印刷」を押してください。\n' +
+    '(キャンセルしても次のダイアログが開きます)\n\n' +
+    '開始しますか?'
+  );
+  if (!okConfirm) return;
+
+  // ③ 全シートの日付入力を sheet1 と同期
+  document.getElementById('s2-date-input').value = dateVal;
+  document.getElementById('s3-date-input').value = dateVal;
+
+  // ④ sheet4の日付選択を sheet1日付のみに同期
+  s4SelectedDates.clear();
+  s4SelectedDates.add(dateVal);
+  document.querySelectorAll('#s4-date-row .s4-date-lbl').forEach(lbl => {
+    const cb = lbl.querySelector('input');
+    if (!cb) return;
+    if (lbl.dataset.date === dateVal) {
+      cb.checked = true;
+      lbl.classList.add('checked');
+    } else {
+      cb.checked = false;
+      lbl.classList.remove('checked');
+    }
+  });
+  updateS4SelInfo();
+
+  // ⑤ sheet1〜3 のデータを並列取得 + 描画
+  s1SetStatus('一括印刷の準備中... データ取得');
+  let hasAfternoon = false;
+  try {
+    const [s1Res, s2Res, s3Res, colorMap] = await Promise.all([
+      fetch(GAS_URL + '?action=getSheet1Data&date=' + dateVal).then(r => r.json()),
+      fetch(GAS_URL + '?action=getSheet2Data&date=' + dateVal).then(r => r.json()),
+      fetch(GAS_URL + '?action=getSheet3Data&date=' + dateVal).then(r => r.json()),
+      loadDriverColorMap(dateVal)
+    ]);
+    if (!s1Res.ok) throw new Error('シート1: ' + (s1Res.error || '不明'));
+    if (!s2Res.ok) throw new Error('シート2: ' + (s2Res.error || '不明'));
+    if (!s3Res.ok) throw new Error('シート3: ' + (s3Res.error || '不明'));
+
+    s1Res._driverColorMap = colorMap;
+    renderSheet1(s1Res);
+    renderSheet2(s2Res);
+
+    // 午後便有無判定
+    hasAfternoon = (s3Res.deliveries && s3Res.deliveries.length > 0);
+    if (hasAfternoon) {
+      renderSheet3(s3Res);
+    } else {
+      // 午後便なしの場合は sheet3 をクリア
+      document.getElementById('sheet3-body').innerHTML = '<div style="padding:20px;color:#999;">この日の午後便はありません</div>';
+    }
+  } catch (e) {
+    s1SetStatus('一括印刷準備失敗: ' + e.message, true);
+    return;
+  }
+
+  // ⑥ sheet4 取得 (既存fetchSheet4をそのまま使う)
+  s1SetStatus('一括印刷の準備中... 仕込み取得');
+  try {
+    await fetchSheet4();
+  } catch (e) {
+    s1SetStatus('仕込み取得失敗: ' + e.message, true);
+    return;
+  }
+
+  // ⑦ 印刷キュー構築
+  _printAllQueue = ['sheet1', 'sheet1', 'sheet2'];  // 拠点配分は2部
+  if (hasAfternoon) {
+    _printAllQueue.push('sheet3');
+  }
+  _printAllQueue.push('sheet4');
+  _printAllIdx = 0;
+
+  // ⑧ afterprint ハンドラを登録 (初回のみ)
+  if (!_printAllBound) {
+    window.addEventListener('afterprint', _printAllOnAfter);
+    _printAllBound = true;
+  }
+
+  // ⑨ 最初の印刷を起動
+  s1SetStatus('一括印刷中... (1/' + _printAllQueue.length + ') ' + _printAllLabel(_printAllQueue[0]));
+  _printAllStartCurrent();
+}
+
+// 現在キューのタブをアクティブ化してwindow.print()を起動
+function _printAllStartCurrent() {
+  if (_printAllIdx >= _printAllQueue.length) {
+    _printAllFinish();
+    return;
+  }
+  const tabName = _printAllQueue[_printAllIdx];
+  // タブ切替
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  const tabBtn  = document.querySelector('.tab-btn[data-tab="' + tabName + '"]');
+  const tabPane = document.getElementById('tab-' + tabName);
+  if (tabBtn)  tabBtn.classList.add('active');
+  if (tabPane) tabPane.classList.add('active');
+
+  // 描画反映を待ってから印刷ダイアログ
+  setTimeout(function() {
+    window.print();
+  }, 200);
+}
+
+// afterprint コールバック (キューが空なら何もしない=単体印刷時)
+function _printAllOnAfter() {
+  if (_printAllQueue.length === 0) return;
+  _printAllIdx++;
+  if (_printAllIdx >= _printAllQueue.length) {
+    _printAllFinish();
+    return;
+  }
+  const tabName = _printAllQueue[_printAllIdx];
+  s1SetStatus('一括印刷中... (' + (_printAllIdx + 1) + '/' + _printAllQueue.length + ') ' + _printAllLabel(tabName));
+  // ブラウザがブロックしないよう遅延
+  setTimeout(_printAllStartCurrent, 500);
+}
+
+// 全完了処理
+function _printAllFinish() {
+  _printAllQueue = [];
+  _printAllIdx = 0;
+  // sheet1に戻す
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  const sheet1Btn = document.querySelector('.tab-btn[data-tab="sheet1"]');
+  const sheet1Pane = document.getElementById('tab-sheet1');
+  if (sheet1Btn) sheet1Btn.classList.add('active');
+  if (sheet1Pane) sheet1Pane.classList.add('active');
+  s1SetStatus('✅ 一括印刷完了');
+  setTimeout(function() { s1SetStatus(''); }, 4000);
+}
+
+// タブ名→日本語ラベル
+function _printAllLabel(tabName) {
+  const labels = {
+    'sheet1': '拠点配分',
+    'sheet2': '午前便盛り出し',
+    'sheet3': '午後便盛り出し',
+    'sheet4': '仕込み'
+  };
+  return labels[tabName] || tabName;
 }
 
 
