@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>🍱 納品管理</title>
-<!-- kanri.html v3.4 (2026-05-21) — ドライバー色連動 Phase 4：拠点配分タブ／配分調整タブの拠点名セル背景色 -->
+<!-- kanri.html v3.6 (2026-05-24) — 発注タブ大改修 Phase 4：必要量＋パック数表示／業者別グループ化／お茶除外／未マッピング警告 -->
 <style id="app-style">
 /* @page は全環境で確実に効く静的指定（用紙＝縦）。横向きはシート1・2をCSS回転で実現（A案） */
 @page { size: A4; margin: 3mm; }
@@ -671,7 +671,31 @@ body {
 .order-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 6px; }
 .order-table th, .order-table td { padding: 5px 8px; border: 0.5px solid #ddd; }
 .order-table th { background: rgba(0,0,0,0.04); font-weight: bold; font-size: 12px; }
-.order-table td.order-qty { font-size: 15px; font-weight: bold; text-align: right; width: 30%; }
+.order-table td.order-need { font-size: 14px; text-align: right; width: 28%; color: #333; }
+.order-table td.order-qty  { font-size: 15px; font-weight: bold; text-align: right; width: 22%; color: #0d47a1; }
+/* ── 未マッピング警告エリア ── */
+.order-warn-wrap {
+  margin: 8px 0;
+  border: 1px solid #ffcc80;
+  background: #fff8e1;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+.order-warn-head {
+  font-weight: bold;
+  color: #e65100;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.order-warn-body { display: none; margin-top: 6px; padding-left: 18px; }
+.order-warn-body.open { display: block; }
+.order-warn-section { margin-top: 6px; }
+.order-warn-section:first-child { margin-top: 0; }
+.order-warn-label { font-weight: bold; color: #bf360c; margin-bottom: 2px; }
+.order-warn-items { color: #555; line-height: 1.5; word-break: break-all; }
 .order-bd-toggle {
   font-size: 11px;
   color: #1565c0;
@@ -1664,6 +1688,7 @@ body {
   </div>
   <div class="order-date-row" id="order-date-row"></div>
   <div class="order-sel-info" id="order-sel-info">日付を選択して取得ボタンを押してください</div>
+  <div class="order-warn-wrap" id="order-warn-wrap" style="display:none;"></div>
   <div class="order-vendor-list" id="order-body"></div>
 </div>
 <div class="tab-pane" id="tab-master">
@@ -2776,16 +2801,76 @@ async function fetchOrderData() {
   if (dates.length === 0) { orderSetStatus('日付を1日以上選択してください', true); return; }
   orderSetStatus('取得中…');
   document.getElementById('order-body').innerHTML = '';
+  document.getElementById('order-warn-wrap').style.display = 'none';
+  document.getElementById('order-warn-wrap').innerHTML = '';
   try {
     const res  = await fetch(GAS_URL + '?action=getOrderData&dates=' + encodeURIComponent(JSON.stringify(dates)));
     const data = await res.json();
     if (!data.ok) { orderSetStatus(data.error || '取得エラー', true); return; }
     orderSetStatus('');
     loadOrderDoneFlags(dates.join('_'));
+    renderOrderWarnings(data.warnings);
     renderOrderData(data);
   } catch(e) {
     orderSetStatus('通信エラー: ' + e.message, true);
   }
+}
+
+// 未マッピング警告エリアを描画
+function renderOrderWarnings(warnings) {
+  const wrap = document.getElementById('order-warn-wrap');
+  if (!warnings) { wrap.style.display = 'none'; return; }
+  const up = warnings.unmappedProducts    || [];
+  const us = warnings.unmappedShikomiIds  || [];
+  const ud = warnings.unmappedDeliveryIds || [];
+  const totalCount = up.length + us.length + ud.length;
+  if (totalCount === 0) { wrap.style.display = 'none'; return; }
+
+  let body = '';
+  if (up.length > 0) {
+    body += '<div class="order-warn-section"><div class="order-warn-label">未マッピング商品（単価マスタで仕込みID/食材IDが未設定）：' + up.length + '件</div>'
+         + '<div class="order-warn-items">' + up.map(escHtml).join('、') + '</div></div>';
+  }
+  if (us.length > 0) {
+    body += '<div class="order-warn-section"><div class="order-warn-label">未マッピング仕込みID（仕込みマスタに登録なし）：' + us.length + '件</div>'
+         + '<div class="order-warn-items">' + us.map(escHtml).join('、') + '</div></div>';
+  }
+  if (ud.length > 0) {
+    body += '<div class="order-warn-section"><div class="order-warn-label">未マッピング配達商品ID（単価マスタに登録なし）：' + ud.length + '件</div>'
+         + '<div class="order-warn-items">' + ud.map(escHtml).join('、') + '</div></div>';
+  }
+
+  wrap.innerHTML = '<div class="order-warn-head" onclick="toggleOrderWarn()">'
+                + '<span id="order-warn-arrow">▶</span>'
+                + '<span>⚠️ 未マッピング警告 ' + totalCount + '件（クリックで詳細）</span>'
+                + '</div>'
+                + '<div class="order-warn-body" id="order-warn-body">' + body + '</div>';
+  wrap.style.display = '';
+}
+
+function toggleOrderWarn() {
+  const body  = document.getElementById('order-warn-body');
+  const arrow = document.getElementById('order-warn-arrow');
+  if (!body) return;
+  body.classList.toggle('open');
+  if (arrow) arrow.textContent = body.classList.contains('open') ? '▼' : '▶';
+}
+
+// 必要量の表示用フォーマット（数値＋単位、小数1桁、kg帯は kg 換算）
+function formatNeedAmount(total, unit) {
+  const u = String(unit || '').trim();
+  // g → 1000 以上で kg 表示
+  if (u === 'g' && total >= 1000) {
+    return (Math.round(total / 100) / 10) + 'kg';
+  }
+  // ml → 1000 以上で L 表示
+  if (u === 'ml' && total >= 1000) {
+    return (Math.round(total / 100) / 10) + 'L';
+  }
+  // 小数1桁表示（整数になればドット省略）
+  const rounded = Math.round(total * 10) / 10;
+  const display = (rounded === Math.floor(rounded)) ? String(Math.floor(rounded)) : rounded.toFixed(1);
+  return display + u;
 }
 
 function renderOrderData(data) {
@@ -2800,7 +2885,7 @@ function renderOrderData(data) {
 
   const body = document.getElementById('order-body');
   if (!vendors || vendors.length === 0) {
-    body.innerHTML = '<div class="placeholder-msg">発注データがありません<br><small>食材マスタと単価マスタの食材ID列を確認してください</small></div>';
+    body.innerHTML = '<div class="placeholder-msg">発注データがありません<br><small>食材マスタと単価マスタの食材ID/仕込みID列を確認してください</small></div>';
     return;
   }
 
@@ -2810,9 +2895,13 @@ function renderOrderData(data) {
     const safeN = v.name.replace(/[^\w\u3000-\u9FFF]/g, '_'); // CSSセーフなID用
     const isDone = _orderDoneFlags[v.name] || false;
 
-    // 食材テーブル
+    // 食材テーブル（3列：食材名 / 必要量 / パック数）
     const rows = v.items.map(it =>
-      `<tr><td>${escHtml(it.name)}</td><td class="order-qty">${it.packCeil} パック</td></tr>`
+      `<tr>
+         <td>${escHtml(it.name)}</td>
+         <td class="order-need">${formatNeedAmount(it.total, it.unit)}</td>
+         <td class="order-qty">${it.packCeil}P</td>
+       </tr>`
     ).join('');
 
     // 日別内訳
@@ -2823,7 +2912,7 @@ function renderOrderData(data) {
       if (!dayItems.length) return;
       const dt = new Date(d.replace(/-/g, '/'));
       const lbl = `${dt.getMonth()+1}/${dt.getDate()}(${DOW[dt.getDay()]})`;
-      const items = dayItems.map(it => `${escHtml(it.name)} ${it.packCeil}P`).join(' / ');
+      const items = dayItems.map(it => `${escHtml(it.name)} ${formatNeedAmount(it.total, it.unit)}(${it.packCeil}P)`).join(' / ');
       bdRows += `<div class="order-bd-row"><span class="order-bd-date">${lbl}</span><span class="order-bd-items">${items}</span></div>`;
     });
     const bdSection = bdRows
@@ -2847,7 +2936,11 @@ function renderOrderData(data) {
         </div>
         <div class="order-vendor-body" id="ovcb-${safeN}">
           <table class="order-table">
-            <thead><tr><th style="text-align:left">食材名</th><th style="text-align:right;width:30%">発注量</th></tr></thead>
+            <thead><tr>
+              <th style="text-align:left">食材名</th>
+              <th style="text-align:right;width:28%">必要量</th>
+              <th style="text-align:right;width:22%">パック数</th>
+            </tr></thead>
             <tbody>${rows}</tbody>
           </table>
           ${bdSection}
@@ -2891,7 +2984,9 @@ function copyOrderText(vendorName) {
   }).join('・');
 
   const lines = [vendorName + ' 発注 ' + datesStr, ''];
-  vendor.items.forEach(it => lines.push(`${it.name}\t${it.packCeil}パック`));
+  vendor.items.forEach(it => {
+    lines.push(`${it.name}\t${formatNeedAmount(it.total, it.unit)}\t${it.packCeil}P`);
+  });
   const text = lines.join('\n');
 
   navigator.clipboard.writeText(text).then(
