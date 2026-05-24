@@ -481,8 +481,9 @@ body {
 .prep-ing {
   padding: 4px 14px 4px 32px;
   font-size: 14px;
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1fr 100px 60px;
+  gap: 12px;
   align-items: center;
   border-bottom: 1px dotted #f0f0f0;
 }
@@ -491,6 +492,12 @@ body {
   font-family: 'Courier New', monospace;
   color: #1565c0;
   font-weight: bold;
+  text-align: right;
+}
+.prep-ing-pack {
+  font-family: 'Courier New', monospace;
+  color: #666;
+  text-align: right;
 }
 .prep-direct-section {
   background: #fff3e0;
@@ -2106,9 +2113,11 @@ function renderSheet4(data) {
         listHtml += `<div class="prep-header">${escHtml(r.shikomiName)}<span class="prep-portion">(${r.portion}人前)</span></div>`;
       } else if (r.type === 'shikomi_ing') {
         const amt = (r.amount != null) ? (r.amount + (r.unit || '')) : '–';
+        const pack = (r.packCeil != null) ? (r.packCeil + 'P') : '';
         listHtml += `<div class="prep-ing">
           <span class="prep-ing-name">${escHtml(r.ingName)}</span>
           <span class="prep-ing-amt">${escHtml(amt)}</span>
+          <span class="prep-ing-pack">${escHtml(pack)}</span>
         </div>`;
       } else if (r.type === 'direct') {
         if (!directSectionStarted) {
