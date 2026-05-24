@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>🍱 配分表</title>
-<!-- kanri.html v3.10 (2026-05-25) — 一括印刷ボタン追加。sheet1日付を全シートに同期→拠点配分(2部)→午前便→(午後便あれば)→仕込み の順で afterprint 連鎖印刷 -->
+<title>🍱 納品管理</title>
+<!-- kanri.html v3.11 (2026-05-25) — copyOrderText を食材ごと unitMode 切替に変更（vendor.unitMode → item.unitMode）。v3.10: 一括印刷ボタン追加。sheet1日付を全シートに同期→拠点配分(2部)→午前便→(午後便あれば)→仕込み の順で afterprint 連鎖印刷 -->
 <style id="app-style">
 /* @page は全環境で確実に効く静的指定（用紙＝縦）。横向きはシート1・2をCSS回転で実現（A案） */
 @page { size: A4; margin: 3mm; }
@@ -3151,13 +3151,12 @@ function copyOrderText(vendorName) {
     dateLabel = `${dt.getMonth()+1}/${dt.getDate()}(${DOW[dt.getDay()]})`;
   }
  
-  // 業者の発注単位区分（デフォルト 'pack'）
-  const unitMode = vendor.unitMode || 'pack';
- 
-  // 各食材の発注量を unitMode に応じて整形
+  // v3.11: 食材ごとに unitMode を取得（食材マスタI列「発注単位区分」由来）
+  // 食材I列が空欄の場合は 'pack' をデフォルトとする
   const itemLines = vendor.items.map(it => {
     const need = formatNeedAmount(it.total, it.unit);
     const pack = `${it.packCeil}パック`;
+    const unitMode = it.unitMode || 'pack';
     let qty;
     if (unitMode === 'kg') {
       qty = need;
