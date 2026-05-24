@@ -2024,85 +2024,100 @@ function buildKawariSelect(id, cands, selected) {
   return html;
 }
  
-// 描画（Phase 3 v2 戻り値構造に対応）
+// 描画（Phase 3 v2.2 戻り値構造に対応：rows = グループ展開）
 function renderSheet4(data) {
-  const main = document.getElementById('sheet4-body');
-  if (!main) return;
- 
+  const body = document.getElementById('sheet4-body');
+  if (!body) return;
+
   if (!data || !data.ok) {
-    main.innerHTML = `<div class="s4-error">${escHtml(data && data.error || '取得失敗')}</div>`;
+    body.innerHTML = `<div class="s4-error">${escHtml(data && data.error || '取得失敗')}</div>`;
     return;
   }
- 
+
   const dateLabel = (data.dateLabels || []).join(' / ');
   const dateCount = data.dateCount || 0;
   const rows = data.rows || [];
-  const kaito = data.kaito || { cut:{}, full:{}, sum:{} };
+  const kaito = data.kaito || { cut:{display:0,packCeil:0}, full:{display:0,packCeil:0}, sum:{display:0,packCeil:0} };
+  const candidates = data.candidates || {};
+  const kawari = data.kawari || {};
   const warnings = data.warnings || {};
   const meta = data.meta || {};
- 
-  // ヘッダー
-  let html = '';
-  html += `<div class="s4-header">🍳 ${escHtml(dateLabel)} 仕込み表`;
-  if (dateCount > 1) html += `<span class="s4-count">（${dateCount}日分合算）</span>`;
-  html += `</div>`;
- 
-  // 日替わり選択UI（candidatesがあれば）
-  if (data.candidates && Object.keys(data.candidates).length > 0) {
-    html += `<div class="s4-kawari">`;
-    html += `<div class="s4-kawari-title">🔄 当日おかず選択（日替わり）</div>`;
-    Object.keys(data.candidates).forEach(base => {
-      const cands = data.candidates[base];
-      ['主菜1', '主菜2'].forEach(slot => {
-        const cur = (data.kawari && data.kawari[base + slot]) || '';
-        let opts = '<option value="">-- 選択 --</option>';
-        cands.forEach(c => {
-          const sel = (c === cur) ? ' selected' : '';
-          opts += `<option value="${escHtml(c)}"${sel}>${escHtml(c)}</option>`;
-        });
-        html += `<div class="s4-kawari-row">
-          <span class="s4-kawari-label">${escHtml(base)} ${slot}:</span>
-          <select class="s4-kawari-sel" data-key="${escHtml(base + slot)}">${opts}</select>
-        </div>`;
-      });
-    });
-    html += `<button class="s4-save-btn" onclick="saveSheet4Kawari()">保存</button>`;
-    html += `<span class="s4-save-badge" id="s4-save-badge" style="display:none"></span>`;
-    html += `</div>`;
-  }
- 
+
+  const zrC = candidates['全六あり'] || [];
+  const znC = candidates['全六なし'] || [];
+
+  // 日替わり選択ボックス
+  const kawariHTML = `
+    <div class="kawari-box">
+      <div class="kawari-title">🔄 当日おかず選択（日替わり）</div>
+      <div class="kawari-grid">
+        <div>
+          <div class="kawari-sep">全六あり</div>
+          <div class="kawari-item"><span class="kawari-lbl">主菜1</span>${buildKawariSelect('s4-zr-s1', zrC, kawari['全六あり主菜1'] || '')}</div>
+          <div class="kawari-item"><span class="kawari-lbl">主菜2</span>${buildKawariSelect('s4-zr-s2', zrC, kawari['全六あり主菜2'] || '')}</div>
+        </div>
+        <div>
+          <div class="kawari-sep">全六なし</div>
+          <div class="kawari-item"><span class="kawari-lbl">主菜1</span>${buildKawariSelect('s4-zn-s1', znC, kawari['全六なし主菜1'] || '')}</div>
+          <div class="kawari-item"><span class="kawari-lbl">主菜2</span>${buildKawariSelect('s4-zn-s2', znC, kawari['全六なし主菜2'] || '')}</div>
+        </div>
+      </div>
+      <div class="kawari-footer">
+        <button class="btn btn-primary" id="s4-kawari-save" style="font-size:12px;padding:4px 14px;">保存</button>
+        <span id="s4-save-badge" class="save-badge"></span>
+      </div>
+    </div>`;
+
   // 解凍セクション
-  html += `<div class="s4-kaito">`;
-  html += `<div class="s4-kaito-title">❄ 解凍</div>`;
-  html += `<div class="s4-kaito-row">`;
-  html += `<span>カット <strong>${kaito.cut.display}P</strong> <small>(実${kaito.cut.packCeil}P)</small></span>`;
-  html += `<span>正肉 <strong>${kaito.full.display}P</strong> <small>(実${kaito.full.packCeil}P)</small></span>`;
-  html += `<span>合計 <strong>${kaito.sum.display}P</strong> <small>(実${kaito.sum.packCeil}P)</small></span>`;
-  html += `</div></div>`;
- 
-  // 仕込み表（グループ展開）
-  if (!rows.length) {
-    html += `<div class="no-delivery-msg">仕込み対象がありません</div>`;
+  const { cut, full, sum } = kaito;
+  const kaitoHTML = `
+    <div class="kaito-box">
+      <span class="kaito-title">解凍</span>
+      <div class="kaito-items">
+        <div class="kaito-item">
+          <span class="kaito-main">${cut.display}P</span>
+          <span class="kaito-actual">(${cut.packCeil}P)</span>
+          <span class="kaito-sub">カット</span>
+        </div>
+        <div class="kaito-divider"></div>
+        <div class="kaito-item">
+          <span class="kaito-main">${full.display}P</span>
+          <span class="kaito-actual">(${full.packCeil}P)</span>
+          <span class="kaito-sub">正肉</span>
+        </div>
+        <div class="kaito-divider"></div>
+        <div class="kaito-item kaito-total">
+          <span class="kaito-main">${sum.display}P</span>
+          <span class="kaito-actual">(${sum.packCeil}P)</span>
+          <span class="kaito-sub">合計</span>
+        </div>
+      </div>
+    </div>`;
+
+  // 仕込み表（v2.2 グループ展開）
+  let tableContent;
+  if (rows.length === 0) {
+    tableContent = '<div class="no-delivery-msg">当日の仕込みデータがありません<br><small>食材マスタと単価マスタの食材ID列を確認してください</small></div>';
   } else {
-    html += `<div class="prep-list">`;
+    let listHtml = '<div class="prep-list">';
     let directSectionStarted = false;
     rows.forEach(r => {
       if (r.type === 'shikomi_header') {
-        html += `<div class="prep-header">${escHtml(r.shikomiName)}<span class="prep-portion">(${r.portion}人前)</span></div>`;
+        listHtml += `<div class="prep-header">${escHtml(r.shikomiName)}<span class="prep-portion">(${r.portion}人前)</span></div>`;
       } else if (r.type === 'shikomi_ing') {
         const amt = (r.amount != null) ? (r.amount + (r.unit || '')) : '–';
-        html += `<div class="prep-ing">
+        listHtml += `<div class="prep-ing">
           <span class="prep-ing-name">${escHtml(r.ingName)}</span>
           <span class="prep-ing-amt">${escHtml(amt)}</span>
         </div>`;
       } else if (r.type === 'direct') {
         if (!directSectionStarted) {
-          html += `<div class="prep-direct-section">───── 食材直接 ─────</div>`;
+          listHtml += `<div class="prep-direct-section">───── 食材直接 ─────</div>`;
           directSectionStarted = true;
         }
         const amt = (r.amount != null) ? (r.amount + (r.unit || '')) : '–';
         const pack = (r.packCeil != null) ? (r.packCeil + 'P') : '–';
-        html += `<div class="prep-direct">
+        listHtml += `<div class="prep-direct">
           <span class="prep-direct-name">${escHtml(r.ingName)}</span>
           <span class="prep-direct-order">${r.orderCount}人前</span>
           <span class="prep-direct-amt">${escHtml(amt)}</span>
@@ -2110,31 +2125,34 @@ function renderSheet4(data) {
         </div>`;
       }
     });
-    html += `</div>`;
+    listHtml += '</div>';
+    tableContent = listHtml;
   }
- 
+
   // メタ情報
-  html += `<div class="s4-meta">📊 拠点分: ${meta.kyotenItems || 0}件 / 配達分: ${meta.deliveryItems || 0}件</div>`;
- 
+  let metaHtml = `<div class="s4-meta" style="margin-top:8px;font-size:12px;color:#666;">📊 拠点分: ${meta.kyotenItems || 0}件 / 配達分: ${meta.deliveryItems || 0}件</div>`;
+
   // 警告
+  let warnHtml = '';
   if (warnings.unmappedProducts && warnings.unmappedProducts.length > 0) {
-    html += `<div class="s4-warn">⚠️ 仕込みID/食材ID未紐付け商品 ${warnings.unmappedProducts.length}件:<br>`;
-    html += warnings.unmappedProducts.slice(0, 20).map(escHtml).join(', ');
-    if (warnings.unmappedProducts.length > 20) html += ` ...他${warnings.unmappedProducts.length - 20}件`;
-    html += `</div>`;
+    warnHtml = `<div class="s4-warn" style="margin-top:8px;padding:8px;background:#fff3e0;border-left:4px solid #ff9800;font-size:12px;">⚠️ 仕込みID/食材ID未紐付け商品 ${warnings.unmappedProducts.length}件:<br>`;
+    warnHtml += warnings.unmappedProducts.slice(0, 20).map(escHtml).join(', ');
+    if (warnings.unmappedProducts.length > 20) warnHtml += ` ...他${warnings.unmappedProducts.length - 20}件`;
+    warnHtml += `</div>`;
   }
- 
-  main.innerHTML = html;
- 
-  // 日替わり選択リスナー
-  main.querySelectorAll('.s4-kawari-sel').forEach(sel => {
-    sel.addEventListener('change', () => {
-      const k = sel.dataset.key;
-      if (!s4KawariDraft) s4KawariDraft = {};
-      s4KawariDraft[k] = sel.value;
-    });
-  });
+
+  body.innerHTML = `
+    <div class="page-title">🍳 ${escHtml(dateLabel)}　仕込み表${dateCount > 1 ? ' (' + dateCount + '日分合算)' : ''}</div>
+    ${kawariHTML}
+    ${kaitoHTML}
+    <div class="s4-section-title">仕込み表</div>
+    ${tableContent}
+    ${metaHtml}
+    ${warnHtml}`;
+
+  document.getElementById('s4-kawari-save').addEventListener('click', onS4KawariSave);
 }
+
  
 // ボタンイベント
 document.getElementById('s4-btn-fetch').addEventListener('click', fetchSheet4);
