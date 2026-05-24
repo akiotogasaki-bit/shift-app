@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>🍱 納品管理</title>
-<!-- kanri.html v3.7 (2026-05-24) — 発注タブ Phase 4 + 仕込みタブに白米/玄米セクション追加（解凍の上、目立つ位置） -->
+<!-- kanri.html v3.9 (2026-05-25) — 拠点配分タブ・配分調整タブに拠点グループ区切り線（太字3pxブラック）を追加。1〜12は3拠点ごと、13-14は2拠点、15以降は4拠点ごとにグループ化 -->
 <style id="app-style">
 /* @page は全環境で確実に効く静的指定（用紙＝縦）。横向きはシート1・2をCSS回転で実現（A案） */
 @page { size: A4; margin: 3mm; }
@@ -196,6 +196,20 @@ body {
 .matrix-table tr.g-blue.brown-row  td.cell-data { background: #fff3e0; }
 .matrix-table tr.g-green.brown-row td.cell-data { background: #ffe0b2; }
 .matrix-table tr.g-yel.brown-row   td.cell-data { background: #ffcc80; }
+
+/* ─────────────────────────────────────────
+   拠点グループ区切り線（v3.9 NEW 2026-05-25）
+   1-12: 3拠点ごと / 13-14: 2拠点 / 15以降: 4拠点ごと
+   ───────────────────────────────────────── */
+/* sheet1 拠点配分タブ（matrix-table）：列方向の縦線 */
+.matrix-table th.cell-bold-boundary,
+.matrix-table td.cell-bold-boundary {
+  border-right: 3px solid #000 !important;
+}
+/* ref-panel（拠点名右側パネル）：行方向の横線 */
+.ref-table tr.cell-bold-boundary-row td {
+  border-bottom: 3px solid #000 !important;
+}
 
 /* ── シート2：グレード配色（配達列セル背景） ── */
 .cell-ume   { background: #ffffff !important; }
@@ -882,6 +896,17 @@ body {
   .app-header, .tab-bar, .ctrl-bar, .legend { display: none !important; }
   .tab-pane { display: none !important; }
 
+  /* 拠点グループ区切り線（v3.9 NEW 2026-05-25）印刷時もコントラスト維持 */
+  .matrix-table th.cell-bold-boundary,
+  .matrix-table td.cell-bold-boundary,
+  .bm-matrix    th.cell-bold-boundary,
+  .bm-matrix    td.cell-bold-boundary {
+    border-right: 2.5px solid #000 !important;
+  }
+  .ref-table tr.cell-bold-boundary-row td {
+    border-bottom: 2.5px solid #000 !important;
+  }
+
   .page-title {
     font-size: 13pt;
     font-weight: bold;
@@ -1211,6 +1236,11 @@ body {
 #tab-master .bm-matrix .bm-data-cell { padding:0; height: 22px; position:relative; }
 #tab-master .bm-matrix .bm-data-cell.bm-loc-confirmed { background:#e8eaed; }
 #tab-master .bm-matrix .bm-data-cell.bm-zero-cell { background:#f8f8f8; }
+/* 拠点グループ区切り線（v3.9 NEW 2026-05-25） */
+#tab-master .bm-matrix th.cell-bold-boundary,
+#tab-master .bm-matrix td.cell-bold-boundary {
+  border-right: 3px solid #000 !important;
+}
 #tab-master .bm-cell-2col { display:flex; height: 22px; line-height: 22px; position:relative; }
 #tab-master .bm-cell-sales {
   flex: 1; padding: 0 2px; font-size: 9pt;
@@ -2323,6 +2353,37 @@ function escHtml(str) {
 }
 
 // ═══════════════════════════════════════
+// 拠点グループ区切り線判定（v3.9 NEW 2026-05-25）
+// 拠点配分タブ・配分調整タブで使用
+// グループ仕様:
+//   1〜12: 3拠点ごと（3, 6, 9, 12 の右に線）
+//   13, 14: 2拠点でひとくくり（14 の右に線）
+//   15以降: 4拠点ごと（18, 22, 26, ... の右に線）
+// @param n 拠点番号（1始まり・表示順）
+// @returns {boolean} n の右側に太字区切り線を入れるなら true
+// ═══════════════════════════════════════
+function isBoldBoundary(n) {
+  if (n >= 1 && n <= 12) {
+    // 1-12: 3拠点ごと（3, 6, 9, 12 の右に線）
+    return (n % 3 === 0);
+  }
+  if (n === 14) {
+    // 13-14 の2拠点グループ終わり
+    return true;
+  }
+  if (n >= 15) {
+    // 15以降は4拠点ごと（18, 22, 26, ... の右に線）
+    return ((n - 14) % 4 === 0);
+  }
+  return false;
+}
+// 便利ヘルパー：クラス文字列（先頭スペース付き／未対象なら空文字）
+function boundaryCls(idx0) {
+  // idx0 は 0始まりインデックス → 表示順は idx0+1
+  return isBoldBoundary(idx0 + 1) ? ' cell-bold-boundary' : '';
+}
+
+// ═══════════════════════════════════════
 // シート1
 // ═══════════════════════════════════════
 
@@ -2399,7 +2460,9 @@ function renderSheet1(data) {
       }
       // Phase 4: ドライバー色を背景色として適用
       const styleAttr = driverColorStyleAttr(lid, colorMap);
-      html += `<th title="${escHtml(fullName)}"${styleAttr}>${escHtml(showName)}</th>`;
+      // v3.9 NEW: 拠点グループ区切り線
+      const bcls = boundaryCls(idx);
+      html += `<th class="${bcls.trim()}" title="${escHtml(fullName)}"${styleAttr}>${escHtml(showName)}</th>`;
     });
     html += '<th class="cell-tot">合計</th>';
     html += '</tr>';
@@ -2416,7 +2479,9 @@ function renderSheet1(data) {
           html += `<td class="cell-sub">${row.subtotal || ''}</td>`;
         }
         const q = row.byLocation[lid];
-        html += `<td class="cell-data">${q ? q : ''}</td>`;
+        // v3.9 NEW: 拠点グループ区切り線
+        const bcls = boundaryCls(idx);
+        html += `<td class="cell-data${bcls}">${q ? q : ''}</td>`;
       });
       html += `<td class="cell-tot">${row.total || ''}</td>`;
       html += '</tr>';
@@ -2454,7 +2519,9 @@ function renderSheet1(data) {
           html += `<td class="cell-sub">${subtotal || ''}</td>`;
         }
         const v = byLocation[lid];
-        html += `<td class="cell-data">${v || ''}</td>`;
+        // v3.9 NEW: 拠点グループ区切り線
+        const bcls = boundaryCls(idx);
+        html += `<td class="cell-data${bcls}">${v || ''}</td>`;
       });
       html += `<td class="cell-tot">${total}</td>`;
       html += '</tr>';
@@ -2476,7 +2543,9 @@ function renderSheet1(data) {
       if (idx === subtotalSplit) {
         html += `<td class="cell-sub">${grandSub || ''}</td>`;
       }
-      html += `<td class="cell-data">${grandByLoc[lid] || ''}</td>`;
+      // v3.9 NEW: 拠点グループ区切り線
+      const bcls = boundaryCls(idx);
+      html += `<td class="cell-data${bcls}">${grandByLoc[lid] || ''}</td>`;
     });
     html += `<td class="cell-tot">${grandTotal}</td>`;
     html += '</tr>';
@@ -2492,10 +2561,12 @@ function renderSheet1(data) {
 
   let refHTML = '<table class="ref-table">'
     + '<tr><th class="col-name">拠点名</th><th class="col-sp">販売員名</th></tr>';
-  locations.forEach((loc) => {
+  locations.forEach((loc, idx) => {
     // Phase 4: ref-panelの拠点名セルにもドライバー色を適用
     const styleAttr = driverColorStyleAttr(loc.id, colorMap);
-    refHTML += `<tr>`
+    // v3.9 NEW: 拠点グループ区切り線（行下方向）
+    const rowCls = isBoldBoundary(idx + 1) ? ' class="cell-bold-boundary-row"' : '';
+    refHTML += `<tr${rowCls}>`
       + `<td class="col-name"${styleAttr}>${escHtml(loc.name)}</td>`
       + `<td class="col-sp">${escHtml(loc.salesPerson || '')}</td>`
       + `</tr>`;
@@ -3381,12 +3452,14 @@ function bmRenderMatrix() {
   let html = '<table class="bm-matrix">';
   html += '<thead><tr>';
   html += '<th rowspan="2" class="bm-product-cell">商品名</th>';
-  for (const loc of bmServerData.locations) {
+  // v3.9 NEW: 拠点グループ区切り線
+  bmServerData.locations.forEach((loc, idx) => {
     const cf = bmIsLocConfirmed(loc.id) ? 'bm-loc-confirmed-h' : '';
-    html += '<th class="bm-loc-id-h ' + cf + '">' + loc.no + '</th>';
-  }
+    const bcls = boundaryCls(idx);
+    html += '<th class="bm-loc-id-h ' + cf + bcls + '">' + loc.no + '</th>';
+  });
   html += '<th rowspan="2" class="bm-total-col">合計</th></tr><tr>';
-  for (const loc of bmServerData.locations) {
+  bmServerData.locations.forEach((loc, idx) => {
     const cf = bmIsLocConfirmed(loc.id) ? 'bm-loc-confirmed-h' : '';
     const copyBtn = '<span class="bm-copy-btn" onclick="event.stopPropagation();bmCopyLocationCol(\'' + loc.id + '\')" title="この拠点の列をコピー">⧉</span>';
     const clearBtn = '<span class="bm-clear-btn" onclick="event.stopPropagation();bmClearLocationCol(\'' + loc.id + '\')" title="この拠点の全商品を0にする">🗑</span>';
@@ -3395,8 +3468,10 @@ function bmRenderMatrix() {
     const titleAttr = (loc.displayName && loc.displayName !== loc.name) ? (' title="' + bmEscape(loc.name) + '"') : '';
     // Phase 4: ドライバー色を背景色として適用（!importantで既存CSS上書き）
     const styleAttr = driverColorStyleAttr(loc.id, bmDriverColorMap);
-    html += '<th class="bm-loc-name-h ' + cf + '"' + titleAttr + styleAttr + '>' + bmEscape(showName) + copyBtn + clearBtn + '</th>';
-  }
+    // v3.9 NEW: 拠点グループ区切り線
+    const bcls = boundaryCls(idx);
+    html += '<th class="bm-loc-name-h ' + cf + bcls + '"' + titleAttr + styleAttr + '>' + bmEscape(showName) + copyBtn + clearBtn + '</th>';
+  });
   html += '</tr></thead>';
 
   // 白米
@@ -3414,13 +3489,15 @@ function bmRenderMatrix() {
   html += '<tbody>';
   html += '<tr class="bm-summary-row"><td class="bm-product-cell">拠点合計</td>';
   let grand = 0;
-  for (const loc of bmServerData.locations) {
+  bmServerData.locations.forEach((loc, idx) => {
     let sum = 0;
     for (const p of products) sum += bmGetDisplaySales(p.id, loc.id);
     grand += sum;
     const cf = bmIsLocConfirmed(loc.id) ? 'bm-loc-confirmed' : '';
-    html += '<td class="' + cf + '">' + sum + '</td>';
-  }
+    // v3.9 NEW: 拠点グループ区切り線
+    const bcls = boundaryCls(idx);
+    html += '<td class="' + cf + bcls + '">' + sum + '</td>';
+  });
   html += '<td class="bm-total-col">' + grand + '</td></tr>';
 
   // カテゴリ別合計
@@ -3428,21 +3505,25 @@ function bmRenderMatrix() {
 
   // 確定ボタン行
   html += '<tr class="bm-loc-confirm-row"><td class="bm-product-cell">確定</td>';
-  for (const loc of bmServerData.locations) {
+  bmServerData.locations.forEach((loc, idx) => {
     const isC = bmIsLocConfirmed(loc.id);
     const cls = isC ? 'bm-loc-confirm-btn bm-done' : 'bm-loc-confirm-btn';
     const txt = isC ? '✓' : '確定';
-    html += '<td><button class="' + cls + '" data-lid="' + loc.id + '" onclick="bmConfirmLoc(\'' + loc.id + '\')">' + txt + '</button></td>';
-  }
+    // v3.9 NEW: 拠点グループ区切り線
+    const bcls = boundaryCls(idx);
+    html += '<td class="' + bcls.trim() + '"><button class="' + cls + '" data-lid="' + loc.id + '" onclick="bmConfirmLoc(\'' + loc.id + '\')">' + txt + '</button></td>';
+  });
   html += '<td class="bm-total-col">—</td></tr>';
 
   // 推奨ボタン行
   html += '<tr class="bm-loc-recommend-row"><td class="bm-product-cell">推奨</td>';
-  for (const loc of bmServerData.locations) {
+  bmServerData.locations.forEach((loc, idx) => {
     const isC = bmIsLocConfirmed(loc.id);
     const dis = isC ? 'disabled' : '';
-    html += '<td><button class="bm-loc-recommend-btn" data-lid="' + loc.id + '" onclick="bmRecommendLoc(\'' + loc.id + '\')" ' + dis + ' title="提案値を採用+確定">→推奨</button></td>';
-  }
+    // v3.9 NEW: 拠点グループ区切り線
+    const bcls = boundaryCls(idx);
+    html += '<td class="' + bcls.trim() + '"><button class="bm-loc-recommend-btn" data-lid="' + loc.id + '" onclick="bmRecommendLoc(\'' + loc.id + '\')" ' + dis + ' title="提案値を採用+確定">→推奨</button></td>';
+  });
   html += '<td class="bm-total-col">—</td></tr>';
   html += '</tbody></table>';
   wrap.innerHTML = html;
@@ -3456,17 +3537,20 @@ function bmRenderRow(p) {
   const titleAttr = (p.displayName && p.displayName !== p.name) ? (' title="' + bmEscape(p.name) + '"') : '';
   let html = '<tr><td class="bm-product-cell"' + titleAttr + '>' + bmEscape(showName) + copyBtn + clearBtn + '</td>';
   let total = 0;
-  for (const loc of bmServerData.locations) {
+  // v3.9 NEW: idx を渡して拠点グループ区切り線対応
+  bmServerData.locations.forEach((loc, idx) => {
     total += bmGetDisplaySales(p.id, loc.id);
-    html += bmRenderCell(p.id, loc.id);
-  }
+    html += bmRenderCell(p.id, loc.id, idx);
+  });
   html += '<td class="bm-total-col">' + total + '</td></tr>';
   return html;
 }
 
-function bmRenderCell(pid, lid) {
+// v3.9 NEW: 第3引数 idx0 を追加（拠点グループ区切り線判定用）
+function bmRenderCell(pid, lid, idx0) {
+  const bcls = (typeof idx0 === 'number') ? boundaryCls(idx0) : '';
   const c = bmServerData.cells[pid + '_' + lid];
-  if (!c) return '<td class="bm-data-cell"></td>';
+  if (!c) return '<td class="bm-data-cell' + bcls + '"></td>';
   const sales = bmGetDisplaySales(pid, lid);
   const pro = c.proposed;
   const diff = pro - sales;
@@ -3479,6 +3563,7 @@ function bmRenderCell(pid, lid) {
   let cls = 'bm-data-cell';
   if (isLocC) cls += ' bm-loc-confirmed';
   if (isZero) cls += ' bm-zero-cell';
+  cls += bcls;  // v3.9 NEW: 区切り線クラス追加
 
   let salesCls = 'bm-cell-sales';
   if (c.isFallback && !isEdited) salesCls += ' bm-fallback';
@@ -3512,7 +3597,8 @@ function bmRenderCategoryRow(cat) {
   const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
   let html = '<tr class="bm-cat-row"><td class="bm-product-cell bm-cat-label">' + cat.label + '</td>';
   let totalNext = 0, totalSales = 0;
-  for (const loc of bmServerData.locations) {
+  // v3.9 NEW: idx を追加（拠点グループ区切り線対応）
+  bmServerData.locations.forEach((loc, idx) => {
     let sumP = 0, sumS = 0;
     for (const p of products) {
       if (p.group !== cat.id) continue;
@@ -3528,8 +3614,9 @@ function bmRenderCategoryRow(cat) {
     let cls = 'bm-cat-cell';
     if (isC) cls += ' bm-loc-confirmed';
     if (isZero) cls += ' bm-cat-cell-zero';
+    cls += boundaryCls(idx);  // v3.9 NEW: 区切り線クラス
     html += '<td class="' + cls + '"><div class="bm-cat-cell-actual">' + (sumS || '–') + '</div><div class="bm-cat-cell-next">' + (sumP || '–') + '</div></td>';
-  }
+  });
   html += '<td class="bm-total-col"><div class="bm-cat-cell-actual">' + totalSales + '</div><div class="bm-cat-cell-next">' + totalNext + '</div></td></tr>';
   return html;
 }
