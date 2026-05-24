@@ -1,64 +1,3076 @@
-═════════════════════════════════════════════════════════════════
-発注タブ大改修 Phase 5: kanri.html v3.7 → v3.8 パッチ
-作成日: 2026-05-25
-変更箇所: copyOrderText 関数（1関数のみ）
-═════════════════════════════════════════════════════════════════
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>🍱 納品管理</title>
+<!-- kanri.html v3.7 (2026-05-24) — 発注タブ Phase 4 + 仕込みタブに白米/玄米セクション追加（解凍の上、目立つ位置） -->
+<style id="app-style">
+/* @page は全環境で確実に効く静的指定（用紙＝縦）。横向きはシート1・2をCSS回転で実現（A案） */
+@page { size: A4; margin: 3mm; }
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-print-color-adjust: exact !important;
+  print-color-adjust: exact !important;
+}
 
-【変更内容】
-  - フォーマット：案C（区切り線で見やすく）
-  - 日付：先頭日付のみ表示
-  - 業者の unitMode（pack / kg / both）に応じて発注量の表示単位を切替
-  - 業者名宛・差出人名なし（挨拶文からスタート）
+body {
+  font-family: 'Yu Gothic', 'Meiryo', sans-serif;
+  font-size: 13px;
+  background: #f5f5f5;
+  color: #212121;
+}
 
+/* ── ヘッダー ── */
+.app-header {
+  background: #1a3c5e;
+  color: white;
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.app-header h1 { font-size: 15px; font-weight: bold; }
 
-═════════════════════════════════════════════════════════════════
-【パッチ】kanri.html copyOrderText  (3066-3095行)
-═════════════════════════════════════════════════════════════════
+/* ── タブバー ── */
+.tab-bar {
+  background: #1a3c5e;
+  border-bottom: 2px solid #0d2a42;
+  display: flex;
+  padding: 0 8px;
+  position: sticky;
+  top: 37px;
+  z-index: 99;
+}
+.tab-btn {
+  padding: 7px 14px;
+  color: rgba(255,255,255,0.65);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: inherit;
+  border-bottom: 3px solid transparent;
+  white-space: nowrap;
+  transition: color 0.15s;
+}
+.tab-btn:hover { color: rgba(255,255,255,0.9); }
+.tab-btn.active { color: #fff; border-bottom-color: #64b5f6; font-weight: bold; }
+.tab-btn:disabled { color: rgba(255,255,255,0.3); cursor: default; }
 
-▼ 3066-3095行  ... 関数全体を以下に置き換え
+/* ── タブコンテンツ ── */
+.tab-pane { display: none; padding: 12px 14px; }
+.tab-pane.active { display: block; }
+.placeholder-msg { text-align: center; padding: 60px; color: #888; font-size: 15px; }
 
-【旧】（30行）
-function copyOrderText(vendorName) {
-  const data = window._orderData;
-  if (!data) return;
-  const vendor = data.vendors.find(v => v.name === vendorName);
-  if (!vendor) return;
-  const DOW = ['日','月','火','水','木','金','土'];
-  const datesStr = data.dates.map(d => {
-    const dt = new Date(d.replace(/-/g, '/'));
-    return `${dt.getMonth()+1}/${dt.getDate()}(${DOW[dt.getDay()]})`;
-  }).join('・');
+/* ── コントロールバー（共通） ── */
+.ctrl-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.ctrl-bar label { font-size: 12px; color: #555; }
+.ctrl-bar input[type="date"] {
+  padding: 4px 8px;
+  border: 1px solid #bbb;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 13px;
+}
+.btn {
+  padding: 5px 14px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: bold;
+}
+.btn-primary { background: #1a3c5e; color: white; }
+.btn-primary:hover { background: #274f7a; }
+.btn-print { background: #546e7a; color: white; }
+.btn-print:hover { background: #607d8b; }
 
-  const lines = [vendorName + ' 発注 ' + datesStr, ''];
-  vendor.items.forEach(it => {
-    lines.push(`${it.name}\t${formatNeedAmount(it.total, it.unit)}\t${it.packCeil}P`);
-  });
-  const text = lines.join('\n');
+.status-msg {
+  font-size: 12px;
+  color: #888;
+  margin-left: 4px;
+}
+.status-msg.err { color: #c62828; }
 
-  navigator.clipboard.writeText(text).then(
-    () => { orderSetStatus(vendorName + ' のコピー完了'); setTimeout(() => orderSetStatus(''), 2500); },
-    () => {
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      document.body.appendChild(ta);
-      ta.select();
-      try { document.execCommand('copy'); orderSetStatus(vendorName + ' のコピー完了'); setTimeout(() => orderSetStatus(''), 2500); }
-      catch(e2) { orderSetStatus('コピー失敗', true); }
-      finally { document.body.removeChild(ta); }
+/* ── シート1 コンテンツ ── */
+.sheet1-content {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+/* ── テーブルエリア（共通） ── */
+.table-wrap { overflow-x: auto; flex: 1; min-width: 0; }
+
+.page-title {
+  font-size: 13px;
+  font-weight: bold;
+  margin-bottom: 6px;
+}
+
+/* ── メインテーブル（共通） ── */
+.matrix-table {
+  border-collapse: collapse;
+  font-size: 7.5pt;
+  white-space: nowrap;
+}
+.matrix-table th,
+.matrix-table td {
+  border: 1px solid #888;
+  padding: 0 3px;
+  text-align: center;
+  height: 14px;
+  line-height: 14px;
+  min-width: 22px;
+}
+.matrix-table th {
+  background: #e0e0e0;
+  font-weight: bold;
+}
+
+/* 商品名セル */
+.matrix-table td.cell-name {
+  text-align: left;
+  padding: 0 5px;
+  width: 82px;
+  background: #f5f5f5;
+  font-weight: bold;
+}
+
+/* 数値セル（全シート共通でボールド） */
+.matrix-table td { font-weight: bold; }
+
+/* 中間計・合計 */
+.matrix-table td.cell-sub  { background: #e8eaf6; font-weight: bold; }
+.matrix-table td.cell-tot  { background: #c5cae9; font-weight: bold; }
+.matrix-table th.cell-sub  { background: #c5cae9; }
+.matrix-table th.cell-tot  { background: #9fa8da; color: #fff; }
+
+/* 拠点合計（シート2用） */
+.matrix-table th.cell-kyoten { background: #c5cae9; }
+.matrix-table td.cell-kyoten { background: #e8eaf6; font-weight: bold; }
+
+/* セクションラベル行 */
+.matrix-table td.cell-section-rice {
+  background: #424242; color: white;
+  font-weight: bold; font-size: 8pt;
+  text-align: left; padding-left: 8px;
+  height: 16px; line-height: 16px;
+}
+.matrix-table td.cell-section-brown {
+  background: #5d4037; color: white;
+  font-weight: bold; font-size: 8pt;
+  text-align: left; padding-left: 8px;
+  height: 16px; line-height: 16px;
+}
+.matrix-table td.cell-section-cat {
+  background: #1565c0; color: white;
+  font-weight: bold; font-size: 8pt;
+  text-align: left; padding-left: 8px;
+  height: 16px; line-height: 16px;
+}
+.matrix-table tr.cat-row td { background:#e3f2fd; font-weight:bold; }
+.matrix-table tr.cat-row td.cat-label { background:#fff3e0; text-align:left; padding-left:5px; }
+.matrix-table tr.cat-grand td { background:#fce4ec; font-weight:bold; }
+.matrix-table tr.cat-grand td.cat-label { background:#f8bbd0; text-align:left; padding-left:5px; }
+
+/* 商品グループ色（白米） */
+.matrix-table tr.g-blue  td.cell-data { background: #e3f2fd; }
+.matrix-table tr.g-green td.cell-data { background: #e8f5e9; }
+.matrix-table tr.g-yel   td.cell-data { background: #fff9c4; }
+
+/* 商品グループ色（玄米） */
+.matrix-table tr.g-blue.brown-row  td.cell-data { background: #fff3e0; }
+.matrix-table tr.g-green.brown-row td.cell-data { background: #ffe0b2; }
+.matrix-table tr.g-yel.brown-row   td.cell-data { background: #ffcc80; }
+
+/* ── シート2：グレード配色（配達列セル背景） ── */
+.cell-ume   { background: #ffffff !important; }
+.cell-take  { background: #c8e6c9 !important; }
+.cell-matsu { background: #d1c4e9 !important; }
+.ohm        { color: #c62828; font-weight: bold; }
+
+/* 凡例 */
+.legend {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 10px;
+  margin-left: 8px;
+}
+.legend-item {
+  display: inline-block;
+  padding: 1px 8px;
+  border: 1px solid #888;
+  font-size: 9.5px;
+}
+.legend-ohm { color: #c62828; font-weight: bold; font-size: 9.5px; }
+
+/* ── シート2：3エリアレイアウト ── */
+.sheet2-container {
+  display: grid;
+  grid-template-columns: 5fr 5fr 2.5fr;
+  gap: 8px;
+  align-items: start;
+}
+
+/* ── 配達カードエリア ── */
+.delivery-area {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.delivery-card {
+  border: 1px solid #555;
+  background: white;
+  overflow: hidden;
+}
+.delivery-header {
+  font-weight: bold;
+  padding: 2px 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #aaa;
+  font-size: 8pt;
+  flex-shrink: 0;
+  line-height: 1.3;
+}
+.delivery-header.grade-matsu { background: #d1c4e9; }
+.delivery-header.grade-take  { background: #c8e6c9; }
+.delivery-header.grade-ume   { background: #ffffff; }
+.delivery-header.grade-empty { background: #f5f5f5; color: #aaa; }
+
+.grade-badge {
+  font-size: 7.5pt;
+  padding: 0 4px;
+  border: 1px solid #666;
+  background: white;
+  font-weight: bold;
+  line-height: 1.3;
+}
+.delivery-body {
+  padding: 3px 6px;
+  font-size: 7.5pt;
+}
+  .grade-badge.grade-matsu { background: #d1c4e9; }
+.grade-badge.grade-take  { background: #c8e6c9; }
+.grade-badge.grade-ume   { background: #ffffff; }
+.grade-badge.grade-empty { background: #f5f5f5; color: #aaa; }
+.delivery-row {
+  display: flex;
+  line-height: 1.5;
+  border-bottom: 1px dotted #ddd;
+  padding-bottom: 1px;
+}
+.delivery-row:last-child { border-bottom: none; }
+.delivery-row .lbl {
+  flex-shrink: 0;
+  width: 38px;
+  color: #555;
+  font-weight: bold;
+  font-size: 7pt;
+}
+.delivery-row .val {
+  flex: 1;
+  font-size: 7.5pt;
+  word-break: break-all;
+}
+.return-badge {
+  display: inline-block;
+  background: #fff3e0;
+  border: 1px solid #ff9800;
+  border-radius: 2px;
+  padding: 0 3px;
+  font-size: 6.5pt;
+  color: #e65100;
+  font-weight: bold;
+}
+.no-delivery-msg {
+  text-align: center;
+  color: #888;
+  font-size: 12px;
+  padding: 20px 0;
+}
+
+/* ── 拠点リスト（右パネル） ── */
+.ref-panel { flex-shrink: 0; }
+.ref-table {
+  border-collapse: collapse;
+  font-size: 7.5pt;
+  white-space: nowrap;
+}
+.ref-table th,
+.ref-table td {
+  border: 1px solid #aaa;
+  padding: 0 4px;
+  height: 14px;
+  line-height: 14px;
+}
+.ref-table th { background: #e0e0e0; text-align: center; }
+.ref-table td.col-no   { width: 22px; text-align: center; background: #fffde7; font-weight: bold; }
+.ref-table td.col-name { width: 88px; text-align: left; padding-left: 4px; font-weight: bold; }
+.ref-table td.col-sp   { width: 72px; text-align: center; font-size: 7pt; color: #333; }
+
+/* ── シート4：仕込みタブ ── */
+.kawari-box {
+  background: var(--color-bg, #fff);
+  border: 0.5px solid #bbb;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+}
+.kawari-title {
+  font-size: 12px;
+  font-weight: bold;
+  color: #555;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.kawari-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.kawari-sep {
+  font-size: 12px;
+  font-weight: bold;
+  padding-bottom: 4px;
+  border-bottom: 0.5px solid #ddd;
+  margin-bottom: 6px;
+}
+.kawari-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.kawari-lbl { font-size: 11px; color: #777; }
+.kawari-item select {
+  padding: 5px 8px;
+  border: 1px solid #bbb;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 13px;
+}
+.kawari-footer {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.save-badge {
+  font-size: 11px;
+  color: #388e3c;
+  display: none;
+  align-items: center;
+  gap: 3px;
+}
+.kaito-box {
+  background: var(--color-bg, #fff);
+  border: 0.5px solid #bbb;
+  border-radius: 8px;
+  padding: 10px 16px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+/* ── 米セクション（解凍の上、最も目立つ位置） ── */
+.rice-box {
+  background: linear-gradient(135deg, #fff8e1 0%, #ffecb3 100%);
+  border: 2px solid #f9a825;
+  border-radius: 10px;
+  padding: 12px 18px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  box-shadow: 0 2px 6px rgba(249,168,37,0.25);
+}
+.rice-title {
+  font-size: 22px;
+  font-weight: bold;
+  color: #e65100;
+  white-space: nowrap;
+  letter-spacing: 0.5px;
+}
+.rice-items {
+  display: flex;
+  gap: 18px;
+  flex: 1;
+}
+.rice-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  background: rgba(255,255,255,0.7);
+  border-radius: 8px;
+  padding: 8px 6px;
+  border: 1px solid rgba(249,168,37,0.4);
+}
+.rice-name {
+  font-size: 16px;
+  font-weight: bold;
+  color: #5d4037;
+  margin-bottom: 4px;
+  letter-spacing: 1px;
+}
+.rice-order {
+  font-size: 24px;
+  font-weight: bold;
+  color: #bf360c;
+  line-height: 1.1;
+}
+.rice-order-sub { font-size: 12px; color: #6d4c41; margin-top: 1px; }
+.rice-amount {
+  font-size: 14px;
+  font-weight: bold;
+  color: #4e342e;
+  margin-top: 4px;
+}
+.rice-pack {
+  font-size: 18px;
+  font-weight: bold;
+  color: #1565c0;
+  margin-top: 2px;
+}
+.rice-pack-sub { font-size: 11px; color: #888; font-weight: normal; }
+.kaito-title {
+  font-size: 12px;
+  font-weight: bold;
+  color: #555;
+  white-space: nowrap;
+}
+.kaito-items {
+  display: flex;
+  gap: 0;
+  flex: 1;
+}
+.kaito-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+}
+.kaito-main  { font-size: 20px; font-weight: bold; color: #1a3c5e; }
+.kaito-actual { font-size: 12px; color: #888; }
+.kaito-sub   { font-size: 11px; color: #888; margin-top: 1px; }
+.kaito-divider {
+  width: 0.5px;
+  background: #ddd;
+  align-self: stretch;
+  margin: 2px 8px;
+}
+.kaito-total .kaito-main { color: #c62828; }
+.s4-section-title {
+  font-size: 12px;
+  font-weight: bold;
+  color: #555;
+  margin-bottom: 8px;
+}
+.prep-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  border: 0.5px solid #bbb;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.prep-table th {
+  background: #f5f5f5;
+  font-size: 11px;
+  font-weight: bold;
+  color: #666;
+  padding: 6px 12px;
+  text-align: left;
+  border-bottom: 0.5px solid #ccc;
+}
+.prep-table th.r { text-align: right; }
+.prep-table td {
+  padding: 7px 12px;
+  font-size: 13px;
+  border-bottom: 0.5px solid #eee;
+}
+.prep-table td.r {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.prep-table tr:last-child td { border-bottom: none; }
+.pack-val { font-weight: bold; }
+.pack-ceil { font-size: 11px; color: #888; margin-left: 4px; }
+  .prep-list {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 8px 0;
+}
+.prep-header {
+  background: #e3f2fd;
+  padding: 8px 14px;
+  font-weight: bold;
+  font-size: 15px;
+  color: #1565c0;
+  border-top: 1px solid #bbdefb;
+  border-bottom: 1px solid #bbdefb;
+  margin-top: 6px;
+}
+.prep-header:first-child { margin-top: 0; }
+.prep-portion {
+  margin-left: 6px;
+  font-size: 13px;
+  color: #555;
+  font-weight: normal;
+}
+.prep-ing {
+  padding: 4px 14px 4px 32px;
+  font-size: 14px;
+  display: grid;
+  grid-template-columns: 1fr 100px 60px;
+  gap: 12px;
+  align-items: center;
+  border-bottom: 1px dotted #f0f0f0;
+}
+.prep-ing-name { color: #333; }
+.prep-ing-amt {
+  font-family: 'Courier New', monospace;
+  color: #1565c0;
+  font-weight: bold;
+  text-align: right;
+}
+.prep-ing-pack {
+  font-family: 'Courier New', monospace;
+  color: #666;
+  text-align: right;
+}
+.prep-direct-section {
+  background: #fff3e0;
+  padding: 6px 14px;
+  font-weight: bold;
+  color: #e65100;
+  margin-top: 12px;
+  border-top: 2px solid #ffb74d;
+  border-bottom: 1px solid #ffb74d;
+  text-align: center;
+  font-size: 13px;
+}
+.prep-direct {
+  padding: 6px 14px;
+  font-size: 14px;
+  display: grid;
+  grid-template-columns: 1fr 80px 80px 80px;
+  gap: 8px;
+  align-items: center;
+  border-bottom: 1px dotted #f0f0f0;
+}
+.prep-direct-name { color: #333; }
+.prep-direct-order,
+.prep-direct-amt,
+.prep-direct-pack {
+  font-family: 'Courier New', monospace;
+  color: #e65100;
+  font-weight: bold;
+  text-align: right;
+}
+
+/* ── 発注タブ ── */
+.order-ctrl { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.order-week-btn {
+  padding: 4px 13px;
+  border: 1px solid #64b5f6;
+  border-radius: 14px;
+  background: transparent;
+  color: #90caf9;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+.order-week-btn:hover { background: rgba(100,181,246,0.15); }
+.order-date-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.order-date-lbl {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 11px;
+  border: 1px solid #aaa;
+  border-radius: 14px;
+  cursor: pointer;
+  font-size: 12px;
+  user-select: none;
+  transition: background 0.12s, color 0.12s;
+}
+.order-date-lbl:hover { border-color: #64b5f6; }
+.order-date-lbl.checked { background: #1565c0; color: #fff; border-color: #1565c0; font-weight: bold; }
+.order-date-lbl input { display: none; }
+.order-date-lbl.disabled {
+  background: #eee;
+  color: #aaa;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+  .s4-ctrl {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.s4-week-btn {
+  padding: 6px 12px;
+  border: 1px solid #1976d2;
+  background: #e3f2fd;
+  color: #1976d2;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 10pt;
+}
+.s4-week-btn:hover { background: #bbdefb; }
+ 
+.s4-date-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.s4-date-lbl {
+  padding: 6px 10px;
+  border: 1px solid #aaa;
+  border-radius: 4px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 10pt;
+  background: #fafafa;
+  min-width: 48px;
+  text-align: center;
+}
+.s4-date-lbl:hover { border-color: #64b5f6; }
+.s4-date-lbl.checked {
+  background: #1565c0;
+  color: #fff;
+  border-color: #1565c0;
+  font-weight: bold;
+}
+.s4-date-lbl.disabled {
+  background: #eee;
+  color: #aaa;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.s4-date-lbl.today { border-color: #ef6c00; border-width: 2px; }
+.s4-date-lbl input { display: none; }
+ 
+.s4-sel-info {
+  font-size: 9.5pt;
+  color: #555;
+  margin-bottom: 10px;
+}
+ 
+.s4-meta {
+  font-size: 9pt;
+  color: #777;
+  margin: 8px 0 4px;
+}
+.s4-warn-box {
+  background: #fff8e1;
+  border: 1px solid #ffe082;
+  padding: 10px 14px;
+  border-radius: 4px;
+  margin-top: 12px;
+  font-size: 10pt;
+}
+.s4-warn-row {
+  margin: 4px 0;
+  line-height: 1.5;
+  word-break: break-all;
+}
+.order-sel-info { font-size: 12px; color: #555; margin-bottom: 10px; min-height: 18px; }
+.order-vendor-list { display: flex; flex-direction: column; gap: 10px; }
+.order-vendor-card { border: 2px solid #bbb; border-radius: 6px; overflow: hidden; background: white; }
+.order-vendor-head {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  cursor: pointer;
+  gap: 8px;
+}
+.order-vendor-name { font-size: 13px; font-weight: bold; flex: 1; }
+.order-vendor-summary { font-size: 11px; opacity: 0.85; font-weight: normal; }
+.order-done-wrap { display: flex; align-items: center; gap: 4px; font-size: 12px; cursor: pointer; }
+.order-done-cb { width: 15px; height: 15px; cursor: pointer; accent-color: #fff; }
+.order-copy-btn {
+  padding: 3px 10px;
+  border-radius: 4px;
+  border: 1px solid white;
+  background: rgba(255,255,255,0.15);
+  color: white;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: inherit;
+  transition: background 0.12s;
+}
+.order-copy-btn:hover { background: rgba(255,255,255,0.3); }
+.order-vendor-body { padding: 10px 14px; }
+.order-vendor-card.collapsed .order-vendor-body { display: none; }
+.order-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 6px; }
+.order-table th, .order-table td { padding: 5px 8px; border: 0.5px solid #ddd; }
+.order-table th { background: rgba(0,0,0,0.04); font-weight: bold; font-size: 12px; }
+.order-table td.order-need { font-size: 14px; text-align: right; width: 28%; color: #333; }
+.order-table td.order-qty  { font-size: 15px; font-weight: bold; text-align: right; width: 22%; color: #0d47a1; }
+/* ── 未マッピング警告エリア ── */
+.order-warn-wrap {
+  margin: 8px 0;
+  border: 1px solid #ffcc80;
+  background: #fff8e1;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+.order-warn-head {
+  font-weight: bold;
+  color: #e65100;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.order-warn-body { display: none; margin-top: 6px; padding-left: 18px; }
+.order-warn-body.open { display: block; }
+.order-warn-section { margin-top: 6px; }
+.order-warn-section:first-child { margin-top: 0; }
+.order-warn-label { font-weight: bold; color: #bf360c; margin-bottom: 2px; }
+.order-warn-items { color: #555; line-height: 1.5; word-break: break-all; }
+.order-bd-toggle {
+  font-size: 11px;
+  color: #1565c0;
+  cursor: pointer;
+  padding: 2px 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: none;
+  font-family: inherit;
+  margin-top: 4px;
+}
+.order-bd-toggle:hover { text-decoration: underline; }
+.order-breakdown { display: none; margin-top: 8px; border-top: 1px dashed #ddd; padding-top: 8px; }
+.order-breakdown.open { display: block; }
+.order-bd-row {
+  display: flex;
+  gap: 6px;
+  padding: 3px 0;
+  border-bottom: 1px dotted #eee;
+  font-size: 11px;
+}
+.order-bd-row:last-child { border-bottom: none; }
+.order-bd-date { color: #555; min-width: 80px; flex-shrink: 0; }
+.order-bd-items { flex: 1; color: #333; }
+/* 業者カラー */
+.ovc-red    { border-color: #c62828; }
+.ovc-red    .order-vendor-head { background: #c62828; color: white; }
+.ovc-blue   { border-color: #1565c0; }
+.ovc-blue   .order-vendor-head { background: #1565c0; color: white; }
+.ovc-orange { border-color: #e65100; }
+.ovc-orange .order-vendor-head { background: #e65100; color: white; }
+.ovc-brown  { border-color: #4e342e; }
+.ovc-brown  .order-vendor-head { background: #4e342e; color: white; }
+.ovc-purple { border-color: #6a1b9a; }
+.ovc-purple .order-vendor-head { background: #6a1b9a; color: white; }
+.ovc-teal   { border-color: #00695c; }
+.ovc-teal   .order-vendor-head { background: #00695c; color: white; }
+.ovc-gray   { border-color: #546e7a; }
+.ovc-gray   .order-vendor-head { background: #546e7a; color: white; }
+.order-vendor-card.done { opacity: 0.55; }
+
+/* ── シート3：2便盛り出し コンテナ ── */
+.sheet3-container {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sheet3-matrix {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  align-items: start;
+}
+.sheet3-delivery {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+}
+
+/* ── 画面表示：配分表・盛り出し表を画面いっぱいに ── */
+@media screen {
+  /* テーブルを横幅いっぱいに伸ばす */
+  #tab-sheet1 .matrix-table,
+  #tab-sheet2 .matrix-table,
+  #tab-sheet3 .matrix-table {
+    width: 100%;
+    font-size: 13px;
+  }
+  #tab-sheet1 .matrix-table th,
+  #tab-sheet1 .matrix-table td,
+  #tab-sheet2 .matrix-table th,
+  #tab-sheet2 .matrix-table td,
+  #tab-sheet3 .matrix-table th,
+  #tab-sheet3 .matrix-table td {
+    height: 28px;
+    line-height: 28px;
+    padding: 0 6px;
+  }
+  /* 商品名セル：表示名が収まるよう内容なりの幅に */
+  #tab-sheet1 .matrix-table td.cell-name,
+  #tab-sheet2 .matrix-table td.cell-name,
+  #tab-sheet3 .matrix-table td.cell-name {
+    width: auto;
+    min-width: 110px;
+    font-size: 13px;
+  }
+  /* セクション見出し行（白米／玄米）も拡大 */
+  #tab-sheet1 .matrix-table td.cell-section-rice,
+  #tab-sheet1 .matrix-table td.cell-section-brown,
+  #tab-sheet2 .matrix-table td.cell-section-rice,
+  #tab-sheet2 .matrix-table td.cell-section-brown,
+  #tab-sheet3 .matrix-table td.cell-section-rice,
+  #tab-sheet3 .matrix-table td.cell-section-brown {
+    font-size: 14px;
+    height: 32px;
+    line-height: 32px;
+  }
+  /* シート1：右の拠点リストも合わせて拡大 */
+  #tab-sheet1 .ref-table { font-size: 12px; }
+  #tab-sheet1 .ref-table th,
+  #tab-sheet1 .ref-table td { height: 26px; line-height: 26px; }
+  #tab-sheet1 .ref-table td.col-name { width: 130px; }
+  #tab-sheet1 .ref-table td.col-sp   { width: 90px; font-size: 11px; }
+  /* シート3：配達カードを画面では少し見やすく */
+  #tab-sheet3 .delivery-card .delivery-body { font-size: 11px; }
+  #tab-sheet3 .delivery-row .lbl { font-size: 10px; width: 42px; }
+  #tab-sheet3 .delivery-row .val { font-size: 11px; }
+}
+
+/* ── 印刷スタイル ── */
+@media print {
+  /* ── 色を維持 ── */
+  *, *::before, *::after {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+  body { background: white; padding: 0; margin: 0; }
+
+  /* 画面用UIを全て非表示 */
+  .app-header, .tab-bar, .ctrl-bar, .legend { display: none !important; }
+  .tab-pane { display: none !important; }
+
+  .page-title {
+    font-size: 13pt;
+    font-weight: bold;
+    margin-bottom: 4px;
+    flex-shrink: 0;
+  }
+
+  /* 竹・松を印刷でもはっきり区別（緑／紫） */
+  .cell-take,
+  .delivery-header.grade-take,
+  .grade-badge.grade-take      { background: #a5d6a7 !important; }
+  .cell-matsu,
+  .delivery-header.grade-matsu,
+  .grade-badge.grade-matsu     { background: #ce93d8 !important; }
+  /* ════════ シート1：縦用紙上で横長に回転（A案） ════════ */
+  #tab-sheet1.active {
+    display: block !important;
+    padding: 2mm;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 291mm;     /* 横向きの幅＝用紙の縦-余白 */
+    height: 204mm;    /* 横向きの高さ＝用紙の横-余白 */
+    transform-origin: top left;
+    transform: rotate(-90deg) translateX(-100%);
+  }
+  #tab-sheet1 .sheet1-content {
+    display: flex;
+    gap: 4px;
+    align-items: flex-start;
+  }
+  #tab-sheet1 .table-wrap {
+    flex: 0 0 auto;
+    overflow: visible;
+    min-width: 0;
+  }
+  #tab-sheet1 .ref-panel { flex: 0 0 auto; }
+  #tab-sheet1 .matrix-table { font-size: 9.5pt; }
+  /* データセル：2文字基準の正方形（24×24px）・数字を大きく */
+  #tab-sheet1 .matrix-table th,
+  #tab-sheet1 .matrix-table td {
+    width: 24px;
+    height: 24px;
+    line-height: 24px;
+    padding: 0;
+  }
+  /* 商品名セル：固定幅・はみ出しは切り詰め */
+  #tab-sheet1 .matrix-table th:first-child,
+  #tab-sheet1 .matrix-table td.cell-name {
+    width: 60px;
+    max-width: 60px;
+    height: 24px;
+    line-height: 24px;
+    padding: 0 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  #tab-sheet1 .ref-table { font-size: 8pt; }
+  #tab-sheet1 .ref-table th,
+  #tab-sheet1 .ref-table td {
+    height: 14px;
+    line-height: 14px;
+  }
+
+  /* ════════ シート2：縦用紙上で横長に回転（A案） ════════ */
+  #tab-sheet2.active {
+    display: block !important;
+    padding: 2mm;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 291mm;     /* 横向きの幅＝用紙の縦-余白 */
+    height: 204mm;    /* 横向きの高さ＝用紙の横-余白 */
+    transform-origin: top left;
+    transform: rotate(-90deg) translateX(-100%);
+  }
+  /* 白米｜玄米｜配達カード を 5fr 5fr 2.5fr 横並び（引き伸ばしなし） */
+  #tab-sheet2 .sheet2-container {
+    display: grid;
+    grid-template-columns: 5fr 5fr 2.5fr;
+    gap: 5px;
+    align-items: start;
+  }
+  #tab-sheet2 .table-wrap { overflow: visible; min-width: 0; }
+  /* マトリクスは引き伸ばさず自然な高さ */
+  #tab-sheet2 .matrix-table {
+    width: auto;
+    font-size: 9pt;
+  }
+  /* データセル・拠点列・計列：39×33px に統一・数字13pt */
+  #tab-sheet2 .matrix-table th,
+  #tab-sheet2 .matrix-table td {
+    width: 39px;
+    height: 33px;
+    line-height: 33px;
+    padding: 0;
+    font-size: 13pt;
+  }
+  /* 商品名セル：66px固定・はみ出しは切り詰め（高さはデータセルに追従） */
+  #tab-sheet2 .matrix-table th:first-child,
+  #tab-sheet2 .matrix-table td.cell-name {
+    width: 66px;
+    max-width: 66px;
+    height: 33px;
+    line-height: 33px;
+    padding: 0 4px;
+    font-size: 9pt;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* 空の配達列（その表に数量が1つも無い列）は印刷時のみ非表示 */
+  #tab-sheet2 .matrix-table .col-empty-print { display: none; }
+  /* セクション見出し行（白米／玄米）は横いっぱい・固定高 */
+  #tab-sheet2 .matrix-table td.cell-section-rice,
+  #tab-sheet2 .matrix-table td.cell-section-brown {
+    width: auto;
+    height: 20px;
+    line-height: 20px;
+    font-size: 9.5pt;
+  }
+  /* 配達カードエリア：自然流し */
+  #tab-sheet2 .delivery-area {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  #tab-sheet2 .delivery-card { overflow: hidden; }
+
+  /* ════════ シート3：A4縦（前チャット実装済み・維持／用紙既定が縦） ════════ */
+  #tab-sheet3.active {
+    display: flex !important;
+    flex-direction: column;
+    width: 204mm;     /* ← 追加：A4縦の有効幅を明示してブラウザ自動スケール防止 */
+    height: 285mm;
+    padding: 2mm;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+  #tab-sheet3 .sheet3-container { flex: 1; min-height: 0; gap: 4px; }
+  /* マトリクス並びを grid から flex に変更（テーブルが押し縮められないように） */
+  #tab-sheet3 .sheet3-matrix {
+    display: flex !important;
+    flex-direction: row;
+    gap: 4px;
+    align-items: flex-start;
+    flex: 2;
+    min-height: 0;
+  }
+  #tab-sheet3 .sheet3-delivery { flex: 1; min-height: 0; }
+  #tab-sheet3 .table-wrap {
+    flex: 0 0 auto;
+    overflow: visible;
+    min-width: 0;
+  }
+  #tab-sheet3 .delivery-card { overflow: hidden; }
+  /* マトリクスはシート2より一回り大きく（コンテンツ少なくてもページに見映えするよう調整） */
+  #tab-sheet3 .matrix-table {
+    width: auto;
+    font-size: 11pt;
+  }
+  /* データセル・計列：50×42px・数字16pt */
+  #tab-sheet3 .matrix-table th,
+  #tab-sheet3 .matrix-table td {
+    width: 50px;
+    height: 42px;
+    line-height: 42px;
+    padding: 0;
+    font-size: 16pt;
+  }
+  /* 商品名セル：84px固定・はみ出しは切り詰め（高さはデータセルに追従） */
+  #tab-sheet3 .matrix-table th:first-child,
+  #tab-sheet3 .matrix-table td.cell-name {
+    width: 84px;
+    max-width: 84px;
+    height: 42px;
+    line-height: 42px;
+    padding: 0 4px;
+    font-size: 11pt;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* セクション見出し行（白米／玄米）は横いっぱい・固定高 */
+  #tab-sheet3 .matrix-table td.cell-section-rice,
+  #tab-sheet3 .matrix-table td.cell-section-brown {
+    width: auto;
+    height: 26px;
+    line-height: 26px;
+    font-size: 12pt;
+  }
+
+  /* ════════ シート4・発注：縦流し（維持） ════════ */
+  #tab-sheet4.active,
+  #tab-order.active {
+    display: block !important;
+    padding: 2mm;
+  }
+  #tab-sheet4 .kawari-box,
+  #tab-sheet4 .kaito-box { page-break-inside: avoid; }
+}
+
+/* ============================================================
+   基本数マスタ画面（tab-master）専用スタイル
+   ============================================================ */
+#tab-master { padding: 8px 10px; background: #f0f0f0; }
+#tab-master .bm-page {
+  background: white; padding: 6px 10px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+#tab-master .bm-title-bar {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 5px; gap: 12px; flex-wrap: wrap;
+}
+#tab-master .bm-title-left { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+#tab-master .bm-title { font-size: 13pt; font-weight: bold; white-space: nowrap; color:#000; }
+#tab-master .bm-subtitle {
+  font-size: 8.5pt; color: #555;
+  padding: 1px 6px; background: #f5f5f5;
+  border: 1px solid #ddd; border-radius: 3px; white-space: nowrap;
+}
+#tab-master .bm-title-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+#tab-master .bm-day-tabs { display: inline-flex; gap: 3px; flex-wrap: wrap; }
+#tab-master .bm-week-tabs { display: inline-flex; gap: 3px; margin-right: 8px; }
+#tab-master .bm-week-tab {
+  padding: 4px 10px; font-size: 10pt; border: 1px solid #999;
+  background: #fafafa; cursor: pointer; border-radius: 3px; font-weight: bold;
+}
+#tab-master .bm-week-tab.bm-active { background: #ef6c00; color: white; border-color: #ef6c00; }
+#tab-master .bm-week-tab:not(.bm-active):hover { background: #e0e0e0; }
+#tab-master .bm-day-tab {
+  padding: 4px 14px; border: 1px solid #888; background: #fafafa;
+  cursor: pointer; font-family: inherit; font-size: 10pt; font-weight: bold;
+  border-radius: 4px; color: #555; min-width: 36px;
+}
+#tab-master .bm-day-tab.bm-active { background: #1976d2; color: white; border-color: #1976d2; }
+#tab-master .bm-day-tab.bm-active.bm-confirmed-all { background: #2e7d32; border-color: #2e7d32; }
+#tab-master .bm-day-tab:not(.bm-active):hover { background: #e0e0e0; }
+#tab-master .bm-day-tab .bm-tab-mark { display:inline-block; margin-left:4px; font-size: 8pt; }
+#tab-master .bm-legend {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 8.5pt; color: #555;
+  padding: 3px 8px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 3px;
+}
+#tab-master .bm-legend .bm-sw { display:inline-block; width:10px; height:10px; border-radius:2px; vertical-align:middle; }
+#tab-master .bm-print-btn, #tab-master .bm-confirm-all-btn, #tab-master .bm-reload-btn {
+  font-size: 9pt; padding: 4px 10px; border: 1px solid #555; background: #fafafa;
+  cursor: pointer; border-radius: 3px; font-family: inherit; color:#000;
+}
+#tab-master .bm-print-btn:hover, #tab-master .bm-reload-btn:hover { background:#eee; }
+#tab-master .bm-confirm-all-btn { background:#c62828; color:white; border-color:#c62828; font-weight:bold; }
+#tab-master .bm-confirm-all-btn:hover { background:#b71c1c; }
+#tab-master .bm-confirm-all-btn.bm-done { background:#2e7d32; border-color:#2e7d32; }
+#tab-master .bm-calc-info {
+  font-size: 9pt; color: #444; background: #f5f7fa;
+  border: 1px solid #d0d7de; border-radius: 4px;
+  padding: 4px 10px; margin-bottom: 6px;
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+}
+#tab-master .bm-calc-info b { color: #1976d2; }
+#tab-master .bm-calc-info .bm-diff-summary { color:#c62828; font-weight:bold; }
+#tab-master .bm-calc-info .bm-sellout-summary { color:#c62828; }
+#tab-master .bm-calc-info .bm-progress-summary { color:#2e7d32; font-weight:bold; }
+
+/* スクロールコンテナ（縦＋横スクロール時に sticky を機能させる） */
+#bm-matrix-wrap {
+  max-height: calc(100vh - 220px);
+  overflow: auto;
+  border: 1px solid #ddd;
+  background: white;
+}
+@media print {
+  #bm-matrix-wrap { max-height: none; overflow: visible; }
+}
+
+#tab-master table.bm-matrix { border-collapse: collapse; font-size: 10pt; table-layout: auto; }
+#tab-master .bm-matrix th, #tab-master .bm-matrix td {
+  border: 1px solid #999; text-align: center; vertical-align: middle;
+  padding: 0; height: 22px; line-height: 22px;
+}
+#tab-master .bm-matrix th.bm-loc-id-h {
+  background:#e3f2fd; font-size: 8.5pt; height: 20px; width: 60px;
+  position: sticky; top: 0; z-index: 3;
+}
+#tab-master .bm-matrix th.bm-loc-name-h {
+  background:#e3f2fd; font-size: 8.5pt; height: 88px; width: 60px;
+  writing-mode: vertical-rl; white-space: nowrap;
+  position: sticky; top: 20px; z-index: 3;
+}
+#tab-master .bm-matrix th.bm-loc-confirmed-h { background:#d4d4d4; }
+#tab-master .bm-matrix .bm-product-cell {
+  background:#f5f5f5; font-weight:bold; text-align:left;
+  padding: 0 6px; font-size: 9.5pt;
+  /* 可変幅＋折り返し禁止 */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 90px;
+  max-width: 220px;
+  /* 横スクロール時固定 */
+  position: sticky;
+  left: 0;
+  z-index: 2;
+}
+#tab-master .bm-matrix .bm-product-cell:hover {
+  overflow: visible;
+  max-width: none;
+  z-index: 6;
+  background: #fff8e1;
+  outline: 1px solid #ef6c00;
+}
+/* 左上交差部（商品名ヘッダ＝thead内のbm-product-cell）は最上位で固定 */
+#tab-master .bm-matrix thead th.bm-product-cell {
+  position: sticky;
+  top: 0;
+  left: 0;
+  z-index: 5;
+  background:#e3f2fd;
+}
+#tab-master .bm-matrix .bm-total-col { background:#e8eaf6; font-weight:bold; width: 56px; }
+#tab-master .bm-matrix .bm-section-label {
+  text-align:left; background:#fafafa; font-weight:bold;
+  padding: 2px 8px; height: 22px; line-height: 22px; font-size: 10pt;
+}
+#tab-master .bm-matrix .bm-section-label.bm-brown-label { background:#efebe9; }
+#tab-master .bm-matrix .bm-data-cell { padding:0; height: 22px; position:relative; }
+#tab-master .bm-matrix .bm-data-cell.bm-loc-confirmed { background:#e8eaed; }
+#tab-master .bm-matrix .bm-data-cell.bm-zero-cell { background:#f8f8f8; }
+#tab-master .bm-cell-2col { display:flex; height: 22px; line-height: 22px; position:relative; }
+#tab-master .bm-cell-sales {
+  flex: 1; padding: 0 2px; font-size: 9pt;
+  border-right: 1px dashed #ccc; cursor:text; outline:none;
+}
+#tab-master .bm-cell-sales:focus { background:#fff9c4; }
+#tab-master .bm-cell-sales.bm-fallback { color:#999; font-style: italic; }
+#tab-master .bm-cell-sales.bm-edited { background:#ffe0b2 !important; color:#e65100; font-weight:bold; }
+#tab-master .bm-cell-sales.bm-recommended { background:#e1f5fe !important; color:#0277bd; font-weight:bold; }
+#tab-master .bm-cell-sales.bm-no-sales { background:#f0f0f0; color:#b0b0b0; }
+#tab-master .bm-cell-proposal { flex: 1; padding: 0 2px; font-size: 9.5pt; cursor: pointer; }
+#tab-master .bm-loc-confirmed .bm-cell-sales,
+#tab-master .bm-loc-confirmed .bm-cell-proposal { color:#2e7d32; font-weight: bold; }
+#tab-master .bm-loc-confirmed .bm-cell-sales::after { content:" ✓"; font-size: 7pt; color:#2e7d32; }
+#tab-master .bm-ind-up { color:#1976d2; font-size: 7pt; margin-left:1px; }
+#tab-master .bm-ind-down { color:#c62828; font-size: 7pt; margin-left:1px; }
+#tab-master .bm-sellout-badge {
+  position:absolute; top:1px; left:1px; width:6px; height:6px;
+  background:#c62828; border-radius:50%; animation: bm-pulse 1.8s ease-in-out infinite;
+}
+@keyframes bm-pulse {
+  0%,100% { transform:scale(1); opacity:1; }
+  50% { transform:scale(1.4); opacity:0.6; }
+}
+#tab-master .bm-cat-row td { background:#e3f2fd; font-weight:bold; padding: 2px; }
+#tab-master .bm-cat-row .bm-product-cell.bm-cat-label { background:#fff3e0; font-size: 9.5pt; }
+#tab-master .bm-cat-cell-actual { font-size: 7.5pt; color:#666; }
+#tab-master .bm-cat-cell-next { font-size: 10pt; }
+#tab-master .bm-summary-row td { background:#e3f2fd; font-weight:bold; }
+#tab-master .bm-loc-confirm-row td, #tab-master .bm-loc-recommend-row td { padding: 2px; height: 28px; }
+#tab-master .bm-loc-confirm-btn {
+  font-size: 8.5pt; padding: 2px 6px; border: 1px solid #666;
+  background:#fff; cursor:pointer; border-radius:3px; min-width: 40px;
+}
+#tab-master .bm-loc-confirm-btn.bm-done { background:#2e7d32; color:white; border-color:#2e7d32; font-weight:bold; }
+#tab-master .bm-loc-confirm-btn:hover { background:#eee; }
+#tab-master .bm-loc-confirm-btn.bm-done:hover { background:#1b5e20; }
+#tab-master .bm-loc-recommend-btn {
+  font-size: 8.5pt; padding: 2px 6px; border: 1px solid #1976d2;
+  background:#e3f2fd; color:#1976d2; cursor:pointer; border-radius:3px; min-width: 50px;
+}
+#tab-master .bm-loc-recommend-btn:hover { background:#bbdefb; }
+#tab-master .bm-loc-recommend-btn:disabled { background:#eee; color:#999; border-color:#ccc; cursor: default; }
+
+/* モーダル */
+.bm-modal-overlay {
+  display: none; position: fixed; top:0; left:0; width:100%; height:100%;
+  background:rgba(0,0,0,0.5); z-index: 10000;
+  justify-content: center; align-items: center;
+}
+.bm-modal-overlay.bm-show { display: flex; }
+.bm-modal {
+  background: white; border-radius: 8px; padding: 16px 20px;
+  max-width: 520px; width: 90%; max-height: 85vh; overflow-y: auto;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+.bm-modal-head {
+  display:flex; justify-content: space-between; align-items: flex-start;
+  margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid #1976d2;
+}
+.bm-modal-head.bm-has-sellout { border-bottom-color: #c62828; }
+.bm-modal-title { font-size: 13pt; font-weight: bold; color: #1976d2; }
+.bm-modal-head.bm-has-sellout .bm-modal-title { color: #c62828; }
+.bm-modal-subtitle { font-size: 9pt; color:#777; margin-top: 2px; }
+.bm-modal-close { background:none; border:none; font-size: 16pt; cursor:pointer; color:#999; padding:0 4px; line-height: 1; }
+.bm-modal-close:hover { color:#555; }
+.bm-modal-body { font-size: 10pt; }
+.bm-modal-section { margin-bottom: 14px; }
+.bm-modal-section-title { font-size: 10.5pt; font-weight: bold; color:#333; margin-bottom: 6px; }
+.bm-modal-history-table { width:100%; border-collapse: collapse; }
+.bm-modal-history-table td { border:1px solid #ddd; padding: 4px 8px; font-size: 9.5pt; background:white; text-align:left; }
+.bm-modal-history-table td.bm-h-label { width: 40%; font-weight:bold; background:#fafafa; }
+.bm-modal-history-table td.bm-h-value { text-align:right; }
+.bm-modal-history-table tr.bm-is-sellout td { background:#ffebee; }
+.bm-sellout-mark-inline { display:inline-block; font-size:8pt; color:#c62828; font-weight:bold; margin-left: 4px; }
+.bm-modal-calc { background:#fafafa; border: 1px solid #ddd; border-radius: 4px; padding: 10px 12px; font-size: 10pt; line-height: 1.6; }
+.bm-modal-calc-row { display:flex; justify-content: space-between; align-items: center; padding: 3px 0; }
+.bm-modal-calc-row.bm-final { border-top: 2px solid #1976d2; margin-top: 6px; padding-top: 8px; font-size: 11pt; font-weight: bold; }
+.bm-modal-calc-row.bm-final.bm-has-sellout { border-top-color: #c62828; }
+.bm-modal-calc-label { color:#555; }
+.bm-modal-calc-value { font-weight:bold; }
+.bm-modal-calc-value.bm-bonus { color:#c62828; }
+.bm-modal-calc-value.bm-final-value { color:#1976d2; font-size: 14pt; }
+.bm-modal-calc-value.bm-final-value.bm-has-sellout { color:#c62828; }
+.bm-modal-note { font-size: 8.5pt; color:#666; background:#fff3e0; border-left: 3px solid #ff9800; padding: 6px 10px; margin-top: 8px; line-height: 1.5; }
+
+/* ローディング */
+#tab-master .bm-loading { text-align: center; padding: 40px; color:#888; font-size: 13pt; }
+#tab-master .bm-error { text-align: center; padding: 40px; color:#c62828; font-size: 12pt; }
+
+/* ============================================================
+   配分表アプリ「翌週配分タブ改善」案B Phase 4-6 追加CSS
+   2026-05-21 Phase 4: F1〜F4, F7
+   2026-05-21 Phase 5: F5, F8
+   2026-05-21 Phase 6: F6
+   ============================================================ */
+
+/* ── F5 プリセット適用ボタン ── */
+#tab-master .bm-preset-btn {
+  padding: 4px 12px;
+  border: 1px solid #ef6c00;
+  background: #fff3e0;
+  color: #ef6c00;
+  cursor: pointer;
+  border-radius: 3px;
+  font-size: 9.5pt;
+  font-weight: bold;
+}
+#tab-master .bm-preset-btn:hover { background: #ffe0b2; }
+
+/* ── F1/F2 コピーボタン「⧉」 ── */
+#tab-master .bm-copy-btn {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 4px;
+  font-size: 9pt;
+  color: #555;
+  cursor: pointer;
+  border-radius: 2px;
+  user-select: none;
+}
+#tab-master .bm-copy-btn:hover { background: #fff3e0; color: #ef6c00; }
+
+/* ── F1/F2 0クリアボタン「🗑」 ── */
+#tab-master .bm-clear-btn {
+  display: inline-block;
+  margin-left: 2px;
+  padding: 0 4px;
+  font-size: 9pt;
+  color: #888;
+  cursor: pointer;
+  border-radius: 2px;
+  user-select: none;
+}
+#tab-master .bm-clear-btn:hover { background: #ffebee; color: #c62828; }
+
+/* ── F3 範囲選択ハイライト ── */
+#tab-master .bm-cell-sales.bm-selected {
+  background: #b3e5fc !important;
+  outline: 1px solid #0288d1;
+}
+
+/* ── F4 一括クリア用アクションバー ── */
+.bm-action-bar {
+  display: none;
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #263238;
+  color: white;
+  padding: 8px 14px;
+  border-radius: 24px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  z-index: 999;
+  gap: 10px;
+  align-items: center;
+  font-size: 10pt;
+}
+.bm-action-bar.bm-visible { display: flex; }
+.bm-action-bar .bm-action-count { font-weight: bold; color: #ffeb3b; }
+.bm-action-bar button {
+  padding: 4px 10px;
+  border: none;
+  background: #c62828;
+  color: white;
+  cursor: pointer;
+  border-radius: 12px;
+  font-size: 9pt;
+  font-weight: bold;
+}
+.bm-action-bar button:hover { background: #b71c1c; }
+.bm-action-bar .bm-action-close {
+  background: transparent;
+  color: #ccc;
+  padding: 2px 6px;
+  font-size: 14pt;
+}
+.bm-action-bar .bm-action-close:hover { background: transparent; color: white; }
+
+/* ── F7 Undo/Redo ボタン（ヘッダ） ── */
+#tab-master .bm-undo-btn, #tab-master .bm-redo-btn {
+  padding: 4px 8px;
+  border: 1px solid #888;
+  background: #fafafa;
+  cursor: pointer;
+  border-radius: 3px;
+  font-size: 10pt;
+}
+#tab-master .bm-undo-btn:disabled, #tab-master .bm-redo-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+#tab-master .bm-undo-btn:not(:disabled):hover,
+#tab-master .bm-redo-btn:not(:disabled):hover { background: #e0e0e0; }
+
+/* ── F5 プリセット選択モーダル ── */
+.wp-modal-overlay {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 1000;
+  justify-content: center;
+  align-items: center;
+}
+.wp-modal-overlay.wp-show { display: flex; }
+.wp-modal {
+  background: white;
+  border-radius: 8px;
+  max-width: 720px;
+  width: 92vw;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.wp-modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #fafafa;
+  border-bottom: 1px solid #ddd;
+}
+.wp-modal-title { font-size: 13pt; font-weight: bold; }
+.wp-modal-close {
+  background: transparent;
+  border: none;
+  font-size: 16pt;
+  cursor: pointer;
+  color: #888;
+}
+.wp-modal-close:hover { color: #000; }
+.wp-modal-body {
+  padding: 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+.wp-modal-foot {
+  padding: 12px 16px;
+  background: #fafafa;
+  border-top: 1px solid #ddd;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.wp-modal-foot button {
+  padding: 6px 14px;
+  border: 1px solid #888;
+  background: white;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 10pt;
+}
+.wp-modal-foot button.wp-primary {
+  background: #ef6c00;
+  color: white;
+  border-color: #ef6c00;
+  font-weight: bold;
+}
+.wp-modal-foot button.wp-primary:hover { background: #e65100; }
+.wp-modal-foot button.wp-danger {
+  background: #c62828;
+  color: white;
+  border-color: #c62828;
+}
+.wp-modal-foot button.wp-danger:hover { background: #b71c1c; }
+
+/* プリセット一覧（F5）*/
+.wp-preset-list { display: flex; flex-direction: column; gap: 8px; }
+.wp-preset-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.wp-preset-row:hover { background: #fff8e1; border-color: #ef6c00; }
+.wp-preset-row-name { font-size: 11pt; font-weight: bold; }
+.wp-preset-row-detail { font-size: 9pt; color: #666; margin-top: 2px; }
+.wp-preset-row-actions { display: flex; gap: 6px; }
+
+/* プリセット適用プレビュー */
+.wp-preview-info {
+  background: #fff3e0;
+  padding: 10px 14px;
+  border-radius: 4px;
+  border-left: 3px solid #ef6c00;
+  margin-bottom: 12px;
+  font-size: 10pt;
+}
+.wp-preview-info b { color: #e65100; }
+
+/* ── F6 プリセット編集UI（設定タブ）── */
+#tab-settings { padding: 12px 14px; background: #f5f5f5; }
+#tab-settings .wp-page {
+  background: white;
+  padding: 16px 20px;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+}
+#tab-settings .wp-section-title {
+  font-size: 14pt;
+  font-weight: bold;
+  margin-bottom: 12px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid #ef6c00;
+}
+#tab-settings .wp-section-desc {
+  color: #555;
+  font-size: 10pt;
+  margin-bottom: 16px;
+}
+#tab-settings .wp-add-btn {
+  padding: 6px 14px;
+  background: #2e7d32;
+  color: white;
+  border: none;
+  cursor: pointer;
+  border-radius: 4px;
+  font-weight: bold;
+  margin-bottom: 12px;
+}
+#tab-settings .wp-add-btn:hover { background: #1b5e20; }
+#tab-settings .wp-presets-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10pt;
+}
+#tab-settings .wp-presets-table th,
+#tab-settings .wp-presets-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #eee;
+  text-align: left;
+}
+#tab-settings .wp-presets-table th { background: #fafafa; font-weight: bold; }
+#tab-settings .wp-presets-table .wp-row-actions { text-align: right; }
+#tab-settings .wp-presets-table button {
+  padding: 4px 10px;
+  margin-left: 4px;
+  border: 1px solid #888;
+  background: white;
+  cursor: pointer;
+  border-radius: 3px;
+  font-size: 9pt;
+}
+#tab-settings .wp-presets-table .wp-btn-edit { color: #1976d2; }
+#tab-settings .wp-presets-table .wp-btn-del { color: #c62828; }
+
+/* プリセット編集モーダル（拠点×係数マトリクス） */
+.wp-edit-name-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #eee;
+}
+.wp-edit-name-row label { font-weight: bold; }
+.wp-edit-name-row input {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  font-size: 11pt;
+}
+.wp-edit-loc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10pt;
+}
+.wp-edit-loc-table th,
+.wp-edit-loc-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid #eee;
+}
+.wp-edit-loc-table th { background: #fafafa; font-weight: bold; font-size: 9pt; text-align: left; }
+.wp-edit-loc-table .wp-loc-name { width: 35%; }
+.wp-edit-loc-table .wp-loc-flag {
+  width: 70px;
+  text-align: center;
+  font-size: 8.5pt;
+  padding: 2px 6px;
+  border-radius: 10px;
+}
+.wp-edit-loc-table .wp-loc-flag.wp-outdoor { background: #ffe0b2; color: #e65100; }
+.wp-edit-loc-table .wp-loc-flag.wp-indoor { background: #c8e6c9; color: #2e7d32; }
+.wp-edit-loc-table .wp-ratio-input {
+  width: 70px;
+  padding: 4px 8px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  text-align: right;
+  font-size: 10pt;
+}
+.wp-edit-bulk-row {
+  background: #f5f5f5;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  border-radius: 4px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 9pt;
+}
+.wp-edit-bulk-row button {
+  padding: 3px 8px;
+  border: 1px solid #888;
+  background: white;
+  cursor: pointer;
+  border-radius: 3px;
+  font-size: 9pt;
+}
+.wp-edit-bulk-row button:hover { background: #e0e0e0; }
+.wp-edit-bulk-row input {
+  width: 50px;
+  padding: 3px 6px;
+  text-align: right;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+}
+
+/* トースト通知 */
+.wp-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 20px;
+  border-radius: 24px;
+  color: white;
+  font-size: 10pt;
+  font-weight: bold;
+  z-index: 1001;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+.wp-toast.wp-show { opacity: 1; }
+.wp-toast.wp-success { background: #2e7d32; }
+.wp-toast.wp-error { background: #c62828; }
+.wp-toast.wp-info { background: #1976d2; }
+
+</style>
+</head>
+<body>
+
+<div class="app-header">
+  <h1>🍱 納品管理</h1>
+</div>
+
+<div class="tab-bar">
+  <button class="tab-btn active" data-tab="sheet1">📋 拠点配分</button>
+  <button class="tab-btn" data-tab="sheet2">📦 午前盛り出し</button>
+  <button class="tab-btn" data-tab="sheet3">🚚 午後便盛り出し</button>
+  <button class="tab-btn" data-tab="sheet4">🍳 仕込み</button>
+  <button class="tab-btn" data-tab="order">📋 発注</button>
+  <button class="tab-btn" data-tab="master">📐 配分調整</button>
+  <button class="tab-btn" data-tab="settings">⚙️ 設定</button>
+</div>
+
+<!-- シート1 -->
+<div class="tab-pane active" id="tab-sheet1">
+  <div class="ctrl-bar">
+    <label>日付：</label>
+    <input type="date" id="s1-date-input">
+    <button class="btn btn-primary" id="s1-btn-fetch">取得</button>
+    <button class="btn btn-print" onclick="window.print()">🖨 印刷</button>
+    <span class="status-msg" id="s1-status-msg"></span>
+  </div>
+  <div id="sheet1-body"></div>
+</div>
+
+<!-- シート2 -->
+<div class="tab-pane" id="tab-sheet2">
+  <div class="ctrl-bar">
+    <label>日付：</label>
+    <input type="date" id="s2-date-input">
+    <button class="btn btn-primary" id="s2-btn-fetch">取得</button>
+    <button class="btn btn-print" onclick="window.print()">🖨 印刷</button>
+    <span class="status-msg" id="s2-status-msg"></span>
+    <div class="legend">
+      <span>色：</span>
+      <span class="legend-item" style="background:#fff;">梅</span>
+      <span class="legend-item" style="background:#c8e6c9;">竹</span>
+      <span class="legend-item" style="background:#d1c4e9;">松</span>
+      <span class="legend-ohm">大盛り</span>
+    </div>
+  </div>
+  <div id="sheet2-body"></div>
+</div>
+
+<!-- 他タブ（準備中） -->
+<!-- シート3 -->
+<div class="tab-pane" id="tab-sheet3">
+  <div class="ctrl-bar">
+    <label>日付：</label>
+    <input type="date" id="s3-date-input">
+    <button class="btn btn-primary" id="s3-btn-fetch">取得</button>
+    <button class="btn btn-print" onclick="window.print()">🖨 印刷</button>
+    <span class="status-msg" id="s3-status-msg"></span>
+    <div class="legend">
+      <span>色：</span>
+      <span class="legend-item" style="background:#fff;">梅</span>
+      <span class="legend-item" style="background:#c8e6c9;">竹</span>
+      <span class="legend-item" style="background:#d1c4e9;">松</span>
+      <span class="legend-ohm">大盛り</span>
+    </div>
+  </div>
+  <div id="sheet3-body"></div>
+</div>
+<div class="tab-pane" id="tab-sheet4">
+  <div class="s4-ctrl">
+    <button class="s4-week-btn" id="s4-btn-week0">今週 月〜日</button>
+    <button class="s4-week-btn" id="s4-btn-week1">来週 月〜日</button>
+    <button class="btn btn-primary" id="s4-btn-fetch">取得</button>
+    <span class="status-msg" id="s4-status-msg"></span>
+  </div>
+  <div class="s4-date-row" id="s4-date-row"></div>
+  <div class="s4-sel-info" id="s4-sel-info">日付を選択して取得ボタンを押してください</div>
+  <div id="sheet4-body"></div>
+</div>
+<!-- 発注タブ -->
+<div class="tab-pane" id="tab-order">
+  <div class="order-ctrl">
+    <button class="order-week-btn" id="order-btn-week0">今週 月〜日</button>
+    <button class="order-week-btn" id="order-btn-week1">来週 月〜日</button>
+    <button class="btn btn-primary" id="order-btn-fetch">取得</button>
+    <span class="status-msg" id="order-status-msg"></span>
+  </div>
+  <div class="order-date-row" id="order-date-row"></div>
+  <div class="order-sel-info" id="order-sel-info">日付を選択して取得ボタンを押してください</div>
+  <div class="order-warn-wrap" id="order-warn-wrap" style="display:none;"></div>
+  <div class="order-vendor-list" id="order-body"></div>
+</div>
+<div class="tab-pane" id="tab-master">
+  <div class="bm-page">
+    <div class="bm-title-bar">
+      <div class="bm-title-left">
+        <div class="bm-title">📐 配分調整</div>
+        <div class="bm-subtitle" id="bm-subtitle">読み込み中...</div>
+      </div>
+      <div class="bm-title-right">
+        <div class="bm-week-tabs" id="bm-week-tabs">
+          <button class="bm-week-tab bm-active" data-week="this" onclick="bmSetWeek('this')">今週配分</button>
+          <button class="bm-week-tab" data-week="next" onclick="bmSetWeek('next')">翌週配分</button>
+        </div>
+        <div class="bm-day-tabs" id="bm-day-tabs"></div>
+        <div class="bm-legend">
+          <b>左</b>=販売(編集) <b>右</b>=提案
+          <span class="bm-sw" style="background:#e8eaed;border:1px solid #888;"></span>確定
+          <span class="bm-sw" style="background:#ffe0b2;"></span>編集
+          <span class="bm-sw" style="background:#e1f5fe;"></span>推奨
+        </div>
+        <button class="bm-undo-btn" id="bm-undo-btn" onclick="bmDoUndo()" title="元に戻す (Ctrl+Z)" disabled>↶ 元に戻す</button>
+        <button class="bm-redo-btn" id="bm-redo-btn" onclick="bmDoRedo()" title="やり直す (Ctrl+Y)" disabled>↷ やり直す</button>
+        <button class="bm-preset-btn" onclick="wpOpenPresetSelector()" title="天候プリセットを適用">📋 プリセット</button>
+        <button class="bm-confirm-all-btn" id="bm-confirm-all" onclick="bmConfirmAll()">✓ 全拠点確定</button>
+        <button class="bm-reload-btn" onclick="bmReload()">🔄 再取得</button>
+        <button class="bm-print-btn" onclick="window.print()">🖨 印刷</button>
+      </div>
+    </div>
+    <div class="bm-calc-info" id="bm-calc-info"></div>
+    <div id="bm-matrix-wrap">
+      <div class="bm-loading">配分調整を読み込み中...</div>
+    </div>
+  </div>
+</div>
+
+<!-- 基本数マスタ 内訳モーダル -->
+<div class="bm-modal-overlay" id="bm-modal-overlay" onclick="bmCloseModal(event)">
+  <div class="bm-modal" onclick="event.stopPropagation()">
+    <div class="bm-modal-head" id="bm-modal-head">
+      <div>
+        <div class="bm-modal-title" id="bm-modal-title">―</div>
+        <div class="bm-modal-subtitle" id="bm-modal-subtitle">―</div>
+      </div>
+      <button class="bm-modal-close" onclick="bmCloseModal()">✕</button>
+    </div>
+    <div class="bm-modal-body" id="bm-modal-body"></div>
+  </div>
+</div>
+
+<div class="tab-pane" id="tab-settings"></div>
+
+<!-- F4 アクションバー（範囲選択時に表示） -->
+<div class="bm-action-bar" id="bm-action-bar">
+  <span><span class="bm-action-count" id="bm-action-count">0</span> セル選択中</span>
+  <button onclick="bmActionClearZero()" title="Delete">🗑 0にする</button>
+  <button onclick="bmActionCopy()" title="Ctrl+C">📋 コピー</button>
+  <button onclick="bmActionPaste()" title="Ctrl+V">📄 ペースト</button>
+  <button class="bm-action-close" onclick="bmActionDeselect()" title="Esc">✕</button>
+</div>
+
+<script>
+'use strict';
+
+// ─────────────────────────────────────────
+// 設定
+// ─────────────────────────────────────────
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5AawPDc7aluPokONkYz6f2ikwl0S487JvhKdKh6QSp1xhEhA/exec';
+
+// ═══════════════════════════════════════════════════════════
+// ドライバー色連動 Phase 4（2026-05-21 v3.4 追加）
+// 拠点名セル背景色：代理 > 主担当 > 既定#E9ECEF
+// データソース：?action=getLocationsWithAssignment&date=YYYY-MM-DD
+// ═══════════════════════════════════════════════════════════
+const DRIVER_DEFAULT_BG = '#E9ECEF';
+const driverColorCache = {};  // { 'YYYY-MM-DD': { locationId: {color, name, type} } }
+
+async function loadDriverColorMap(dateStr) {
+  if (!dateStr) return {};
+  if (driverColorCache[dateStr]) return driverColorCache[dateStr];
+  try {
+    const res  = await fetch(GAS_URL + '?action=getLocationsWithAssignment&date=' + encodeURIComponent(dateStr));
+    const data = await res.json();
+    if (!Array.isArray(data)) {
+      console.warn('[driverColor] unexpected response:', data);
+      driverColorCache[dateStr] = {};
+      return {};
     }
-  );
+    const map = {};
+    data.forEach(item => {
+      if (item && item.locationId) {
+        map[item.locationId] = {
+          color: item.color || '',
+          name:  item.name  || '',
+          type:  item.type  || '',
+        };
+      }
+    });
+    driverColorCache[dateStr] = map;
+    return map;
+  } catch (e) {
+    console.warn('[driverColor] fetch failed:', e);
+    driverColorCache[dateStr] = {};
+    return {};
+  }
+}
+
+// 拠点IDからinline style属性文字列を生成（先頭半角スペース含む）
+// 例: ' style="background-color:#FFF0D9 !important;"'
+function driverColorStyleAttr(locId, colorMap) {
+  if (!colorMap) return '';
+  const info = colorMap[locId];
+  const color = (info && info.color) ? info.color : DRIVER_DEFAULT_BG;
+  return ' style="background-color:' + color + ' !important;"';
+}
+
+// 拠点配分タブ・配分調整タブで共通利用するキャッシュ無効化
+// （将来GASでマスタ更新後に呼ぶ用途）
+function invalidateDriverColorCache(dateStr) {
+  if (dateStr) delete driverColorCache[dateStr];
+  else Object.keys(driverColorCache).forEach(k => delete driverColorCache[k]);
+}
+
+// ★ 単価マスタの「カテゴリー」列の実値に合わせて変更してください
+const CATEGORY_COLOR = {
+  '海苔弁系': 'blue',
+  '満腹系':   'green',
+  '全六':     'yellow',
+  '他社商品': 'yellow',
+  '全':       'yellow',
+};
+
+// カテゴリー未設定時のフォールバック（商品名パターン）
+const NAME_COLOR_RULES = [
+  { re: /^(あいもり|銀鮭|塩麹|照り焼き|鯖から|アジフライ|柚子焼き|マグロ|あさひめ)/, color: 'blue' },
+  { re: /^(メンチ|カレー|満腹)/,                                                        color: 'green' },
+];
+
+// グレード（日本語） → CSS クラス
+function gradeClassOf(g) {
+  if (g == null) return '';
+  const s = String(g).trim().toLowerCase();
+  if (s.indexOf('松') >= 0 || s.indexOf('matsu') >= 0) return 'matsu';
+  if (s.indexOf('竹') >= 0 || s.indexOf('take')  >= 0) return 'take';
+  if (s.indexOf('梅') >= 0 || s.indexOf('ume')   >= 0) return 'ume';
+  return '';
+}
+function gradeLabelJa(g) {
+  const c = gradeClassOf(g);
+  if (c === 'matsu') return '松';
+  if (c === 'take')  return '竹';
+  if (c === 'ume')   return '梅';
+  return '—';
+}
+
+function getColor(category, baseName) {
+  if (category && CATEGORY_COLOR[category]) return CATEGORY_COLOR[category];
+  for (const rule of NAME_COLOR_RULES) {
+    if (rule.re.test(baseName)) return rule.color;
+  }
+  return 'yellow';
 }
 
 
-【新】
+
+// ═══════════════════════════════════════
+// シート4（仕込み表）Phase 3 v2 ─ 複数日対応
+// ═══════════════════════════════════════
+ 
+const s4Status = document.getElementById('s4-status-msg');
+function s4SetStatus(msg, isErr) {
+  s4Status.textContent = msg;
+  s4Status.className = 'status-msg' + (isErr ? ' err' : '');
+}
+ 
+// 複数日選択の状態管理
+const s4SelectedDates = new Set();
+ 
+// 日付チェックボックス初期化(今週月〜日 + 来週月〜日 = 14日分)
+// v2.1: タイムゾーンバグ修正(UTC date算術に統一)
+function initS4DateChecks() {
+  const jstNow = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);
+  const todayStr = jstNow.toISOString().slice(0, 10);
+  const [tYear, tMonth, tDay] = todayStr.split('-').map(Number);
+  const todayDow = jstNow.getUTCDay();
+  const daysFromMonday = (todayDow === 0) ? 6 : todayDow - 1;
+  const thisMondayUtc = new Date(Date.UTC(tYear, tMonth - 1, tDay - daysFromMonday));
+
+  const DOW = ['日','月','火','水','木','金','土'];
+  const row = document.getElementById('s4-date-row');
+  row.innerHTML = '';
+  s4SelectedDates.clear();
+
+  for (let i = 0; i < 14; i++) {
+    const d = new Date(thisMondayUtc.getTime() + i * 86400000);
+    const dateStr = d.toISOString().slice(0, 10);
+    const dispDay = d.getUTCDate();
+    const dispDow = d.getUTCDay();
+    const isPast = dateStr < todayStr;
+    const isToday = dateStr === todayStr;
+    const wn = (i < 7) ? 0 : 1;
+
+    const lbl = document.createElement('label');
+    let cls = 's4-date-lbl';
+    if (isPast)  cls += ' disabled';
+    if (isToday) cls += ' today';
+    lbl.className = cls;
+    lbl.dataset.date = dateStr;
+    lbl.dataset.week = wn;
+
+    if (isPast) {
+      lbl.innerHTML = `${DOW[dispDow]}${dispDay}`;
+    } else {
+      const checked = isToday ? ' checked' : '';
+      lbl.innerHTML = `<input type="checkbox" value="${dateStr}"${checked}> ${DOW[dispDow]}${dispDay}`;
+      if (isToday) {
+        lbl.classList.add('checked');
+        s4SelectedDates.add(dateStr);
+      }
+      lbl.querySelector('input').addEventListener('change', e => {
+        if (e.target.checked) {
+          s4SelectedDates.add(dateStr);
+          lbl.classList.add('checked');
+        } else {
+          s4SelectedDates.delete(dateStr);
+          lbl.classList.remove('checked');
+        }
+        updateS4SelInfo();
+      });
+    }
+    row.appendChild(lbl);
+  }
+  updateS4SelInfo();
+}
+ 
+// 週一括選択（0=今週 / 1=来週）— 過去日は除外
+function s4SelectWeek(wn) {
+  document.querySelectorAll('#s4-date-row .s4-date-lbl').forEach(lbl => {
+    if (lbl.classList.contains('disabled')) return;
+    const cb = lbl.querySelector('input');
+    if (!cb) return;
+    const dateStr = lbl.dataset.date;
+    if (parseInt(lbl.dataset.week) === wn) {
+      cb.checked = true;
+      s4SelectedDates.add(dateStr);
+      lbl.classList.add('checked');
+    } else {
+      cb.checked = false;
+      s4SelectedDates.delete(dateStr);
+      lbl.classList.remove('checked');
+    }
+  });
+  updateS4SelInfo();
+}
+ 
+// 選択情報の更新表示(v2.1: UTC基準でJST日付を正しく表示)
+function updateS4SelInfo() {
+  const info = document.getElementById('s4-sel-info');
+  const dates = Array.from(s4SelectedDates).sort();
+  if (dates.length === 0) {
+    info.textContent = '日付を選択して取得ボタンを押してください';
+    return;
+  }
+  const DOW = ['日','月','火','水','木','金','土'];
+  const labels = dates.map(d => {
+    const [y, m, dd] = d.split('-').map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, dd));
+    return m + '/' + dd + '(' + DOW[dt.getUTCDay()] + ')';
+  });
+  info.textContent = `選択中: ${labels.join(' / ')} （${dates.length}日分）`;
+}
+ 
+// 取得ボタン押下時の処理
+async function fetchSheet4() {
+  const dates = Array.from(s4SelectedDates).sort();
+  if (dates.length === 0) {
+    s4SetStatus('日付を1日以上選択してください', true);
+    return;
+  }
+  s4SetStatus('取得中…');
+  document.getElementById('sheet4-body').innerHTML = '';
+  try {
+    // ① 最初の日の保存済み日替わり選択を取得
+    const kRes  = await fetch(GAS_URL + '?action=getKawariSelections&date=' + dates[0]);
+    const kData = await kRes.json();
+    const kawari = (kData.ok && kData.selections) ? kData.selections : {};
+ 
+    // ② 仕込み表データを取得（複数日合算）
+    const kawariJson = encodeURIComponent(JSON.stringify(kawari));
+    const res  = await fetch(GAS_URL + '?action=getSheet4Data&dates=' + dates.join(',') + '&kawari=' + kawariJson);
+    const data = await res.json();
+    if (!data.ok) {
+      s4SetStatus(data.error || '取得エラー', true);
+      return;
+    }
+    s4SetStatus('');
+    renderSheet4(data);
+ 
+    // 保存済みバッジ
+    const hasSelection = Object.values(kawari).some(v => v !== '');
+    if (hasSelection) showS4SavedBadge(dates[0]);
+  } catch(e) {
+    s4SetStatus('通信エラー: ' + e.message, true);
+  }
+}
+ 
+// 日替わり保存後の再計算
+async function onS4KawariSave() {
+  const dates = Array.from(s4SelectedDates).sort();
+  if (dates.length === 0) {
+    s4SetStatus('日付を1日以上選択してください', true);
+    return;
+  }
+  const targetDate = dates[0];   // 最初の日に保存
+  const selections = getS4KawariSelections();
+  s4SetStatus('保存中…');
+  try {
+    await fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'saveKawariSelections', date: targetDate, selections })
+    });
+    showS4SavedBadge(targetDate);
+ 
+    // 仕込み表を再計算
+    const kawariJson = encodeURIComponent(JSON.stringify(selections));
+    const res  = await fetch(GAS_URL + '?action=getSheet4Data&dates=' + dates.join(',') + '&kawari=' + kawariJson);
+    const data = await res.json();
+    if (!data.ok) {
+      s4SetStatus(data.error || '更新エラー', true);
+      return;
+    }
+    s4SetStatus('');
+    renderSheet4(data);
+    showS4SavedBadge(targetDate);
+  } catch(e) {
+    s4SetStatus('通信エラー: ' + e.message, true);
+  }
+}
+ 
+function getS4KawariSelections() {
+  return {
+    '全六あり主菜1': document.getElementById('s4-zr-s1') ? document.getElementById('s4-zr-s1').value : '',
+    '全六あり主菜2': document.getElementById('s4-zr-s2') ? document.getElementById('s4-zr-s2').value : '',
+    '全六なし主菜1': document.getElementById('s4-zn-s1') ? document.getElementById('s4-zn-s1').value : '',
+    '全六なし主菜2': document.getElementById('s4-zn-s2') ? document.getElementById('s4-zn-s2').value : ''
+  };
+}
+ 
+function showS4SavedBadge(dateVal) {
+  const badge = document.getElementById('s4-save-badge');
+  if (!badge) return;
+  const [y, m, dd] = dateVal.split('-').map(Number);
+  badge.textContent = '✓ ' + m + '/' + dd + ' 保存済み';
+  badge.style.display = 'inline-flex';
+}
+ 
+function buildKawariSelect(id, cands, selected) {
+  let html = `<select id="${id}" style="padding:5px 8px;border:1px solid #bbb;border-radius:4px;font-family:inherit;font-size:13px;">`;
+  html += `<option value="">-- 未選択 --</option>`;
+  (cands || []).forEach(c => {
+    html += `<option value="${escHtml(c)}"${c === selected ? ' selected' : ''}>${escHtml(c)}</option>`;
+  });
+  html += '</select>';
+  return html;
+}
+ 
+// 描画（Phase 3 v2.2 戻り値構造に対応：rows = グループ展開）
+function renderSheet4(data) {
+  const body = document.getElementById('sheet4-body');
+  if (!body) return;
+
+  if (!data || !data.ok) {
+    body.innerHTML = `<div class="s4-error">${escHtml(data && data.error || '取得失敗')}</div>`;
+    return;
+  }
+
+  const dateLabel = (data.dateLabels || []).join(' / ');
+  const dateCount = data.dateCount || 0;
+  const rows = data.rows || [];
+  const kaito = data.kaito || { cut:{display:0,packCeil:0}, full:{display:0,packCeil:0}, sum:{display:0,packCeil:0} };
+  const candidates = data.candidates || {};
+  const kawari = data.kawari || {};
+  const warnings = data.warnings || {};
+  const meta = data.meta || {};
+
+  const zrC = candidates['全六あり'] || [];
+  const znC = candidates['全六なし'] || [];
+
+  // 日替わり選択ボックス
+  const kawariHTML = `
+    <div class="kawari-box">
+      <div class="kawari-title">🔄 当日おかず選択（日替わり）</div>
+      <div class="kawari-grid">
+        <div>
+          <div class="kawari-sep">全六あり</div>
+          <div class="kawari-item"><span class="kawari-lbl">主菜1</span>${buildKawariSelect('s4-zr-s1', zrC, kawari['全六あり主菜1'] || '')}</div>
+          <div class="kawari-item"><span class="kawari-lbl">主菜2</span>${buildKawariSelect('s4-zr-s2', zrC, kawari['全六あり主菜2'] || '')}</div>
+        </div>
+        <div>
+          <div class="kawari-sep">全六なし</div>
+          <div class="kawari-item"><span class="kawari-lbl">主菜1</span>${buildKawariSelect('s4-zn-s1', znC, kawari['全六なし主菜1'] || '')}</div>
+          <div class="kawari-item"><span class="kawari-lbl">主菜2</span>${buildKawariSelect('s4-zn-s2', znC, kawari['全六なし主菜2'] || '')}</div>
+        </div>
+      </div>
+      <div class="kawari-footer">
+        <button class="btn btn-primary" id="s4-kawari-save" style="font-size:12px;padding:4px 14px;">保存</button>
+        <span id="s4-save-badge" class="save-badge"></span>
+      </div>
+    </div>`;
+
+  // 米セクション（解凍の上、最も目立つ位置）
+  const rice = data.rice || { hakumai: { orderCount:0, amount:0, unit:'', packCeil:0 }, genmai: { orderCount:0, amount:0, unit:'', packCeil:0 } };
+  function fmtRiceAmount(amt, unit) {
+    if (!amt) return '0' + (unit || '');
+    const u = String(unit || '').trim();
+    if (u === 'g' && amt >= 1000)  return (Math.round(amt / 100) / 10) + 'kg';
+    if (u === 'ml' && amt >= 1000) return (Math.round(amt / 100) / 10) + 'L';
+    const r = Math.round(amt * 10) / 10;
+    return (r === Math.floor(r) ? String(Math.floor(r)) : r.toFixed(1)) + u;
+  }
+  const riceHTML = `
+    <div class="rice-box">
+      <span class="rice-title">🍚 米</span>
+      <div class="rice-items">
+        <div class="rice-item">
+          <div class="rice-name">白米</div>
+          <div class="rice-order">${rice.hakumai.orderCount || 0}<span class="rice-order-sub">人前</span></div>
+          <div class="rice-amount">${fmtRiceAmount(rice.hakumai.amount, rice.hakumai.unit)}</div>
+          <div class="rice-pack">${rice.hakumai.packCeil || 0}P<span class="rice-pack-sub">（袋）</span></div>
+        </div>
+        <div class="rice-item">
+          <div class="rice-name">玄米</div>
+          <div class="rice-order">${rice.genmai.orderCount || 0}<span class="rice-order-sub">人前</span></div>
+          <div class="rice-amount">${fmtRiceAmount(rice.genmai.amount, rice.genmai.unit)}</div>
+          <div class="rice-pack">${rice.genmai.packCeil || 0}P<span class="rice-pack-sub">（袋）</span></div>
+        </div>
+      </div>
+    </div>`;
+
+  // 解凍セクション
+  const { cut, full, sum } = kaito;
+  const kaitoHTML = `
+    <div class="kaito-box">
+      <span class="kaito-title">解凍</span>
+      <div class="kaito-items">
+        <div class="kaito-item">
+          <span class="kaito-main">${cut.display}P</span>
+          <span class="kaito-actual">(${cut.packCeil}P)</span>
+          <span class="kaito-sub">カット</span>
+        </div>
+        <div class="kaito-divider"></div>
+        <div class="kaito-item">
+          <span class="kaito-main">${full.display}P</span>
+          <span class="kaito-actual">(${full.packCeil}P)</span>
+          <span class="kaito-sub">正肉</span>
+        </div>
+        <div class="kaito-divider"></div>
+        <div class="kaito-item kaito-total">
+          <span class="kaito-main">${sum.display}P</span>
+          <span class="kaito-actual">(${sum.packCeil}P)</span>
+          <span class="kaito-sub">合計</span>
+        </div>
+      </div>
+    </div>`;
+
+  // 仕込み表（v2.2 グループ展開）
+  let tableContent;
+  if (rows.length === 0) {
+    tableContent = '<div class="no-delivery-msg">当日の仕込みデータがありません<br><small>食材マスタと単価マスタの食材ID列を確認してください</small></div>';
+  } else {
+    let listHtml = '<div class="prep-list">';
+    let directSectionStarted = false;
+    rows.forEach(r => {
+      if (r.type === 'shikomi_header') {
+        listHtml += `<div class="prep-header">${escHtml(r.shikomiName)}<span class="prep-portion">(${r.portion}人前)</span></div>`;
+      } else if (r.type === 'shikomi_ing') {
+        const amt = (r.amount != null) ? (r.amount + (r.unit || '')) : '–';
+        const pack = (r.packCount != null) ? (r.packCount.toFixed(1) + 'P') : '';
+        listHtml += `<div class="prep-ing">
+          <span class="prep-ing-name">${escHtml(r.ingName)}</span>
+          <span class="prep-ing-amt">${escHtml(amt)}</span>
+          <span class="prep-ing-pack">${escHtml(pack)}</span>
+        </div>`;
+      } else if (r.type === 'direct') {
+        if (!directSectionStarted) {
+          listHtml += `<div class="prep-direct-section">───── 食材直接 ─────</div>`;
+          directSectionStarted = true;
+        }
+        const amt = (r.amount != null) ? (r.amount + (r.unit || '')) : '–';
+        const pack = (r.packCount != null) ? (r.packCount.toFixed(1) + 'P') : '–';
+        listHtml += `<div class="prep-direct">
+          <span class="prep-direct-name">${escHtml(r.ingName)}</span>
+          <span class="prep-direct-order">${r.orderCount}人前</span>
+          <span class="prep-direct-amt">${escHtml(amt)}</span>
+          <span class="prep-direct-pack">${escHtml(pack)}</span>
+        </div>`;
+      }
+    });
+    listHtml += '</div>';
+    tableContent = listHtml;
+  }
+
+  // メタ情報
+  let metaHtml = `<div class="s4-meta" style="margin-top:8px;font-size:12px;color:#666;">📊 拠点分: ${meta.kyotenItems || 0}件 / 配達分: ${meta.deliveryItems || 0}件</div>`;
+
+  // 警告
+  let warnHtml = '';
+  if (warnings.unmappedProducts && warnings.unmappedProducts.length > 0) {
+    warnHtml = `<div class="s4-warn" style="margin-top:8px;padding:8px;background:#fff3e0;border-left:4px solid #ff9800;font-size:12px;">⚠️ 仕込みID/食材ID未紐付け商品 ${warnings.unmappedProducts.length}件:<br>`;
+    warnHtml += warnings.unmappedProducts.slice(0, 20).map(escHtml).join(', ');
+    if (warnings.unmappedProducts.length > 20) warnHtml += ` ...他${warnings.unmappedProducts.length - 20}件`;
+    warnHtml += `</div>`;
+  }
+
+  body.innerHTML = `
+    <div class="page-title">🍳 ${escHtml(dateLabel)}　仕込み表${dateCount > 1 ? ' (' + dateCount + '日分合算)' : ''}</div>
+    ${kawariHTML}
+    ${riceHTML}
+    ${kaitoHTML}
+    <div class="s4-section-title">仕込み表</div>
+    ${tableContent}
+    ${metaHtml}
+    ${warnHtml}`;
+
+  document.getElementById('s4-kawari-save').addEventListener('click', onS4KawariSave);
+}
+
+ 
+// ボタンイベント
+document.getElementById('s4-btn-fetch').addEventListener('click', fetchSheet4);
+document.getElementById('s4-btn-week0').addEventListener('click', () => s4SelectWeek(0));
+document.getElementById('s4-btn-week1').addEventListener('click', () => s4SelectWeek(1));
+ 
+// 初期化
+initS4DateChecks();
+
+
+document.querySelectorAll('.tab-btn:not(:disabled)').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    const pane = document.getElementById('tab-' + btn.dataset.tab);
+    if (pane) pane.classList.add('active');
+    // 設定タブを開いたらプリセットUIを初期化
+    if (btn.dataset.tab === 'settings' && typeof wpEnsureSettingsLoaded === 'function') {
+      wpEnsureSettingsLoaded();
+    }
+  });
+});
+
+// ─────────────────────────────────────────
+// 日付ピッカー初期化（今日・JST）
+// ─────────────────────────────────────────
+function toJstDateStr() {
+  const now = new Date();
+  const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  return jst.toISOString().slice(0, 10);
+}
+const TODAY = toJstDateStr();
+document.getElementById('s1-date-input').value = TODAY;
+document.getElementById('s2-date-input').value = TODAY;
+document.getElementById('s3-date-input').value = TODAY;
+
+// ─────────────────────────────────────────
+// ユーティリティ
+// ─────────────────────────────────────────
+function escHtml(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ═══════════════════════════════════════
+// シート1
+// ═══════════════════════════════════════
+
+const s1Status = document.getElementById('s1-status-msg');
+
+function s1SetStatus(msg, isErr) {
+  s1Status.textContent = msg;
+  s1Status.className = 'status-msg' + (isErr ? ' err' : '');
+}
+
+document.getElementById('s1-btn-fetch').addEventListener('click', fetchSheet1);
+
+async function fetchSheet1() {
+  const dateVal = document.getElementById('s1-date-input').value;
+  if (!dateVal) { s1SetStatus('日付を選択してください', true); return; }
+  s1SetStatus('取得中…');
+  document.getElementById('sheet1-body').innerHTML = '';
+  try {
+    // ドライバー色マップを並列取得（Phase 4）
+    const [res, colorMap] = await Promise.all([
+      fetch(GAS_URL + '?action=getSheet1Data&date=' + dateVal),
+      loadDriverColorMap(dateVal)
+    ]);
+    const data = await res.json();
+    if (!data.ok) { s1SetStatus(data.error || '取得エラー', true); return; }
+    s1SetStatus('');
+    data._driverColorMap = colorMap;
+    renderSheet1(data);
+  } catch(e) {
+    s1SetStatus('通信エラー: ' + e.message, true);
+  }
+}
+
+function renderSheet1(data) {
+  const body = document.getElementById('sheet1-body');
+  const { dateLabel, locations, rice, brown, subtotalSplit } = data;
+  const locIds = locations.map(l => l.id);
+  const colorMap = data._driverColorMap || {};  // Phase 4: ドライバー色マップ
+
+  // お茶判定（商品名に「お茶」を含む行を除外）
+  const isTea = (r) => r && r.baseName && r.baseName.indexOf('お茶') >= 0;
+
+  // カテゴリー集計用：白米+玄米を結合してお茶を除外
+  const allRows = [].concat(rice || [], brown || []).filter(r => !isTea(r));
+
+  // シート1用カテゴリー定義（match に複数の表記揺れを許容）
+  const SHEET1_CATEGORIES = [
+    { label: '海苔弁系', matches: ['海苔弁系'],                   color: 'blue'   },
+    { label: '満腹系',   matches: ['満腹系', '満腹シリーズ'],     color: 'green'  },
+    { label: '全六',     matches: ['全六', '全'],                 color: 'yellow' },
+    { label: '他社商品', matches: ['他社商品', '他社製品', 'other'], color: 'yellow' }
+  ];
+
+  function buildTableHTML(rows, isBrown) {
+    if (!rows || rows.length === 0) return '';
+    const sectionClass = isBrown ? 'cell-section-brown' : 'cell-section-rice';
+    const sectionLabel = isBrown ? '▼ 玄米' : '▼ 白米';
+    const rowClass     = isBrown ? 'brown-row' : '';
+    const colspan      = 1 + locIds.length + 1 + 1;
+
+    let html = '';
+    html += `<tr><td colspan="${colspan}" class="${sectionClass}">${sectionLabel}</td></tr>`;
+    html += '<tr>';
+    html += '<th style="width:82px;text-align:left;padding-left:5px;">商品</th>';
+    locIds.forEach((lid, idx) => {
+      const loc      = locations.find(l => l.id === lid);
+      const fullName = loc ? loc.name : lid;
+      // 表示名優先、空なら拠点名の先頭2文字
+      const showName = (loc && loc.displayName && loc.displayName.length > 0)
+                        ? loc.displayName
+                        : fullName.slice(0, 2);
+      if (idx === subtotalSplit) {
+        html += `<th class="cell-sub" title="中間計(前${subtotalSplit}拠点)">中計</th>`;
+      }
+      // Phase 4: ドライバー色を背景色として適用
+      const styleAttr = driverColorStyleAttr(lid, colorMap);
+      html += `<th title="${escHtml(fullName)}"${styleAttr}>${escHtml(showName)}</th>`;
+    });
+    html += '<th class="cell-tot">合計</th>';
+    html += '</tr>';
+
+    rows.forEach(row => {
+      if (!row.total) return;
+      if (isTea(row)) return;  // お茶を除外
+      const color  = getColor(row.category, row.baseName);
+      const trCls  = `g-${color}${rowClass ? ' ' + rowClass : ''}`;
+      html += `<tr class="${trCls}">`;
+      html += `<td class="cell-name">${escHtml(row.baseName)}</td>`;
+      locIds.forEach((lid, idx) => {
+        if (idx === subtotalSplit) {
+          html += `<td class="cell-sub">${row.subtotal || ''}</td>`;
+        }
+        const q = row.byLocation[lid];
+        html += `<td class="cell-data">${q ? q : ''}</td>`;
+      });
+      html += `<td class="cell-tot">${row.total || ''}</td>`;
+      html += '</tr>';
+    });
+
+    return html;
+  }
+
+  // カテゴリー別合計行（白米+玄米合算、お茶除外）
+  function buildCategoryRowsHTML() {
+    const colspan = 1 + locIds.length + 1 + 1;
+    let html = '';
+    html += `<tr><td colspan="${colspan}" class="cell-section-cat">▼ カテゴリー別合計</td></tr>`;
+
+    SHEET1_CATEGORIES.forEach(cat => {
+      const catRows = allRows.filter(r => cat.matches.indexOf(r.category) >= 0);
+      if (catRows.length === 0) return;
+
+      // 拠点ごとの合計を計算
+      const byLocation = {};
+      let subtotal = 0, total = 0;
+      locIds.forEach((lid, idx) => {
+        let sum = 0;
+        catRows.forEach(r => { sum += Number(r.byLocation[lid]) || 0; });
+        byLocation[lid] = sum;
+        total += sum;
+        if (idx < subtotalSplit) subtotal += sum;
+      });
+      if (total === 0) return;  // 全拠点ゼロなら行ごと省略
+
+      html += `<tr class="cat-row g-${cat.color}">`;
+      html += `<td class="cell-name cat-label">${cat.label}</td>`;
+      locIds.forEach((lid, idx) => {
+        if (idx === subtotalSplit) {
+          html += `<td class="cell-sub">${subtotal || ''}</td>`;
+        }
+        const v = byLocation[lid];
+        html += `<td class="cell-data">${v || ''}</td>`;
+      });
+      html += `<td class="cell-tot">${total}</td>`;
+      html += '</tr>';
+    });
+
+    // 拠点合計行（全カテゴリー合算）
+    const grandByLoc = {};
+    let grandSub = 0, grandTotal = 0;
+    locIds.forEach((lid, idx) => {
+      let sum = 0;
+      allRows.forEach(r => { sum += Number(r.byLocation[lid]) || 0; });
+      grandByLoc[lid] = sum;
+      grandTotal += sum;
+      if (idx < subtotalSplit) grandSub += sum;
+    });
+    html += '<tr class="cat-row cat-grand">';
+    html += '<td class="cell-name cat-label">拠点合計</td>';
+    locIds.forEach((lid, idx) => {
+      if (idx === subtotalSplit) {
+        html += `<td class="cell-sub">${grandSub || ''}</td>`;
+      }
+      html += `<td class="cell-data">${grandByLoc[lid] || ''}</td>`;
+    });
+    html += `<td class="cell-tot">${grandTotal}</td>`;
+    html += '</tr>';
+
+    return html;
+  }
+
+  const tableHTML = '<table class="matrix-table">'
+    + buildTableHTML(rice,  false)
+    + buildTableHTML(brown, true)
+    + buildCategoryRowsHTML()
+    + '</table>';
+
+  let refHTML = '<table class="ref-table">'
+    + '<tr><th class="col-name">拠点名</th><th class="col-sp">販売員名</th></tr>';
+  locations.forEach((loc) => {
+    // Phase 4: ref-panelの拠点名セルにもドライバー色を適用
+    const styleAttr = driverColorStyleAttr(loc.id, colorMap);
+    refHTML += `<tr>`
+      + `<td class="col-name"${styleAttr}>${escHtml(loc.name)}</td>`
+      + `<td class="col-sp">${escHtml(loc.salesPerson || '')}</td>`
+      + `</tr>`;
+  });
+  refHTML += '</table>';
+
+  body.innerHTML = `
+    <div class="page-title">📋 ${escHtml(dateLabel)}　拠点配分表</div>
+    <div class="sheet1-content">
+      <div class="table-wrap">${tableHTML}</div>
+      <div class="ref-panel">${refHTML}</div>
+    </div>`;
+}
+
+// ═══════════════════════════════════════
+// シート2
+// ═══════════════════════════════════════
+
+const s2Status = document.getElementById('s2-status-msg');
+
+function s2SetStatus(msg, isErr) {
+  s2Status.textContent = msg;
+  s2Status.className = 'status-msg' + (isErr ? ' err' : '');
+}
+
+document.getElementById('s2-btn-fetch').addEventListener('click', fetchSheet2);
+
+async function fetchSheet2() {
+  const dateVal = document.getElementById('s2-date-input').value;
+  if (!dateVal) { s2SetStatus('日付を選択してください', true); return; }
+  s2SetStatus('取得中…');
+  document.getElementById('sheet2-body').innerHTML = '';
+  try {
+    const res  = await fetch(GAS_URL + '?action=getSheet2Data&date=' + dateVal);
+    const data = await res.json();
+    if (!data.ok) { s2SetStatus(data.error || '取得エラー', true); return; }
+    s2SetStatus('');
+    renderSheet2(data);
+  } catch(e) {
+    s2SetStatus('通信エラー: ' + e.message, true);
+  }
+}
+
+function renderSheet2(data) {
+  const body = document.getElementById('sheet2-body');
+  const { dateLabel, deliveries, rice, brown } = data;
+  const dCount = deliveries.length;
+
+  // ── マトリクス HTML 構築 ──
+  function buildMatrixHTML(rows, isBrown) {
+    const sectionClass = isBrown ? 'cell-section-brown' : 'cell-section-rice';
+    const sectionLabel = isBrown ? '▼ 玄米' : '▼ 白米';
+    const rowClass     = isBrown ? ' brown-row' : '';
+    const colspan      = 1 + 1 + dCount + 1; // 商品名 + 拠点合計 + N配達 + 計
+
+    // この表に数量が1つも無い配達列を判定（印刷時のみ非表示・列番号は元のまま維持）
+    const activeRows = (rows || []).filter(r => r.total);
+    const colEmpty = [];
+    for (let d = 0; d < dCount; d++) {
+      colEmpty[d] = !activeRows.some(r => r.deliveryQtys[d] > 0);
+    }
+    const colEmptyCls = d => colEmpty[d] ? ' col-empty-print' : '';
+
+    let html = '<thead>';
+    html += `<tr><td colspan="${colspan}" class="${sectionClass}">${sectionLabel}</td></tr>`;
+    html += '<tr>';
+    html += '<th style="text-align:left;padding-left:5px;min-width:80px;">商品</th>';
+    html += '<th class="cell-kyoten">拠点</th>';
+    for (let d = 0; d < dCount; d++) {
+      const tip = escHtml(deliveries[d].address || deliveries[d].orderNum);
+      html += `<th title="${tip}" class="${colEmptyCls(d).trim()}" style="min-width:20px;">${d + 1}</th>`;
+    }
+    html += '<th class="cell-tot">計</th>';
+    html += '</tr></thead><tbody>';
+
+    activeRows.forEach(row => {
+      const color  = getColor(row.category, row.baseName);
+      const trCls  = `g-${color}${rowClass}`;
+      html += `<tr class="${trCls}">`;
+      html += `<td class="cell-name">${escHtml(row.baseName)}</td>`;
+      html += `<td class="cell-kyoten">${row.kyotenTotal || ''}</td>`;
+
+      for (let d = 0; d < dCount; d++) {
+        const qty  = row.deliveryQtys[d];
+        const ohm  = row.deliveryOhm[d];
+        const gc   = gradeClassOf(deliveries[d].grade)
+        const bgCls = (qty > 0 && gc) ? `cell-${gc}` : '';
+        const txt  = qty ? (ohm ? `<span class="ohm">${qty}</span>` : qty) : '';
+        html += `<td class="${(bgCls + colEmptyCls(d)).trim()}">${txt}</td>`;
+      }
+      html += `<td class="cell-tot">${row.total || ''}</td>`;
+      html += '</tr>';
+    });
+
+    html += '</tbody>';
+    return html;
+  }
+
+  const riceHTML  = '<table class="matrix-table">' + buildMatrixHTML(rice,  false) + '</table>';
+  const brownHTML = '<table class="matrix-table">' + buildMatrixHTML(brown, true)  + '</table>';
+
+  // ── 配達カード HTML 構築 ──
+  let cardsHTML = '';
+
+  if (dCount === 0) {
+    cardsHTML = '<div class="no-delivery-msg">本日の1便配達データはありません</div>';
+  } else {
+    deliveries.forEach(d => {
+      const gc      = gradeClassOf(d.grade) ? `grade-${gradeClassOf(d.grade)}` : 'grade-empty';
+      const addrFull = d.address + (d.detail ? '　' + d.detail : '');
+      const returnBadge = d.hasReturn
+        ? `<span class="return-badge">🔄 回収 ${d.returnTime || ''}</span>`
+        : '';
+
+      cardsHTML += `
+        <div class="delivery-card">
+          <div class="delivery-header ${gc}">
+            <span>配達 ${d.n}</span>
+            <span class="grade-badge grade-${gradeClassOf(d.grade) || 'empty'}">${gradeLabelJa(d.grade)}</span>
+          </div>
+          <div class="delivery-body">
+            <div class="delivery-row">
+              <span class="lbl">時間</span>
+              <span class="val">${escHtml(d.time)}</span>
+            </div>
+            <div class="delivery-row">
+              <span class="lbl">届先</span>
+              <span class="val">${escHtml(addrFull)}</span>
+            </div>
+            ${d.contact ? `<div class="delivery-row"><span class="lbl">担当</span><span class="val">${escHtml(d.contact)}</span></div>` : ''}
+            ${d.note ? `<div class="delivery-row"><span class="lbl">備考</span><span class="val">${escHtml(d.note)}</span></div>` : ''}
+            ${d.hasReturn ? `<div class="delivery-row"><span class="lbl">回収</span><span class="val">${returnBadge}</span></div>` : ''}
+          </div>
+        </div>`;
+    });
+  }
+
+  // ── 組み合わせ ──
+  body.innerHTML = `
+    <div class="page-title">📋 ${escHtml(dateLabel)}　1便盛り出し表（配達 ${dCount} 件）</div>
+    <div class="sheet2-container">
+      <div class="table-wrap">${riceHTML}</div>
+      <div class="table-wrap">${brownHTML}</div>
+      <div class="delivery-area">${cardsHTML}</div>
+    </div>`;
+}
+
+// ═══════════════════════════════════════
+// シート3（2便盛り出し表）
+// ═══════════════════════════════════════
+
+const s3Status = document.getElementById('s3-status-msg');
+
+function s3SetStatus(msg, isErr) {
+  s3Status.textContent = msg;
+  s3Status.className = 'status-msg' + (isErr ? ' err' : '');
+}
+
+document.getElementById('s3-btn-fetch').addEventListener('click', fetchSheet3);
+
+async function fetchSheet3() {
+  const dateVal = document.getElementById('s3-date-input').value;
+  if (!dateVal) { s3SetStatus('日付を選択してください', true); return; }
+  s3SetStatus('取得中…');
+  document.getElementById('sheet3-body').innerHTML = '';
+  try {
+    const res  = await fetch(GAS_URL + '?action=getSheet3Data&date=' + dateVal);
+    const data = await res.json();
+    if (!data.ok) { s3SetStatus(data.error || '取得エラー', true); return; }
+    s3SetStatus('');
+    renderSheet3(data);
+  } catch(e) {
+    s3SetStatus('通信エラー: ' + e.message, true);
+  }
+}
+
+function renderSheet3(data) {
+  const body = document.getElementById('sheet3-body');
+  const { dateLabel, deliveries, rice, brown } = data;
+  const dCount = deliveries.length;
+
+  // ── マトリクス HTML 構築（拠点合計列なし） ──
+  function buildMatrixHTML(rows, isBrown) {
+    const sectionClass = isBrown ? 'cell-section-brown' : 'cell-section-rice';
+    const sectionLabel = isBrown ? '▼ 玄米' : '▼ 白米';
+    const rowClass     = isBrown ? ' brown-row' : '';
+    const colspan      = 1 + dCount + 1; // 商品名 + N配達 + 計
+
+    let html = '<thead>';
+    html += `<tr><td colspan="${colspan}" class="${sectionClass}">${sectionLabel}</td></tr>`;
+    html += '<tr>';
+    html += '<th style="text-align:left;padding-left:5px;min-width:80px;">商品</th>';
+    for (let d = 0; d < dCount; d++) {
+      const tip = escHtml(deliveries[d].address || deliveries[d].orderNum);
+      html += `<th title="${tip}" style="min-width:20px;">${d + 1}</th>`;
+    }
+    html += '<th class="cell-tot">計</th>';
+    html += '</tr></thead><tbody>';
+
+    (rows || []).forEach(row => {
+      if (!row.total) return;
+      const color  = getColor(row.category, row.baseName);
+      const trCls  = `g-${color}${rowClass}`;
+      html += `<tr class="${trCls}">`;
+      html += `<td class="cell-name">${escHtml(row.baseName)}</td>`;
+      for (let d = 0; d < dCount; d++) {
+        const qty  = row.deliveryQtys[d];
+        const ohm  = row.deliveryOhm[d];
+        const gc   = gradeClassOf(deliveries[d].grade)
+        const bgCls = (qty > 0 && gc) ? `cell-${gc}` : '';
+        const txt  = qty ? (ohm ? `<span class="ohm">${qty}</span>` : qty) : '';
+        html += `<td class="${bgCls}">${txt}</td>`;
+      }
+      html += `<td class="cell-tot">${row.total || ''}</td>`;
+      html += '</tr>';
+    });
+
+    html += '</tbody>';
+    return html;
+  }
+
+  // 2便データが無い日
+  if (dCount === 0) {
+    body.innerHTML = `
+      <div class="page-title">📋 ${escHtml(dateLabel)}　2便盛り出し表</div>
+      <div class="no-delivery-msg">本日の2便配達データはありません</div>`;
+    return;
+  }
+
+  const riceHTML  = '<table class="matrix-table">' + buildMatrixHTML(rice,  false) + '</table>';
+  const brownHTML = '<table class="matrix-table">' + buildMatrixHTML(brown, true)  + '</table>';
+
+  // ── 配達カード HTML 構築 ──
+  let cardsHTML = '';
+  deliveries.forEach(d => {
+    const gc       = gradeClassOf(d.grade) ? `grade-${gradeClassOf(d.grade)}` : 'grade-empty';
+    const addrFull = d.address + (d.detail ? '　' + d.detail : '');
+    const returnBadge = d.hasReturn
+      ? `<span class="return-badge">🔄 回収 ${d.returnTime || ''}</span>`
+      : '';
+
+    cardsHTML += `
+      <div class="delivery-card">
+        <div class="delivery-header ${gc}">
+          <span>配達 ${d.n}</span>
+          <span class="grade-badge grade-${gradeClassOf(d.grade) || 'empty'}">${gradeLabelJa(d.grade)}</span>
+        </div>
+        <div class="delivery-body">
+          <div class="delivery-row">
+            <span class="lbl">時間</span>
+            <span class="val">${escHtml(d.time)}</span>
+          </div>
+          <div class="delivery-row">
+            <span class="lbl">届先</span>
+            <span class="val">${escHtml(addrFull)}</span>
+          </div>
+          ${d.contact ? `<div class="delivery-row"><span class="lbl">担当</span><span class="val">${escHtml(d.contact)}</span></div>` : ''}
+          ${d.note ? `<div class="delivery-row"><span class="lbl">備考</span><span class="val">${escHtml(d.note)}</span></div>` : ''}
+          ${d.hasReturn ? `<div class="delivery-row"><span class="lbl">回収</span><span class="val">${returnBadge}</span></div>` : ''}
+        </div>
+      </div>`;
+  });
+
+  // ── 組み合わせ ──
+  body.innerHTML = `
+    <div class="page-title">📋 ${escHtml(dateLabel)}　2便盛り出し表（配達 ${dCount} 件）</div>
+    <div class="sheet3-container">
+      <div class="sheet3-matrix">
+        <div class="table-wrap">${riceHTML}</div>
+        <div class="table-wrap">${brownHTML}</div>
+      </div>
+      <div class="sheet3-delivery">${cardsHTML}</div>
+    </div>`;
+}
+
+// ═══════════════════════════════════════
+// 発注タブ
+// ═══════════════════════════════════════
+
+// 業者名→カラークラス（食材マスタの業者名に合わせて追記可）
+const VENDOR_COLOR_MAP = {
+  '鶏肉業者': 'red',   '魚業者':   'blue',  '卵業者':   'orange',
+  '米業者':   'brown', '食品問屋': 'purple', '豆腐業者': 'teal',
+};
+const VENDOR_KW_MAP = [
+  ['鶏','red'],['肉','red'],['魚','blue'],['鮭','blue'],['水産','blue'],
+  ['卵','orange'],['玉子','orange'],['野菜','orange'],
+  ['米','brown'],['穀','brown'],
+  ['食品','purple'],['問屋','purple'],
+  ['豆腐','teal'],['乳','teal'],
+];
+function getVendorColorClass(n) {
+  if (VENDOR_COLOR_MAP[n]) return 'ovc-' + VENDOR_COLOR_MAP[n];
+  for (const [kw, col] of VENDOR_KW_MAP) { if (n.includes(kw)) return 'ovc-' + col; }
+  return 'ovc-gray';
+}
+
+// 発注済みフラグ（localStorage）
+let _orderDoneFlags = {};
+let _orderDoneFlagsKey = '';
+function loadOrderDoneFlags(key) {
+  _orderDoneFlagsKey = 'orderDone_' + key;
+  try { _orderDoneFlags = JSON.parse(localStorage.getItem(_orderDoneFlagsKey) || '{}'); }
+  catch(e) { _orderDoneFlags = {}; }
+}
+function saveOrderDoneFlags() {
+  try { localStorage.setItem(_orderDoneFlagsKey, JSON.stringify(_orderDoneFlags)); } catch(e) {}
+}
+
+// 選択日セット
+const orderSelectedDates = new Set();
+
+// 日付チェックボックス初期化（翌日から月〜日・14日分・今日以前はdisabled）
+// v2.1: 土日含む対応＋タイムゾーンバグ修正（UTC算術で統一）
+function initOrderDateChecks() {
+  const jstNow = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);
+  const todayStr = jstNow.toISOString().slice(0, 10);
+  const [tYear, tMonth, tDay] = todayStr.split('-').map(Number);
+
+  const startUtc = new Date(Date.UTC(tYear, tMonth - 1, tDay + 1));
+  const startDow = startUtc.getUTCDay();
+  const daysFromMonday = (startDow === 0) ? 6 : startDow - 1;
+  const thisMondayUtc = new Date(startUtc.getTime() - daysFromMonday * 86400000);
+
+  const DOW = ['日','月','火','水','木','金','土'];
+  const row = document.getElementById('order-date-row');
+  row.innerHTML = '';
+  orderSelectedDates.clear();
+
+  for (let i = 0; i < 14; i++) {
+    const d = new Date(thisMondayUtc.getTime() + i * 86400000);
+    const dateStr = d.toISOString().slice(0, 10);
+    const dispDay = d.getUTCDate();
+    const dispMonth = d.getUTCMonth() + 1;
+    const dispDow = d.getUTCDay();
+    const isDisabled = dateStr <= todayStr;
+    const wn = (i < 7) ? 0 : 1;
+
+    const lbl = document.createElement('label');
+    let cls = 'order-date-lbl';
+    if (isDisabled) cls += ' disabled';
+    lbl.className = cls;
+    lbl.dataset.date = dateStr;
+    lbl.dataset.week = wn;
+
+    if (isDisabled) {
+      lbl.innerHTML = `${dispMonth}/${dispDay}(${DOW[dispDow]})`;
+    } else {
+      lbl.innerHTML = `<input type="checkbox" value="${dateStr}"> ${dispMonth}/${dispDay}(${DOW[dispDow]})`;
+      lbl.querySelector('input').addEventListener('change', e => {
+        if (e.target.checked) {
+          orderSelectedDates.add(dateStr);
+          lbl.classList.add('checked');
+        } else {
+          orderSelectedDates.delete(dateStr);
+          lbl.classList.remove('checked');
+        }
+      });
+    }
+    row.appendChild(lbl);
+  }
+}
+
+function orderSelectWeek(wn) {
+  document.querySelectorAll('#order-date-row .order-date-lbl').forEach(lbl => {
+    if (lbl.classList.contains('disabled')) return;
+    const cb = lbl.querySelector('input');
+    if (!cb) return;
+    const dateStr = lbl.dataset.date;
+    if (parseInt(lbl.dataset.week) === wn) {
+      cb.checked = true;
+      orderSelectedDates.add(dateStr);
+      lbl.classList.add('checked');
+    } else {
+      cb.checked = false;
+      orderSelectedDates.delete(dateStr);
+      lbl.classList.remove('checked');
+    }
+  });
+}
+
+const orderStatus = document.getElementById('order-status-msg');
+function orderSetStatus(msg, isErr) {
+  orderStatus.textContent = msg;
+  orderStatus.className = 'status-msg' + (isErr ? ' err' : '');
+}
+
+document.getElementById('order-btn-fetch').addEventListener('click', fetchOrderData);
+document.getElementById('order-btn-week0').addEventListener('click', () => orderSelectWeek(0));
+document.getElementById('order-btn-week1').addEventListener('click', () => orderSelectWeek(1));
+
+async function fetchOrderData() {
+  const dates = Array.from(orderSelectedDates).sort();
+  if (dates.length === 0) { orderSetStatus('日付を1日以上選択してください', true); return; }
+  orderSetStatus('取得中…');
+  document.getElementById('order-body').innerHTML = '';
+  document.getElementById('order-warn-wrap').style.display = 'none';
+  document.getElementById('order-warn-wrap').innerHTML = '';
+  try {
+    const res  = await fetch(GAS_URL + '?action=getOrderData&dates=' + encodeURIComponent(JSON.stringify(dates)));
+    const data = await res.json();
+    if (!data.ok) { orderSetStatus(data.error || '取得エラー', true); return; }
+    orderSetStatus('');
+    loadOrderDoneFlags(dates.join('_'));
+    renderOrderWarnings(data.warnings);
+    renderOrderData(data);
+  } catch(e) {
+    orderSetStatus('通信エラー: ' + e.message, true);
+  }
+}
+
+// 未マッピング警告エリアを描画
+function renderOrderWarnings(warnings) {
+  const wrap = document.getElementById('order-warn-wrap');
+  if (!warnings) { wrap.style.display = 'none'; return; }
+  const up = warnings.unmappedProducts    || [];
+  const us = warnings.unmappedShikomiIds  || [];
+  const ud = warnings.unmappedDeliveryIds || [];
+  const totalCount = up.length + us.length + ud.length;
+  if (totalCount === 0) { wrap.style.display = 'none'; return; }
+
+  let body = '';
+  if (up.length > 0) {
+    body += '<div class="order-warn-section"><div class="order-warn-label">未マッピング商品（単価マスタで仕込みID/食材IDが未設定）：' + up.length + '件</div>'
+         + '<div class="order-warn-items">' + up.map(escHtml).join('、') + '</div></div>';
+  }
+  if (us.length > 0) {
+    body += '<div class="order-warn-section"><div class="order-warn-label">未マッピング仕込みID（仕込みマスタに登録なし）：' + us.length + '件</div>'
+         + '<div class="order-warn-items">' + us.map(escHtml).join('、') + '</div></div>';
+  }
+  if (ud.length > 0) {
+    body += '<div class="order-warn-section"><div class="order-warn-label">未マッピング配達商品ID（単価マスタに登録なし）：' + ud.length + '件</div>'
+         + '<div class="order-warn-items">' + ud.map(escHtml).join('、') + '</div></div>';
+  }
+
+  wrap.innerHTML = '<div class="order-warn-head" onclick="toggleOrderWarn()">'
+                + '<span id="order-warn-arrow">▶</span>'
+                + '<span>⚠️ 未マッピング警告 ' + totalCount + '件（クリックで詳細）</span>'
+                + '</div>'
+                + '<div class="order-warn-body" id="order-warn-body">' + body + '</div>';
+  wrap.style.display = '';
+}
+
+function toggleOrderWarn() {
+  const body  = document.getElementById('order-warn-body');
+  const arrow = document.getElementById('order-warn-arrow');
+  if (!body) return;
+  body.classList.toggle('open');
+  if (arrow) arrow.textContent = body.classList.contains('open') ? '▼' : '▶';
+}
+
+// 必要量の表示用フォーマット（数値＋単位、小数1桁、kg帯は kg 換算）
+function formatNeedAmount(total, unit) {
+  const u = String(unit || '').trim();
+  // g → 1000 以上で kg 表示
+  if (u === 'g' && total >= 1000) {
+    return (Math.round(total / 100) / 10) + 'kg';
+  }
+  // ml → 1000 以上で L 表示
+  if (u === 'ml' && total >= 1000) {
+    return (Math.round(total / 100) / 10) + 'L';
+  }
+  // 小数1桁表示（整数になればドット省略）
+  const rounded = Math.round(total * 10) / 10;
+  const display = (rounded === Math.floor(rounded)) ? String(Math.floor(rounded)) : rounded.toFixed(1);
+  return display + u;
+}
+
+function renderOrderData(data) {
+  const { dates, vendors, dailyBreakdown } = data;
+  const DOW = ['日','月','火','水','木','金','土'];
+
+  const datesLabel = dates.map(d => {
+    const dt = new Date(d.replace(/-/g, '/'));
+    return `${dt.getMonth()+1}/${dt.getDate()}(${DOW[dt.getDay()]})`;
+  }).join('・');
+  document.getElementById('order-sel-info').textContent = `選択中：${datesLabel}（${dates.length}日分合計）`;
+
+  const body = document.getElementById('order-body');
+  if (!vendors || vendors.length === 0) {
+    body.innerHTML = '<div class="placeholder-msg">発注データがありません<br><small>食材マスタと単価マスタの食材ID/仕込みID列を確認してください</small></div>';
+    return;
+  }
+
+  let html = '';
+  vendors.forEach(v => {
+    const cc    = getVendorColorClass(v.name);
+    const safeN = v.name.replace(/[^\w\u3000-\u9FFF]/g, '_'); // CSSセーフなID用
+    const isDone = _orderDoneFlags[v.name] || false;
+
+    // 食材テーブル（3列：食材名 / 必要量 / パック数）
+    const rows = v.items.map(it =>
+      `<tr>
+         <td>${escHtml(it.name)}</td>
+         <td class="order-need">${formatNeedAmount(it.total, it.unit)}</td>
+         <td class="order-qty">${it.packCeil}P</td>
+       </tr>`
+    ).join('');
+
+    // 日別内訳
+    const bdId = 'order-bd-' + safeN;
+    let bdRows = '';
+    dates.forEach(d => {
+      const dayItems = (dailyBreakdown[d] || []).filter(it => it.vendorName === v.name);
+      if (!dayItems.length) return;
+      const dt = new Date(d.replace(/-/g, '/'));
+      const lbl = `${dt.getMonth()+1}/${dt.getDate()}(${DOW[dt.getDay()]})`;
+      const items = dayItems.map(it => `${escHtml(it.name)} ${formatNeedAmount(it.total, it.unit)}(${it.packCeil}P)`).join(' / ');
+      bdRows += `<div class="order-bd-row"><span class="order-bd-date">${lbl}</span><span class="order-bd-items">${items}</span></div>`;
+    });
+    const bdSection = bdRows
+      ? `<button class="order-bd-toggle" onclick="toggleOrderBd('${bdId}')"><span id="${bdId}-arrow">▶</span> 日別内訳</button>
+         <div class="order-breakdown" id="${bdId}">${bdRows}</div>`
+      : '';
+
+    html += `
+      <div class="order-vendor-card ${cc}${isDone ? ' done' : ''}" id="ovc-${safeN}">
+        <div class="order-vendor-head" onclick="toggleOrderCard('${safeN}')">
+          <span class="order-vendor-name">${escHtml(v.name)}</span>
+          <span class="order-vendor-summary">（${v.items.length}品目）</span>
+          <div style="display:flex;align-items:center;gap:8px;margin-left:auto;" onclick="event.stopPropagation()">
+            <label class="order-done-wrap">
+              <input type="checkbox" class="order-done-cb" data-vendor="${escHtml(v.name)}"
+                ${isDone ? 'checked' : ''} onchange="onOrderDone('${escHtml(v.name)}',this.checked)">
+              発注済み
+            </label>
+            <button class="order-copy-btn" onclick="copyOrderText('${escHtml(v.name)}')">📋 コピー</button>
+          </div>
+        </div>
+        <div class="order-vendor-body" id="ovcb-${safeN}">
+          <table class="order-table">
+            <thead><tr>
+              <th style="text-align:left">食材名</th>
+              <th style="text-align:right;width:28%">必要量</th>
+              <th style="text-align:right;width:22%">パック数</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+          ${bdSection}
+        </div>
+      </div>`;
+  });
+  body.innerHTML = html;
+  window._orderData = data;
+}
+
+function toggleOrderCard(safeN) {
+  const body = document.getElementById('ovcb-' + safeN);
+  if (body) body.style.display = body.style.display === 'none' ? '' : 'none';
+}
+
+function toggleOrderBd(bdId) {
+  const el    = document.getElementById(bdId);
+  const arrow = document.getElementById(bdId + '-arrow');
+  if (!el) return;
+  el.classList.toggle('open');
+  if (arrow) arrow.textContent = el.classList.contains('open') ? '▼' : '▶';
+}
+
+function onOrderDone(vendorName, checked) {
+  _orderDoneFlags[vendorName] = checked;
+  saveOrderDoneFlags();
+  const safeN = vendorName.replace(/[^\w\u3000-\u9FFF]/g, '_');
+  const card  = document.getElementById('ovc-' + safeN);
+  if (card) card.classList.toggle('done', checked);
+}
+
 function copyOrderText(vendorName) {
   const data = window._orderData;
   if (!data) return;
   const vendor = data.vendors.find(v => v.name === vendorName);
   if (!vendor) return;
-
+ 
   const DOW = ['日','月','火','水','木','金','土'];
-
+ 
   // 先頭日付のみ表示
   let dateLabel = '';
   const firstDate = data.dates && data.dates[0];
@@ -66,10 +3078,10 @@ function copyOrderText(vendorName) {
     const dt = new Date(firstDate.replace(/-/g, '/'));
     dateLabel = `${dt.getMonth()+1}/${dt.getDate()}(${DOW[dt.getDay()]})`;
   }
-
+ 
   // 業者の発注単位区分（デフォルト 'pack'）
   const unitMode = vendor.unitMode || 'pack';
-
+ 
   // 各食材の発注量を unitMode に応じて整形
   const itemLines = vendor.items.map(it => {
     const need = formatNeedAmount(it.total, it.unit);
@@ -85,7 +3097,7 @@ function copyOrderText(vendorName) {
     }
     return `・${it.name} ${qty}`;
   });
-
+ 
   // 案C: 区切り線フォーマット
   const sep = '━━━━━━━━━━━━━━━━';
   const lines = [
@@ -100,7 +3112,7 @@ function copyOrderText(vendorName) {
     'よろしくお願いいたします。'
   ];
   const text = lines.join('\n');
-
+ 
   navigator.clipboard.writeText(text).then(
     () => { orderSetStatus(vendorName + ' のコピー完了'); setTimeout(() => orderSetStatus(''), 2500); },
     () => {
@@ -115,57 +3127,1589 @@ function copyOrderText(vendorName) {
   );
 }
 
-
-═════════════════════════════════════════════════════════════════
-【出力サンプル】
-═════════════════════════════════════════════════════════════════
-
-▼ 業者の unitMode = 'pack' の場合
-─────────────────────────────────
-お世話になっております。お江戸弁当です。
-下記、発注をお願いいたします。
-
-▼納品日：5/26(火)
-━━━━━━━━━━━━━━━━
-・鶏もも肉 8パック
-・玉ねぎ 3パック
-・人参 2パック
-━━━━━━━━━━━━━━━━
-
-よろしくお願いいたします。
-─────────────────────────────────
+// 発注タブ 初期化
+initOrderDateChecks();
 
 
-▼ 業者の unitMode = 'kg' の場合（米屋などkg単位の業者）
-─────────────────────────────────
-お世話になっております。お江戸弁当です。
-下記、発注をお願いいたします。
-
-▼納品日：5/26(火)
-━━━━━━━━━━━━━━━━
-・白米 30kg
-・玄米 5kg
-━━━━━━━━━━━━━━━━
-
-よろしくお願いいたします。
-─────────────────────────────────
 
 
-▼ 業者の unitMode = 'both' の場合
-─────────────────────────────────
-お世話になっております。お江戸弁当です。
-下記、発注をお願いいたします。
+// ═══════════════════════════════════════════════════════════
+// 基本数マスタ画面（日付キー版 2026-05-19）
+// ═══════════════════════════════════════════════════════════
 
-▼納品日：5/26(火)
-━━━━━━━━━━━━━━━━
-・鶏もも肉 12kg / 8パック
-・玉ねぎ 1.5kg / 3パック
-━━━━━━━━━━━━━━━━
+const BM_CATEGORIES = [
+  { id:'noriben', label:'海苔弁系' },
+  { id:'manpuku', label:'満腹シリーズ' },
+  { id:'zenroku', label:'全六' },
+  { id:'other',   label:'他社製品' }
+];
+const BM_SELLOUT_RULES = [
+  { from:'08:00', to:'10:59', bonus:5 },
+  { from:'11:00', to:'11:59', bonus:3 },
+  { from:'12:00', to:'12:59', bonus:2 },
+  { from:'13:00', to:'13:59', bonus:1 }
+];
+const BM_DOW_JA = ['日','月','火','水','木','金','土'];
 
-よろしくお願いいたします。
-─────────────────────────────────
+const BM_LS_KEY = 'kanri_bm_edits_v2_date';  // 旧キー(v1)とは別物。旧データは無効化
+let bmCurrentDate = null;     // 'YYYY-MM-DD' 形式
+let bmCurrentWeek = 'this';   // 'this' or 'next'
+let bmServerData  = null;     // 現在表示中の日付のサーバーデータ
+let bmEditsCache  = {};       // { dateStr: { 'pid_lid': editedValue } }
+let bmInitialized = false;
+let bmLoadedDates = new Set();
+let bmThisWeekDates = [];     // ['2026-05-19','2026-05-20',...]
+let bmNextWeekDates = [];
+let bmDriverColorMap = {};    // Phase 4: 現在表示中の日付のドライバー色マップ
+
+// localStorage 読込
+function bmLoadEdits() {
+  try {
+    const raw = localStorage.getItem(BM_LS_KEY);
+    bmEditsCache = raw ? JSON.parse(raw) : {};
+  } catch(e) { bmEditsCache = {}; }
+  // 旧版localStorage(kanri_bm_edits_v1)があれば削除（曜日キー版・無効化）
+  try { localStorage.removeItem('kanri_bm_edits_v1'); } catch(e) {}
+}
+function bmSaveEdits() {
+  try { localStorage.setItem(BM_LS_KEY, JSON.stringify(bmEditsCache)); } catch(e) {}
+}
+function bmGetEdit(dateStr, pid, lid) {
+  return (bmEditsCache[dateStr] && bmEditsCache[dateStr][pid + '_' + lid] !== undefined)
+    ? bmEditsCache[dateStr][pid + '_' + lid] : null;
+}
+function bmSetEdit(dateStr, pid, lid, val) {
+  if (!bmEditsCache[dateStr]) bmEditsCache[dateStr] = {};
+  if (val === null || val === undefined) {
+    delete bmEditsCache[dateStr][pid + '_' + lid];
+  } else {
+    bmEditsCache[dateStr][pid + '_' + lid] = val;
+  }
+  bmSaveEdits();
+}
+function bmClearEditsForLoc(dateStr, lid) {
+  if (!bmEditsCache[dateStr]) return;
+  const keys = Object.keys(bmEditsCache[dateStr]);
+  for (const k of keys) {
+    if (k.endsWith('_' + lid)) delete bmEditsCache[dateStr][k];
+  }
+  bmSaveEdits();
+}
+
+// 古い日付の編集キャッシュをクリア（範囲外の日付を削除）
+function bmPurgeOldEdits(validDates) {
+  const validSet = new Set(validDates);
+  const keys = Object.keys(bmEditsCache);
+  let purged = 0;
+  for (const k of keys) {
+    if (!validSet.has(k)) {
+      delete bmEditsCache[k];
+      purged++;
+    }
+  }
+  if (purged > 0) bmSaveEdits();
+  return purged;
+}
+
+// 完売増量
+function bmGetSelloutBonus(timeStr) {
+  if (!timeStr) return 0;
+  const s = String(timeStr).substring(0,5);
+  for (const r of BM_SELLOUT_RULES) {
+    if (s >= r.from && s <= r.to) return r.bonus;
+  }
+  return 0;
+}
+
+// 日付フォーマット系
+function bmFmtDateLabel(dateStr) {
+  // 'YYYY-MM-DD' → 'M/D(曜)'
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return dateStr;
+  const m = parseInt(parts[1], 10);
+  const d = parseInt(parts[2], 10);
+  // JS Date を JST 解釈：YYYY-MM-DD は UTC扱いになるので注意
+  // ローカル時刻でつくる
+  const dt = new Date(parseInt(parts[0],10), m-1, d);
+  const dow = BM_DOW_JA[dt.getDay()];
+  return m + '/' + d + '(' + dow + ')';
+}
+function bmFmtDateFull(dateStr) {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return dateStr;
+  const y = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
+  const d = parseInt(parts[2], 10);
+  const dt = new Date(y, m-1, d);
+  const dow = BM_DOW_JA[dt.getDay()];
+  return y + '年' + m + '月' + d + '日(' + dow + ')';
+}
+
+// 今日の日付取得（YYYY-MM-DD 形式・ローカル時刻）
+function bmTodayStr() {
+  const t = new Date();
+  const y = t.getFullYear();
+  const m = String(t.getMonth() + 1).padStart(2, '0');
+  const d = String(t.getDate()).padStart(2, '0');
+  return y + '-' + m + '-' + d;
+}
+
+// API
+async function bmFetchMatrix(dateStr) {
+  try {
+    const res = await fetch(GAS_URL + '?action=getBasicMasterMatrix&date=' + encodeURIComponent(dateStr));
+    const json = await res.json();
+    return json;
+  } catch(err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
+async function bmPostAction(action, payload) {
+  try {
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(Object.assign({ action }, payload || {}))
+    });
+    return await res.json();
+  } catch(err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
+// 確定状態：拠点の全商品でG列に値があるか
+function bmIsLocConfirmed(lid) {
+  if (!bmServerData) return false;
+  const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
+  for (const p of products) {
+    const c = bmServerData.cells[p.id + '_' + lid];
+    if (!c) continue;
+    if (c.confirmed === null || c.confirmed === undefined) return false;
+  }
+  return true;
+}
+function bmIsAllConfirmed() {
+  if (!bmServerData) return false;
+  for (const loc of bmServerData.locations) {
+    if (!bmIsLocConfirmed(loc.id)) return false;
+  }
+  return true;
+}
+
+// セルの「表示する販売数」を取得（編集値 > サーバーweekSales）
+function bmGetDisplaySales(pid, lid) {
+  const edit = bmGetEdit(bmCurrentDate, pid, lid);
+  if (edit !== null && edit !== undefined && edit !== '') return Number(edit);
+  if (!bmServerData) return 0;
+  const c = bmServerData.cells[pid + '_' + lid];
+  return c ? c.weekSales : 0;
+}
+
+// レンダリング
+function bmRenderAll() {
+  bmRenderWeekTabs();
+  bmRenderDayTabs();
+  bmRenderCalcInfo();
+  bmRenderMatrix();
+  bmUpdateConfirmAllBtn();
+  bmUpdateSubtitle();
+}
+
+function bmRenderWeekTabs() {
+  const wrap = document.getElementById('bm-week-tabs');
+  if (!wrap) return;
+  const buttons = wrap.querySelectorAll('.bm-week-tab');
+  buttons.forEach(b => {
+    if (b.dataset.week === bmCurrentWeek) b.classList.add('bm-active');
+    else b.classList.remove('bm-active');
+  });
+}
+
+function bmRenderDayTabs() {
+  const wrap = document.getElementById('bm-day-tabs');
+  if (!wrap) return;
+  const dates = bmCurrentWeek === 'next' ? bmNextWeekDates : bmThisWeekDates;
+  if (!dates || dates.length === 0) {
+    wrap.innerHTML = '<span style="color:#999;font-size:9pt;">日付未取得</span>';
+    return;
+  }
+  let html = '';
+  for (const ds of dates) {
+    const active = (ds === bmCurrentDate) ? 'bm-active' : '';
+    html += '<button class="bm-day-tab ' + active + '" data-date="' + ds + '" onclick="bmSetDate(\'' + ds + '\')">' + bmFmtDateLabel(ds) + '</button>';
+  }
+  wrap.innerHTML = html;
+}
+
+function bmRenderCalcInfo() {
+  const el = document.getElementById('bm-calc-info');
+  if (!bmServerData) { el.innerHTML = ''; return; }
+  const w = bmServerData.weights;
+  let confirmedCount = 0;
+  for (const loc of bmServerData.locations) if (bmIsLocConfirmed(loc.id)) confirmedCount++;
+  let selloutCount = 0, diffCount = 0;
+  const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
+  for (const loc of bmServerData.locations) {
+    for (const p of products) {
+      const c = bmServerData.cells[p.id + '_' + loc.id];
+      if (!c) continue;
+      if (c.selloutTime) selloutCount++;
+      const sales = bmGetDisplaySales(p.id, loc.id);
+      if (c.proposed !== sales && c.proposed > 0) diffCount++;
+    }
+  }
+  // 反映元（= 先週同曜の日付 = histDates[0]）
+  const sourceDate = (bmServerData.histDates && bmServerData.histDates[0]) ? bmServerData.histDates[0] : '';
+  let html = '';
+  html += '<span><b>計算式:</b> W1:' + w.w1 + ' / W2:' + w.w2 + ' / W3:' + w.w3 + ' / W4:' + w.w4 + '</span>';
+  html += '<span><b>反映元:</b> ' + bmFmtDateLabel(sourceDate) + '</span>';
+  html += '<span><b>配達日:</b> ' + bmFmtDateLabel(bmServerData.thisWeekDate) + '</span>';
+  html += '<span class="bm-diff-summary">変動: ' + diffCount + '件</span>';
+  html += '<span class="bm-sellout-summary">🔴 完売: ' + selloutCount + '件</span>';
+  html += '<span class="bm-progress-summary">確定: ' + confirmedCount + '/' + bmServerData.locations.length + '拠点</span>';
+  el.innerHTML = html;
+}
+
+function bmRenderMatrix() {
+  const wrap = document.getElementById('bm-matrix-wrap');
+  if (!bmServerData) { wrap.innerHTML = '<div class="bm-loading">読み込み中...</div>'; return; }
+  const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
+  const totalCols = 1 + bmServerData.locations.length + 1;
+  let html = '<table class="bm-matrix">';
+  html += '<thead><tr>';
+  html += '<th rowspan="2" class="bm-product-cell">商品名</th>';
+  for (const loc of bmServerData.locations) {
+    const cf = bmIsLocConfirmed(loc.id) ? 'bm-loc-confirmed-h' : '';
+    html += '<th class="bm-loc-id-h ' + cf + '">' + loc.no + '</th>';
+  }
+  html += '<th rowspan="2" class="bm-total-col">合計</th></tr><tr>';
+  for (const loc of bmServerData.locations) {
+    const cf = bmIsLocConfirmed(loc.id) ? 'bm-loc-confirmed-h' : '';
+    const copyBtn = '<span class="bm-copy-btn" onclick="event.stopPropagation();bmCopyLocationCol(\'' + loc.id + '\')" title="この拠点の列をコピー">⧉</span>';
+    const clearBtn = '<span class="bm-clear-btn" onclick="event.stopPropagation();bmClearLocationCol(\'' + loc.id + '\')" title="この拠点の全商品を0にする">🗑</span>';
+    // 表示名優先（空なら拠点名）
+    const showName = (loc.displayName && loc.displayName.length > 0) ? loc.displayName : loc.name;
+    const titleAttr = (loc.displayName && loc.displayName !== loc.name) ? (' title="' + bmEscape(loc.name) + '"') : '';
+    // Phase 4: ドライバー色を背景色として適用（!importantで既存CSS上書き）
+    const styleAttr = driverColorStyleAttr(loc.id, bmDriverColorMap);
+    html += '<th class="bm-loc-name-h ' + cf + '"' + titleAttr + styleAttr + '>' + bmEscape(showName) + copyBtn + clearBtn + '</th>';
+  }
+  html += '</tr></thead>';
+
+  // 白米
+  html += '<tbody>';
+  html += '<tr><td class="bm-section-label" colspan="' + totalCols + '">▼ 白米</td></tr>';
+  for (const p of bmServerData.products.rice) html += bmRenderRow(p);
+  html += '</tbody>';
+  // 玄米
+  html += '<tbody class="bm-brown">';
+  html += '<tr><td class="bm-section-label bm-brown-label" colspan="' + totalCols + '">▼ 玄米</td></tr>';
+  for (const p of bmServerData.products.brown) html += bmRenderRow(p);
+  html += '</tbody>';
+
+  // 拠点合計
+  html += '<tbody>';
+  html += '<tr class="bm-summary-row"><td class="bm-product-cell">拠点合計</td>';
+  let grand = 0;
+  for (const loc of bmServerData.locations) {
+    let sum = 0;
+    for (const p of products) sum += bmGetDisplaySales(p.id, loc.id);
+    grand += sum;
+    const cf = bmIsLocConfirmed(loc.id) ? 'bm-loc-confirmed' : '';
+    html += '<td class="' + cf + '">' + sum + '</td>';
+  }
+  html += '<td class="bm-total-col">' + grand + '</td></tr>';
+
+  // カテゴリ別合計
+  for (const cat of BM_CATEGORIES) html += bmRenderCategoryRow(cat);
+
+  // 確定ボタン行
+  html += '<tr class="bm-loc-confirm-row"><td class="bm-product-cell">確定</td>';
+  for (const loc of bmServerData.locations) {
+    const isC = bmIsLocConfirmed(loc.id);
+    const cls = isC ? 'bm-loc-confirm-btn bm-done' : 'bm-loc-confirm-btn';
+    const txt = isC ? '✓' : '確定';
+    html += '<td><button class="' + cls + '" data-lid="' + loc.id + '" onclick="bmConfirmLoc(\'' + loc.id + '\')">' + txt + '</button></td>';
+  }
+  html += '<td class="bm-total-col">—</td></tr>';
+
+  // 推奨ボタン行
+  html += '<tr class="bm-loc-recommend-row"><td class="bm-product-cell">推奨</td>';
+  for (const loc of bmServerData.locations) {
+    const isC = bmIsLocConfirmed(loc.id);
+    const dis = isC ? 'disabled' : '';
+    html += '<td><button class="bm-loc-recommend-btn" data-lid="' + loc.id + '" onclick="bmRecommendLoc(\'' + loc.id + '\')" ' + dis + ' title="提案値を採用+確定">→推奨</button></td>';
+  }
+  html += '<td class="bm-total-col">—</td></tr>';
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
+function bmRenderRow(p) {
+  const copyBtn = '<span class="bm-copy-btn" onclick="event.stopPropagation();bmCopyProductRow(\'' + p.id + '\')" title="この商品の行をコピー">⧉</span>';
+  const clearBtn = '<span class="bm-clear-btn" onclick="event.stopPropagation();bmClearProductRow(\'' + p.id + '\')" title="この商品の全拠点を0にする">🗑</span>';
+  // 表示名優先、空ならname
+  const showName = (p.displayName && p.displayName.length > 0) ? p.displayName : p.name;
+  const titleAttr = (p.displayName && p.displayName !== p.name) ? (' title="' + bmEscape(p.name) + '"') : '';
+  let html = '<tr><td class="bm-product-cell"' + titleAttr + '>' + bmEscape(showName) + copyBtn + clearBtn + '</td>';
+  let total = 0;
+  for (const loc of bmServerData.locations) {
+    total += bmGetDisplaySales(p.id, loc.id);
+    html += bmRenderCell(p.id, loc.id);
+  }
+  html += '<td class="bm-total-col">' + total + '</td></tr>';
+  return html;
+}
+
+function bmRenderCell(pid, lid) {
+  const c = bmServerData.cells[pid + '_' + lid];
+  if (!c) return '<td class="bm-data-cell"></td>';
+  const sales = bmGetDisplaySales(pid, lid);
+  const pro = c.proposed;
+  const diff = pro - sales;
+  const isLocC = bmIsLocConfirmed(lid);
+  const hasSO = !!c.selloutTime;
+  const isZero = !pro && !sales;
+  const edit = bmGetEdit(bmCurrentDate, pid, lid);
+  const isEdited = (edit !== null && edit !== undefined);
+
+  let cls = 'bm-data-cell';
+  if (isLocC) cls += ' bm-loc-confirmed';
+  if (isZero) cls += ' bm-zero-cell';
+
+  let salesCls = 'bm-cell-sales';
+  if (c.isFallback && !isEdited) salesCls += ' bm-fallback';
+  if (isEdited) salesCls += ' bm-edited';
+  if (!sales && !isZero) salesCls += ' bm-no-sales';
+  if (isZero) salesCls += ' bm-no-sales';
+
+  const proStr = pro || '–';
+  const salStr = (sales || sales === 0) && pro ? String(sales) : (sales ? String(sales) : '–');
+
+  let ind = '';
+  if (diff > 0 && pro > 0) ind = '<span class="bm-ind-up">▲</span>';
+  else if (diff < 0 && pro > 0) ind = '<span class="bm-ind-down">▼</span>';
+  const badge = hasSO ? '<span class="bm-sellout-badge"></span>' : '';
+
+  const editable = !isZero;
+  const rangeAttrs = ' onmousedown="bmOnCellMouseDown(event,\'' + pid + '\',\'' + lid + '\')" onmouseenter="bmOnCellMouseEnter(event,\'' + pid + '\',\'' + lid + '\')"';
+  const editAttrs = editable
+    ? 'contenteditable="true" inputmode="numeric" data-pid="' + pid + '" data-lid="' + lid + '" onkeydown="bmOnSalesKey(event)" onblur="bmOnSalesBlur(this)" onfocus="bmOnSalesFocus(this)"' + rangeAttrs
+    : 'data-pid="' + pid + '" data-lid="' + lid + '"' + rangeAttrs;
+  const proClick = isZero ? '' : 'onclick="bmOpenModal(\'' + pid + '\',\'' + lid + '\')"';
+
+  return '<td class="' + cls + '">'
+    + '<div class="bm-cell-2col">' + badge
+    + '<div class="' + salesCls + '" ' + editAttrs + '>' + salStr + '</div>'
+    + '<div class="bm-cell-proposal" ' + proClick + '>' + proStr + ind + '</div>'
+    + '</div></td>';
+}
+
+function bmRenderCategoryRow(cat) {
+  const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
+  let html = '<tr class="bm-cat-row"><td class="bm-product-cell bm-cat-label">' + cat.label + '</td>';
+  let totalNext = 0, totalSales = 0;
+  for (const loc of bmServerData.locations) {
+    let sumP = 0, sumS = 0;
+    for (const p of products) {
+      if (p.group !== cat.id) continue;
+      const c = bmServerData.cells[p.id + '_' + loc.id];
+      if (!c) continue;
+      sumP += c.proposed;
+      sumS += bmGetDisplaySales(p.id, loc.id);
+    }
+    totalNext += sumP;
+    totalSales += sumS;
+    const isC = bmIsLocConfirmed(loc.id);
+    const isZero = !sumP && !sumS;
+    let cls = 'bm-cat-cell';
+    if (isC) cls += ' bm-loc-confirmed';
+    if (isZero) cls += ' bm-cat-cell-zero';
+    html += '<td class="' + cls + '"><div class="bm-cat-cell-actual">' + (sumS || '–') + '</div><div class="bm-cat-cell-next">' + (sumP || '–') + '</div></td>';
+  }
+  html += '<td class="bm-total-col"><div class="bm-cat-cell-actual">' + totalSales + '</div><div class="bm-cat-cell-next">' + totalNext + '</div></td></tr>';
+  return html;
+}
+
+function bmUpdateConfirmAllBtn() {
+  const btn = document.getElementById('bm-confirm-all');
+  if (!btn) return;
+  if (bmIsAllConfirmed()) {
+    btn.classList.add('bm-done');
+    btn.textContent = '✓ 全拠点確定済（クリックで解除）';
+  } else {
+    btn.classList.remove('bm-done');
+    btn.textContent = '✓ 全拠点確定';
+  }
+}
+function bmUpdateSubtitle() {
+  const el = document.getElementById('bm-subtitle');
+  if (!el || !bmServerData) { if(el) el.textContent = '読み込み中...'; return; }
+  const r = bmServerData.products.rice.length;
+  const b = bmServerData.products.brown.length;
+  el.textContent = bmFmtDateFull(bmCurrentDate) + ' / ' + bmServerData.locations.length + '拠点 × ' + (r+b) + 'SKU';
+}
+
+// 編集ハンドラ
+function bmOnSalesFocus(el) {
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+  if (el.classList.contains('bm-fallback')) el.textContent = '';
+}
+function bmOnSalesKey(e) {
+  const allowed = /^[0-9]$/.test(e.key) || ['Backspace','Delete','Tab','ArrowLeft','ArrowRight'].includes(e.key);
+  if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); return; }
+  if (e.key === 'Escape') { e.target.blur(); return; }
+  if (!allowed) e.preventDefault();
+}
+function bmOnSalesBlur(el) {
+  const pid = el.dataset.pid;
+  const lid = el.dataset.lid;
+  const raw = (el.textContent || '').trim();
+  const c = bmServerData.cells[pid + '_' + lid];
+  let newVal;
+  if (raw === '') {
+    newVal = null;
+  } else {
+    const v = parseInt(raw, 10);
+    if (isNaN(v) || v < 0) {
+      newVal = null;
+    } else {
+      const orig = c ? c.weekSales : 0;
+      newVal = (v === orig) ? null : v;
+    }
+  }
+  // Undo履歴付きで設定
+  bmSetEditWithHistory(bmCurrentDate, pid, lid, newVal);
+  bmRenderMatrix();
+  bmRenderCalcInfo();
+}
+
+// 内訳モーダル
+function bmOpenModal(pid, lid) {
+  const c = bmServerData.cells[pid + '_' + lid];
+  if (!c || (!c.proposed && !c.weekSales)) return;
+  const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
+  const p = products.find(x => x.id === pid);
+  const loc = bmServerData.locations.find(x => x.id === lid);
+  const isBrown = bmServerData.products.brown.some(b => b.id === pid);
+  const productLabel = isBrown ? p.name + '(玄米)' : p.name + '(白米)';
+  const hasSO = !!c.selloutTime;
+  const dowJa = bmServerData.dowJa || '';
+
+  document.getElementById('bm-modal-title').textContent = productLabel + ' @ ' + loc.name;
+  document.getElementById('bm-modal-subtitle').textContent = bmFmtDateLabel(bmCurrentDate) + ' / 翌週提案の計算内訳';
+  const head = document.getElementById('bm-modal-head');
+  head.classList.toggle('bm-has-sellout', hasSO);
+
+  const histLabels = ['先週','2週前','3週前','4週前'];
+  let histHtml = '<table class="bm-modal-history-table">';
+  for (let i = 0; i < 4; i++) {
+    const h = c.hist[i];
+    const isSO = (i === 0 && hasSO);
+    const trCls = isSO ? 'bm-is-sellout' : '';
+    const mark = isSO ? '<span class="bm-sellout-mark-inline">🔴 ' + c.selloutTime + '完売</span>' : '';
+    histHtml += '<tr class="' + trCls + '"><td class="bm-h-label">' + histLabels[i] + '<br><span style="font-size:7.5pt;color:#888;font-weight:normal;">' + h.date + '</span></td><td class="bm-h-value">' + h.value + '個 ' + mark + '</td></tr>';
+  }
+  histHtml += '</table>';
+
+  const w = bmServerData.weights;
+  const wAvg = c.weightedAvg.toFixed(1);
+  let calcHtml = '<div class="bm-modal-calc">';
+  calcHtml += '<div class="bm-modal-calc-row"><span class="bm-modal-calc-label">加重平均(W1:' + w.w1 + '/W2:' + w.w2 + '/W3:' + w.w3 + '/W4:' + w.w4 + ')</span><span class="bm-modal-calc-value">' + wAvg + '個</span></div>';
+  if (hasSO) {
+    calcHtml += '<div class="bm-modal-calc-row"><span class="bm-modal-calc-label">🔴 完売増量(' + c.selloutTime + ')</span><span class="bm-modal-calc-value bm-bonus">+' + c.selloutBonus + '個</span></div>';
+  } else {
+    calcHtml += '<div class="bm-modal-calc-row" style="color:#999;"><span class="bm-modal-calc-label">完売増量</span><span class="bm-modal-calc-value">+0個</span></div>';
+  }
+  calcHtml += '<div class="bm-modal-calc-row bm-final ' + (hasSO ? 'bm-has-sellout' : '') + '"><span class="bm-modal-calc-label">翌週提案</span><span class="bm-modal-calc-value bm-final-value ' + (hasSO ? 'bm-has-sellout' : '') + '">' + c.proposed + '個</span></div>';
+  calcHtml += '</div>';
+  if (hasSO) {
+    calcHtml += '<div class="bm-modal-note">💡 完売は<b>直近の同曜日のみ</b>翌週に加算されます。それ以前の完売は加重平均に反映済のため追加加算しません。</div>';
+  }
+
+  let weekInfo = '';
+  if (c.isFallback) {
+    weekInfo = '<div class="bm-modal-note" style="background:#eceff1;border-left-color:#90a4ae;">📅 ' + bmFmtDateLabel(bmCurrentDate) + ' は<b>未計上</b>のため、参考として先週同曜の販売数(' + c.hist[0].value + '個)を表示しています。</div>';
+  } else {
+    const sales = bmGetDisplaySales(pid, lid);
+    const edit = bmGetEdit(bmCurrentDate, pid, lid);
+    const tag = (edit !== null && edit !== undefined) ? '(編集中)' : '';
+    weekInfo = '<div class="bm-modal-note" style="background:#e3f2fd;border-left-color:#1976d2;">📊 ' + bmFmtDateLabel(bmCurrentDate) + ' の販売数: <b>' + sales + '個</b>' + tag + '</div>';
+  }
+
+  let body = weekInfo;
+  body += '<div class="bm-modal-section"><div class="bm-modal-section-title">📅 過去4週の' + dowJa + '曜販売実績</div>' + histHtml + '</div>';
+  body += '<div class="bm-modal-section"><div class="bm-modal-section-title">🧮 計算内訳</div>' + calcHtml + '</div>';
+  document.getElementById('bm-modal-body').innerHTML = body;
+  document.getElementById('bm-modal-overlay').classList.add('bm-show');
+}
+function bmCloseModal(e) {
+  if (e && e.target.id !== 'bm-modal-overlay' && e.type !== undefined) return;
+  document.getElementById('bm-modal-overlay').classList.remove('bm-show');
+}
+
+// 操作
+async function bmSetWeek(week) {
+  if (week === bmCurrentWeek) return;
+  bmCurrentWeek = week;
+  bmRenderWeekTabs();
+  // 切り替え先の週の最初の日付（または今日に最も近い日付）を選択
+  const dates = (week === 'next') ? bmNextWeekDates : bmThisWeekDates;
+  if (!dates || dates.length === 0) {
+    bmRenderDayTabs();
+    return;
+  }
+  // this 週なら「今日」or 今日より過去の最終日 or 月曜
+  // next 週なら最初の日（月曜）
+  let target = dates[0];
+  if (week === 'this') {
+    const today = bmTodayStr();
+    if (dates.indexOf(today) >= 0) target = today;
+    else {
+      // 今日が日付配列に無いなら最も近い日（過去寄り）を選ぶ
+      for (let i = dates.length - 1; i >= 0; i--) {
+        if (dates[i] <= today) { target = dates[i]; break; }
+      }
+    }
+  }
+  await bmSetDate(target);
+}
+
+async function bmSetDate(dateStr) {
+  if (dateStr === bmCurrentDate && bmServerData) return;
+  bmCurrentDate = dateStr;
+  // 週の自動切替
+  if (bmNextWeekDates.indexOf(dateStr) >= 0) bmCurrentWeek = 'next';
+  else if (bmThisWeekDates.indexOf(dateStr) >= 0) bmCurrentWeek = 'this';
+  await bmLoadDate(dateStr);
+}
+
+async function bmLoadDate(dateStr) {
+  const wrap = document.getElementById('bm-matrix-wrap');
+  wrap.innerHTML = '<div class="bm-loading">配分調整を読み込み中...</div>';
+  document.getElementById('bm-calc-info').innerHTML = '';
+  // Phase 4: ドライバー色マップを並列取得
+  const [r, colorMap] = await Promise.all([
+    bmFetchMatrix(dateStr),
+    loadDriverColorMap(dateStr)
+  ]);
+  if (!r.ok) {
+    wrap.innerHTML = '<div class="bm-error">取得エラー: ' + bmEscape(r.error || '不明') + '</div>';
+    return;
+  }
+  bmServerData = r;
+  bmDriverColorMap = colorMap || {};  // Phase 4
+  bmLoadedDates.add(dateStr);
+  // サーバーから受け取った表示対象日付配列を保存
+  if (r.thisWeekDates) bmThisWeekDates = r.thisWeekDates;
+  if (r.nextWeekDates) bmNextWeekDates = r.nextWeekDates;
+  // 古い編集キャッシュを掃除（範囲外日付）
+  const allDates = bmThisWeekDates.concat(bmNextWeekDates);
+  bmPurgeOldEdits(allDates);
+  bmRenderAll();
+}
+
+async function bmReload() {
+  await bmLoadDate(bmCurrentDate);
+}
+
+// 確定／推奨／全拠点確定
+async function bmConfirmLoc(lid) {
+  if (!bmServerData) return;
+  if (bmIsLocConfirmed(lid)) {
+    // 解除
+    const locName = (bmServerData.locations.find(l => l.id === lid) || {}).name || lid;
+    if (!confirm(locName + ' の確定を解除しますか？\n(G列をクリアします)')) return;
+    const r = await bmPostAction('unconfirmBasicMasterLocation', { date: bmCurrentDate, locId: lid });
+    if (!r.ok) { alert('解除失敗: ' + (r.error || '')); return; }
+    await bmLoadDate(bmCurrentDate);
+    return;
+  }
+  // 確定：編集値を items に集約
+  const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
+  const items = {};
+  for (const p of products) {
+    const e = bmGetEdit(bmCurrentDate, p.id, lid);
+    if (e !== null && e !== undefined) items[p.id] = Number(e);
+  }
+  const r = await bmPostAction('confirmBasicMasterLocation', { date: bmCurrentDate, locId: lid, items });
+  if (!r.ok) { alert('確定失敗: ' + (r.error || '')); return; }
+  bmClearEditsForLoc(bmCurrentDate, lid);
+  await bmLoadDate(bmCurrentDate);
+}
+
+async function bmRecommendLoc(lid) {
+  if (!bmServerData) return;
+  const locName = (bmServerData.locations.find(l => l.id === lid) || {}).name || lid;
+  if (!confirm(locName + ' の全商品を提案値で確定します。編集値があれば破棄されます。よろしいですか？')) return;
+  const r = await bmPostAction('recommendBasicMasterLocation', { date: bmCurrentDate, locId: lid });
+  if (!r.ok) { alert('推奨失敗: ' + (r.error || '')); return; }
+  bmClearEditsForLoc(bmCurrentDate, lid);
+  await bmLoadDate(bmCurrentDate);
+}
+
+async function bmConfirmAll() {
+  if (!bmServerData) return;
+  const dateLabel = bmFmtDateLabel(bmCurrentDate);
+  if (bmIsAllConfirmed()) {
+    if (!confirm(dateLabel + ' の全25拠点の確定を解除しますか？\n(G列をすべてクリアします)')) return;
+    for (const loc of bmServerData.locations) {
+      await bmPostAction('unconfirmBasicMasterLocation', { date: bmCurrentDate, locId: loc.id });
+    }
+    bmEditsCache[bmCurrentDate] = {};
+    bmSaveEdits();
+    await bmLoadDate(bmCurrentDate);
+    return;
+  }
+  if (!confirm(dateLabel + ' の全25拠点を確定します。\n(編集値あれば編集値、なければ提案値をG列に保存)\nよろしいですか？')) return;
+  const itemsByLoc = {};
+  const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
+  for (const loc of bmServerData.locations) {
+    const locItems = {};
+    for (const p of products) {
+      const e = bmGetEdit(bmCurrentDate, p.id, loc.id);
+      if (e !== null && e !== undefined) locItems[p.id] = Number(e);
+    }
+    if (Object.keys(locItems).length > 0) itemsByLoc[loc.id] = locItems;
+  }
+  const r = await bmPostAction('confirmBasicMasterAll', { date: bmCurrentDate, itemsByLoc });
+  if (!r.ok) { alert('全拠点確定失敗: ' + (r.error || '')); return; }
+  bmEditsCache[bmCurrentDate] = {};
+  bmSaveEdits();
+  await bmLoadDate(bmCurrentDate);
+}
+
+function bmEscape(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;').replace(/"/g,'&quot;');
+}
+
+// 初期化（tab-master を開いた時にトリガー）
+async function bmInitIfNeeded() {
+  if (bmInitialized) return;
+  bmInitialized = true;
+  bmLoadEdits();
+  // 初期日付：今日
+  const today = bmTodayStr();
+  bmCurrentDate = today;
+  bmCurrentWeek = 'this';
+  // 初回ロード：サーバーから visibleDates を取得する
+  await bmLoadDate(today);
+  // サーバー応答後に thisWeekDates が空（今日が土日など）の場合は、可能なら月曜にフォールバック
+  if (bmServerData && bmServerData.thisWeekDates && bmServerData.thisWeekDates.length > 0) {
+    if (bmServerData.thisWeekDates.indexOf(today) < 0) {
+      // 今日が土日等で範囲外 → 今週月曜（thisWeekDates[0]）に切替
+      await bmSetDate(bmServerData.thisWeekDates[0]);
+    }
+  }
+}
+
+// タブ切替フック：master タブを開いたら初期化
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  if (btn.dataset.tab === 'master') {
+    btn.addEventListener('click', () => { bmInitIfNeeded(); });
+  }
+});
+
+// ESC でモーダル閉じる
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') bmCloseModal();
+});
 
 
-═════════════════════════════════════════════════════════════════
-END OF kanri.html PATCH
-═════════════════════════════════════════════════════════════════
+// タブ切替フック：master タブを開いたら初期化
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  if (btn.dataset.tab === 'master') {
+    btn.addEventListener('click', () => { bmInitIfNeeded(); });
+  }
+});
+
+// ESC でモーダル閉じる
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') bmCloseModal();
+});
+
+// ============================================================
+// 配分表アプリ「翌週配分タブ改善」案B Phase 4-6 追加JS
+// 2026-05-21 v1.0
+// 機能:
+//   F1 商品行コピペ / F2 拠点列コピペ / F3 範囲選択コピペ
+//   F4 一括クリア / F5 プリセット適用 / F6 プリセット編集
+//   F7 Undo/Redo (10手) / F8 カテゴリ違い警告
+// ============================================================
+
+// ── グローバル状態 ──
+let wpPresets = [];          // [{name, rows: [{locId, ratio, ...}]}]
+let wpLocations = [];        // [{id, name, outdoor}]
+let wpCurrentEditPreset = null; // 編集中のプリセット名
+
+// F3 範囲選択
+let bmSelectedCells = new Set(); // 'pid_lid'
+let bmRangeDragging = false;
+let bmRangeStart = null; // {pid, lid}
+
+// F7 Undo/Redo
+const BM_HISTORY_MAX = 10;
+let bmUndoStack = []; // [{actions: [{date, pid, lid, oldVal, newVal}, ...]}]
+let bmRedoStack = [];
+
+// F1/F2 コピー内容
+let bmCopyBuffer = null; // { type: 'row', pid, values: {lid: val} } | { type: 'col', lid, values: {pid: val} } | { type: 'range', cells: [{pid, lid, val}] }
+
+// ============================================================
+// ヘルパー
+// ============================================================
+function wpEsc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function wpToast(msg, type) {
+  type = type || 'info';
+  let t = document.getElementById('wp-toast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'wp-toast';
+    t.className = 'wp-toast';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.className = 'wp-toast wp-show wp-' + type;
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => {
+    t.className = 'wp-toast wp-' + type;
+  }, 2500);
+}
+
+async function wpFetch(action, params) {
+  const usp = new URLSearchParams();
+  usp.set('action', action);
+  if (params) {
+    for (const k of Object.keys(params)) {
+      usp.set(k, params[k]);
+    }
+  }
+  try {
+    const res = await fetch(GAS_URL + '?' + usp.toString());
+    return await res.json();
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
+// ============================================================
+// F7 Undo/Redo: 編集の履歴管理
+// ============================================================
+function bmPushHistory(actions) {
+  // actions: [{date, pid, lid, oldVal, newVal}]
+  if (!actions || actions.length === 0) return;
+  bmUndoStack.push({ actions: actions });
+  if (bmUndoStack.length > BM_HISTORY_MAX) bmUndoStack.shift();
+  bmRedoStack = []; // 新操作でRedo履歴クリア
+  bmUpdateUndoBtns();
+}
+
+function bmApplyHistoryActions(actions, isUndo) {
+  // isUndo=true → oldVal を適用、false → newVal を適用
+  for (const a of actions) {
+    const v = isUndo ? a.oldVal : a.newVal;
+    if (v === null || v === undefined) {
+      bmSetEdit(a.date, a.pid, a.lid, null);
+    } else {
+      bmSetEdit(a.date, a.pid, a.lid, v);
+    }
+  }
+}
+
+function bmDoUndo() {
+  if (bmUndoStack.length === 0) return;
+  const entry = bmUndoStack.pop();
+  bmApplyHistoryActions(entry.actions, true);
+  bmRedoStack.push(entry);
+  if (bmRedoStack.length > BM_HISTORY_MAX) bmRedoStack.shift();
+  bmRenderMatrix();
+  bmRenderCalcInfo();
+  bmUpdateUndoBtns();
+  wpToast('元に戻しました（' + entry.actions.length + '件）', 'info');
+}
+
+function bmDoRedo() {
+  if (bmRedoStack.length === 0) return;
+  const entry = bmRedoStack.pop();
+  bmApplyHistoryActions(entry.actions, false);
+  bmUndoStack.push(entry);
+  if (bmUndoStack.length > BM_HISTORY_MAX) bmUndoStack.shift();
+  bmRenderMatrix();
+  bmRenderCalcInfo();
+  bmUpdateUndoBtns();
+  wpToast('やり直しました（' + entry.actions.length + '件）', 'info');
+}
+
+function bmUpdateUndoBtns() {
+  const ub = document.getElementById('bm-undo-btn');
+  const rb = document.getElementById('bm-redo-btn');
+  if (ub) ub.disabled = (bmUndoStack.length === 0);
+  if (rb) rb.disabled = (bmRedoStack.length === 0);
+}
+
+// 編集を1件単位で履歴に積む（既存 bmSetEdit のラッパ）
+function bmSetEditWithHistory(date, pid, lid, newVal) {
+  const oldVal = bmGetEdit(date, pid, lid);
+  if (oldVal === newVal) return;
+  bmSetEdit(date, pid, lid, newVal);
+  bmPushHistory([{ date, pid, lid, oldVal, newVal }]);
+}
+
+// 複数編集をまとめて履歴に積む
+function bmSetEditsBulk(changes) {
+  // changes: [{date, pid, lid, newVal}]
+  const actions = [];
+  for (const c of changes) {
+    const oldVal = bmGetEdit(c.date, c.pid, c.lid);
+    if (oldVal === c.newVal) continue;
+    bmSetEdit(c.date, c.pid, c.lid, c.newVal);
+    actions.push({ date: c.date, pid: c.pid, lid: c.lid, oldVal: oldVal, newVal: c.newVal });
+  }
+  if (actions.length > 0) {
+    bmPushHistory(actions);
+  }
+  return actions.length;
+}
+
+// ============================================================
+// F3 範囲選択
+// ============================================================
+function bmCellKey(pid, lid) { return pid + '_' + lid; }
+function bmIsSelected(pid, lid) { return bmSelectedCells.has(bmCellKey(pid, lid)); }
+
+function bmClearSelection() {
+  bmSelectedCells.clear();
+  bmUpdateSelectionUI();
+  bmUpdateActionBar();
+}
+
+function bmAddToSelection(pid, lid) {
+  bmSelectedCells.add(bmCellKey(pid, lid));
+}
+
+function bmUpdateSelectionUI() {
+  // DOM上の選択状態を反映
+  const cells = document.querySelectorAll('#tab-master .bm-cell-sales[data-pid]');
+  cells.forEach(el => {
+    const k = bmCellKey(el.dataset.pid, el.dataset.lid);
+    if (bmSelectedCells.has(k)) el.classList.add('bm-selected');
+    else el.classList.remove('bm-selected');
+  });
+}
+
+function bmSelectRange(startPid, startLid, endPid, endLid) {
+  if (!bmServerData) return;
+  const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
+  const pids = products.map(p => p.id);
+  const lids = bmServerData.locations.map(l => l.id);
+  const pi1 = pids.indexOf(startPid), pi2 = pids.indexOf(endPid);
+  const li1 = lids.indexOf(startLid), li2 = lids.indexOf(endLid);
+  if (pi1 < 0 || pi2 < 0 || li1 < 0 || li2 < 0) return;
+  const pMin = Math.min(pi1, pi2), pMax = Math.max(pi1, pi2);
+  const lMin = Math.min(li1, li2), lMax = Math.max(li1, li2);
+  bmSelectedCells.clear();
+  for (let i = pMin; i <= pMax; i++) {
+    for (let j = lMin; j <= lMax; j++) {
+      bmAddToSelection(pids[i], lids[j]);
+    }
+  }
+  bmUpdateSelectionUI();
+  bmUpdateActionBar();
+}
+
+function bmOnCellMouseDown(e, pid, lid) {
+  if (e.button !== 0) return; // 左クリックのみ
+  // contenteditable のクリック編集を邪魔しないように、Shift/Ctrl 押下時のみ範囲動作
+  if (!e.shiftKey && !e.ctrlKey && !e.metaKey) return;
+  e.preventDefault();
+  if (e.shiftKey && bmRangeStart) {
+    // 範囲指定
+    bmSelectRange(bmRangeStart.pid, bmRangeStart.lid, pid, lid);
+  } else {
+    // 単一選択開始
+    bmRangeStart = { pid, lid };
+    bmSelectedCells.clear();
+    bmAddToSelection(pid, lid);
+    bmUpdateSelectionUI();
+    bmUpdateActionBar();
+    bmRangeDragging = true;
+  }
+}
+
+function bmOnCellMouseEnter(e, pid, lid) {
+  if (!bmRangeDragging || !bmRangeStart) return;
+  bmSelectRange(bmRangeStart.pid, bmRangeStart.lid, pid, lid);
+}
+
+function bmOnGlobalMouseUp() {
+  bmRangeDragging = false;
+}
+
+// ============================================================
+// F4 一括クリア用アクションバー
+// ============================================================
+function bmUpdateActionBar() {
+  let bar = document.getElementById('bm-action-bar');
+  if (!bar) return;
+  if (bmSelectedCells.size === 0) {
+    bar.classList.remove('bm-visible');
+  } else {
+    bar.classList.add('bm-visible');
+    const cnt = document.getElementById('bm-action-count');
+    if (cnt) cnt.textContent = bmSelectedCells.size;
+  }
+}
+
+function bmActionClearZero() {
+  if (bmSelectedCells.size === 0) return;
+  const changes = [];
+  for (const k of bmSelectedCells) {
+    const [pid, lid] = k.split('_');
+    changes.push({ date: bmCurrentDate, pid, lid, newVal: 0 });
+  }
+  const n = bmSetEditsBulk(changes);
+  bmRenderMatrix();
+  bmRenderCalcInfo();
+  wpToast(n + '件を0にしました', 'success');
+  bmClearSelection();
+}
+
+function bmActionDeselect() {
+  bmClearSelection();
+}
+
+function bmActionCopy() {
+  if (bmSelectedCells.size === 0) return;
+  const cells = [];
+  for (const k of bmSelectedCells) {
+    const [pid, lid] = k.split('_');
+    const v = bmGetDisplaySales(pid, lid);
+    cells.push({ pid, lid, val: v });
+  }
+  bmCopyBuffer = { type: 'range', cells: cells };
+  wpToast('コピーしました（' + cells.length + 'セル）', 'info');
+}
+
+function bmActionPaste() {
+  if (!bmCopyBuffer || bmCopyBuffer.type !== 'range' || bmSelectedCells.size === 0) {
+    wpToast('貼り付け先を選択してください', 'error');
+    return;
+  }
+  // 単純実装：選択範囲の左上に貼り付け（オフセット計算）
+  const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
+  const pids = products.map(p => p.id);
+  const lids = bmServerData.locations.map(l => l.id);
+
+  // コピー元の左上を求める
+  const srcPids = [...new Set(bmCopyBuffer.cells.map(c => c.pid))];
+  const srcLids = [...new Set(bmCopyBuffer.cells.map(c => c.lid))];
+  const srcPiMin = Math.min(...srcPids.map(p => pids.indexOf(p)));
+  const srcLiMin = Math.min(...srcLids.map(l => lids.indexOf(l)));
+
+  // 貼り付け先の左上を求める
+  const dstPids = [...new Set([...bmSelectedCells].map(k => k.split('_')[0]))];
+  const dstLids = [...new Set([...bmSelectedCells].map(k => k.split('_')[1]))];
+  const dstPiMin = Math.min(...dstPids.map(p => pids.indexOf(p)));
+  const dstLiMin = Math.min(...dstLids.map(l => lids.indexOf(l)));
+
+  const dPi = dstPiMin - srcPiMin;
+  const dLi = dstLiMin - srcLiMin;
+
+  // F8 カテゴリ違い警告
+  const srcCats = new Set();
+  const dstCats = new Set();
+  for (const c of bmCopyBuffer.cells) {
+    const p = products.find(x => x.id === c.pid);
+    if (p) srcCats.add(p.group || p.category || '');
+  }
+  for (const cell of bmCopyBuffer.cells) {
+    const srcPi = pids.indexOf(cell.pid);
+    const newPi = srcPi + dPi;
+    if (newPi < 0 || newPi >= pids.length) continue;
+    const p = products.find(x => x.id === pids[newPi]);
+    if (p) dstCats.add(p.group || p.category || '');
+  }
+  const srcCatArr = [...srcCats];
+  const dstCatArr = [...dstCats];
+  if (srcCatArr.length > 0 && dstCatArr.length > 0 &&
+      !srcCatArr.every(c => dstCatArr.includes(c))) {
+    if (!confirm('コピー元と貼り付け先のカテゴリが違います。\n続行しますか？')) return;
+  }
+
+  const changes = [];
+  for (const cell of bmCopyBuffer.cells) {
+    const srcPi = pids.indexOf(cell.pid);
+    const srcLi = lids.indexOf(cell.lid);
+    const newPi = srcPi + dPi;
+    const newLi = srcLi + dLi;
+    if (newPi < 0 || newPi >= pids.length) continue;
+    if (newLi < 0 || newLi >= lids.length) continue;
+    changes.push({
+      date: bmCurrentDate,
+      pid: pids[newPi],
+      lid: lids[newLi],
+      newVal: cell.val
+    });
+  }
+  const n = bmSetEditsBulk(changes);
+  bmRenderMatrix();
+  bmRenderCalcInfo();
+  wpToast(n + 'セルに貼り付けました', 'success');
+  bmClearSelection();
+}
+
+
+// ============================================================
+// 🗑 商品行・拠点列 一括0クリア（v3.1 追加）
+// ============================================================
+function bmClearProductRow(pid) {
+  if (!bmServerData) return;
+  const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
+  const p = products.find(x => x.id === pid);
+  const pname = p ? ((p.displayName && p.displayName.length > 0) ? p.displayName : p.name) : pid;
+  if (!confirm('「' + pname + '」の全拠点を 0 にしますか？\n（Ctrl+Z で元に戻せます）')) return;
+  const changes = [];
+  for (const loc of bmServerData.locations) {
+    changes.push({ date: bmCurrentDate, pid: pid, lid: loc.id, newVal: 0 });
+  }
+  const n = bmSetEditsBulk(changes);
+  bmRenderMatrix();
+  bmRenderCalcInfo();
+  wpToast('「' + pname + '」を' + n + '拠点で0にしました', 'success');
+}
+
+function bmClearLocationCol(lid) {
+  if (!bmServerData) return;
+  const loc = bmServerData.locations.find(x => x.id === lid);
+  const lname = loc ? ((loc.displayName && loc.displayName.length > 0) ? loc.displayName : loc.name) : lid;
+  if (!confirm('「' + lname + '」の全商品を 0 にしますか？\n（Ctrl+Z で元に戻せます）')) return;
+  const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
+  const changes = [];
+  for (const p of products) {
+    changes.push({ date: bmCurrentDate, pid: p.id, lid: lid, newVal: 0 });
+  }
+  const n = bmSetEditsBulk(changes);
+  bmRenderMatrix();
+  bmRenderCalcInfo();
+  wpToast('「' + lname + '」を' + n + '商品で0にしました', 'success');
+}
+
+// ============================================================
+// F1 商品行コピペ
+// ============================================================
+function bmCopyProductRow(pid) {
+  if (!bmServerData) return;
+  const values = {};
+  for (const loc of bmServerData.locations) {
+    values[loc.id] = bmGetDisplaySales(pid, loc.id);
+  }
+  bmCopyBuffer = { type: 'row', pid: pid, values: values };
+  // 商品名取得（表示名優先）
+  const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
+  const p = products.find(x => x.id === pid);
+  const pname = p ? ((p.displayName && p.displayName.length > 0) ? p.displayName : p.name) : pid;
+  wpToast('「' + pname + '」の行をコピー（' + Object.keys(values).length + '拠点）→ ⧉で貼付先選択', 'info');
+  bmOpenRowPasteModal(pid);
+}
+
+function bmOpenRowPasteModal(srcPid) {
+  if (!bmCopyBuffer || bmCopyBuffer.type !== 'row') return;
+  const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
+  const srcP = products.find(x => x.id === srcPid);
+  const srcCat = srcP ? (srcP.group || srcP.category || '') : '';
+  const srcShowName = (srcP.displayName && srcP.displayName.length > 0) ? srcP.displayName : srcP.name;
+  let html = '<div style="margin-bottom:10px;font-size:10pt;color:#555;">「<b>' + wpEsc(srcShowName) + '</b>」の値を貼り付ける商品を選んでください</div>';
+  html += '<div style="display:flex;flex-direction:column;gap:4px;max-height:50vh;overflow-y:auto;">';
+  for (const p of products) {
+    if (p.id === srcPid) continue;
+    const cat = p.group || p.category || '';
+    const warn = (cat !== srcCat) ? ' <span style="color:#c62828;font-size:8.5pt;">⚠️ カテゴリ違い</span>' : '';
+    const showName = (p.displayName && p.displayName.length > 0) ? p.displayName : p.name;
+    html += '<label style="display:flex;align-items:center;gap:8px;padding:4px 8px;border:1px solid #eee;border-radius:3px;cursor:pointer;">'
+      + '<input type="checkbox" class="wp-paste-target" data-pid="' + wpEsc(p.id) + '" data-cat="' + wpEsc(cat) + '">'
+      + '<span>' + wpEsc(showName) + '</span>'
+      + warn
+      + '</label>';
+  }
+  html += '</div>';
+  wpOpenModal('行コピー：貼付先選択', html, [
+    { label: 'キャンセル', onclick: 'wpCloseModal()' },
+    { label: '貼り付け', primary: true, onclick: 'bmExecRowPaste(\'' + srcPid + '\')' }
+  ]);
+}
+
+function bmExecRowPaste(srcPid) {
+  if (!bmCopyBuffer || bmCopyBuffer.type !== 'row') { wpCloseModal(); return; }
+  const targets = document.querySelectorAll('.wp-paste-target:checked');
+  if (targets.length === 0) { wpToast('貼付先を選んでください', 'error'); return; }
+  // カテゴリチェック
+  const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
+  const srcP = products.find(x => x.id === srcPid);
+  const srcCat = srcP ? (srcP.group || srcP.category || '') : '';
+  let hasCatMismatch = false;
+  for (const t of targets) {
+    if (t.dataset.cat !== srcCat) { hasCatMismatch = true; break; }
+  }
+  if (hasCatMismatch) {
+    if (!confirm('カテゴリ違いの貼付先があります。続行しますか？')) return;
+  }
+  const changes = [];
+  for (const t of targets) {
+    const dstPid = t.dataset.pid;
+    for (const lid of Object.keys(bmCopyBuffer.values)) {
+      changes.push({
+        date: bmCurrentDate,
+        pid: dstPid,
+        lid: lid,
+        newVal: bmCopyBuffer.values[lid]
+      });
+    }
+  }
+  const n = bmSetEditsBulk(changes);
+  bmRenderMatrix();
+  bmRenderCalcInfo();
+  wpCloseModal();
+  wpToast(targets.length + '商品 × ' + Object.keys(bmCopyBuffer.values).length + '拠点 = ' + n + '件を貼り付けました', 'success');
+}
+
+// ============================================================
+// F2 拠点列コピペ
+// ============================================================
+function bmCopyLocationCol(lid) {
+  if (!bmServerData) return;
+  const values = {};
+  const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
+  for (const p of products) {
+    values[p.id] = bmGetDisplaySales(p.id, lid);
+  }
+  bmCopyBuffer = { type: 'col', lid: lid, values: values };
+  const loc = bmServerData.locations.find(x => x.id === lid);
+  const lname = loc ? ((loc.displayName && loc.displayName.length > 0) ? loc.displayName : loc.name) : lid;
+  wpToast('「' + lname + '」の列をコピー（' + Object.keys(values).length + '商品）→ ⧉で貼付先選択', 'info');
+  bmOpenColPasteModal(lid);
+}
+
+function bmOpenColPasteModal(srcLid) {
+  if (!bmCopyBuffer || bmCopyBuffer.type !== 'col') return;
+  const srcLoc = bmServerData.locations.find(x => x.id === srcLid);
+  const srcShowName = (srcLoc.displayName && srcLoc.displayName.length > 0) ? srcLoc.displayName : srcLoc.name;
+  let html = '<div style="margin-bottom:10px;font-size:10pt;color:#555;">「<b>' + wpEsc(srcShowName) + '</b>」の値を貼り付ける拠点を選んでください</div>';
+  html += '<div style="display:flex;flex-direction:column;gap:4px;max-height:50vh;overflow-y:auto;">';
+  for (const loc of bmServerData.locations) {
+    if (loc.id === srcLid) continue;
+    const showName = (loc.displayName && loc.displayName.length > 0) ? loc.displayName : loc.name;
+    html += '<label style="display:flex;align-items:center;gap:8px;padding:4px 8px;border:1px solid #eee;border-radius:3px;cursor:pointer;">'
+      + '<input type="checkbox" class="wp-paste-target" data-lid="' + wpEsc(loc.id) + '">'
+      + '<span>' + wpEsc(showName) + '</span>'
+      + '</label>';
+  }
+  html += '</div>';
+  wpOpenModal('列コピー：貼付先選択', html, [
+    { label: 'キャンセル', onclick: 'wpCloseModal()' },
+    { label: '貼り付け', primary: true, onclick: 'bmExecColPaste(\'' + srcLid + '\')' }
+  ]);
+}
+
+function bmExecColPaste(srcLid) {
+  if (!bmCopyBuffer || bmCopyBuffer.type !== 'col') { wpCloseModal(); return; }
+  const targets = document.querySelectorAll('.wp-paste-target:checked');
+  if (targets.length === 0) { wpToast('貼付先を選んでください', 'error'); return; }
+  const changes = [];
+  for (const t of targets) {
+    const dstLid = t.dataset.lid;
+    for (const pid of Object.keys(bmCopyBuffer.values)) {
+      changes.push({
+        date: bmCurrentDate,
+        pid: pid,
+        lid: dstLid,
+        newVal: bmCopyBuffer.values[pid]
+      });
+    }
+  }
+  const n = bmSetEditsBulk(changes);
+  bmRenderMatrix();
+  bmRenderCalcInfo();
+  wpCloseModal();
+  wpToast(targets.length + '拠点 × ' + Object.keys(bmCopyBuffer.values).length + '商品 = ' + n + '件を貼り付けました', 'success');
+}
+
+// ============================================================
+// 汎用モーダル
+// ============================================================
+function wpOpenModal(title, bodyHtml, buttons) {
+  let overlay = document.getElementById('wp-modal-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'wp-modal-overlay';
+    overlay.className = 'wp-modal-overlay';
+    overlay.onclick = (e) => { if (e.target === overlay) wpCloseModal(); };
+    document.body.appendChild(overlay);
+  }
+  const btnsHtml = (buttons || []).map(b => {
+    const cls = b.primary ? 'wp-primary' : (b.danger ? 'wp-danger' : '');
+    return '<button class="' + cls + '" onclick="' + b.onclick + '">' + wpEsc(b.label) + '</button>';
+  }).join('');
+  overlay.innerHTML =
+    '<div class="wp-modal" onclick="event.stopPropagation()">' +
+      '<div class="wp-modal-head">' +
+        '<div class="wp-modal-title">' + wpEsc(title) + '</div>' +
+        '<button class="wp-modal-close" onclick="wpCloseModal()">✕</button>' +
+      '</div>' +
+      '<div class="wp-modal-body">' + bodyHtml + '</div>' +
+      (btnsHtml ? '<div class="wp-modal-foot">' + btnsHtml + '</div>' : '') +
+    '</div>';
+  overlay.classList.add('wp-show');
+}
+
+function wpCloseModal() {
+  const overlay = document.getElementById('wp-modal-overlay');
+  if (overlay) overlay.classList.remove('wp-show');
+}
+
+// ============================================================
+// F5 プリセット適用
+// ============================================================
+async function wpLoadPresets() {
+  const r = await wpFetch('getWeatherPresets');
+  if (!r.ok) {
+    wpToast('プリセット取得失敗: ' + (r.error || '不明'), 'error');
+    return false;
+  }
+  // ゴミデータ「プリセット名」を除外
+  wpPresets = (r.presets || []).filter(p => p.name && p.name !== 'プリセット名' && p.rows && p.rows.length > 1);
+  wpLocations = r.locations || [];
+  return true;
+}
+
+async function wpOpenPresetSelector() {
+  wpToast('プリセット読み込み中...', 'info');
+  const ok = await wpLoadPresets();
+  if (!ok) return;
+  if (wpPresets.length === 0) {
+    wpOpenModal('プリセット選択', '<div style="padding:20px;text-align:center;color:#888;">プリセットが登録されていません。<br>設定タブで作成してください。</div>',
+      [{ label: '閉じる', onclick: 'wpCloseModal()' }]);
+    return;
+  }
+  let html = '<div class="wp-preview-info">対象日：<b>' + wpEsc(bmCurrentDate) + '</b> に適用します（G列を上書き）</div>';
+  html += '<div class="wp-preset-list">';
+  for (const p of wpPresets) {
+    const valid = p.rows.filter(r => r.locId);
+    const off = valid.filter(r => r.ratio === 0).length;
+    const reduce = valid.filter(r => r.ratio > 0 && r.ratio < 100).length;
+    const keep = valid.filter(r => r.ratio === 100).length;
+    const inc = valid.filter(r => r.ratio > 100).length;
+    html += '<div class="wp-preset-row" onclick="wpPreviewPreset(\'' + wpEsc(p.name).replace(/'/g, "\\'") + '\')">';
+    html += '<div><div class="wp-preset-row-name">' + wpEsc(p.name) + '</div>';
+    html += '<div class="wp-preset-row-detail">' + valid.length + '拠点設定 / 0%:' + off + ' / 80%帯:' + reduce + ' / 100%:' + keep + ' / 増量:' + inc + '</div></div>';
+    html += '<div class="wp-preset-row-actions"><button class="wp-primary" style="padding:4px 12px;">適用 →</button></div>';
+    html += '</div>';
+  }
+  html += '</div>';
+  wpOpenModal('📋 プリセット選択', html, [
+    { label: '閉じる', onclick: 'wpCloseModal()' }
+  ]);
+}
+
+function wpPreviewPreset(presetName) {
+  const preset = wpPresets.find(p => p.name === presetName);
+  if (!preset) return;
+  // 影響を受ける拠点数を計算
+  let html = '<div class="wp-preview-info">';
+  html += '<b>' + wpEsc(presetName) + '</b> を <b>' + wpEsc(bmCurrentDate) + '</b> に適用します。<br>';
+  html += '基本数 × 係数(%) を <b>切上げ</b>で計算し、G列（現在値）に上書きします。<br>';
+  html += 'H列（翌週提案値）は変更されません。';
+  html += '</div>';
+  html += '<table style="width:100%;font-size:9.5pt;border-collapse:collapse;">';
+  html += '<thead><tr><th style="text-align:left;padding:4px 8px;background:#fafafa;">拠点</th><th style="padding:4px 8px;background:#fafafa;">係数</th><th style="padding:4px 8px;background:#fafafa;">区分</th></tr></thead>';
+  html += '<tbody>';
+  for (const r of preset.rows) {
+    if (!r.locId) continue;
+    const loc = wpLocations.find(l => l.id === r.locId);
+    const flagCls = loc && loc.outdoor === '屋外' ? 'wp-outdoor' : 'wp-indoor';
+    const flag = loc ? loc.outdoor : '?';
+    const ratioBg = r.ratio === 0 ? '#ffcdd2' : (r.ratio < 100 ? '#fff9c4' : (r.ratio > 100 ? '#c8e6c9' : '#f5f5f5'));
+    html += '<tr style="border-bottom:1px solid #eee;">';
+    html += '<td style="padding:4px 8px;">' + wpEsc((loc && loc.displayName && loc.displayName.length > 0) ? loc.displayName : (r.locName || r.locId)) + '</td>';
+    html += '<td style="padding:4px 8px;text-align:center;background:' + ratioBg + ';font-weight:bold;">' + r.ratio + '%</td>';
+    html += '<td style="padding:4px 8px;text-align:center;"><span class="wp-loc-flag ' + flagCls + '">' + wpEsc(flag) + '</span></td>';
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  wpOpenModal('プレビュー：' + presetName, html, [
+    { label: '← 戻る', onclick: 'wpOpenPresetSelector()' },
+    { label: '✓ ' + presetName + ' を適用', primary: true, onclick: 'wpApplyPreset(\'' + presetName.replace(/'/g, "\\'") + '\')' }
+  ]);
+}
+
+async function wpApplyPreset(presetName) {
+  if (!confirm(presetName + ' を ' + bmCurrentDate + ' に適用しますか？')) return;
+  wpToast('適用中...', 'info');
+  const r = await wpFetch('applyWeatherPreset', { presetName: presetName, date: bmCurrentDate });
+  if (!r.ok) {
+    wpToast('適用失敗: ' + (r.error || '不明'), 'error');
+    return;
+  }
+  wpToast(r.message || '適用完了', 'success');
+  wpCloseModal();
+  // 編集キャッシュをクリア（サーバー側のG列が変わるため）
+  if (bmEditsCache[bmCurrentDate]) {
+    delete bmEditsCache[bmCurrentDate];
+    bmSaveEdits();
+  }
+  // Undo履歴クリア（サーバ側変更のため）
+  bmUndoStack = [];
+  bmRedoStack = [];
+  bmUpdateUndoBtns();
+  await bmReload();
+}
+
+// ============================================================
+// F6 設定タブ：プリセット編集UI
+// ============================================================
+async function wpRenderSettingsTab() {
+  const wrap = document.getElementById('tab-settings');
+  if (!wrap) return;
+  wrap.innerHTML = '<div class="wp-page"><div style="text-align:center;padding:30px;color:#888;">読み込み中...</div></div>';
+  const ok = await wpLoadPresets();
+  if (!ok) {
+    wrap.innerHTML = '<div class="wp-page"><div style="text-align:center;padding:30px;color:#c62828;">プリセット取得に失敗しました</div></div>';
+    return;
+  }
+  let html = '<div class="wp-page">';
+  html += '<div class="wp-section-title">🌤️ 天候プリセット管理</div>';
+  html += '<div class="wp-section-desc">雨天や猛暑日など、天候に応じて配分を一括変更するプリセットを管理します。「📋 プリセット」ボタンから単日に適用できます。</div>';
+  html += '<button class="wp-add-btn" onclick="wpOpenNewPresetEditor()">+ 新規プリセット</button>';
+  html += '<table class="wp-presets-table">';
+  html += '<thead><tr><th>プリセット名</th><th>登録拠点数</th><th>0%</th><th>増量</th><th class="wp-row-actions">操作</th></tr></thead><tbody>';
+  if (wpPresets.length === 0) {
+    html += '<tr><td colspan="5" style="text-align:center;padding:20px;color:#888;">プリセットがありません</td></tr>';
+  }
+  for (const p of wpPresets) {
+    const valid = p.rows.filter(r => r.locId);
+    const off = valid.filter(r => r.ratio === 0).length;
+    const inc = valid.filter(r => r.ratio > 100).length;
+    html += '<tr>';
+    html += '<td><b>' + wpEsc(p.name) + '</b></td>';
+    html += '<td>' + valid.length + '</td>';
+    html += '<td>' + (off > 0 ? off + '拠点' : '–') + '</td>';
+    html += '<td>' + (inc > 0 ? inc + '拠点' : '–') + '</td>';
+    html += '<td class="wp-row-actions">';
+    html += '<button class="wp-btn-edit" onclick="wpOpenEditPresetEditor(\'' + wpEsc(p.name).replace(/'/g, "\\'") + '\')">編集</button>';
+    html += '<button class="wp-btn-del" onclick="wpDeletePresetConfirm(\'' + wpEsc(p.name).replace(/'/g, "\\'") + '\')">削除</button>';
+    html += '</td>';
+    html += '</tr>';
+  }
+  html += '</tbody></table></div>';
+  wrap.innerHTML = html;
+}
+
+function wpOpenNewPresetEditor() {
+  const name = prompt('プリセット名を入力してください（例：🌧️ 雨天）');
+  if (!name || !name.trim()) return;
+  // 既存名チェック
+  if (wpPresets.some(p => p.name === name.trim())) {
+    alert('同名のプリセットが既に存在します');
+    return;
+  }
+  wpCurrentEditPreset = name.trim();
+  // 全拠点を100%で初期化した編集モーダルを開く
+  const newPreset = {
+    name: wpCurrentEditPreset,
+    rows: wpLocations.map(l => ({ locId: l.id, locName: l.name, ratio: 100, note: '' }))
+  };
+  wpRenderEditModal(newPreset, true);
+}
+
+function wpOpenEditPresetEditor(presetName) {
+  const p = wpPresets.find(x => x.name === presetName);
+  if (!p) return;
+  wpCurrentEditPreset = presetName;
+  // 拠点マスタの全拠点を反映（プリセットにない拠点は100%で補完）
+  const rows = wpLocations.map(l => {
+    const r = p.rows.find(x => x.locId === l.id);
+    return r ? { locId: l.id, locName: l.name, ratio: r.ratio, note: r.note || '' }
+             : { locId: l.id, locName: l.name, ratio: 100, note: '' };
+  });
+  wpRenderEditModal({ name: presetName, rows: rows }, false);
+}
+
+function wpRenderEditModal(preset, isNew) {
+  let html = '';
+  html += '<div class="wp-edit-name-row">';
+  html += '<label>プリセット名：</label>';
+  html += '<input type="text" id="wp-edit-name" value="' + wpEsc(preset.name) + '" ' + (isNew ? '' : 'readonly') + '>';
+  html += '</div>';
+  html += '<div class="wp-edit-bulk-row">';
+  html += '<b>一括設定：</b>';
+  html += '<button onclick="wpBulkSet(\'all\', 0)">全拠点 0%</button>';
+  html += '<button onclick="wpBulkSet(\'all\', 100)">全拠点 100%</button>';
+  html += '<button onclick="wpBulkSet(\'outdoor\', 0)">屋外のみ 0%</button>';
+  html += '<button onclick="wpBulkSet(\'indoor\', 80)">屋内のみ 80%</button>';
+  html += '<span style="margin-left:auto;">指定値で一括: <input type="number" id="wp-bulk-val" value="100" min="0" max="500"> %';
+  html += ' <button onclick="wpBulkSet(\'all\', null)">適用</button></span>';
+  html += '</div>';
+  html += '<table class="wp-edit-loc-table">';
+  html += '<thead><tr><th class="wp-loc-name">拠点</th><th style="width:80px;text-align:center;">区分</th><th style="text-align:center;">係数(%)</th></tr></thead>';
+  html += '<tbody>';
+  for (const r of preset.rows) {
+    const loc = wpLocations.find(l => l.id === r.locId);
+    const flagCls = loc && loc.outdoor === '屋外' ? 'wp-outdoor' : 'wp-indoor';
+    const flag = loc ? loc.outdoor : '屋内';
+    html += '<tr>';
+    html += '<td class="wp-loc-name">' + wpEsc((loc && loc.displayName && loc.displayName.length > 0) ? loc.displayName : r.locName) + ' <span style="color:#888;font-size:8.5pt;">(' + wpEsc(r.locId) + ')</span></td>';
+    html += '<td style="text-align:center;"><span class="wp-loc-flag ' + flagCls + '" data-flag="' + wpEsc(flag) + '">' + wpEsc(flag) + '</span></td>';
+    html += '<td style="text-align:center;"><input type="number" class="wp-ratio-input" data-lid="' + wpEsc(r.locId) + '" value="' + r.ratio + '" min="0" max="500"></td>';
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+
+  const buttons = [
+    { label: 'キャンセル', onclick: 'wpCloseModal()' }
+  ];
+  if (!isNew) {
+    buttons.push({ label: '🗑 削除', danger: true, onclick: 'wpDeletePresetConfirm(\'' + preset.name.replace(/'/g, "\\'") + '\')' });
+  }
+  buttons.push({ label: '💾 保存', primary: true, onclick: 'wpSaveCurrentEdit()' });
+
+  wpOpenModal((isNew ? '新規プリセット作成' : 'プリセット編集：') + preset.name, html, buttons);
+}
+
+function wpBulkSet(scope, value) {
+  let val = value;
+  if (val === null) {
+    const inp = document.getElementById('wp-bulk-val');
+    val = parseInt(inp.value, 10);
+    if (isNaN(val) || val < 0) { alert('有効な数値を入力してください'); return; }
+  }
+  const inputs = document.querySelectorAll('.wp-ratio-input');
+  let n = 0;
+  inputs.forEach(inp => {
+    const lid = inp.dataset.lid;
+    const loc = wpLocations.find(l => l.id === lid);
+    const outdoor = loc ? loc.outdoor : '屋内';
+    if (scope === 'all' || (scope === 'outdoor' && outdoor === '屋外') || (scope === 'indoor' && outdoor === '屋内')) {
+      inp.value = val;
+      n++;
+    }
+  });
+  wpToast(n + '拠点を ' + val + '% に設定', 'info');
+}
+
+async function wpSaveCurrentEdit() {
+  const nameInp = document.getElementById('wp-edit-name');
+  const newName = nameInp.value.trim();
+  if (!newName) { alert('プリセット名を入力してください'); return; }
+
+  const inputs = document.querySelectorAll('.wp-ratio-input');
+  const rows = [];
+  inputs.forEach(inp => {
+    const lid = inp.dataset.lid;
+    const ratio = parseInt(inp.value, 10);
+    if (isNaN(ratio) || ratio < 0) return;
+    rows.push({ locId: lid, ratio: ratio, note: '' });
+  });
+  if (rows.length === 0) { alert('1拠点以上設定してください'); return; }
+
+  wpToast('保存中...', 'info');
+  // GET経由（URLが長くなる可能性あるがOK）
+  const usp = new URLSearchParams();
+  usp.set('action', 'saveWeatherPreset');
+  usp.set('presetName', newName);
+  usp.set('rows', JSON.stringify(rows));
+  try {
+    const res = await fetch(GAS_URL + '?' + usp.toString());
+    const r = await res.json();
+    if (!r.ok) { wpToast('保存失敗: ' + (r.error || '不明'), 'error'); return; }
+    wpToast(r.message || '保存完了', 'success');
+    wpCloseModal();
+    await wpRenderSettingsTab();
+  } catch (err) {
+    wpToast('保存失敗: ' + String(err), 'error');
+  }
+}
+
+async function wpDeletePresetConfirm(presetName) {
+  if (!confirm('プリセット「' + presetName + '」を削除しますか？\nこの操作は取り消せません。')) return;
+  const r = await wpFetch('deleteWeatherPreset', { presetName: presetName });
+  if (!r.ok) { wpToast('削除失敗: ' + (r.error || '不明'), 'error'); return; }
+  wpToast(r.message || '削除完了', 'success');
+  wpCloseModal();
+  await wpRenderSettingsTab();
+}
+
+// ============================================================
+// 初期化フック
+// ============================================================
+// マウスアップでドラッグ終了
+document.addEventListener('mouseup', bmOnGlobalMouseUp);
+
+// キーボードショートカット（既存handlerに追加）
+document.addEventListener('keydown', function(e) {
+  // tab-master がアクティブなときのみ
+  const tabMaster = document.getElementById('tab-master');
+  if (!tabMaster || !tabMaster.classList.contains('active')) return;
+  // 編集中（contenteditableにフォーカス）なら無視（Ctrl+Z/Yはブラウザに任せたほうが安全だが、選択範囲操作は別）
+  const isEditing = document.activeElement && document.activeElement.isContentEditable;
+  // Ctrl+Z / Cmd+Z → Undo
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'z' && !isEditing) {
+    e.preventDefault();
+    bmDoUndo();
+    return;
+  }
+  // Ctrl+Y or Ctrl+Shift+Z → Redo
+  if (((e.ctrlKey || e.metaKey) && e.key === 'y') ||
+      ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'z' || e.key === 'Z'))) {
+    if (isEditing) return;
+    e.preventDefault();
+    bmDoRedo();
+    return;
+  }
+  // Delete / Backspace → 範囲を0クリア
+  if ((e.key === 'Delete' || e.key === 'Backspace') && !isEditing && bmSelectedCells.size > 0) {
+    e.preventDefault();
+    bmActionClearZero();
+    return;
+  }
+  // Ctrl+C → 範囲コピー
+  if ((e.ctrlKey || e.metaKey) && e.key === 'c' && !isEditing && bmSelectedCells.size > 0) {
+    e.preventDefault();
+    bmActionCopy();
+    return;
+  }
+  // Ctrl+V → 範囲ペースト
+  if ((e.ctrlKey || e.metaKey) && e.key === 'v' && !isEditing && bmSelectedCells.size > 0) {
+    e.preventDefault();
+    bmActionPaste();
+    return;
+  }
+  // Escape → 選択解除
+  if (e.key === 'Escape' && !isEditing) {
+    bmClearSelection();
+    return;
+  }
+});
+
+// 設定タブ初回表示時にプリセット読み込み
+let wpSettingsLoaded = false;
+function wpEnsureSettingsLoaded() {
+  if (wpSettingsLoaded) return;
+  wpSettingsLoaded = true;
+  wpRenderSettingsTab();
+}
+
+
+</script>
+</body>
+</html>
