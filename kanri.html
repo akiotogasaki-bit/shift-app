@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>🍱 納品管理</title>
-<!-- kanri.html v3.11 (2026-05-25) — copyOrderText を食材ごと unitMode 切替に変更（vendor.unitMode → item.unitMode）。v3.10: 一括印刷ボタン追加。sheet1日付を全シートに同期→拠点配分(2部)→午前便→(午後便あれば)→仕込み の順で afterprint 連鎖印刷 -->
+<!-- kanri.html v3.12 (2026-05-25) — 業者カードに定数発注セクション追加（入力欄＋GAS保存・コピー時組込み）。v3.11: copyOrderText を食材ごと unitMode 切替。v3.10: 一括印刷ボタン追加。 -->
 <style id="app-style">
 /* @page は全環境で確実に効く静的指定（用紙＝縦）。横向きはシート1・2をCSS回転で実現（A案） */
 @page { size: A4; margin: 3mm; }
@@ -797,6 +797,19 @@ body {
 .order-bd-row:last-child { border-bottom: none; }
 .order-bd-date { color: #555; min-width: 80px; flex-shrink: 0; }
 .order-bd-items { flex: 1; color: #333; }
+/* ── 定数発注セクション (v3.12) ── */
+.order-constants-section { margin-top: 14px; padding-top: 12px; border-top: 2px dashed #999; }
+.order-constants-head { font-weight: bold; margin-bottom: 8px; color: #1A3C5E; font-size: 14px; }
+.order-constants-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.order-constants-table th, .order-constants-table td { padding: 5px 8px; border: 0.5px solid #ddd; }
+.order-constants-table th { background: rgba(0,0,0,0.04); font-weight: bold; font-size: 12px; }
+.order-constants-table td.const-name { text-align: left; }
+.order-constants-table td.const-qty { text-align: right; width: 30%; }
+.order-constants-table td.const-unit { text-align: center; width: 15%; color: #555; }
+.order-constants-table input[type="number"] { width: 90px; padding: 4px 6px; border: 1px solid #ccc; border-radius: 4px; text-align: right; font-size: 14px; }
+.order-constants-table input[type="number"]:focus { border-color: #1976d2; outline: none; box-shadow: 0 0 0 2px rgba(25,118,210,0.2); }
+.order-constants-table input.saving { border-color: #ff9800; background: #fff8e1; }
+.order-constants-table input.saved { border-color: #4caf50; background: #e8f5e9; transition: background 0.4s; }
 /* 業者カラー */
 .ovc-red    { border-color: #c62828; }
 .ovc-red    .order-vendor-head { background: #c62828; color: white; }
@@ -3083,11 +3096,41 @@ function renderOrderData(data) {
          <div class="order-breakdown" id="${bdId}">${bdRows}</div>`
       : '';
 
+    // 定数発注セクション (v3.12)
+    let constSection = '';
+    const consts = v.constants || [];
+    if (consts.length > 0) {
+      const constRows = consts.map(c => {
+        const safeVendor = escHtml(v.name);
+        const safeConstId = escHtml(c.id);
+        const currentQty = (c.currentQty !== undefined && c.currentQty !== null) ? c.currentQty : c.defaultQty;
+        return `<tr>
+          <td class="const-name">${escHtml(c.name)}</td>
+          <td class="const-qty"><input type="number" min="0" step="1" value="${currentQty}"
+            data-vendor="${safeVendor}" data-const-id="${safeConstId}"
+            data-default="${c.defaultQty}"
+            onblur="saveConstantInput(this)" /></td>
+          <td class="const-unit">${escHtml(c.unit || '')}</td>
+        </tr>`;
+      }).join('');
+      constSection = `<div class="order-constants-section">
+        <div class="order-constants-head">📦 定数発注</div>
+        <table class="order-constants-table">
+          <thead><tr>
+            <th style="text-align:left">品目名</th>
+            <th style="text-align:right">数量</th>
+            <th style="text-align:center">単位</th>
+          </tr></thead>
+          <tbody>${constRows}</tbody>
+        </table>
+      </div>`;
+    }
+
     html += `
       <div class="order-vendor-card ${cc}${isDone ? ' done' : ''}" id="ovc-${safeN}">
         <div class="order-vendor-head" onclick="toggleOrderCard('${safeN}')">
           <span class="order-vendor-name">${escHtml(v.name)}</span>
-          <span class="order-vendor-summary">（${v.items.length}品目）</span>
+          <span class="order-vendor-summary">（${v.items.length}品目${consts.length > 0 ? '＋定数' + consts.length : ''}）</span>
           <div style="display:flex;align-items:center;gap:8px;margin-left:auto;" onclick="event.stopPropagation()">
             <label class="order-done-wrap">
               <input type="checkbox" class="order-done-cb" data-vendor="${escHtml(v.name)}"
@@ -3106,6 +3149,7 @@ function renderOrderData(data) {
             </tr></thead>
             <tbody>${rows}</tbody>
           </table>
+          ${constSection}
           ${bdSection}
         </div>
       </div>`;
@@ -3151,8 +3195,8 @@ function copyOrderText(vendorName) {
     dateLabel = `${dt.getMonth()+1}/${dt.getDate()}(${DOW[dt.getDay()]})`;
   }
  
-  // v3.11: 食材ごとに unitMode を取得（食材マスタI列「発注単位区分」由来）
-  // 食材I列が空欄の場合は 'pack' をデフォルトとする
+  // v3.11: 食材ごとに unitMode を取得（食材マスタJ列「発注単位区分」由来）
+  // 食材J列が空欄の場合は 'pack' をデフォルトとする
   const itemLines = vendor.items.map(it => {
     const need = formatNeedAmount(it.total, it.unit);
     const pack = `${it.packCeil}パック`;
@@ -3168,6 +3212,19 @@ function copyOrderText(vendorName) {
     }
     return `・${it.name} ${qty}`;
   });
+
+  // v3.12: 定数発注リスト（0/空欄スキップ・現在の入力値を優先）
+  const constants = vendor.constants || [];
+  // DOM から最新の入力値を取得（保存前の編集中の値も反映）
+  const constLines = constants
+    .map(c => {
+      const safeVendor = vendorName.replace(/"/g, '\\"');
+      const inputEl = document.querySelector(`input[data-vendor="${safeVendor}"][data-const-id="${c.id}"]`);
+      const qty = inputEl ? Number(inputEl.value) || 0 : (Number(c.currentQty) || 0);
+      return { name: c.name, unit: c.unit || '', qty: qty };
+    })
+    .filter(c => c.qty > 0)
+    .map(c => `・${c.name} ${c.qty}${c.unit}`);
  
   // 案C: 区切り線フォーマット
   const sep = '━━━━━━━━━━━━━━━━';
@@ -3177,11 +3234,17 @@ function copyOrderText(vendorName) {
     '',
     `▼納品日：${dateLabel}`,
     sep,
-    ...itemLines,
-    sep,
-    '',
-    'よろしくお願いいたします。'
+    ...itemLines
   ];
+  // 定数発注があればセクション追加
+  if (constLines.length > 0) {
+    lines.push(sep);
+    lines.push(...constLines);
+  }
+  lines.push(sep);
+  lines.push('');
+  lines.push('よろしくお願いいたします。');
+
   const text = lines.join('\n');
  
   navigator.clipboard.writeText(text).then(
@@ -3196,6 +3259,58 @@ function copyOrderText(vendorName) {
       finally { document.body.removeChild(ta); }
     }
   );
+}
+
+// v3.12: 定数発注の入力値をGAS経由で保存（blur時に自動呼出）
+async function saveConstantInput(inputEl) {
+  const vendorName = inputEl.dataset.vendor;
+  const constId = inputEl.dataset.constId;
+  const qty = Number(inputEl.value) || 0;
+  const data = window._orderData;
+  if (!data) return;
+  const firstDate = data.firstDate || (data.dates && data.dates[0]);
+  if (!firstDate) return;
+
+  // 視覚フィードバック（保存中）
+  inputEl.classList.remove('saved');
+  inputEl.classList.add('saving');
+
+  try {
+    let userId = '';
+    try {
+      if (typeof getCurrentUserId === 'function') userId = getCurrentUserId() || '';
+    } catch(_) {}
+
+    const params = new URLSearchParams();
+    params.append('action', 'saveConstantOrderInput');
+    params.append('date', firstDate);
+    params.append('vendorName', vendorName);
+    params.append('constId', constId);
+    params.append('qty', String(qty));
+    params.append('userId', userId);
+
+    const res = await fetch(GAS_URL, { method: 'POST', body: params });
+    const json = await res.json();
+
+    inputEl.classList.remove('saving');
+    if (json && json.success) {
+      inputEl.classList.add('saved');
+      setTimeout(() => inputEl.classList.remove('saved'), 1500);
+      // メモリ内データも更新
+      const vendor = data.vendors.find(v => v.name === vendorName);
+      if (vendor && vendor.constants) {
+        const c = vendor.constants.find(x => x.id === constId);
+        if (c) c.currentQty = qty;
+      }
+    } else {
+      console.warn('定数発注入力保存失敗', json && json.error);
+      orderSetStatus('保存失敗: ' + (json && json.error ? json.error : '不明'), true);
+    }
+  } catch(e) {
+    inputEl.classList.remove('saving');
+    console.warn('定数発注入力保存エラー', e);
+    orderSetStatus('保存通信エラー', true);
+  }
 }
 
 // 発注タブ 初期化
