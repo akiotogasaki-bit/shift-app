@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>🍱 納品管理</title>
-<!-- kanri.html v3.12 (2026-05-25) — 業者カードに定数発注セクション追加（入力欄＋GAS保存・コピー時組込み）。v3.11: copyOrderText を食材ごと unitMode 切替。v3.10: 一括印刷ボタン追加。 -->
+<!-- kanri.html v3.13 (2026-05-25) — 主菜候補マスタ対応（仕込みタブ日替わり選択を仕込みマスタからの選択に変更・kawari に仕込みID保存）。v3.12: 業者カードに定数発注セクション追加。v3.11: copyOrderText を食材ごと unitMode 切替。v3.10: 一括印刷ボタン追加。 -->
 <style id="app-style">
 /* @page は全環境で確実に効く静的指定（用紙＝縦）。横向きはシート1・2をCSS回転で実現（A案） */
 @page { size: A4; margin: 3mm; }
@@ -2152,10 +2152,16 @@ function showS4SavedBadge(dateVal) {
 }
  
 function buildKawariSelect(id, cands, selected) {
+  // v3.13: cands は `[{id, name}, ...]` (新形式・仕込みマスタベース)
+  //        後方互換: 文字列要素の場合は {id: c, name: c} として扱う
   let html = `<select id="${id}" style="padding:5px 8px;border:1px solid #bbb;border-radius:4px;font-family:inherit;font-size:13px;">`;
   html += `<option value="">-- 未選択 --</option>`;
   (cands || []).forEach(c => {
-    html += `<option value="${escHtml(c)}"${c === selected ? ' selected' : ''}>${escHtml(c)}</option>`;
+    const cid   = (typeof c === 'object' && c !== null) ? String(c.id || '')   : String(c || '');
+    const cname = (typeof c === 'object' && c !== null) ? String(c.name || '') : String(c || '');
+    if (!cid) return;
+    const isSel = (cid === selected);
+    html += `<option value="${escHtml(cid)}"${isSel ? ' selected' : ''}>${escHtml(cname)}</option>`;
   });
   html += '</select>';
   return html;
