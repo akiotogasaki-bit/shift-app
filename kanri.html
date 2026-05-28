@@ -3699,7 +3699,7 @@ function bmRenderCell(pid, lid, idx0) {
   else if (diff < 0 && pro > 0) ind = '<span class="bm-ind-down">▼</span>';
   const badge = hasSO ? '<span class="bm-sellout-badge"></span>' : '';
 
-  const editable = !isZero;
+  const editable = true;
   const rangeAttrs = ' onmousedown="bmOnCellMouseDown(event,\'' + pid + '\',\'' + lid + '\')" onmouseenter="bmOnCellMouseEnter(event,\'' + pid + '\',\'' + lid + '\')"';
   const editAttrs = editable
     ? 'contenteditable="true" inputmode="numeric" data-pid="' + pid + '" data-lid="' + lid + '" onkeydown="bmOnSalesKey(event)" onblur="bmOnSalesBlur(this)" onfocus="bmOnSalesFocus(this)"' + rangeAttrs
