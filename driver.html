@@ -629,17 +629,37 @@ body {
           <button onclick="loadResidualSummary()" style="background:rgba(255,255,255,.2);border:none;color:#FFF;font-size:11px;padding:3px 10px;border-radius:10px;cursor:pointer;font-family:inherit;">🔄 更新</button>
         </div>
       </div>
-      <div onclick="openAllBreakdown()" style="cursor:pointer;text-align:center;padding:10px 0;background:rgba(255,255,255,.15);border-radius:10px;margin-bottom:10px;border:1px solid rgba(255,255,255,.3);">
-        <span style="color:#FFD700;font-size:44px;font-weight:700;text-shadow:0 0 20px rgba(255,215,0,.5);" id="all-residual-total">—</span>
-        <span style="color:#FFD700;font-size:16px;font-weight:700;">個</span>
-        <div style="color:rgba(255,255,255,.6);font-size:10px;margin-top:2px;">タップで種別内訳</div>
+      <!-- v1.2: 計算上 / 入力済 を併記 -->
+      <div style="display:flex;gap:8px;margin-bottom:10px;">
+        <div style="flex:1;text-align:center;padding:10px 0;background:rgba(255,255,255,.15);border-radius:10px;border:1px solid rgba(255,255,255,.3);">
+          <div style="color:rgba(255,255,255,.6);font-size:10px;margin-bottom:2px;">計算上</div>
+          <span style="color:#FFFFFF;font-size:28px;font-weight:700;" id="all-residual-calculated">—</span>
+          <span style="color:#FFFFFF;font-size:12px;font-weight:700;">個</span>
+        </div>
+        <div onclick="openAllBreakdown()" style="flex:1;text-align:center;padding:10px 0;background:rgba(255,255,255,.15);border-radius:10px;cursor:pointer;border:1px solid rgba(255,255,255,.3);">
+          <div style="color:rgba(255,255,255,.6);font-size:10px;margin-bottom:2px;">入力済</div>
+          <span style="color:#FFD700;font-size:28px;font-weight:700;text-shadow:0 0 12px rgba(255,215,0,.4);" id="all-residual-total">—</span>
+          <span style="color:#FFD700;font-size:12px;font-weight:700;">個</span>
+          <div style="color:rgba(255,255,255,.5);font-size:9px;margin-top:1px;">タップで内訳</div>
+        </div>
       </div>
       <div id="driver-list" style="display:flex;flex-direction:column;gap:6px;"></div>
     </div>
 
     <div class="residual-summary" onclick="openBreakdown()" style="cursor:pointer;">
-      <div class="residual-summary-label">自分の残数入力合計（お茶除く）</div>
-      <div class="residual-summary-count" id="residual-total">0</div>
+      <div class="residual-summary-label">自分の残数（お茶除く）</div>
+      <!-- v1.2: 計算上 / 入力済 を併記 -->
+      <div style="display:flex;gap:10px;justify-content:center;align-items:flex-end;margin:4px 0;">
+        <div style="text-align:center;">
+          <div style="font-size:11px;opacity:.6;margin-bottom:2px;">計算上</div>
+          <div style="font-size:36px;font-weight:700;line-height:1;" id="residual-calculated">0</div>
+        </div>
+        <div style="font-size:28px;opacity:.4;padding-bottom:2px;">/</div>
+        <div style="text-align:center;">
+          <div style="font-size:11px;opacity:.6;margin-bottom:2px;">入力済</div>
+          <div style="font-size:36px;font-weight:700;line-height:1;color:#FFD700;" id="residual-total">0</div>
+        </div>
+      </div>
       <div class="residual-summary-unit">個</div>
       <div style="font-size:11px;opacity:.6;margin-top:6px;">タップで内訳を確認</div>
     </div>
@@ -887,6 +907,7 @@ async function init() {
     state.todayAssignment = {};                                // ★ NEW
     (assignmentRes || []).forEach(a => {
       state.todayAssignment[a.locationId] = {
+        userId: a.userId || '',   // v1.2: userId追加（自分担当判定用）
         color: a.color || '',
         name:  a.name  || '',
         type:  a.type  || '',
@@ -1051,6 +1072,8 @@ function renderCollectionList() {
   document.getElementById('uncollected-badge').textContent = uncollected.length;
   document.getElementById('uncollected-badge').className =
     `tab-badge ${uncollected.length > 0 ? 'red' : ''}`;
+  // v1.2: レポート状況更新後に計算上残数も再計算
+  updateCalculatedResidualTotal();
 }
 
 // 休止中拠点の専用レンダリング
@@ -1093,7 +1116,10 @@ function renderLocationItem(loc, isCollected) {
     status = 'intermediate';
     onclickAction = `handleUnreportedTap('${loc.id}')`;
     hint = '';
-    amountHtml = `<span class="location-amount intermediate">販売中</span>`;
+    // v1.2: お茶除外の「販売数/納品数」併記
+    const _soldX = getNonTeaSoldCount_(r);
+    const _delivY = getNonTeaDeliveryCount_(r);
+    amountHtml = `<span class="location-amount intermediate">販売中 ${_soldX}/${_delivY}</span>`;
   } else {
     status = 'unreported';
     extraClass = 'unreported';
@@ -1355,6 +1381,95 @@ function updateResidualTotal() {
     .filter(p => !teaIds.includes(p.id))
     .reduce((sum, p) => sum + (parseInt(document.getElementById(`res-${p.id}`)?.value || '0') || 0), 0);
   document.getElementById('residual-total').textContent = total;
+  // v1.2: 計算上残数も同時に更新（state.reportsByLocベース）
+  updateCalculatedResidualTotal();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// v1.2 NEW: お茶除外ヘルパー＆計算上残数
+// ═══════════════════════════════════════════════════════════════
+
+/** お茶のproduct IDセットを返す */
+function getTeaIdSet_() {
+  return new Set((state.products || []).filter(p => String(p.name || '').includes('お茶')).map(p => String(p.id)));
+}
+
+/**
+ * deliveryCount (オブジェクト or JSON文字列) からお茶除外合計を計算
+ * intermediate: r.deliveryCount (オブジェクト)
+ * final:        r.deliveryCountJson (JSON文字列)
+ */
+function getNonTeaDeliveryCount_(r) {
+  if (!r) return 0;
+  const teaIds = getTeaIdSet_();
+  let obj = null;
+  if (r.deliveryCount && typeof r.deliveryCount === 'object') {
+    obj = r.deliveryCount;
+  } else if (r.deliveryCountJson) {
+    try { obj = JSON.parse(r.deliveryCountJson); } catch(e) { obj = null; }
+  }
+  if (!obj || typeof obj !== 'object') return 0;
+  let total = 0;
+  Object.entries(obj).forEach(([pid, qty]) => {
+    if (teaIds.has(String(pid))) return;
+    total += Number(qty) || 0;
+  });
+  return total;
+}
+
+/**
+ * productSalesJson からお茶除外販売数を算出。
+ * フォールバック: r.soldCount (お茶含む可能性あるが、productSalesJsonが空のときの最終手段)
+ */
+function getNonTeaSoldCount_(r) {
+  if (!r) return 0;
+  const teaIds = getTeaIdSet_();
+  if (r.productSalesJson) {
+    try {
+      const obj = JSON.parse(r.productSalesJson);
+      if (obj && typeof obj === 'object') {
+        let total = 0;
+        Object.entries(obj).forEach(([pid, qty]) => {
+          if (teaIds.has(String(pid))) return;
+          total += Number(qty) || 0;
+        });
+        return total;
+      }
+    } catch(e) {}
+  }
+  // フォールバック (productSalesJsonが無い古いデータ用)
+  return Number(r.soldCount) || 0;
+}
+
+/**
+ * 「自分の」計算上残数 = Σ(納品 - 販売) お茶除外
+ *   - スタート報告未の拠点はスキップ
+ *   - 自分が当日担当（主担当/応援/代理いずれか優先表示されているドライバー）の拠点のみ集計
+ *   - userIdで照合（state.todayAssignment.userId が一致するもの）
+ */
+function calculateMyExpectedResidual_() {
+  const myUid = String(state.userId || '');
+  if (!myUid) return 0;
+  let total = 0;
+  (state.locations || []).forEach(loc => {
+    const assign = state.todayAssignment[loc.id];
+    if (!assign) return;
+    if (String(assign.userId || '') !== myUid) return;
+    const r = state.reportsByLoc[loc.id];
+    if (!r) return; // スタート報告未 → スキップ
+    const deliv = getNonTeaDeliveryCount_(r);
+    if (deliv <= 0) return;
+    const sold  = getNonTeaSoldCount_(r);
+    total += Math.max(0, deliv - sold);
+  });
+  return total;
+}
+
+/** 計算上残数表示を更新 */
+function updateCalculatedResidualTotal() {
+  const el = document.getElementById('residual-calculated');
+  if (!el) return;
+  el.textContent = calculateMyExpectedResidual_();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1367,6 +1482,12 @@ async function loadResidualSummary() {
     const res  = await fetch(GAS_URL + '?action=getResidualSummary', { redirect: 'follow' });
     const data = JSON.parse(await res.text());
     document.getElementById('all-residual-total').textContent = data.total || 0;
+    // v1.2: 計算上の全ドライバー合計を表示
+    const calcEl = document.getElementById('all-residual-calculated');
+    if (calcEl) {
+      calcEl.textContent = (data.calculatedTotal !== undefined && data.calculatedTotal !== null)
+        ? data.calculatedTotal : '—';
+    }
     const driverList = document.getElementById('driver-list');
     if (data.drivers && data.drivers.length > 0) {
       driverList.innerHTML = data.drivers.map(d => {
@@ -1414,7 +1535,11 @@ function stopResidualSummaryTimer() {
 }
 
 function switchTab(tab) {
-  if (tab === 'residual') startResidualSummaryTimer();
+  if (tab === 'residual') {
+    startResidualSummaryTimer();
+    // v1.2: 残数タブ表示時に計算上残数を即時更新
+    updateCalculatedResidualTotal();
+  }
   else stopResidualSummaryTimer();
 
   document.getElementById('tab-collection').classList.toggle('active', tab === 'collection');
