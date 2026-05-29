@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>🍱 納品管理</title>
-<!-- kanri.html v3.13 (2026-05-25) — 主菜候補マスタ対応（仕込みタブ日替わり選択を仕込みマスタからの選択に変更・kawari に仕込みID保存）。v3.12: 業者カードに定数発注セクション追加。v3.11: copyOrderText を食材ごと unitMode 切替。v3.10: 一括印刷ボタン追加。 -->
+<!-- kanri.html v3.16 (2026-05-29) — 配分調整: 商品単位の確定/解除ボタン追加（商品名横の✓ボタン）。v3.15: 推奨0かつ売上0のゼロセルも編集可能化。v3.14: 保存POSTのCORS preflight対応。v3.13: 主菜候補マスタ対応。v3.12: 業者カードに定数発注セクション追加。v3.11: copyOrderText を食材ごと unitMode 切替。v3.10: 一括印刷ボタン追加。 -->
 <style id="app-style">
 /* @page は全環境で確実に効く静的指定（用紙＝縦）。横向きはシート1・2をCSS回転で実現（A案） */
 @page { size: A4; margin: 3mm; }
@@ -1389,6 +1389,24 @@ body {
   user-select: none;
 }
 #tab-master .bm-clear-btn:hover { background: #ffebee; color: #c62828; }
+  /* ── v3.16 商品確定ボタン「✓」 ── */
+#tab-master .bm-confirm-prod-btn {
+  display: inline-block;
+  margin-left: 2px;
+  padding: 0 4px;
+  font-size: 9pt;
+  color: #888;
+  cursor: pointer;
+  border-radius: 2px;
+  user-select: none;
+  border: 1px solid #ccc;
+}
+#tab-master .bm-confirm-prod-btn:hover { background: #e8f5e9; color: #2e7d32; border-color: #81c784; }
+#tab-master .bm-confirm-prod-btn.bm-confirmed {
+  background: #2e7d32; color: #fff; border-color: #1b5e20; font-weight: bold;
+}
+#tab-master .bm-confirm-prod-btn.bm-confirmed:hover { background: #1b5e20; }
+#tab-master tr.bm-prod-confirmed .bm-product-cell { background: #e8f5e9; font-weight: bold; }
 
 /* ── F3 範囲選択ハイライト ── */
 #tab-master .bm-cell-sales.bm-selected {
@@ -3386,7 +3404,14 @@ function bmClearEditsForLoc(dateStr, lid) {
   }
   bmSaveEdits();
 }
-
+function bmClearEditsForProduct(dateStr, pid) {
+  if (!bmEditsCache[dateStr]) return;
+  const keys = Object.keys(bmEditsCache[dateStr]);
+  for (const k of keys) {
+    if (k.startsWith(pid + '_')) delete bmEditsCache[dateStr][k];
+  }
+  bmSaveEdits();
+}
 // 古い日付の編集キャッシュをクリア（範囲外の日付を削除）
 function bmPurgeOldEdits(validDates) {
   const validSet = new Set(validDates);
@@ -3489,7 +3514,15 @@ function bmIsAllConfirmed() {
   }
   return true;
 }
-
+function bmIsProductConfirmed(pid) {
+  if (!bmServerData) return false;
+  for (const loc of bmServerData.locations) {
+    const c = bmServerData.cells[pid + '_' + loc.id];
+    if (!c) continue;
+    if (c.confirmed === null || c.confirmed === undefined) return false;
+  }
+  return true;
+}
 // セルの「表示する販売数」を取得（編集値 > サーバーweekSales）
 function bmGetDisplaySales(pid, lid) {
   const edit = bmGetEdit(bmCurrentDate, pid, lid);
@@ -3652,10 +3685,17 @@ function bmRenderMatrix() {
 function bmRenderRow(p) {
   const copyBtn = '<span class="bm-copy-btn" onclick="event.stopPropagation();bmCopyProductRow(\'' + p.id + '\')" title="この商品の行をコピー">⧉</span>';
   const clearBtn = '<span class="bm-clear-btn" onclick="event.stopPropagation();bmClearProductRow(\'' + p.id + '\')" title="この商品の全拠点を0にする">🗑</span>';
+  // v3.16 追加：商品確定ボタン
+  const isPc = bmIsProductConfirmed(p.id);
+  const pcCls = isPc ? 'bm-confirm-prod-btn bm-confirmed' : 'bm-confirm-prod-btn';
+  const pcTxt = isPc ? '✓済' : '✓';
+  const pcTtl = isPc ? 'この商品の確定を解除（全拠点のG列クリア）' : 'この商品を全拠点で確定（編集値→なければ提案値をG列保存）';
+  const confirmBtn = '<span class="' + pcCls + '" onclick="event.stopPropagation();bmConfirmProduct(\'' + p.id + '\')" title="' + pcTtl + '">' + pcTxt + '</span>';
   // 表示名優先、空ならname
   const showName = (p.displayName && p.displayName.length > 0) ? p.displayName : p.name;
   const titleAttr = (p.displayName && p.displayName !== p.name) ? (' title="' + bmEscape(p.name) + '"') : '';
-  let html = '<tr><td class="bm-product-cell"' + titleAttr + '>' + bmEscape(showName) + copyBtn + clearBtn + '</td>';
+  const trCls = isPc ? ' class="bm-prod-confirmed"' : '';
+  let html = '<tr' + trCls + '><td class="bm-product-cell"' + titleAttr + '>' + bmEscape(showName) + copyBtn + clearBtn + confirmBtn + '</td>';
   let total = 0;
   // v3.9 NEW: idx を渡して拠点グループ区切り線対応
   bmServerData.locations.forEach((loc, idx) => {
@@ -3928,6 +3968,42 @@ async function bmReload() {
 }
 
 // 確定／推奨／全拠点確定
+  async function bmConfirmProduct(pid) {
+  if (!bmServerData) return;
+  const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
+  const p = products.find(x => x.id === pid);
+  const pname = p ? ((p.displayName && p.displayName.length > 0) ? p.displayName : p.name) : pid;
+ 
+  if (bmIsProductConfirmed(pid)) {
+    // 解除：全拠点のG列でこの商品分をクリア
+    if (!confirm('「' + pname + '」の確定を解除しますか？\n（全拠点のG列でこの商品分をクリアします）')) return;
+    const r = await bmPostAction('unconfirmBasicMasterProduct', { date: bmCurrentDate, pid: pid });
+    if (!r.ok) { alert('解除失敗: ' + (r.error || '')); return; }
+    await bmLoadDate(bmCurrentDate);
+    return;
+  }
+ 
+  // 確定：この商品の全拠点について、編集値→なければ提案値 を集約
+  const itemsByLoc = {};
+  let cnt = 0;
+  for (const loc of bmServerData.locations) {
+    const e = bmGetEdit(bmCurrentDate, pid, loc.id);
+    const c = bmServerData.cells[pid + '_' + loc.id];
+    let val = null;
+    if (e !== null && e !== undefined && e !== '') val = Number(e);
+    else if (c && c.proposed) val = Number(c.proposed);
+    if (val !== null && !isNaN(val)) {
+      itemsByLoc[loc.id] = { [pid]: val };
+      cnt++;
+    }
+  }
+  if (cnt === 0) { alert('確定する値がありません（編集値も提案値もゼロ）'); return; }
+  if (!confirm('「' + pname + '」を ' + cnt + ' 拠点で確定しますか？\n（編集値があれば編集値、なければ提案値をG列に保存）')) return;
+  const r = await bmPostAction('confirmBasicMasterAll', { date: bmCurrentDate, itemsByLoc });
+  if (!r.ok) { alert('確定失敗: ' + (r.error || '')); return; }
+  bmClearEditsForProduct(bmCurrentDate, pid);
+  await bmLoadDate(bmCurrentDate);
+}
 async function bmConfirmLoc(lid) {
   if (!bmServerData) return;
   if (bmIsLocConfirmed(lid)) {
