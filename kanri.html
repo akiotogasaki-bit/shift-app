@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>🍱 納品管理</title>
-<!-- kanri.html v3.16 (2026-05-29) — 配分調整: 商品単位の確定/解除ボタン追加（商品名横の✓ボタン）。v3.15: 推奨0かつ売上0のゼロセルも編集可能化。v3.14: 保存POSTのCORS preflight対応。v3.13: 主菜候補マスタ対応。v3.12: 業者カードに定数発注セクション追加。v3.11: copyOrderText を食材ごと unitMode 切替。v3.10: 一括印刷ボタン追加。 -->
+<!-- kanri.html v3.18 (2026-05-29) — 配分調整: 全編集操作（セル編集・コピー・クリア・undo/redo）の全マトリクス再描画を回避しDOM直更新化（全体高速化）。v3.17: セル編集時のみ高速化。v3.16: 商品単位の確定/解除ボタン追加。v3.15: 推奨0かつ売上0のゼロセルも編集可能化。v3.14: 保存POSTのCORS preflight対応。v3.13: 主菜候補マスタ対応。v3.12: 業者カードに定数発注セクション追加。v3.11: copyOrderText を食材ごと unitMode 切替。v3.10: 一括印刷ボタン追加。 -->
 <style id="app-style">
 /* @page は全環境で確実に効く静的指定（用紙＝縦）。横向きはシート1・2をCSS回転で実現（A案） */
 @page { size: A4; margin: 3mm; }
@@ -3834,10 +3834,71 @@ function bmOnSalesBlur(el) {
   }
   // Undo履歴付きで設定
   bmSetEditWithHistory(bmCurrentDate, pid, lid, newVal);
-  bmRenderMatrix();
-  bmRenderCalcInfo();
+  bmUpdateCellDOM(pid, lid);  // v3.18: 全再描画を回避し編集セル+合計のみ更新
 }
-
+function bmUpdateCellsDOM(changes) {
+  if (!bmServerData || !changes || changes.length === 0) return;
+  const pidSet = new Set();
+  const lidSet = new Set();
+ 
+  // 1. 各セル本体を更新
+  for (const ch of changes) {
+    const pid = ch.pid, lid = ch.lid;
+    if (!pid || !lid) continue;
+    const el = document.querySelector('.bm-cell-sales[data-pid="' + pid + '"][data-lid="' + lid + '"]');
+    if (!el) continue;
+    const c = bmServerData.cells[pid + '_' + lid];
+    const sales = bmGetDisplaySales(pid, lid);
+    const edit = bmGetEdit(bmCurrentDate, pid, lid);
+    const isEdited = (edit !== null && edit !== undefined);
+    const pro = c ? c.proposed : 0;
+    const isZero = !pro && !sales;
+    const salStr = (sales || sales === 0) && pro ? String(sales) : (sales ? String(sales) : '–');
+    el.textContent = salStr;
+    el.classList.remove('bm-fallback', 'bm-edited', 'bm-no-sales');
+    if (c && c.isFallback && !isEdited) el.classList.add('bm-fallback');
+    if (isEdited) el.classList.add('bm-edited');
+    if (!sales && !isZero) el.classList.add('bm-no-sales');
+    if (isZero) el.classList.add('bm-no-sales');
+    pidSet.add(pid);
+    lidSet.add(lid);
+  }
+ 
+  // 2. 影響を受けた商品行の合計列を1回ずつ更新
+  for (const pid of pidSet) {
+    const anyEl = document.querySelector('.bm-cell-sales[data-pid="' + pid + '"]');
+    if (!anyEl) continue;
+    const tr = anyEl.closest('tr');
+    if (!tr) continue;
+    const totalCell = tr.querySelector('.bm-total-col');
+    if (!totalCell) continue;
+    let total = 0;
+    for (const loc of bmServerData.locations) {
+      total += bmGetDisplaySales(pid, loc.id);
+    }
+    totalCell.textContent = total;
+  }
+ 
+  // 3. 影響を受けた拠点列の拠点合計を1回ずつ更新
+  const summaryRow = document.querySelector('#tab-master .bm-matrix .bm-summary-row');
+  if (summaryRow) {
+    const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
+    for (const lid of lidSet) {
+      const idx = bmServerData.locations.findIndex(l => l.id === lid);
+      if (idx < 0) continue;
+      const colIdx = idx + 1; // 商品名列分シフト
+      if (!summaryRow.children[colIdx]) continue;
+      let sum = 0;
+      for (const p of products) sum += bmGetDisplaySales(p.id, lid);
+      summaryRow.children[colIdx].textContent = sum;
+    }
+  }
+}
+ 
+// v3.18: 単一セル用ラッパー（bmOnSalesBlur から呼ばれる）
+function bmUpdateCellDOM(pid, lid) {
+  bmUpdateCellsDOM([{ pid, lid }]);
+}
 // 内訳モーダル
 function bmOpenModal(pid, lid) {
   const c = bmServerData.cells[pid + '_' + lid];
@@ -4217,8 +4278,7 @@ function bmDoUndo() {
   bmApplyHistoryActions(entry.actions, true);
   bmRedoStack.push(entry);
   if (bmRedoStack.length > BM_HISTORY_MAX) bmRedoStack.shift();
-  bmRenderMatrix();
-  bmRenderCalcInfo();
+  bmUpdateCellsDOM(entry.actions);  // v3.18: 全再描画を回避
   bmUpdateUndoBtns();
   wpToast('元に戻しました（' + entry.actions.length + '件）', 'info');
 }
@@ -4229,8 +4289,7 @@ function bmDoRedo() {
   bmApplyHistoryActions(entry.actions, false);
   bmUndoStack.push(entry);
   if (bmUndoStack.length > BM_HISTORY_MAX) bmUndoStack.shift();
-  bmRenderMatrix();
-  bmRenderCalcInfo();
+  bmUpdateCellsDOM(entry.actions);  // v3.18: 全再描画を回避
   bmUpdateUndoBtns();
   wpToast('やり直しました（' + entry.actions.length + '件）', 'info');
 }
@@ -4363,8 +4422,7 @@ function bmActionClearZero() {
     changes.push({ date: bmCurrentDate, pid, lid, newVal: 0 });
   }
   const n = bmSetEditsBulk(changes);
-  bmRenderMatrix();
-  bmRenderCalcInfo();
+  bmUpdateCellsDOM(changes);  // v3.18: 全再描画を回避
   wpToast(n + '件を0にしました', 'success');
   bmClearSelection();
 }
@@ -4447,11 +4505,9 @@ function bmActionPaste() {
     });
   }
   const n = bmSetEditsBulk(changes);
-  bmRenderMatrix();
-  bmRenderCalcInfo();
+  bmUpdateCellsDOM(changes);  // v3.18: 全再描画を回避
   wpToast(n + 'セルに貼り付けました', 'success');
   bmClearSelection();
-}
 
 
 // ============================================================
@@ -4468,11 +4524,9 @@ function bmClearProductRow(pid) {
     changes.push({ date: bmCurrentDate, pid: pid, lid: loc.id, newVal: 0 });
   }
   const n = bmSetEditsBulk(changes);
-  bmRenderMatrix();
-  bmRenderCalcInfo();
+  bmUpdateCellsDOM(changes);  // v3.18: 全再描画を回避
   wpToast('「' + pname + '」を' + n + '拠点で0にしました', 'success');
 }
-
 function bmClearLocationCol(lid) {
   if (!bmServerData) return;
   const loc = bmServerData.locations.find(x => x.id === lid);
@@ -4484,8 +4538,7 @@ function bmClearLocationCol(lid) {
     changes.push({ date: bmCurrentDate, pid: p.id, lid: lid, newVal: 0 });
   }
   const n = bmSetEditsBulk(changes);
-  bmRenderMatrix();
-  bmRenderCalcInfo();
+  bmUpdateCellsDOM(changes);  // v3.18: 全再描画を回避
   wpToast('「' + lname + '」を' + n + '商品で0にしました', 'success');
 }
 
@@ -4561,12 +4614,10 @@ function bmExecRowPaste(srcPid) {
     }
   }
   const n = bmSetEditsBulk(changes);
-  bmRenderMatrix();
-  bmRenderCalcInfo();
+  bmUpdateCellsDOM(changes);  // v3.18: 全再描画を回避
   wpCloseModal();
   wpToast(targets.length + '商品 × ' + Object.keys(bmCopyBuffer.values).length + '拠点 = ' + n + '件を貼り付けました', 'success');
 }
-
 // ============================================================
 // F2 拠点列コピペ
 // ============================================================
@@ -4622,12 +4673,10 @@ function bmExecColPaste(srcLid) {
     }
   }
   const n = bmSetEditsBulk(changes);
-  bmRenderMatrix();
-  bmRenderCalcInfo();
+  bmUpdateCellsDOM(changes);  // v3.18: 全再描画を回避
   wpCloseModal();
   wpToast(targets.length + '拠点 × ' + Object.keys(bmCopyBuffer.values).length + '商品 = ' + n + '件を貼り付けました', 'success');
 }
-
 // ============================================================
 // 汎用モーダル
 // ============================================================
