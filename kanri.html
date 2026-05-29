@@ -4075,28 +4075,6 @@ async function bmReload() {
   await bmLoadDate(bmCurrentDate);
 }
 
-
-  // 確定：この商品の全拠点について、編集値→なければ提案値 を集約
-  const itemsByLoc = {};
-  let cnt = 0;
-  for (const loc of bmServerData.locations) {
-    const e = bmGetEdit(bmCurrentDate, pid, loc.id);
-    const c = bmServerData.cells[pid + '_' + loc.id];
-    let val = null;
-    if (e !== null && e !== undefined && e !== '') val = Number(e);
-    else if (c && c.proposed) val = Number(c.proposed);
-    if (val !== null && !isNaN(val)) {
-      itemsByLoc[loc.id] = { [pid]: val };
-      cnt++;
-    }
-  }
-  if (cnt === 0) { alert('確定する値がありません（編集値も提案値もゼロ）'); return; }
-  if (!confirm('「' + pname + '」を ' + cnt + ' 拠点で確定しますか？\n（編集値があれば編集値、なければ提案値をG列に保存）')) return;
-  const r = await bmPostAction('confirmBasicMasterAll', { date: bmCurrentDate, itemsByLoc });
-  if (!r.ok) { alert('確定失敗: ' + (r.error || '')); return; }
-  bmClearEditsForProduct(bmCurrentDate, pid);
-  await bmLoadDate(bmCurrentDate);
-}
 function bmConfirmLoc(lid) {
   if (!bmServerData) return;
   const locName = (bmServerData.locations.find(l => l.id === lid) || {}).name || lid;
