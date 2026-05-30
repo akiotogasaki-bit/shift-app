@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>🍱 納品管理</title>
-<!-- kanri.html v3.19 (2026-05-29) — 配分調整: ローカル確定ワークフロー化（拠点確定/全拠点確定/→推奨はサーバー送信せずローカル状態のみ更新、💾 保存ボタンで一括サーバー送信＋再描画）。商品行コピーを推奨値ベースに変更。商品確定ボタン✓廃止。v3.18: 全編集操作のDOM直更新化。v3.17: セル編集時のみ高速化。v3.16: 商品単位の確定/解除ボタン追加。v3.15: 推奨0かつ売上0のゼロセルも編集可能化。v3.14: 保存POSTのCORS preflight対応。v3.13: 主菜候補マスタ対応。v3.12: 業者カードに定数発注セクション追加。v3.11: copyOrderText を食材ごと unitMode 切替。v3.10: 一括印刷ボタン追加。 -->
+<!-- kanri.html v3.20 (2026-05-29) — 配分調整: 保存ワークフロー改善（部分編集モード/拠点確定モードを区別、特定商品コピー時に未編集セルがH列値で上書きされる問題を修正）。商品行コピーは編集値優先、なければ推奨値。v3.19: ローカル確定ワークフロー化（拠点確定/全拠点確定/→推奨はサーバー送信せずローカル状態のみ更新、💾 保存ボタンで一括サーバー送信＋再描画）。商品行コピーを推奨値ベースに変更。商品確定ボタン✓廃止。v3.18: 全編集操作のDOM直更新化。v3.17: セル編集時のみ高速化。v3.16: 商品単位の確定/解除ボタン追加。v3.15: 推奨0かつ売上0のゼロセルも編集可能化。v3.14: 保存POSTのCORS preflight対応。v3.13: 主菜候補マスタ対応。v3.12: 業者カードに定数発注セクション追加。v3.11: copyOrderText を食材ごと unitMode 切替。v3.10: 一括印刷ボタン追加。 -->
 <style id="app-style">
 /* @page は全環境で確実に効く静的指定（用紙＝縦）。横向きはシート1・2をCSS回転で実現（A案） */
 @page { size: A4; margin: 3mm; }
@@ -4185,7 +4185,10 @@ async function bmSaveAll() {
   const targetLocs = new Set();
   if (bmEditsCache[bmCurrentDate]) {
     for (const k of Object.keys(bmEditsCache[bmCurrentDate])) {
-      const lid = k.split('_')[1];
+      // pid と lid を最後の '_' で安全に分離（pid に '_' を含む場合に対応）
+      const lastUnderscore = k.lastIndexOf('_');
+      if (lastUnderscore < 0) continue;
+      const lid = k.substring(lastUnderscore + 1);
       if (lid) targetLocs.add(lid);
     }
   }
@@ -4197,7 +4200,6 @@ async function bmSaveAll() {
   }
  
   // 2. itemsByLoc 構築：各拠点について編集値があるセルのみ含める
-  //    （編集値なしセルはGAS側で H列の提案値が自動採用される）
   const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
   const itemsByLoc = {};
   for (const lid of targetLocs) {
@@ -4208,13 +4210,22 @@ async function bmSaveAll() {
         locItems[p.id] = Number(e);
       }
     }
-    itemsByLoc[lid] = locItems;  // 空オブジェクトでもOK（提案値で確定）
+    itemsByLoc[lid] = locItems;
   }
  
-  // 3. サーバー送信
+  // 3. confirmedLocs：拠点確定モードの拠点ID配列
+  //    含まれる拠点 = 編集値ありセル+ H列値で全セル確定（拠点確定モード）
+  //    含まれない拠点 = 編集値のあるセルだけG列保存（部分編集モード）
+  const confirmedLocs = Array.from(bmLocalConfirmedLocs);
+ 
+  // 4. サーバー送信
   const btn = document.getElementById('bm-save-btn');
   if (btn) { btn.disabled = true; btn.textContent = '保存中...'; }
-  const r = await bmPostAction('confirmBasicMasterAll', { date: bmCurrentDate, itemsByLoc });
+  const r = await bmPostAction('confirmBasicMasterAll', {
+    date: bmCurrentDate,
+    itemsByLoc: itemsByLoc,
+    confirmedLocs: confirmedLocs
+  });
   if (btn) btn.disabled = false;
   if (!r.ok) {
     alert('保存失敗: ' + (r.error || ''));
@@ -4222,17 +4233,14 @@ async function bmSaveAll() {
     return;
   }
  
-  // 4. ローカル状態リセット
+  // 5. ローカル状態リセット
   bmEditsCache[bmCurrentDate] = {};
   bmSaveEdits();
   bmLocalConfirmedLocs.clear();
  
-  // 5. サーバーから取り直し＋全画面再描画
+  // 6. サーバーから取り直し＋全画面再描画
   await bmLoadDate(bmCurrentDate);
-  wpToast('保存完了（' + targetLocs.size + '拠点）', 'success');
-}
-function bmEscape(s) {
-  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;').replace(/"/g,'&quot;');
+  wpToast('保存完了（' + targetLocs.size + '拠点・更新' + (r.updated || 0) + '件）', 'success');
 }
 
 // 初期化（tab-master を開いた時にトリガー）
@@ -4647,18 +4655,26 @@ function bmClearLocationCol(lid) {
 // ============================================================
 // F1 商品行コピペ
 // ============================================================
+// v3.20: 編集値があれば編集値、なければ推奨値（H列）をコピー
 function bmCopyProductRow(pid) {
   if (!bmServerData) return;
   const values = {};
   for (const loc of bmServerData.locations) {
-    const c = bmServerData.cells[pid + '_' + loc.id];
-    values[loc.id] = c ? (c.proposed || 0) : 0;
+    const e = bmGetEdit(bmCurrentDate, pid, loc.id);
+    if (e !== null && e !== undefined && e !== '') {
+      // 編集値あり：そのまま採用
+      values[loc.id] = Number(e);
+    } else {
+      // 編集値なし：推奨値（H列）を採用
+      const c = bmServerData.cells[pid + '_' + loc.id];
+      values[loc.id] = c ? (c.proposed || 0) : 0;
+    }
   }
   bmCopyBuffer = { type: 'row', pid: pid, values: values };
   const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
   const p = products.find(x => x.id === pid);
   const pname = p ? ((p.displayName && p.displayName.length > 0) ? p.displayName : p.name) : pid;
-  wpToast('「' + pname + '」の推奨値をコピー（' + Object.keys(values).length + '拠点）→ ⧉で貼付先選択', 'info');
+  wpToast('「' + pname + '」をコピー（編集値優先・なければ推奨値・' + Object.keys(values).length + '拠点）→ ⧉で貼付先選択', 'info');
   bmOpenRowPasteModal(pid);
 }
 
