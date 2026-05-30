@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>🍱 納品管理</title>
-<!-- kanri.html v3.25 (2026-05-30) — 配分調整: v3.24完売表示の体裁修正。①完売時刻を必ずHH:MMに整形（表記ゆれ吸収・bmFmtSelloutTime）。②未来日付セルは完売時刻をセル上部のストリップに表示し、推奨数と重ならないようにセルを少し縦に伸ばす。GAS変更不要（kanriのみ差し替え）。v3.24 — 配分調整: ③未来日付（翌週）のセルに反映元（直近同曜=「先週」）の完売情報を🔴＋時刻で表示。完売サマリー・完売モーダルも未来日付では反映元基準で表示。過去日・当日は従来通り。要：getBasicMasterMatrixが各セルに refSelloutTime/refSelloutBonus を返す（GAS追記）。v3.23 — 配分調整: ①「数字の保存」と「確定」を完全分離（案A／K列=確定フラグ）。💾保存=編集セルのみG列に保存しK列は触らない。✓全拠点確定/拠点単位確定=即サーバーでK列フラグをトグル（解除可能）。確定判定をG列の有無→K列フラグに変更。確定時の空セルはH列補完・既存G列は維持。②拠点名の下に販売担当者名（先頭4文字・横書き小）を表示（データ源=getSalesPersonMapForDate_／日付別・未割当は非表示）。要：メインGAS側の対応関数デプロイ（saveBasicMasterNumbers/unconfirmBasicMasterAll追加、confirm系のK列対応、getBasicMasterMatrixがconfirmedLocsとlocations[].salesPersonを返す）。v3.21: 配分調整: ①「数字の保存」と「確定」を完全分離（案A／K列=確定フラグ）。💾保存=編集セルのみG列に保存しK列は触らない。✓全拠点確定/拠点単位確定=即サーバーでK列フラグをトグル（解除可能）。確定判定をG列の有無→K列フラグに変更。確定時の空セルはH列補完・既存G列は維持。②拠点名の下に販売担当者名（先頭4文字・横書き小）を表示（データ源=getSalesPersonMapForDate_／日付別・未割当は非表示）。要：メインGAS側の対応関数デプロイ（saveBasicMasterNumbers/unconfirmBasicMasterAll追加、confirm系のK列対応、getBasicMasterMatrixがconfirmedLocsとlocations[].salesPersonを返す）。v3.21: bmGetDisplaySales修正（G列確定値confirmedを表示優先・weekSalesは未確定時のみ表示）。保存後に値が戻る問題を修正。v3.20: 保存ワークフロー改善（部分編集モード/拠点確定モードを区別）。v3.19: ローカル確定ワークフロー化（拠点確定/全拠点確定/→推奨はサーバー送信せずローカル状態のみ更新、💾 保存ボタンで一括サーバー送信＋再描画）。商品行コピーを推奨値ベースに変更。商品確定ボタン✓廃止。v3.18: 全編集操作のDOM直更新化。v3.17: セル編集時のみ高速化。v3.16: 商品単位の確定/解除ボタン追加。v3.15: 推奨0かつ売上0のゼロセルも編集可能化。v3.14: 保存POSTのCORS preflight対応。v3.13: 主菜候補マスタ対応。v3.12: 業者カードに定数発注セクション追加。v3.11: copyOrderText を食材ごと unitMode 切替。v3.10: 一括印刷ボタン追加。 -->
+<!-- kanri.html v3.26 (2026-05-30) — 設定タブに「🔴 完売増量」セクションを追加（案B：時間帯[開始〜終了]＋個数を自由に追加/削除・HH:MMタイムピッカー・天気プリセットの上に同居）。読込=getSelloutBonusRules / 保存=saveSelloutBonusRules（保存と同時にサーバーで全曜日を即再計算→配分調整を自動再描画）。完売増量の実値はサーバー「完売増量マスタ」が唯一の真実（BM_SELLOUT_RULES/bmGetSelloutBonusは未使用化・残置）。表示の+Nはサーバー値(c.selloutBonus/c.refSelloutBonus)依存のためGAS差し替えで自動追従。要GASパッチ（完売増量マスタ作成・読込/保存API・getSelloutBonusByTime_差し替え・doGet/doPostルーティング・clearAllMasterCacheキー追加）。v3.25 — 配分調整: v3.24完売表示の体裁修正。①完売時刻を必ずHH:MMに整形（表記ゆれ吸収・bmFmtSelloutTime）。②未来日付セルは完売時刻をセル上部のストリップに表示し、推奨数と重ならないようにセルを少し縦に伸ばす。GAS変更不要（kanriのみ差し替え）。v3.24 — 配分調整: ③未来日付（翌週）のセルに反映元（直近同曜=「先週」）の完売情報を🔴＋時刻で表示。完売サマリー・完売モーダルも未来日付では反映元基準で表示。過去日・当日は従来通り。要：getBasicMasterMatrixが各セルに refSelloutTime/refSelloutBonus を返す（GAS追記）。v3.23 — 配分調整: ①「数字の保存」と「確定」を完全分離（案A／K列=確定フラグ）。💾保存=編集セルのみG列に保存しK列は触らない。✓全拠点確定/拠点単位確定=即サーバーでK列フラグをトグル（解除可能）。確定判定をG列の有無→K列フラグに変更。確定時の空セルはH列補完・既存G列は維持。②拠点名の下に販売担当者名（先頭4文字・横書き小）を表示（データ源=getSalesPersonMapForDate_／日付別・未割当は非表示）。要：メインGAS側の対応関数デプロイ（saveBasicMasterNumbers/unconfirmBasicMasterAll追加、confirm系のK列対応、getBasicMasterMatrixがconfirmedLocsとlocations[].salesPersonを返す）。v3.21: 配分調整: ①「数字の保存」と「確定」を完全分離（案A／K列=確定フラグ）。💾保存=編集セルのみG列に保存しK列は触らない。✓全拠点確定/拠点単位確定=即サーバーでK列フラグをトグル（解除可能）。確定判定をG列の有無→K列フラグに変更。確定時の空セルはH列補完・既存G列は維持。②拠点名の下に販売担当者名（先頭4文字・横書き小）を表示（データ源=getSalesPersonMapForDate_／日付別・未割当は非表示）。要：メインGAS側の対応関数デプロイ（saveBasicMasterNumbers/unconfirmBasicMasterAll追加、confirm系のK列対応、getBasicMasterMatrixがconfirmedLocsとlocations[].salesPersonを返す）。v3.21: bmGetDisplaySales修正（G列確定値confirmedを表示優先・weekSalesは未確定時のみ表示）。保存後に値が戻る問題を修正。v3.20: 保存ワークフロー改善（部分編集モード/拠点確定モードを区別）。v3.19: ローカル確定ワークフロー化（拠点確定/全拠点確定/→推奨はサーバー送信せずローカル状態のみ更新、💾 保存ボタンで一括サーバー送信＋再描画）。商品行コピーを推奨値ベースに変更。商品確定ボタン✓廃止。v3.18: 全編集操作のDOM直更新化。v3.17: セル編集時のみ高速化。v3.16: 商品単位の確定/解除ボタン追加。v3.15: 推奨0かつ売上0のゼロセルも編集可能化。v3.14: 保存POSTのCORS preflight対応。v3.13: 主菜候補マスタ対応。v3.12: 業者カードに定数発注セクション追加。v3.11: copyOrderText を食材ごと unitMode 切替。v3.10: 一括印刷ボタン追加。 -->
 <style id="app-style">
 /* @page は全環境で確実に効く静的指定（用紙＝縦）。横向きはシート1・2をCSS回転で実現（A案） */
 @page { size: A4; margin: 3mm; }
@@ -1674,6 +1674,21 @@ body {
 }
 #tab-settings .wp-presets-table .wp-btn-edit { color: #1976d2; }
 #tab-settings .wp-presets-table .wp-btn-del { color: #c62828; }
+
+/* v3.26: 完売増量セクション（設定タブ・天気プリセットと同居・sb-プレフィックスでwp-と非衝突） */
+#tab-settings .sb-table { width: 100%; max-width: 460px; border-collapse: collapse; margin: 6px 0 12px; }
+#tab-settings .sb-table th, #tab-settings .sb-table td { border: 1px solid #e0e0e0; padding: 6px 8px; text-align: center; }
+#tab-settings .sb-table th { background: #fafafa; font-weight: bold; font-size: 9pt; color: #555; }
+#tab-settings .sb-table input[type="time"] { width: 116px; padding: 5px 4px; border: 1px solid #ccc; border-radius: 4px; font-size: 10pt; }
+#tab-settings .sb-table input.sb-bonus { width: 72px; padding: 5px 4px; border: 1px solid #ccc; border-radius: 4px; text-align: center; font-size: 10pt; }
+#tab-settings .sb-del-btn { background: none; border: none; color: #c62828; cursor: pointer; font-size: 13pt; line-height: 1; padding: 2px 6px; border-radius: 4px; }
+#tab-settings .sb-del-btn:hover { background: #ffebee; }
+#tab-settings .sb-actions { display: flex; gap: 10px; align-items: center; max-width: 460px; margin-top: 4px; }
+#tab-settings .sb-add-btn { background: #fff; color: #c62828; border: 1.5px solid #c62828; border-radius: 6px; padding: 7px 14px; font-size: 9.5pt; font-weight: bold; cursor: pointer; }
+#tab-settings .sb-add-btn:hover { background: #ffebee; }
+#tab-settings .sb-save-btn { background: #c62828; color: #fff; border: none; border-radius: 6px; padding: 8px 18px; font-size: 9.5pt; font-weight: bold; cursor: pointer; margin-left: auto; }
+#tab-settings .sb-save-btn:hover { background: #a31515; }
+#tab-settings .sb-save-btn:disabled { opacity: 0.55; cursor: default; }
 
 /* プリセット編集モーダル（拠点×係数マトリクス） */
 .wp-edit-name-row {
@@ -3403,6 +3418,9 @@ const BM_CATEGORIES = [
   { id:'zenroku', label:'全六' },
   { id:'other',   label:'他社製品' }
 ];
+// ⚠️ v3.26: 完売増量の実値はサーバー（「完売増量マスタ」シート／⚙️設定タブの🔴完売増量で編集）が唯一の真実です。
+//   配分調整の表示+N は c.selloutBonus / c.refSelloutBonus（サーバー値）を使用します。
+//   下記 BM_SELLOUT_RULES / bmGetSelloutBonus は現在どこからも呼ばれていません（後方互換のため残置）。
 const BM_SELLOUT_RULES = [
   { from:'08:00', to:'10:59', bonus:5 },
   { from:'11:00', to:'11:59', bonus:3 },
@@ -5010,7 +5028,11 @@ async function wpRenderSettingsTab() {
     wrap.innerHTML = '<div class="wp-page"><div style="text-align:center;padding:30px;color:#c62828;">プリセット取得に失敗しました</div></div>';
     return;
   }
+  await sbLoadRules();  // v3.26: 完売増量ルール取得
   let html = '<div class="wp-page">';
+  // v3.26: 🔴 完売増量セクション（天気プリセットの上）
+  html += sbSectionHtml();
+  html += '<div style="height:18px;"></div>';
   html += '<div class="wp-section-title">🌤️ 天候プリセット管理</div>';
   html += '<div class="wp-section-desc">雨天や猛暑日など、天候に応じて配分を一括変更するプリセットを管理します。「📋 プリセット」ボタンから単日に適用できます。</div>';
   html += '<button class="wp-add-btn" onclick="wpOpenNewPresetEditor()">+ 新規プリセット</button>';
@@ -5170,6 +5192,137 @@ async function wpDeletePresetConfirm(presetName) {
   wpToast(r.message || '削除完了', 'success');
   wpCloseModal();
   await wpRenderSettingsTab();
+}
+
+// ============================================================
+// v3.26 🔴 完売増量（設定タブ・案B：時間帯[開始〜終了]＋個数を自由追加/削除）
+//   読込 = getSelloutBonusRules(GET) / 保存 = saveSelloutBonusRules(POST)
+//   保存するとサーバーが「完売増量マスタ」を全書換→キャッシュクリア→全曜日を即再計算（H列=提案値のみ）
+//   完売増量の真実はサーバー。BM_SELLOUT_RULES等のローカル定数は未使用。
+// ============================================================
+let sbRules = [];  // [{from:'HH:MM', to:'HH:MM', bonus:Number}]
+
+async function sbLoadRules() {
+  const r = await wpFetch('getSelloutBonusRules');
+  sbRules = (r && r.ok && Array.isArray(r.rules)) ? r.rules : [];
+}
+
+function sbSectionHtml() {
+  let h = '';
+  h += '<div class="wp-section-title">🔴 完売増量</div>';
+  h += '<div class="wp-section-desc">完売した時刻の時間帯ごとに、翌週の推奨数へ自動で上乗せする個数(+N)を設定します。時間帯は開始時刻順に並び、重複する場合は<b>早い開始が優先</b>。該当なしは +0 です。<b>保存すると即座に全曜日の推奨数を再計算します（十数秒）。</b></div>';
+  h += '<table class="sb-table"><thead><tr><th>開始</th><th>終了</th><th>増量(+個)</th><th style="width:44px;"></th></tr></thead><tbody id="sb-tbody">';
+  h += sbRowsHtml();
+  h += '</tbody></table>';
+  h += '<div class="sb-actions">';
+  h += '<button class="sb-add-btn" onclick="sbAddRow()">＋ 行を追加</button>';
+  h += '<button class="sb-save-btn" id="sb-save-btn" onclick="sbSaveRules()">💾 保存して再計算</button>';
+  h += '</div>';
+  return h;
+}
+
+function sbRowsHtml() {
+  if (!sbRules.length) {
+    return '<tr id="sb-empty"><td colspan="4" style="color:#888;padding:16px;">行がありません。「＋ 行を追加」で追加してください。</td></tr>';
+  }
+  let h = '';
+  for (const r of sbRules) {
+    h += sbOneRowHtml(r.from || '', r.to || '', (r.bonus != null ? r.bonus : 0));
+  }
+  return h;
+}
+
+function sbOneRowHtml(from, to, bonus) {
+  return '<tr class="sb-row">'
+    + '<td><input type="time" class="sb-from" value="' + bmEscape(from) + '"></td>'
+    + '<td><input type="time" class="sb-to" value="' + bmEscape(to) + '"></td>'
+    + '<td><input type="number" class="sb-bonus" min="0" step="1" value="' + bmEscape(String(bonus)) + '"></td>'
+    + '<td><button class="sb-del-btn" onclick="sbDeleteRow(this)" title="この行を削除">🗑</button></td>'
+    + '</tr>';
+}
+
+// DOMの入力値を sbRules に取り込む（行追加/削除の前に呼ぶ＝編集消失防止）
+function sbSyncFromDOM() {
+  const rows = document.querySelectorAll('#sb-tbody tr.sb-row');
+  const arr = [];
+  rows.forEach(tr => {
+    const fromEl = tr.querySelector('.sb-from');
+    const toEl   = tr.querySelector('.sb-to');
+    const bonusEl = tr.querySelector('.sb-bonus');
+    const from = fromEl ? fromEl.value : '';
+    const to   = toEl ? toEl.value : '';
+    const raw  = bonusEl ? bonusEl.value : '';
+    let bonus = (raw === '' || raw == null) ? 0 : parseInt(raw, 10);
+    if (isNaN(bonus)) bonus = 0;
+    arr.push({ from: from, to: to, bonus: bonus });
+  });
+  sbRules = arr;
+}
+
+function sbRerenderRows() {
+  const tb = document.getElementById('sb-tbody');
+  if (tb) tb.innerHTML = sbRowsHtml();
+}
+
+function sbAddRow() {
+  sbSyncFromDOM();
+  sbRules.push({ from: '', to: '', bonus: 0 });
+  sbRerenderRows();
+}
+
+function sbDeleteRow(btn) {
+  sbSyncFromDOM();
+  const tr = btn.closest('tr.sb-row');
+  if (!tr) return;
+  const rows = Array.prototype.slice.call(document.querySelectorAll('#sb-tbody tr.sb-row'));
+  const idx = rows.indexOf(tr);
+  if (idx >= 0) sbRules.splice(idx, 1);
+  sbRerenderRows();
+}
+
+async function sbSaveRules() {
+  sbSyncFromDOM();
+  // バリデーション＆完全空行の除外
+  const rules = [];
+  for (let i = 0; i < sbRules.length; i++) {
+    const r = sbRules[i];
+    const from = (r.from || '').trim();
+    const to   = (r.to || '').trim();
+    const isEmptyRow = (!from && !to && (!r.bonus || Number(r.bonus) === 0));
+    if (isEmptyRow) continue;  // 完全な空行はスキップ
+    if (!/^\d{2}:\d{2}$/.test(from) || !/^\d{2}:\d{2}$/.test(to)) {
+      wpToast((i + 1) + '行目：開始・終了を HH:MM 形式で入力してください', 'error');
+      return;
+    }
+    if (!(from < to)) {
+      wpToast((i + 1) + '行目：開始は終了より前にしてください（' + from + '〜' + to + '）', 'error');
+      return;
+    }
+    let bonus = parseInt(r.bonus, 10);
+    if (isNaN(bonus) || bonus < 0) {
+      wpToast((i + 1) + '行目：増量は 0 以上の整数で入力してください', 'error');
+      return;
+    }
+    rules.push({ from: from, to: to, bonus: bonus });
+  }
+
+  const btn = document.getElementById('sb-save-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '保存中…再計算（十数秒）'; }
+  const res = await bmPostAction('saveSelloutBonusRules', { rules: rules });
+  if (btn) { btn.disabled = false; btn.textContent = '💾 保存して再計算'; }
+
+  if (!res || !res.ok) {
+    wpToast('保存失敗: ' + ((res && res.error) || '不明'), 'error');
+    return;
+  }
+  wpToast('保存＋再計算しました（' + (res.count != null ? res.count : rules.length) + '区分 / ' + (res.processed || 0) + '件更新）', 'success');
+  // サーバー正規化結果（昇順ソート等）をUIへ反映
+  await sbLoadRules();
+  sbRerenderRows();
+  // 配分調整が読み込み済みなら再描画（+N反映）
+  if (typeof bmCurrentDate !== 'undefined' && bmCurrentDate && typeof bmLoadDate === 'function') {
+    try { await bmLoadDate(bmCurrentDate); } catch (e) {}
+  }
 }
 
 // ============================================================
