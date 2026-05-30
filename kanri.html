@@ -3534,12 +3534,17 @@ function bmIsAllConfirmed() {
 }
 
 // セルの「表示する販売数」を取得（編集値 > サーバーweekSales）
+// v3.21: 表示優先順「編集値 > confirmed（G列）> weekSales（先週実績）」
 function bmGetDisplaySales(pid, lid) {
   const edit = bmGetEdit(bmCurrentDate, pid, lid);
   if (edit !== null && edit !== undefined && edit !== '') return Number(edit);
   if (!bmServerData) return 0;
   const c = bmServerData.cells[pid + '_' + lid];
-  return c ? c.weekSales : 0;
+  if (!c) return 0;
+  // G列確定値（confirmed）があれば優先表示
+  if (c.confirmed !== null && c.confirmed !== undefined) return Number(c.confirmed);
+  // 確定値なし → 先週実績
+  return c.weekSales || 0;
 }
 
 // レンダリング
@@ -3860,11 +3865,11 @@ function bmOnSalesKey(e) {
   if (e.key === 'Escape') { e.target.blur(); return; }
   if (!allowed) e.preventDefault();
 }
+// v3.21: 比較対象を「confirmed > weekSales」に変更（表示値と整合）
 function bmOnSalesBlur(el) {
   const pid = el.dataset.pid;
   const lid = el.dataset.lid;
   const raw = (el.textContent || '').trim();
-  const c = bmServerData.cells[pid + '_' + lid];
   let newVal;
   if (raw === '') {
     newVal = null;
@@ -3873,14 +3878,19 @@ function bmOnSalesBlur(el) {
     if (isNaN(v) || v < 0) {
       newVal = null;
     } else {
-      const orig = c ? c.weekSales : 0;
+      // v3.21: 編集前の表示値（confirmed > weekSales）と比較
+      const c = bmServerData.cells[pid + '_' + lid];
+      let orig = 0;
+      if (c) {
+        if (c.confirmed !== null && c.confirmed !== undefined) orig = Number(c.confirmed);
+        else orig = c.weekSales || 0;
+      }
       newVal = (v === orig) ? null : v;
     }
   }
-  // Undo履歴付きで設定
   bmSetEditWithHistory(bmCurrentDate, pid, lid, newVal);
-  bmUpdateCellDOM(pid, lid);  // v3.18: 全再描画を回避し編集セル+合計のみ更新
-  bmUpdateSaveDirty();        // v3.19: 保存ボタンの未保存状態を更新
+  bmUpdateCellDOM(pid, lid);
+  bmUpdateSaveDirty();
 }
 function bmUpdateCellsDOM(changes) {
   if (!bmServerData || !changes || changes.length === 0) return;
