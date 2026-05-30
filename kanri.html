@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>🍱 納品管理</title>
-<!-- kanri.html v3.23 (2026-05-30) — 配分調整: 「数字の保存」と「確定」を完全分離（案A／K列=確定フラグ）。💾保存=編集セルのみG列に保存しK列は触らない。✓全拠点確定/拠点単位確定=即サーバーでK列フラグをトグル（解除可能）。確定判定をG列の有無→K列フラグに変更。確定時の空セルはH列補完・既存G列は維持。要：メインGAS側の対応関数デプロイ（saveBasicMasterNumbers/unconfirmBasicMasterAll追加、confirm系のK列対応、getBasicMasterMatrixがconfirmedLocsを返す）。v3.21: bmGetDisplaySales修正（G列確定値confirmedを表示優先・weekSalesは未確定時のみ表示）。保存後に値が戻る問題を修正。v3.20: 保存ワークフロー改善（部分編集モード/拠点確定モードを区別）。v3.19: ローカル確定ワークフロー化（拠点確定/全拠点確定/→推奨はサーバー送信せずローカル状態のみ更新、💾 保存ボタンで一括サーバー送信＋再描画）。商品行コピーを推奨値ベースに変更。商品確定ボタン✓廃止。v3.18: 全編集操作のDOM直更新化。v3.17: セル編集時のみ高速化。v3.16: 商品単位の確定/解除ボタン追加。v3.15: 推奨0かつ売上0のゼロセルも編集可能化。v3.14: 保存POSTのCORS preflight対応。v3.13: 主菜候補マスタ対応。v3.12: 業者カードに定数発注セクション追加。v3.11: copyOrderText を食材ごと unitMode 切替。v3.10: 一括印刷ボタン追加。 -->
+<!-- kanri.html v3.24 (2026-05-30) — 配分調整: ③未来日付（翌週）のセルに反映元（直近同曜=「先週」）の完売情報を🔴＋時刻で表示。完売サマリー・完売モーダルも未来日付では反映元基準で表示。過去日・当日は従来通り。要：getBasicMasterMatrixが各セルに refSelloutTime/refSelloutBonus を返す（GAS追記）。v3.23 — 配分調整: ①「数字の保存」と「確定」を完全分離（案A／K列=確定フラグ）。💾保存=編集セルのみG列に保存しK列は触らない。✓全拠点確定/拠点単位確定=即サーバーでK列フラグをトグル（解除可能）。確定判定をG列の有無→K列フラグに変更。確定時の空セルはH列補完・既存G列は維持。②拠点名の下に販売担当者名（先頭4文字・横書き小）を表示（データ源=getSalesPersonMapForDate_／日付別・未割当は非表示）。要：メインGAS側の対応関数デプロイ（saveBasicMasterNumbers/unconfirmBasicMasterAll追加、confirm系のK列対応、getBasicMasterMatrixがconfirmedLocsとlocations[].salesPersonを返す）。v3.21: bmGetDisplaySales修正（G列確定値confirmedを表示優先・weekSalesは未確定時のみ表示）。保存後に値が戻る問題を修正。v3.20: 保存ワークフロー改善（部分編集モード/拠点確定モードを区別）。v3.19: ローカル確定ワークフロー化（拠点確定/全拠点確定/→推奨はサーバー送信せずローカル状態のみ更新、💾 保存ボタンで一括サーバー送信＋再描画）。商品行コピーを推奨値ベースに変更。商品確定ボタン✓廃止。v3.18: 全編集操作のDOM直更新化。v3.17: セル編集時のみ高速化。v3.16: 商品単位の確定/解除ボタン追加。v3.15: 推奨0かつ売上0のゼロセルも編集可能化。v3.14: 保存POSTのCORS preflight対応。v3.13: 主菜候補マスタ対応。v3.12: 業者カードに定数発注セクション追加。v3.11: copyOrderText を食材ごと unitMode 切替。v3.10: 一括印刷ボタン追加。 -->
 <style id="app-style">
 /* @page は全環境で確実に効く静的指定（用紙＝縦）。横向きはシート1・2をCSS回転で実現（A案） */
 @page { size: A4; margin: 3mm; }
@@ -1211,6 +1211,20 @@ body {
   position: sticky; top: 20px; z-index: 3;
 }
 #tab-master .bm-matrix th.bm-loc-confirmed-h { background:#d4d4d4; }
+/* v3.23: 拠点名の下に表示する販売担当者名（縦書きヘッダー内に横書きで重ねる・先頭4文字） */
+#tab-master .bm-matrix th.bm-loc-name-h .bm-loc-staff {
+  writing-mode: horizontal-tb;
+  display: inline-block;
+  font-size: 7pt;
+  font-weight: normal;
+  color: #1565c0;
+  line-height: 1.15;
+  margin-top: 3px;
+  max-width: 56px;
+  overflow: hidden;
+  text-align: center;
+  vertical-align: middle;
+}
 #tab-master .bm-matrix .bm-product-cell {
   background:#f5f5f5; font-weight:bold; text-align:left;
   padding: 0 6px; font-size: 9.5pt;
@@ -1273,6 +1287,14 @@ body {
 #tab-master .bm-sellout-badge {
   position:absolute; top:1px; left:1px; width:6px; height:6px;
   background:#c62828; border-radius:50%; animation: bm-pulse 1.8s ease-in-out infinite;
+  pointer-events:none;
+}
+/* v3.24: 未来日付セルの完売時刻（反映元）。左上に小さく重ねる・編集クリックは透過 */
+#tab-master .bm-sellout-time {
+  position:absolute; top:0; left:8px;
+  font-size:6.5pt; line-height:1.2; font-weight:bold; color:#c62828;
+  background:rgba(255,255,255,0.85); padding:0 1px; border-radius:2px;
+  white-space:nowrap; pointer-events:none; z-index:1;
 }
 @keyframes bm-pulse {
   0%,100% { transform:scale(1); opacity:1; }
@@ -3591,7 +3613,9 @@ function bmRenderCalcInfo() {
     for (const p of products) {
       const c = bmServerData.cells[p.id + '_' + loc.id];
       if (!c) continue;
-      if (c.selloutTime) selloutCount++;
+      // v3.24: 未来日付は反映元の完売を数える
+      const soT = c.isFallback ? c.refSelloutTime : c.selloutTime;
+      if (soT) selloutCount++;
       const sales = bmGetDisplaySales(p.id, loc.id);
       if (c.proposed !== sales && c.proposed > 0) diffCount++;
     }
@@ -3632,9 +3656,13 @@ function bmRenderMatrix() {
     const titleAttr = (loc.displayName && loc.displayName !== loc.name) ? (' title="' + bmEscape(loc.name) + '"') : '';
     // Phase 4: ドライバー色を背景色として適用（!importantで既存CSS上書き）
     const styleAttr = driverColorStyleAttr(loc.id, bmDriverColorMap);
+    // v3.23: 販売担当者名（先頭4文字・横書き小）。未割当/空欄は非表示
+    const staffName = (loc.salesPerson || '').toString();
+    const staffShort = staffName.slice(0, 4);
+    const staffHtml = staffShort ? ('<span class="bm-loc-staff" title="' + bmEscape(staffName) + '">' + bmEscape(staffShort) + '</span>') : '';
     // v3.9 NEW: 拠点グループ区切り線
     const bcls = boundaryCls(idx);
-    html += '<th class="bm-loc-name-h ' + cf + bcls + '"' + titleAttr + styleAttr + '>' + bmEscape(showName) + copyBtn + clearBtn + '</th>';
+    html += '<th class="bm-loc-name-h ' + cf + bcls + '"' + titleAttr + styleAttr + '>' + bmEscape(showName) + staffHtml + copyBtn + clearBtn + '</th>';
   });
   html += '</tr></thead>';
 
@@ -3718,7 +3746,10 @@ function bmRenderCell(pid, lid, idx0) {
   const pro = c.proposed;
   const diff = pro - sales;
   const isLocC = bmIsLocConfirmed(lid);
-  const hasSO = !!c.selloutTime;
+  // v3.24: 未来日付(isFallback)は反映元(直近同曜=先週)の完売、過去日・当日は表示日自身の完売
+  const isFuture = !!c.isFallback;
+  const soTime = isFuture ? (c.refSelloutTime || null) : (c.selloutTime || null);
+  const hasSO = !!soTime;
   const isZero = !pro && !sales;
   const edit = bmGetEdit(bmCurrentDate, pid, lid);
   const isEdited = (edit !== null && edit !== undefined);
@@ -3740,7 +3771,18 @@ function bmRenderCell(pid, lid, idx0) {
   let ind = '';
   if (diff > 0 && pro > 0) ind = '<span class="bm-ind-up">▲</span>';
   else if (diff < 0 && pro > 0) ind = '<span class="bm-ind-down">▼</span>';
-  const badge = hasSO ? '<span class="bm-sellout-badge"></span>' : '';
+  // v3.24: 過去日・当日は赤ドットのみ。未来日付は赤ドット＋反映元の完売時刻を併記
+  let badge = '';
+  if (hasSO) {
+    if (isFuture) {
+      const refDate = (c.hist && c.hist[0]) ? c.hist[0].date : '';
+      const soTitle = '反映元(' + refDate + ') ' + soTime + '完売';
+      badge = '<span class="bm-sellout-badge" title="' + bmEscape(soTitle) + '"></span>'
+            + '<span class="bm-sellout-time" title="' + bmEscape(soTitle) + '">' + bmEscape(soTime) + '</span>';
+    } else {
+      badge = '<span class="bm-sellout-badge" title="' + bmEscape(soTime + '完売') + '"></span>';
+    }
+  }
 
   const editable = true;
   const rangeAttrs = ' onmousedown="bmOnCellMouseDown(event,\'' + pid + '\',\'' + lid + '\')" onmouseenter="bmOnCellMouseEnter(event,\'' + pid + '\',\'' + lid + '\')"';
@@ -3966,7 +4008,11 @@ function bmOpenModal(pid, lid) {
   const loc = bmServerData.locations.find(x => x.id === lid);
   const isBrown = bmServerData.products.brown.some(b => b.id === pid);
   const productLabel = isBrown ? p.name + '(玄米)' : p.name + '(白米)';
-  const hasSO = !!c.selloutTime;
+  // v3.24: 未来日付(isFallback)は反映元(先週)の完売、過去日・当日は表示日自身の完売
+  const isFutureM = !!c.isFallback;
+  const soTime = isFutureM ? (c.refSelloutTime || null) : (c.selloutTime || null);
+  const soBonus = isFutureM ? (c.refSelloutBonus || 0) : (c.selloutBonus || 0);
+  const hasSO = !!soTime;
   const dowJa = bmServerData.dowJa || '';
 
   document.getElementById('bm-modal-title').textContent = productLabel + ' @ ' + loc.name;
@@ -3980,7 +4026,7 @@ function bmOpenModal(pid, lid) {
     const h = c.hist[i];
     const isSO = (i === 0 && hasSO);
     const trCls = isSO ? 'bm-is-sellout' : '';
-    const mark = isSO ? '<span class="bm-sellout-mark-inline">🔴 ' + c.selloutTime + '完売</span>' : '';
+    const mark = isSO ? '<span class="bm-sellout-mark-inline">🔴 ' + soTime + '完売</span>' : '';
     histHtml += '<tr class="' + trCls + '"><td class="bm-h-label">' + histLabels[i] + '<br><span style="font-size:7.5pt;color:#888;font-weight:normal;">' + h.date + '</span></td><td class="bm-h-value">' + h.value + '個 ' + mark + '</td></tr>';
   }
   histHtml += '</table>';
@@ -3990,7 +4036,7 @@ function bmOpenModal(pid, lid) {
   let calcHtml = '<div class="bm-modal-calc">';
   calcHtml += '<div class="bm-modal-calc-row"><span class="bm-modal-calc-label">加重平均(W1:' + w.w1 + '/W2:' + w.w2 + '/W3:' + w.w3 + '/W4:' + w.w4 + ')</span><span class="bm-modal-calc-value">' + wAvg + '個</span></div>';
   if (hasSO) {
-    calcHtml += '<div class="bm-modal-calc-row"><span class="bm-modal-calc-label">🔴 完売増量(' + c.selloutTime + ')</span><span class="bm-modal-calc-value bm-bonus">+' + c.selloutBonus + '個</span></div>';
+    calcHtml += '<div class="bm-modal-calc-row"><span class="bm-modal-calc-label">🔴 完売増量(' + soTime + ')</span><span class="bm-modal-calc-value bm-bonus">+' + soBonus + '個</span></div>';
   } else {
     calcHtml += '<div class="bm-modal-calc-row" style="color:#999;"><span class="bm-modal-calc-label">完売増量</span><span class="bm-modal-calc-value">+0個</span></div>';
   }
