@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>🍱 納品管理</title>
-<!-- kanri.html v3.24 (2026-05-30) — 配分調整: ③未来日付（翌週）のセルに反映元（直近同曜=「先週」）の完売情報を🔴＋時刻で表示。完売サマリー・完売モーダルも未来日付では反映元基準で表示。過去日・当日は従来通り。要：getBasicMasterMatrixが各セルに refSelloutTime/refSelloutBonus を返す（GAS追記）。v3.23 — 配分調整: ①「数字の保存」と「確定」を完全分離（案A／K列=確定フラグ）。💾保存=編集セルのみG列に保存しK列は触らない。✓全拠点確定/拠点単位確定=即サーバーでK列フラグをトグル（解除可能）。確定判定をG列の有無→K列フラグに変更。確定時の空セルはH列補完・既存G列は維持。②拠点名の下に販売担当者名（先頭4文字・横書き小）を表示（データ源=getSalesPersonMapForDate_／日付別・未割当は非表示）。要：メインGAS側の対応関数デプロイ（saveBasicMasterNumbers/unconfirmBasicMasterAll追加、confirm系のK列対応、getBasicMasterMatrixがconfirmedLocsとlocations[].salesPersonを返す）。v3.21: bmGetDisplaySales修正（G列確定値confirmedを表示優先・weekSalesは未確定時のみ表示）。保存後に値が戻る問題を修正。v3.20: 保存ワークフロー改善（部分編集モード/拠点確定モードを区別）。v3.19: ローカル確定ワークフロー化（拠点確定/全拠点確定/→推奨はサーバー送信せずローカル状態のみ更新、💾 保存ボタンで一括サーバー送信＋再描画）。商品行コピーを推奨値ベースに変更。商品確定ボタン✓廃止。v3.18: 全編集操作のDOM直更新化。v3.17: セル編集時のみ高速化。v3.16: 商品単位の確定/解除ボタン追加。v3.15: 推奨0かつ売上0のゼロセルも編集可能化。v3.14: 保存POSTのCORS preflight対応。v3.13: 主菜候補マスタ対応。v3.12: 業者カードに定数発注セクション追加。v3.11: copyOrderText を食材ごと unitMode 切替。v3.10: 一括印刷ボタン追加。 -->
+<!-- kanri.html v3.25 (2026-05-30) — 配分調整: v3.24完売表示の体裁修正。①完売時刻を必ずHH:MMに整形（表記ゆれ吸収・bmFmtSelloutTime）。②未来日付セルは完売時刻をセル上部のストリップに表示し、推奨数と重ならないようにセルを少し縦に伸ばす。GAS変更不要（kanriのみ差し替え）。v3.24 — 配分調整: ③未来日付（翌週）のセルに反映元（直近同曜=「先週」）の完売情報を🔴＋時刻で表示。完売サマリー・完売モーダルも未来日付では反映元基準で表示。過去日・当日は従来通り。要：getBasicMasterMatrixが各セルに refSelloutTime/refSelloutBonus を返す（GAS追記）。v3.23 — 配分調整: ①「数字の保存」と「確定」を完全分離（案A／K列=確定フラグ）。💾保存=編集セルのみG列に保存しK列は触らない。✓全拠点確定/拠点単位確定=即サーバーでK列フラグをトグル（解除可能）。確定判定をG列の有無→K列フラグに変更。確定時の空セルはH列補完・既存G列は維持。②拠点名の下に販売担当者名（先頭4文字・横書き小）を表示（データ源=getSalesPersonMapForDate_／日付別・未割当は非表示）。要：メインGAS側の対応関数デプロイ（saveBasicMasterNumbers/unconfirmBasicMasterAll追加、confirm系のK列対応、getBasicMasterMatrixがconfirmedLocsとlocations[].salesPersonを返す）。v3.21: 配分調整: ①「数字の保存」と「確定」を完全分離（案A／K列=確定フラグ）。💾保存=編集セルのみG列に保存しK列は触らない。✓全拠点確定/拠点単位確定=即サーバーでK列フラグをトグル（解除可能）。確定判定をG列の有無→K列フラグに変更。確定時の空セルはH列補完・既存G列は維持。②拠点名の下に販売担当者名（先頭4文字・横書き小）を表示（データ源=getSalesPersonMapForDate_／日付別・未割当は非表示）。要：メインGAS側の対応関数デプロイ（saveBasicMasterNumbers/unconfirmBasicMasterAll追加、confirm系のK列対応、getBasicMasterMatrixがconfirmedLocsとlocations[].salesPersonを返す）。v3.21: bmGetDisplaySales修正（G列確定値confirmedを表示優先・weekSalesは未確定時のみ表示）。保存後に値が戻る問題を修正。v3.20: 保存ワークフロー改善（部分編集モード/拠点確定モードを区別）。v3.19: ローカル確定ワークフロー化（拠点確定/全拠点確定/→推奨はサーバー送信せずローカル状態のみ更新、💾 保存ボタンで一括サーバー送信＋再描画）。商品行コピーを推奨値ベースに変更。商品確定ボタン✓廃止。v3.18: 全編集操作のDOM直更新化。v3.17: セル編集時のみ高速化。v3.16: 商品単位の確定/解除ボタン追加。v3.15: 推奨0かつ売上0のゼロセルも編集可能化。v3.14: 保存POSTのCORS preflight対応。v3.13: 主菜候補マスタ対応。v3.12: 業者カードに定数発注セクション追加。v3.11: copyOrderText を食材ごと unitMode 切替。v3.10: 一括印刷ボタン追加。 -->
 <style id="app-style">
 /* @page は全環境で確実に効く静的指定（用紙＝縦）。横向きはシート1・2をCSS回転で実現（A案） */
 @page { size: A4; margin: 3mm; }
@@ -1289,12 +1289,17 @@ body {
   background:#c62828; border-radius:50%; animation: bm-pulse 1.8s ease-in-out infinite;
   pointer-events:none;
 }
-/* v3.24: 未来日付セルの完売時刻（反映元）。左上に小さく重ねる・編集クリックは透過 */
-#tab-master .bm-sellout-time {
-  position:absolute; top:0; left:8px;
-  font-size:6.5pt; line-height:1.2; font-weight:bold; color:#c62828;
-  background:rgba(255,255,255,0.85); padding:0 1px; border-radius:2px;
-  white-space:nowrap; pointer-events:none; z-index:1;
+/* v3.25: 未来日付セルは上部に完売時刻ストリップ（推奨数と重ならない・セルが少し縦に伸びる） */
+#tab-master .bm-cell-so-line {
+  height: 13px; line-height: 13px;
+  font-size: 6.5pt; font-weight: bold; color:#c62828;
+  text-align: center; white-space: nowrap; overflow: hidden;
+  background: rgba(198,40,40,0.06);
+}
+#tab-master .bm-so-dot {
+  display:inline-block; width:5px; height:5px; background:#c62828;
+  border-radius:50%; vertical-align:middle; margin-right:2px;
+  animation: bm-pulse 1.8s ease-in-out infinite;
 }
 @keyframes bm-pulse {
   0%,100% { transform:scale(1); opacity:1; }
@@ -3476,6 +3481,23 @@ function bmGetSelloutBonus(timeStr) {
   return 0;
 }
 
+// v3.25: 完売時刻を必ず HH:MM に整形（Date文字列/HH:mm:ss/小数シリアル等の表記ゆれを吸収）
+function bmFmtSelloutTime(v) {
+  if (v === null || v === undefined) return '';
+  const s = String(v).trim();
+  if (s === '') return '';
+  // 1) 文字列中の最初の HH:MM を抽出（"11:30" / "11:30:00" / Date文字列 / ISO に対応）
+  const m = s.match(/(\d{1,2}):(\d{2})/);
+  if (m) return ('0' + m[1]).slice(-2) + ':' + m[2];
+  // 2) 小数シリアル（0〜1 のスプレッドシート時刻）→ HH:MM
+  const num = Number(s);
+  if (!isNaN(num) && num >= 0 && num < 1) {
+    const total = Math.round(num * 24 * 60);
+    return ('0' + Math.floor(total / 60)).slice(-2) + ':' + ('0' + (total % 60)).slice(-2);
+  }
+  return s; // 最後の手段
+}
+
 // 日付フォーマット系
 function bmFmtDateLabel(dateStr) {
   // 'YYYY-MM-DD' → 'M/D(曜)'
@@ -3746,9 +3768,10 @@ function bmRenderCell(pid, lid, idx0) {
   const pro = c.proposed;
   const diff = pro - sales;
   const isLocC = bmIsLocConfirmed(lid);
-  // v3.24: 未来日付(isFallback)は反映元(直近同曜=先週)の完売、過去日・当日は表示日自身の完売
+  // v3.24/v3.25: 未来日付(isFallback)は反映元(直近同曜=先週)の完売、過去日・当日は表示日自身の完売。時刻は必ずHH:MMに整形
   const isFuture = !!c.isFallback;
-  const soTime = isFuture ? (c.refSelloutTime || null) : (c.selloutTime || null);
+  const rawSO = isFuture ? (c.refSelloutTime || null) : (c.selloutTime || null);
+  const soTime = rawSO ? bmFmtSelloutTime(rawSO) : '';
   const hasSO = !!soTime;
   const isZero = !pro && !sales;
   const edit = bmGetEdit(bmCurrentDate, pid, lid);
@@ -3771,14 +3794,14 @@ function bmRenderCell(pid, lid, idx0) {
   let ind = '';
   if (diff > 0 && pro > 0) ind = '<span class="bm-ind-up">▲</span>';
   else if (diff < 0 && pro > 0) ind = '<span class="bm-ind-down">▼</span>';
-  // v3.24: 過去日・当日は赤ドットのみ。未来日付は赤ドット＋反映元の完売時刻を併記
+  // v3.25: 過去日・当日は絶対配置の赤ドット。未来日付は上部ストリップ(soLine)に🔴＋時刻（推奨数と重ならない）
   let badge = '';
+  let soLine = '';
   if (hasSO) {
     if (isFuture) {
       const refDate = (c.hist && c.hist[0]) ? c.hist[0].date : '';
       const soTitle = '反映元(' + refDate + ') ' + soTime + '完売';
-      badge = '<span class="bm-sellout-badge" title="' + bmEscape(soTitle) + '"></span>'
-            + '<span class="bm-sellout-time" title="' + bmEscape(soTitle) + '">' + bmEscape(soTime) + '</span>';
+      soLine = '<div class="bm-cell-so-line" title="' + bmEscape(soTitle) + '"><span class="bm-so-dot"></span>' + bmEscape(soTime) + '</div>';
     } else {
       badge = '<span class="bm-sellout-badge" title="' + bmEscape(soTime + '完売') + '"></span>';
     }
@@ -3792,6 +3815,7 @@ function bmRenderCell(pid, lid, idx0) {
   const proClick = isZero ? '' : 'onclick="bmOpenModal(\'' + pid + '\',\'' + lid + '\')"';
 
   return '<td class="' + cls + '">'
+    + soLine
     + '<div class="bm-cell-2col">' + badge
     + '<div class="' + salesCls + '" ' + editAttrs + '>' + salStr + '</div>'
     + '<div class="bm-cell-proposal" ' + proClick + '>' + proStr + ind + '</div>'
@@ -4008,9 +4032,10 @@ function bmOpenModal(pid, lid) {
   const loc = bmServerData.locations.find(x => x.id === lid);
   const isBrown = bmServerData.products.brown.some(b => b.id === pid);
   const productLabel = isBrown ? p.name + '(玄米)' : p.name + '(白米)';
-  // v3.24: 未来日付(isFallback)は反映元(先週)の完売、過去日・当日は表示日自身の完売
+  // v3.24/v3.25: 未来日付(isFallback)は反映元(先週)の完売、過去日・当日は表示日自身の完売。時刻は整形
   const isFutureM = !!c.isFallback;
-  const soTime = isFutureM ? (c.refSelloutTime || null) : (c.selloutTime || null);
+  const rawSOm = isFutureM ? (c.refSelloutTime || null) : (c.selloutTime || null);
+  const soTime = rawSOm ? bmFmtSelloutTime(rawSOm) : '';
   const soBonus = isFutureM ? (c.refSelloutBonus || 0) : (c.selloutBonus || 0);
   const hasSO = !!soTime;
   const dowJa = bmServerData.dowJa || '';
