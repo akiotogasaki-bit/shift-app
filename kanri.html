@@ -4668,26 +4668,43 @@ function bmClearLocationCol(lid) {
 // ============================================================
 // F1 商品行コピペ
 // ============================================================
-// v3.20: 編集値があれば編集値、なければ推奨値（H列）をコピー
+// v3.22: コピー優先順「編集値 > confirmed（G列）> proposed（H列）> 0」
+// 画面表示（bmGetDisplaySales）と整合させる
 function bmCopyProductRow(pid) {
   if (!bmServerData) return;
   const values = {};
   for (const loc of bmServerData.locations) {
+    // 1) 編集値あり → 編集値
     const e = bmGetEdit(bmCurrentDate, pid, loc.id);
     if (e !== null && e !== undefined && e !== '') {
-      // 編集値あり：そのまま採用
       values[loc.id] = Number(e);
+      continue;
+    }
+    const c = bmServerData.cells[pid + '_' + loc.id];
+    if (c) {
+      // 2) 編集値なし & confirmed（G列）あり → confirmed
+      if (c.confirmed !== null && c.confirmed !== undefined) {
+        values[loc.id] = Number(c.confirmed);
+      // 3) 編集値なし & confirmedなし & proposed（H列）> 0 → proposed
+      } else if (c.proposed) {
+        values[loc.id] = Number(c.proposed);
+      } else {
+        values[loc.id] = 0;
+      }
     } else {
-      // 編集値なし：推奨値（H列）を採用
-      const c = bmServerData.cells[pid + '_' + loc.id];
-      values[loc.id] = c ? (c.proposed || 0) : 0;
+      values[loc.id] = 0;
     }
   }
   bmCopyBuffer = { type: 'row', pid: pid, values: values };
   const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
   const p = products.find(x => x.id === pid);
   const pname = p ? ((p.displayName && p.displayName.length > 0) ? p.displayName : p.name) : pid;
-  wpToast('「' + pname + '」をコピー（編集値優先・なければ推奨値・' + Object.keys(values).length + '拠点）→ ⧉で貼付先選択', 'info');
+  // コピーした実値の合計を確認用に出す
+  let nonZero = 0;
+  for (const lid of Object.keys(values)) {
+    if (values[lid] > 0) nonZero++;
+  }
+  wpToast('「' + pname + '」をコピー（' + nonZero + '/' + Object.keys(values).length + '拠点に値あり）→ ⧉で貼付先選択', 'info');
   bmOpenRowPasteModal(pid);
 }
 
