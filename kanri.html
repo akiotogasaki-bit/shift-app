@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>🍱 納品管理</title>
-<!-- kanri.html v3.26 (2026-05-30) — 設定タブに「🔴 完売増量」セクションを追加（案B：時間帯[開始〜終了]＋個数を自由に追加/削除・HH:MMタイムピッカー・天気プリセットの上に同居）。読込=getSelloutBonusRules / 保存=saveSelloutBonusRules（保存と同時にサーバーで全曜日を即再計算→配分調整を自動再描画）。完売増量の実値はサーバー「完売増量マスタ」が唯一の真実（BM_SELLOUT_RULES/bmGetSelloutBonusは未使用化・残置）。表示の+Nはサーバー値(c.selloutBonus/c.refSelloutBonus)依存のためGAS差し替えで自動追従。要GASパッチ（完売増量マスタ作成・読込/保存API・getSelloutBonusByTime_差し替え・doGet/doPostルーティング・clearAllMasterCacheキー追加）。v3.25 — 配分調整: v3.24完売表示の体裁修正。①完売時刻を必ずHH:MMに整形（表記ゆれ吸収・bmFmtSelloutTime）。②未来日付セルは完売時刻をセル上部のストリップに表示し、推奨数と重ならないようにセルを少し縦に伸ばす。GAS変更不要（kanriのみ差し替え）。v3.24 — 配分調整: ③未来日付（翌週）のセルに反映元（直近同曜=「先週」）の完売情報を🔴＋時刻で表示。完売サマリー・完売モーダルも未来日付では反映元基準で表示。過去日・当日は従来通り。要：getBasicMasterMatrixが各セルに refSelloutTime/refSelloutBonus を返す（GAS追記）。v3.23 — 配分調整: ①「数字の保存」と「確定」を完全分離（案A／K列=確定フラグ）。💾保存=編集セルのみG列に保存しK列は触らない。✓全拠点確定/拠点単位確定=即サーバーでK列フラグをトグル（解除可能）。確定判定をG列の有無→K列フラグに変更。確定時の空セルはH列補完・既存G列は維持。②拠点名の下に販売担当者名（先頭4文字・横書き小）を表示（データ源=getSalesPersonMapForDate_／日付別・未割当は非表示）。要：メインGAS側の対応関数デプロイ（saveBasicMasterNumbers/unconfirmBasicMasterAll追加、confirm系のK列対応、getBasicMasterMatrixがconfirmedLocsとlocations[].salesPersonを返す）。v3.21: 配分調整: ①「数字の保存」と「確定」を完全分離（案A／K列=確定フラグ）。💾保存=編集セルのみG列に保存しK列は触らない。✓全拠点確定/拠点単位確定=即サーバーでK列フラグをトグル（解除可能）。確定判定をG列の有無→K列フラグに変更。確定時の空セルはH列補完・既存G列は維持。②拠点名の下に販売担当者名（先頭4文字・横書き小）を表示（データ源=getSalesPersonMapForDate_／日付別・未割当は非表示）。要：メインGAS側の対応関数デプロイ（saveBasicMasterNumbers/unconfirmBasicMasterAll追加、confirm系のK列対応、getBasicMasterMatrixがconfirmedLocsとlocations[].salesPersonを返す）。v3.21: bmGetDisplaySales修正（G列確定値confirmedを表示優先・weekSalesは未確定時のみ表示）。保存後に値が戻る問題を修正。v3.20: 保存ワークフロー改善（部分編集モード/拠点確定モードを区別）。v3.19: ローカル確定ワークフロー化（拠点確定/全拠点確定/→推奨はサーバー送信せずローカル状態のみ更新、💾 保存ボタンで一括サーバー送信＋再描画）。商品行コピーを推奨値ベースに変更。商品確定ボタン✓廃止。v3.18: 全編集操作のDOM直更新化。v3.17: セル編集時のみ高速化。v3.16: 商品単位の確定/解除ボタン追加。v3.15: 推奨0かつ売上0のゼロセルも編集可能化。v3.14: 保存POSTのCORS preflight対応。v3.13: 主菜候補マスタ対応。v3.12: 業者カードに定数発注セクション追加。v3.11: copyOrderText を食材ごと unitMode 切替。v3.10: 一括印刷ボタン追加。 -->
+<!-- kanri.html v3.27 (2026-05-30) — 設定タブに「📊 加重平均（W1〜W4の重み）」セクションを追加（最小UI：4つの数値入力＋合計表示＋💾保存して再計算・最上部に配置）。読込=getSettingWeights / 保存=saveSettingWeights（保存と同時に全曜日を即再計算→配分調整を自動再描画）。※完売増量の「内訳表示だけ+0」バグはGAS側で修正（bmSelloutBonus_の時刻取り出しを堅牢化・kanri変更なし）。v3.26 — 設定タブに「🔴 完売増量」セクションを追加（案B：時間帯[開始〜終了]＋個数を自由に追加/削除・HH:MMタイムピッカー・天気プリセットの上に同居）。読込=getSelloutBonusRules / 保存=saveSelloutBonusRules（保存と同時にサーバーで全曜日を即再計算→配分調整を自動再描画）。完売増量の実値はサーバー「完売増量マスタ」が唯一の真実（BM_SELLOUT_RULES/bmGetSelloutBonusは未使用化・残置）。表示の+Nはサーバー値(c.selloutBonus/c.refSelloutBonus)依存のためGAS差し替えで自動追従。要GASパッチ（完売増量マスタ作成・読込/保存API・getSelloutBonusByTime_差し替え・doGet/doPostルーティング・clearAllMasterCacheキー追加）。v3.25 — 配分調整: v3.24完売表示の体裁修正。①完売時刻を必ずHH:MMに整形（表記ゆれ吸収・bmFmtSelloutTime）。②未来日付セルは完売時刻をセル上部のストリップに表示し、推奨数と重ならないようにセルを少し縦に伸ばす。GAS変更不要（kanriのみ差し替え）。v3.24 — 配分調整: ③未来日付（翌週）のセルに反映元（直近同曜=「先週」）の完売情報を🔴＋時刻で表示。完売サマリー・完売モーダルも未来日付では反映元基準で表示。過去日・当日は従来通り。要：getBasicMasterMatrixが各セルに refSelloutTime/refSelloutBonus を返す（GAS追記）。v3.23 — 配分調整: ①「数字の保存」と「確定」を完全分離（案A／K列=確定フラグ）。💾保存=編集セルのみG列に保存しK列は触らない。✓全拠点確定/拠点単位確定=即サーバーでK列フラグをトグル（解除可能）。確定判定をG列の有無→K列フラグに変更。確定時の空セルはH列補完・既存G列は維持。②拠点名の下に販売担当者名（先頭4文字・横書き小）を表示（データ源=getSalesPersonMapForDate_／日付別・未割当は非表示）。要：メインGAS側の対応関数デプロイ（saveBasicMasterNumbers/unconfirmBasicMasterAll追加、confirm系のK列対応、getBasicMasterMatrixがconfirmedLocsとlocations[].salesPersonを返す）。v3.21: 配分調整: ①「数字の保存」と「確定」を完全分離（案A／K列=確定フラグ）。💾保存=編集セルのみG列に保存しK列は触らない。✓全拠点確定/拠点単位確定=即サーバーでK列フラグをトグル（解除可能）。確定判定をG列の有無→K列フラグに変更。確定時の空セルはH列補完・既存G列は維持。②拠点名の下に販売担当者名（先頭4文字・横書き小）を表示（データ源=getSalesPersonMapForDate_／日付別・未割当は非表示）。要：メインGAS側の対応関数デプロイ（saveBasicMasterNumbers/unconfirmBasicMasterAll追加、confirm系のK列対応、getBasicMasterMatrixがconfirmedLocsとlocations[].salesPersonを返す）。v3.21: bmGetDisplaySales修正（G列確定値confirmedを表示優先・weekSalesは未確定時のみ表示）。保存後に値が戻る問題を修正。v3.20: 保存ワークフロー改善（部分編集モード/拠点確定モードを区別）。v3.19: ローカル確定ワークフロー化（拠点確定/全拠点確定/→推奨はサーバー送信せずローカル状態のみ更新、💾 保存ボタンで一括サーバー送信＋再描画）。商品行コピーを推奨値ベースに変更。商品確定ボタン✓廃止。v3.18: 全編集操作のDOM直更新化。v3.17: セル編集時のみ高速化。v3.16: 商品単位の確定/解除ボタン追加。v3.15: 推奨0かつ売上0のゼロセルも編集可能化。v3.14: 保存POSTのCORS preflight対応。v3.13: 主菜候補マスタ対応。v3.12: 業者カードに定数発注セクション追加。v3.11: copyOrderText を食材ごと unitMode 切替。v3.10: 一括印刷ボタン追加。 -->
 <style id="app-style">
 /* @page は全環境で確実に効く静的指定（用紙＝縦）。横向きはシート1・2をCSS回転で実現（A案） */
 @page { size: A4; margin: 3mm; }
@@ -1689,6 +1689,14 @@ body {
 #tab-settings .sb-save-btn { background: #c62828; color: #fff; border: none; border-radius: 6px; padding: 8px 18px; font-size: 9.5pt; font-weight: bold; cursor: pointer; margin-left: auto; }
 #tab-settings .sb-save-btn:hover { background: #a31515; }
 #tab-settings .sb-save-btn:disabled { opacity: 0.55; cursor: default; }
+
+/* v3.27: 加重平均（W1〜W4）セクション */
+#tab-settings .wa-grid { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; max-width: 560px; margin: 6px 0 10px; }
+#tab-settings .wa-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 9pt; color: #555; }
+#tab-settings .wa-grid input { width: 84px; padding: 6px 4px; border: 1px solid #ccc; border-radius: 4px; text-align: center; font-size: 11pt; }
+#tab-settings .wa-sum { align-self: center; padding-left: 4px; font-size: 10pt; color: #555; }
+#tab-settings .wa-sum b { font-size: 12pt; }
+#tab-settings .wa-sum.wa-warn b { color: #c62828; }
 
 /* プリセット編集モーダル（拠点×係数マトリクス） */
 .wp-edit-name-row {
@@ -5029,7 +5037,11 @@ async function wpRenderSettingsTab() {
     return;
   }
   await sbLoadRules();  // v3.26: 完売増量ルール取得
+  await waLoadWeights();  // v3.27: 加重平均の重み取得
   let html = '<div class="wp-page">';
+  // v3.27: 📊 加重平均セクション（最上部）
+  html += waSectionHtml();
+  html += '<div style="height:18px;"></div>';
   // v3.26: 🔴 完売増量セクション（天気プリセットの上）
   html += sbSectionHtml();
   html += '<div style="height:18px;"></div>';
@@ -5320,6 +5332,97 @@ async function sbSaveRules() {
   await sbLoadRules();
   sbRerenderRows();
   // 配分調整が読み込み済みなら再描画（+N反映）
+  if (typeof bmCurrentDate !== 'undefined' && bmCurrentDate && typeof bmLoadDate === 'function') {
+    try { await bmLoadDate(bmCurrentDate); } catch (e) {}
+  }
+}
+
+// ============================================================
+// v3.27 📊 加重平均（W1〜W4の重み・最小UI）
+//   読込 = getSettingWeights(GET) / 保存 = saveSettingWeights(POST)
+//   保存すると設定シートの weight_w1〜w4 を更新→キャッシュクリア→全曜日を即再計算
+// ============================================================
+let waWeights = { w1: 40, w2: 30, w3: 20, w4: 10 };
+
+async function waLoadWeights() {
+  const r = await wpFetch('getSettingWeights');
+  if (r && r.ok && r.weights) {
+    waWeights = {
+      w1: Number(r.weights.w1), w2: Number(r.weights.w2),
+      w3: Number(r.weights.w3), w4: Number(r.weights.w4)
+    };
+  }
+}
+
+function waSectionHtml() {
+  const w = waWeights;
+  const sum = (Number(w.w1) || 0) + (Number(w.w2) || 0) + (Number(w.w3) || 0) + (Number(w.w4) || 0);
+  let h = '';
+  h += '<div class="wp-section-title">📊 加重平均（直近4週の重み）</div>';
+  h += '<div class="wp-section-desc">過去4週の同曜日の販売数を、どの比率で平均するかを設定します（先週ほど重く）。合計100%が目安です（合計が100でなくても内部で正規化して計算します）。<b>保存すると全曜日の推奨数を即再計算します（十数秒）。</b></div>';
+  h += '<div class="wa-grid">';
+  h += waCellHtml('wa-w1', '先週 (W1)', w.w1);
+  h += waCellHtml('wa-w2', '2週前 (W2)', w.w2);
+  h += waCellHtml('wa-w3', '3週前 (W3)', w.w3);
+  h += waCellHtml('wa-w4', '4週前 (W4)', w.w4);
+  h += '<span class="wa-sum' + (sum !== 100 ? ' wa-warn' : '') + '" id="wa-sum">合計 <b id="wa-sum-val">' + sum + '</b> %</span>';
+  h += '</div>';
+  h += '<div class="sb-actions"><button class="sb-save-btn" id="wa-save-btn" onclick="waSaveWeights()">💾 保存して再計算</button></div>';
+  return h;
+}
+
+function waCellHtml(id, label, val) {
+  return '<label>' + bmEscape(label)
+    + '<input type="number" id="' + id + '" min="0" step="1" value="' + bmEscape(String(val)) + '" oninput="waUpdateSum()"></label>';
+}
+
+function waUpdateSum() {
+  const ids = ['wa-w1', 'wa-w2', 'wa-w3', 'wa-w4'];
+  let sum = 0;
+  ids.forEach(function (id) {
+    const el = document.getElementById(id);
+    const v = el ? parseInt(el.value, 10) : 0;
+    if (!isNaN(v)) sum += v;
+  });
+  const val = document.getElementById('wa-sum-val');
+  if (val) val.textContent = sum;
+  const box = document.getElementById('wa-sum');
+  if (box) box.classList.toggle('wa-warn', sum !== 100);
+}
+
+async function waSaveWeights() {
+  const getv = function (id) {
+    const el = document.getElementById(id);
+    const v = el ? parseInt(el.value, 10) : NaN;
+    return isNaN(v) ? -1 : v;
+  };
+  const w1 = getv('wa-w1'), w2 = getv('wa-w2'), w3 = getv('wa-w3'), w4 = getv('wa-w4');
+  if ([w1, w2, w3, w4].some(function (v) { return v < 0; })) {
+    wpToast('W1〜W4は0以上の整数で入力してください', 'error');
+    return;
+  }
+  if (w1 + w2 + w3 + w4 === 0) {
+    wpToast('合計が0です。1つ以上に重みを入れてください', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('wa-save-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '保存中…再計算（十数秒）'; }
+  const res = await bmPostAction('saveSettingWeights', { weights: { w1: w1, w2: w2, w3: w3, w4: w4 } });
+  if (btn) { btn.disabled = false; btn.textContent = '💾 保存して再計算'; }
+
+  if (!res || !res.ok) {
+    wpToast('保存失敗: ' + ((res && res.error) || '不明'), 'error');
+    return;
+  }
+  if (res.weights) {
+    waWeights = {
+      w1: Number(res.weights.w1), w2: Number(res.weights.w2),
+      w3: Number(res.weights.w3), w4: Number(res.weights.w4)
+    };
+  }
+  wpToast('保存＋再計算しました（重み ' + waWeights.w1 + '/' + waWeights.w2 + '/' + waWeights.w3 + '/' + waWeights.w4 + ' ・' + (res.processed || 0) + '件更新）', 'success');
+  // 配分調整が読み込み済みなら再描画
   if (typeof bmCurrentDate !== 'undefined' && bmCurrentDate && typeof bmLoadDate === 'function') {
     try { await bmLoadDate(bmCurrentDate); } catch (e) {}
   }
