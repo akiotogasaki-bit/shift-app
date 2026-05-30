@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>🍱 納品管理</title>
-<!-- kanri.html v3.21 (2026-05-29) — 配分調整: bmGetDisplaySales修正（G列確定値confirmedを表示優先・weekSalesは未確定時のみ表示）。保存後に値が戻る問題を修正。v3.20: 保存ワークフロー改善（部分編集モード/拠点確定モードを区別）。v3.19: ローカル確定ワークフロー化（拠点確定/全拠点確定/→推奨はサーバー送信せずローカル状態のみ更新、💾 保存ボタンで一括サーバー送信＋再描画）。商品行コピーを推奨値ベースに変更。商品確定ボタン✓廃止。v3.18: 全編集操作のDOM直更新化。v3.17: セル編集時のみ高速化。v3.16: 商品単位の確定/解除ボタン追加。v3.15: 推奨0かつ売上0のゼロセルも編集可能化。v3.14: 保存POSTのCORS preflight対応。v3.13: 主菜候補マスタ対応。v3.12: 業者カードに定数発注セクション追加。v3.11: copyOrderText を食材ごと unitMode 切替。v3.10: 一括印刷ボタン追加。 -->
+<!-- kanri.html v3.23 (2026-05-30) — 配分調整: 「数字の保存」と「確定」を完全分離（案A／K列=確定フラグ）。💾保存=編集セルのみG列に保存しK列は触らない。✓全拠点確定/拠点単位確定=即サーバーでK列フラグをトグル（解除可能）。確定判定をG列の有無→K列フラグに変更。確定時の空セルはH列補完・既存G列は維持。要：メインGAS側の対応関数デプロイ（saveBasicMasterNumbers/unconfirmBasicMasterAll追加、confirm系のK列対応、getBasicMasterMatrixがconfirmedLocsを返す）。v3.21: bmGetDisplaySales修正（G列確定値confirmedを表示優先・weekSalesは未確定時のみ表示）。保存後に値が戻る問題を修正。v3.20: 保存ワークフロー改善（部分編集モード/拠点確定モードを区別）。v3.19: ローカル確定ワークフロー化（拠点確定/全拠点確定/→推奨はサーバー送信せずローカル状態のみ更新、💾 保存ボタンで一括サーバー送信＋再描画）。商品行コピーを推奨値ベースに変更。商品確定ボタン✓廃止。v3.18: 全編集操作のDOM直更新化。v3.17: セル編集時のみ高速化。v3.16: 商品単位の確定/解除ボタン追加。v3.15: 推奨0かつ売上0のゼロセルも編集可能化。v3.14: 保存POSTのCORS preflight対応。v3.13: 主菜候補マスタ対応。v3.12: 業者カードに定数発注セクション追加。v3.11: copyOrderText を食材ごと unitMode 切替。v3.10: 一括印刷ボタン追加。 -->
 <style id="app-style">
 /* @page は全環境で確実に効く静的指定（用紙＝縦）。横向きはシート1・2をCSS回転で実現（A案） */
 @page { size: A4; margin: 3mm; }
@@ -3515,15 +3515,11 @@ async function bmPostAction(action, payload) {
 
 // 確定状態：拠点の全商品でG列に値があるか
 function bmIsLocConfirmed(lid) {
-  if (bmLocalConfirmedLocs.has(lid)) return true;
+  // v3.23: 確定判定は「G列の有無」ではなく「K列フラグ(サーバーconfirmedLocs)」で行う
+  if (bmLocalConfirmedLocs.has(lid)) return true;  // 念のため（通常は空）
   if (!bmServerData) return false;
-  const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
-  for (const p of products) {
-    const c = bmServerData.cells[p.id + '_' + lid];
-    if (!c) continue;
-    if (c.confirmed === null || c.confirmed === undefined) return false;
-  }
-  return true;
+  const cl = bmServerData.confirmedLocs || [];
+  return cl.indexOf(lid) !== -1;
 }
 function bmIsAllConfirmed() {
   if (!bmServerData) return false;
@@ -3828,13 +3824,19 @@ function bmUpdateAllLocConfirmBtnUI() {
   }
 }
  
-// v3.19: 「💾 保存」ボタンの "未保存あり" 状態を更新（オレンジ点滅）
+// v3.23: 「💾 保存」ボタンの "未保存あり" 状態（編集の有無のみで判定。確定はサーバー即時のため対象外）
 function bmUpdateSaveDirty() {
   const btn = document.getElementById('bm-save-btn');
   if (!btn) return;
-  const hasEdits = bmEditsCache[bmCurrentDate] && Object.keys(bmEditsCache[bmCurrentDate]).length > 0;
-  const hasLocalConfirm = bmLocalConfirmedLocs.size > 0;
-  if (hasEdits || hasLocalConfirm) {
+  let hasEdits = false;
+  const cache = bmEditsCache[bmCurrentDate];
+  if (cache) {
+    for (const k of Object.keys(cache)) {
+      const v = cache[k];
+      if (v !== null && v !== undefined && v !== '') { hasEdits = true; break; }
+    }
+  }
+  if (hasEdits) {
     btn.classList.add('bm-dirty');
     btn.textContent = '💾 保存 (未保存あり)';
   } else {
@@ -4085,62 +4087,40 @@ async function bmReload() {
   await bmLoadDate(bmCurrentDate);
 }
 
-function bmConfirmLoc(lid) {
+async function bmConfirmLoc(lid) {
+  // v3.23: K列方式。確定済みなら解除（K列クリア・数字は残す）、未確定なら確定（編集値保存+空セルH補完+K=1）。いずれも即サーバー。
   if (!bmServerData) return;
   const locName = (bmServerData.locations.find(l => l.id === lid) || {}).name || lid;
   const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
-  // 既にサーバー確定済みかチェック
-  let isServerConfirmed = true;
-  for (const p of products) {
-    const c = bmServerData.cells[p.id + '_' + lid];
-    if (!c) continue;
-    if (c.confirmed === null || c.confirmed === undefined) { isServerConfirmed = false; break; }
-  }
-  // ローカル確定済み or サーバー確定済み → 解除（ローカルマークだけ外す）
-  if (bmLocalConfirmedLocs.has(lid)) {
-    bmLocalConfirmedLocs.delete(lid);
-    bmUpdateLocConfirmBtnUI(lid);
-    bmUpdateSaveDirty();
-    wpToast('「' + locName + '」のローカル確定を解除', 'info');
+
+  if (bmIsLocConfirmed(lid)) {
+    // 解除
+    if (!confirm('「' + locName + '」の確定を解除しますか？\n（入力済みの数字は残ります）')) return;
+    const r = await bmPostAction('unconfirmBasicMasterLocation', { date: bmCurrentDate, locId: lid });
+    if (!r.ok) { alert('解除失敗: ' + (r.error || '')); return; }
+    await bmLoadDate(bmCurrentDate);
+    wpToast('「' + locName + '」の確定を解除', 'info');
     return;
   }
-  if (isServerConfirmed) {
-    // サーバー確定済み → 解除予定マーク（次の保存時にG列クリア）
-    if (!confirm('「' + locName + '」は既にサーバー保存済みです。\n💾 保存を押すとG列がクリアされます。続行しますか？')) return;
-    bmLocalConfirmedLocs.delete(lid);  // 念のため
-    // サーバー側のconfirmedをクリアしてローカル状態を「未確定」にする
-    for (const p of products) {
-      const c = bmServerData.cells[p.id + '_' + lid];
-      if (c) c.confirmed = null;
-    }
-    bmUpdateLocConfirmBtnUI(lid);
-    bmUpdateSaveDirty();
-    wpToast('「' + locName + '」のサーバー確定を解除予定（💾 保存で反映）', 'info');
-    return;
-  }
-  // ローカル確定マーク追加 + 編集値が無いセルに推奨値を編集値として設定
-  bmLocalConfirmedLocs.add(lid);
-  const changes = [];
+
+  // 確定：この拠点の編集値を集めて送信（空セルはGAS側でH列補完・既存G列は維持）
+  const items = {};
   for (const p of products) {
     const e = bmGetEdit(bmCurrentDate, p.id, lid);
-    if (e !== null && e !== undefined && e !== '') continue;
-    const c = bmServerData.cells[p.id + '_' + lid];
-    const pro = c ? (c.proposed || 0) : 0;
-    if (pro > 0) {
-      changes.push({ date: bmCurrentDate, pid: p.id, lid: lid, newVal: pro });
-    }
+    if (e !== null && e !== undefined && e !== '') items[p.id] = Number(e);
   }
-  if (changes.length > 0) bmSetEditsBulk(changes);
-  bmUpdateCellsDOM(changes);
-  bmUpdateLocConfirmBtnUI(lid);
-  bmUpdateSaveDirty();
-  wpToast('「' + locName + '」を確定（ローカル・💾 保存で反映）', 'success');
+  const r = await bmPostAction('confirmBasicMasterLocation', { date: bmCurrentDate, locId: lid, items: items });
+  if (!r.ok) { alert('確定失敗: ' + (r.error || '')); return; }
+  bmClearEditsForLoc(bmCurrentDate, lid);
+  await bmLoadDate(bmCurrentDate);
+  wpToast('「' + locName + '」を確定', 'success');
 }
 
 function bmRecommendLoc(lid) {
+  // v3.23: 推奨値(H列)を編集値として入力するだけ（確定はしない）。確定したい場合は別途✓確定を押す。
   if (!bmServerData) return;
   const locName = (bmServerData.locations.find(l => l.id === lid) || {}).name || lid;
-  if (!confirm(locName + ' の全商品を推奨値で上書きします。編集値があれば破棄されます。よろしいですか？\n（ローカル動作のみ・💾 保存で反映）')) return;
+  if (!confirm(locName + ' の全商品を推奨値で上書きします。編集値があれば破棄されます。よろしいですか？\n（数字を入力するだけ・確定はされません。💾保存 または ✓確定で反映）')) return;
   const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
   const changes = [];
   for (const p of products) {
@@ -4151,90 +4131,83 @@ function bmRecommendLoc(lid) {
     }
   }
   if (changes.length > 0) bmSetEditsBulk(changes);
-  bmLocalConfirmedLocs.add(lid);
   bmUpdateCellsDOM(changes);
-  bmUpdateLocConfirmBtnUI(lid);
   bmUpdateSaveDirty();
-  wpToast('「' + locName + '」を推奨値で確定（ローカル・💾 保存で反映）', 'success');
+  wpToast('「' + locName + '」に推奨値を入力（💾保存 または ✓確定で反映）', 'success');
 }
 
-function bmConfirmAll() {
+async function bmConfirmAll() {
+  // v3.23: K列方式。全拠点確定済みなら全解除（全行K列クリア・数字は残す）、未確定なら全確定（編集値保存+空セルH補完+全行K=1）。即サーバー。
   if (!bmServerData) return;
   const dateLabel = bmFmtDateLabel(bmCurrentDate);
+  const btn = document.getElementById('bm-confirm-all');
+
   if (bmIsAllConfirmed()) {
-    if (!confirm(dateLabel + ' の全拠点のローカル確定を解除しますか？\n（サーバー保存済みは「💾 保存」を押すまで残ります）')) return;
-    bmLocalConfirmedLocs.clear();
-    bmUpdateAllLocConfirmBtnUI();
-    bmUpdateSaveDirty();
+    if (!confirm(dateLabel + ' の全拠点の確定を解除しますか？\n（入力済みの数字は残ります）')) return;
+    if (btn) { btn.disabled = true; btn.textContent = '解除中...'; }
+    const r = await bmPostAction('unconfirmBasicMasterAll', { date: bmCurrentDate });
+    if (btn) btn.disabled = false;
+    if (!r.ok) { alert('解除失敗: ' + (r.error || '')); bmUpdateConfirmAllBtn(); return; }
+    await bmLoadDate(bmCurrentDate);
+    wpToast('全拠点の確定を解除', 'info');
     return;
   }
-  if (!confirm(dateLabel + ' の全拠点をローカル確定します。\n（編集値が無いセルは推奨値が入ります。💾 保存で反映）\nよろしいですか？')) return;
+
+  if (!confirm(dateLabel + ' の全拠点を確定します。\n（編集値は保存、空セルは提案値で補完、入力済みの数字は維持）\nよろしいですか？')) return;
+  // 全拠点の編集値を itemsByLoc にまとめる
   const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
-  const allChanges = [];
+  const itemsByLoc = {};
   for (const loc of bmServerData.locations) {
-    bmLocalConfirmedLocs.add(loc.id);
+    const li = {};
     for (const p of products) {
       const e = bmGetEdit(bmCurrentDate, p.id, loc.id);
-      if (e !== null && e !== undefined && e !== '') continue;
-      const c = bmServerData.cells[p.id + '_' + loc.id];
-      const pro = c ? (c.proposed || 0) : 0;
-      if (pro > 0) {
-        allChanges.push({ date: bmCurrentDate, pid: p.id, lid: loc.id, newVal: pro });
-      }
+      if (e !== null && e !== undefined && e !== '') li[p.id] = Number(e);
     }
+    itemsByLoc[loc.id] = li;
   }
-  if (allChanges.length > 0) bmSetEditsBulk(allChanges);
-  bmUpdateCellsDOM(allChanges);
-  bmUpdateAllLocConfirmBtnUI();
-  bmUpdateSaveDirty();
-  wpToast('全拠点をローカル確定（💾 保存で反映）', 'success');
+  if (btn) { btn.disabled = true; btn.textContent = '確定中...'; }
+  const r = await bmPostAction('confirmBasicMasterAll', { date: bmCurrentDate, itemsByLoc: itemsByLoc });
+  if (btn) btn.disabled = false;
+  if (!r.ok) { alert('確定失敗: ' + (r.error || '')); bmUpdateConfirmAllBtn(); return; }
+  bmEditsCache[bmCurrentDate] = {};
+  bmSaveEdits();
+  await bmLoadDate(bmCurrentDate);
+  wpToast('全拠点を確定（更新' + (r.updated || 0) + '件）', 'success');
 }
 async function bmSaveAll() {
+  // v3.23: 「数字の保存」のみ。編集セルだけG列に書く（K列=確定フラグは一切触らない＝確定にならない）。
   if (!bmServerData) return;
-  // 1. 保存対象拠点を集める：編集値がある拠点 + ローカル確定マーク拠点
-  const targetLocs = new Set();
-  if (bmEditsCache[bmCurrentDate]) {
-    for (const k of Object.keys(bmEditsCache[bmCurrentDate])) {
+  const itemsByLoc = {};
+  const locSet = new Set();
+  let cellCount = 0;
+  const cache = bmEditsCache[bmCurrentDate];
+  if (cache) {
+    for (const k of Object.keys(cache)) {
+      const v = cache[k];
+      if (v === null || v === undefined || v === '') continue;
       // pid と lid を最後の '_' で安全に分離（pid に '_' を含む場合に対応）
       const lastUnderscore = k.lastIndexOf('_');
       if (lastUnderscore < 0) continue;
       const lid = k.substring(lastUnderscore + 1);
-      if (lid) targetLocs.add(lid);
+      const pid = k.substring(0, lastUnderscore);
+      if (!lid || !pid) continue;
+      if (!itemsByLoc[lid]) itemsByLoc[lid] = {};
+      itemsByLoc[lid][pid] = Number(v);
+      locSet.add(lid);
+      cellCount++;
     }
   }
-  for (const lid of bmLocalConfirmedLocs) targetLocs.add(lid);
- 
-  if (targetLocs.size === 0) {
+
+  if (cellCount === 0) {
     wpToast('保存する変更がありません', 'info');
     return;
   }
- 
-  // 2. itemsByLoc 構築：各拠点について編集値があるセルのみ含める
-  const products = [].concat(bmServerData.products.rice, bmServerData.products.brown);
-  const itemsByLoc = {};
-  for (const lid of targetLocs) {
-    const locItems = {};
-    for (const p of products) {
-      const e = bmGetEdit(bmCurrentDate, p.id, lid);
-      if (e !== null && e !== undefined && e !== '') {
-        locItems[p.id] = Number(e);
-      }
-    }
-    itemsByLoc[lid] = locItems;
-  }
- 
-  // 3. confirmedLocs：拠点確定モードの拠点ID配列
-  //    含まれる拠点 = 編集値ありセル+ H列値で全セル確定（拠点確定モード）
-  //    含まれない拠点 = 編集値のあるセルだけG列保存（部分編集モード）
-  const confirmedLocs = Array.from(bmLocalConfirmedLocs);
- 
-  // 4. サーバー送信
+
   const btn = document.getElementById('bm-save-btn');
   if (btn) { btn.disabled = true; btn.textContent = '保存中...'; }
-  const r = await bmPostAction('confirmBasicMasterAll', {
+  const r = await bmPostAction('saveBasicMasterNumbers', {
     date: bmCurrentDate,
-    itemsByLoc: itemsByLoc,
-    confirmedLocs: confirmedLocs
+    itemsByLoc: itemsByLoc
   });
   if (btn) btn.disabled = false;
   if (!r.ok) {
@@ -4242,15 +4215,14 @@ async function bmSaveAll() {
     bmUpdateSaveDirty();
     return;
   }
- 
-  // 5. ローカル状態リセット
+
+  // ローカル編集キャッシュをリセット
   bmEditsCache[bmCurrentDate] = {};
   bmSaveEdits();
-  bmLocalConfirmedLocs.clear();
- 
-  // 6. サーバーから取り直し＋全画面再描画
+
+  // サーバーから取り直し＋全画面再描画
   await bmLoadDate(bmCurrentDate);
-  wpToast('保存完了（' + targetLocs.size + '拠点・更新' + (r.updated || 0) + '件）', 'success');
+  wpToast('保存完了（' + locSet.size + '拠点・' + (r.updated || 0) + 'セル）', 'success');
 }
   function bmEscape(s) {
   return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;').replace(/"/g,'&quot;');
