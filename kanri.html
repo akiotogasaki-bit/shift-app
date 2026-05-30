@@ -4242,6 +4242,9 @@ async function bmSaveAll() {
   await bmLoadDate(bmCurrentDate);
   wpToast('保存完了（' + targetLocs.size + '拠点・更新' + (r.updated || 0) + '件）', 'success');
 }
+  function bmEscape(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;').replace(/"/g,'&quot;');
+}
 
 // 初期化（tab-master を開いた時にトリガー）
 async function bmInitIfNeeded() {
