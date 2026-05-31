@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>🍱 納品管理</title>
-<!-- kanri.html v3.27 (2026-05-30) — 設定タブに「📊 加重平均（W1〜W4の重み）」セクションを追加（最小UI：4つの数値入力＋合計表示＋💾保存して再計算・最上部に配置）。読込=getSettingWeights / 保存=saveSettingWeights（保存と同時に全曜日を即再計算→配分調整を自動再描画）。※完売増量の「内訳表示だけ+0」バグはGAS側で修正（bmSelloutBonus_の時刻取り出しを堅牢化・kanri変更なし）。v3.26 — 設定タブに「🔴 完売増量」セクションを追加（案B：時間帯[開始〜終了]＋個数を自由に追加/削除・HH:MMタイムピッカー・天気プリセットの上に同居）。読込=getSelloutBonusRules / 保存=saveSelloutBonusRules（保存と同時にサーバーで全曜日を即再計算→配分調整を自動再描画）。完売増量の実値はサーバー「完売増量マスタ」が唯一の真実（BM_SELLOUT_RULES/bmGetSelloutBonusは未使用化・残置）。表示の+Nはサーバー値(c.selloutBonus/c.refSelloutBonus)依存のためGAS差し替えで自動追従。要GASパッチ（完売増量マスタ作成・読込/保存API・getSelloutBonusByTime_差し替え・doGet/doPostルーティング・clearAllMasterCacheキー追加）。v3.25 — 配分調整: v3.24完売表示の体裁修正。①完売時刻を必ずHH:MMに整形（表記ゆれ吸収・bmFmtSelloutTime）。②未来日付セルは完売時刻をセル上部のストリップに表示し、推奨数と重ならないようにセルを少し縦に伸ばす。GAS変更不要（kanriのみ差し替え）。v3.24 — 配分調整: ③未来日付（翌週）のセルに反映元（直近同曜=「先週」）の完売情報を🔴＋時刻で表示。完売サマリー・完売モーダルも未来日付では反映元基準で表示。過去日・当日は従来通り。要：getBasicMasterMatrixが各セルに refSelloutTime/refSelloutBonus を返す（GAS追記）。v3.23 — 配分調整: ①「数字の保存」と「確定」を完全分離（案A／K列=確定フラグ）。💾保存=編集セルのみG列に保存しK列は触らない。✓全拠点確定/拠点単位確定=即サーバーでK列フラグをトグル（解除可能）。確定判定をG列の有無→K列フラグに変更。確定時の空セルはH列補完・既存G列は維持。②拠点名の下に販売担当者名（先頭4文字・横書き小）を表示（データ源=getSalesPersonMapForDate_／日付別・未割当は非表示）。要：メインGAS側の対応関数デプロイ（saveBasicMasterNumbers/unconfirmBasicMasterAll追加、confirm系のK列対応、getBasicMasterMatrixがconfirmedLocsとlocations[].salesPersonを返す）。v3.21: 配分調整: ①「数字の保存」と「確定」を完全分離（案A／K列=確定フラグ）。💾保存=編集セルのみG列に保存しK列は触らない。✓全拠点確定/拠点単位確定=即サーバーでK列フラグをトグル（解除可能）。確定判定をG列の有無→K列フラグに変更。確定時の空セルはH列補完・既存G列は維持。②拠点名の下に販売担当者名（先頭4文字・横書き小）を表示（データ源=getSalesPersonMapForDate_／日付別・未割当は非表示）。要：メインGAS側の対応関数デプロイ（saveBasicMasterNumbers/unconfirmBasicMasterAll追加、confirm系のK列対応、getBasicMasterMatrixがconfirmedLocsとlocations[].salesPersonを返す）。v3.21: bmGetDisplaySales修正（G列確定値confirmedを表示優先・weekSalesは未確定時のみ表示）。保存後に値が戻る問題を修正。v3.20: 保存ワークフロー改善（部分編集モード/拠点確定モードを区別）。v3.19: ローカル確定ワークフロー化（拠点確定/全拠点確定/→推奨はサーバー送信せずローカル状態のみ更新、💾 保存ボタンで一括サーバー送信＋再描画）。商品行コピーを推奨値ベースに変更。商品確定ボタン✓廃止。v3.18: 全編集操作のDOM直更新化。v3.17: セル編集時のみ高速化。v3.16: 商品単位の確定/解除ボタン追加。v3.15: 推奨0かつ売上0のゼロセルも編集可能化。v3.14: 保存POSTのCORS preflight対応。v3.13: 主菜候補マスタ対応。v3.12: 業者カードに定数発注セクション追加。v3.11: copyOrderText を食材ごと unitMode 切替。v3.10: 一括印刷ボタン追加。 -->
+<!-- kanri.html v3.28 (2026-05-30) — スマホ対応：タブバーを横スクロール化（display:flexのはみ出しで白背景に白文字が乗り見えなくなる問題を解消）。.tab-barにoverflow-x:auto＋慣性スクロール＋スクロールバー非表示、.tab-btnにflex:0 0 auto（縮小防止）。PC表示は変化なし。GAS変更なし。v3.27 — 設定タブに「📊 加重平均（W1〜W4の重み）」セクションを追加（最小UI：4つの数値入力＋合計表示＋💾保存して再計算・最上部に配置）。読込=getSettingWeights / 保存=saveSettingWeights（保存と同時に全曜日を即再計算→配分調整を自動再描画）。※完売増量の「内訳表示だけ+0」バグはGAS側で修正（bmSelloutBonus_の時刻取り出しを堅牢化・kanri変更なし）。v3.26 — 設定タブに「🔴 完売増量」セクションを追加（案B：時間帯[開始〜終了]＋個数を自由に追加/削除・HH:MMタイムピッカー・天気プリセットの上に同居）。読込=getSelloutBonusRules / 保存=saveSelloutBonusRules（保存と同時にサーバーで全曜日を即再計算→配分調整を自動再描画）。完売増量の実値はサーバー「完売増量マスタ」が唯一の真実（BM_SELLOUT_RULES/bmGetSelloutBonusは未使用化・残置）。表示の+Nはサーバー値(c.selloutBonus/c.refSelloutBonus)依存のためGAS差し替えで自動追従。要GASパッチ（完売増量マスタ作成・読込/保存API・getSelloutBonusByTime_差し替え・doGet/doPostルーティング・clearAllMasterCacheキー追加）。v3.25 — 配分調整: v3.24完売表示の体裁修正。①完売時刻を必ずHH:MMに整形（表記ゆれ吸収・bmFmtSelloutTime）。②未来日付セルは完売時刻をセル上部のストリップに表示し、推奨数と重ならないようにセルを少し縦に伸ばす。GAS変更不要（kanriのみ差し替え）。v3.24 — 配分調整: ③未来日付（翌週）のセルに反映元（直近同曜=「先週」）の完売情報を🔴＋時刻で表示。完売サマリー・完売モーダルも未来日付では反映元基準で表示。過去日・当日は従来通り。要：getBasicMasterMatrixが各セルに refSelloutTime/refSelloutBonus を返す（GAS追記）。v3.23 — 配分調整: ①「数字の保存」と「確定」を完全分離（案A／K列=確定フラグ）。💾保存=編集セルのみG列に保存しK列は触らない。✓全拠点確定/拠点単位確定=即サーバーでK列フラグをトグル（解除可能）。確定判定をG列の有無→K列フラグに変更。確定時の空セルはH列補完・既存G列は維持。②拠点名の下に販売担当者名（先頭4文字・横書き小）を表示（データ源=getSalesPersonMapForDate_／日付別・未割当は非表示）。要：メインGAS側の対応関数デプロイ（saveBasicMasterNumbers/unconfirmBasicMasterAll追加、confirm系のK列対応、getBasicMasterMatrixがconfirmedLocsとlocations[].salesPersonを返す）。v3.21: 配分調整: ①「数字の保存」と「確定」を完全分離（案A／K列=確定フラグ）。💾保存=編集セルのみG列に保存しK列は触らない。✓全拠点確定/拠点単位確定=即サーバーでK列フラグをトグル（解除可能）。確定判定をG列の有無→K列フラグに変更。確定時の空セルはH列補完・既存G列は維持。②拠点名の下に販売担当者名（先頭4文字・横書き小）を表示（データ源=getSalesPersonMapForDate_／日付別・未割当は非表示）。要：メインGAS側の対応関数デプロイ（saveBasicMasterNumbers/unconfirmBasicMasterAll追加、confirm系のK列対応、getBasicMasterMatrixがconfirmedLocsとlocations[].salesPersonを返す）。v3.21: bmGetDisplaySales修正（G列確定値confirmedを表示優先・weekSalesは未確定時のみ表示）。保存後に値が戻る問題を修正。v3.20: 保存ワークフロー改善（部分編集モード/拠点確定モードを区別）。v3.19: ローカル確定ワークフロー化（拠点確定/全拠点確定/→推奨はサーバー送信せずローカル状態のみ更新、💾 保存ボタンで一括サーバー送信＋再描画）。商品行コピーを推奨値ベースに変更。商品確定ボタン✓廃止。v3.18: 全編集操作のDOM直更新化。v3.17: セル編集時のみ高速化。v3.16: 商品単位の確定/解除ボタン追加。v3.15: 推奨0かつ売上0のゼロセルも編集可能化。v3.14: 保存POSTのCORS preflight対応。v3.13: 主菜候補マスタ対応。v3.12: 業者カードに定数発注セクション追加。v3.11: copyOrderText を食材ごと unitMode 切替。v3.10: 一括印刷ボタン追加。 -->
 <style id="app-style">
 /* @page は全環境で確実に効く静的指定（用紙＝縦）。横向きはシート1・2をCSS回転で実現（A案） */
 @page { size: A4; margin: 3mm; }
@@ -46,7 +46,13 @@ body {
   position: sticky;
   top: 37px;
   z-index: 99;
+  /* v3.28: スマホで横にはみ出した分は白背景に乗らずスクロールで見せる */
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;       /* Firefox: スクロールバー非表示 */
+  -ms-overflow-style: none;    /* IE/Edge: 同上 */
 }
+.tab-bar::-webkit-scrollbar { display: none; }  /* Chrome/Safari: 同上 */
 .tab-btn {
   padding: 7px 14px;
   color: rgba(255,255,255,0.65);
@@ -57,6 +63,7 @@ body {
   font-family: inherit;
   border-bottom: 3px solid transparent;
   white-space: nowrap;
+  flex: 0 0 auto;   /* v3.28: 縮小させずサイズ維持（横スクロール用） */
   transition: color 0.15s;
 }
 .tab-btn:hover { color: rgba(255,255,255,0.9); }
