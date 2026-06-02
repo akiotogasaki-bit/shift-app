@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>お江戸弁当 ドライバー報告</title>
-<!-- driver.html v1.3 (2026-06-02) — 取り置きタブ追加 -->
+<!-- driver.html v1.4 (2026-06-02) — 取り置きタブ / 商品名B列表示 -->
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
 :root {
@@ -2200,7 +2200,7 @@ function renderToriokiProducts_(presetQtys) {
     g.items.forEach(p => {
       const tag = p._isDelivery ? `<span class="deliv-tag">配達</span>` : '';
       const v = saved[p.id] ? String(saved[p.id]) : '';
-      const label = p.displayName ? p.displayName : p.name;
+      const label = p.name;   // v1.4: 常にB列商品名を表示
       html += `
         <div class="tk-prod-row">
           <span class="tk-prod-name">${_esc(label)}${tag}</span>
