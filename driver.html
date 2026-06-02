@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>お江戸弁当 ドライバー報告</title>
+<!-- driver.html v1.3 (2026-06-02) — 取り置きタブ追加 -->
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
 :root {
@@ -142,6 +143,133 @@ body {
 }
 
 .nextroute-list { padding: 0 12px; }
+
+/* ── 取り置きタブ（v1.3 NEW）── */
+.tab-btn { white-space: nowrap; padding-left: 4px; padding-right: 4px; }
+
+.tk-header {
+  padding: 12px 16px 8px;
+  background: var(--cream);
+}
+.tk-title { font-size: 14px; font-weight: 700; color: var(--ink); margin-bottom: 8px; }
+.tk-date-row { display: flex; align-items: center; gap: 8px; }
+.tk-date-label { font-size: 12px; color: var(--ink-soft); font-weight: 500; }
+.tk-date-picker {
+  flex: 1; padding: 8px 10px; font-size: 14px;
+  border: 1.5px solid var(--border); border-radius: 6px;
+  background: var(--white); color: var(--ink);
+  font-family: inherit; -webkit-appearance: none; appearance: none;
+}
+.tk-date-weekday { font-size: 13px; color: var(--blue); font-weight: 700; min-width: 32px; text-align: center; }
+
+.tk-form { padding: 12px 12px 0; }
+.tk-section-title {
+  font-size: 12px; font-weight: 700; color: var(--ink-soft);
+  margin: 14px 2px 6px;
+}
+.tk-field { margin-bottom: 10px; }
+.tk-field-label { font-size: 12px; color: var(--ink-soft); font-weight: 600; margin-bottom: 4px; display: block; }
+.tk-input, .tk-select, .tk-textarea, .tk-time {
+  width: 100%; box-sizing: border-box; padding: 10px 12px; font-size: 15px;
+  border: 1.5px solid var(--border); border-radius: 8px;
+  background: var(--white); color: var(--ink); font-family: inherit;
+  -webkit-appearance: none; appearance: none;
+}
+.tk-select { background-image: none; }
+.tk-textarea { min-height: 56px; resize: vertical; }
+.tk-row-2 { display: flex; gap: 8px; }
+.tk-row-2 > * { flex: 1; }
+
+.tk-pay-toggle { display: flex; gap: 0; border: 1.5px solid var(--border); border-radius: 8px; overflow: hidden; }
+.tk-pay-btn {
+  flex: 1; padding: 10px 0; font-size: 14px; font-weight: 600;
+  border: none; background: var(--white); color: var(--ink-mute);
+  cursor: pointer; font-family: inherit; transition: all .12s;
+}
+.tk-pay-btn + .tk-pay-btn { border-left: 1.5px solid var(--border); }
+.tk-pay-btn.active { background: var(--blue); color: #FFF; }
+.tk-pay-btn.active.paid { background: var(--green); }
+
+.tk-show-delivery-row {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--white); border: 1.5px dashed var(--border); border-radius: 8px;
+  padding: 10px 12px; margin: 6px 0 4px;
+}
+.tk-show-delivery-row label { font-size: 13px; color: var(--ink); font-weight: 600; }
+.tk-switch { position: relative; width: 44px; height: 24px; flex: 0 0 auto; }
+.tk-switch input { opacity: 0; width: 0; height: 0; }
+.tk-switch .slider {
+  position: absolute; inset: 0; background: var(--border); border-radius: 24px; transition: .15s; cursor: pointer;
+}
+.tk-switch .slider::before {
+  content: ''; position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px;
+  background: #FFF; border-radius: 50%; transition: .15s;
+}
+.tk-switch input:checked + .slider { background: var(--blue); }
+.tk-switch input:checked + .slider::before { transform: translateX(20px); }
+
+.tk-prod-cat {
+  font-size: 12px; font-weight: 700; color: var(--blue);
+  background: var(--cream); padding: 6px 10px; border-radius: 6px; margin: 10px 0 4px;
+}
+.tk-prod-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 4px; border-bottom: 1px solid var(--border);
+}
+.tk-prod-name { flex: 1; font-size: 14px; color: var(--ink); }
+.tk-prod-name .deliv-tag {
+  font-size: 10px; color: #FFF; background: var(--ink-soft);
+  padding: 1px 6px; border-radius: 8px; margin-left: 6px; vertical-align: middle;
+}
+.tk-qty {
+  width: 64px; box-sizing: border-box; text-align: center; padding: 8px 4px; font-size: 15px;
+  border: 1.5px solid var(--border); border-radius: 8px; background: var(--white); color: var(--ink); font-family: inherit;
+}
+.tk-qty.filled { border-color: var(--blue); background: #EAF2FB; font-weight: 700; }
+
+.tk-editing-banner {
+  display: none; align-items: center; justify-content: space-between;
+  background: #FFF7E6; border: 1.5px solid #F0C36D; border-radius: 8px;
+  padding: 8px 12px; margin-bottom: 8px; font-size: 13px; color: #8A6D00;
+}
+.tk-editing-banner.show { display: flex; }
+.tk-editing-banner button {
+  background: none; border: 1px solid #C9A227; color: #8A6D00; border-radius: 6px;
+  padding: 4px 10px; font-size: 12px; cursor: pointer; font-family: inherit;
+}
+
+.tk-save-btn {
+  width: 100%; padding: 14px; font-size: 16px; font-weight: 700;
+  background: var(--blue); color: #FFF; border: none; border-radius: 10px;
+  cursor: pointer; font-family: inherit;
+}
+.tk-save-btn:disabled { background: var(--border); color: var(--ink-mute); cursor: not-allowed; }
+
+.tk-list { padding: 4px 12px; }
+.tk-list-title { font-size: 13px; font-weight: 700; color: var(--ink); margin: 8px 2px; }
+.tk-empty { text-align: center; color: var(--ink-mute); font-size: 13px; padding: 24px 16px; }
+.tk-card {
+  background: var(--white); border: 1px solid var(--border); border-radius: 12px;
+  padding: 12px 14px; margin-bottom: 10px;
+}
+.tk-card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.tk-card-time { font-size: 15px; font-weight: 700; color: var(--blue); }
+.tk-card-bin { font-size: 11px; color: var(--ink-mute); margin-left: 6px; }
+.tk-card-pay { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
+.tk-card-pay.unpaid { background: #FDECEC; color: var(--red); }
+.tk-card-pay.paid   { background: #E7F6EC; color: var(--green); }
+.tk-card-loc { font-size: 13px; font-weight: 700; color: var(--ink); }
+.tk-card-name { font-size: 13px; color: var(--ink-soft); margin-bottom: 6px; }
+.tk-card-items { font-size: 13px; color: var(--ink); line-height: 1.7; }
+.tk-card-note { font-size: 12px; color: var(--ink-mute); margin-top: 6px; }
+.tk-card-btns { display: flex; gap: 8px; margin-top: 10px; }
+.tk-card-btn {
+  flex: 1; padding: 8px 0; font-size: 13px; font-weight: 600; border-radius: 8px;
+  border: 1.5px solid var(--border); background: var(--white); color: var(--ink);
+  cursor: pointer; font-family: inherit;
+}
+.tk-card-btn.edit { border-color: var(--blue); color: var(--blue); }
+.tk-card-btn.del  { border-color: var(--red);  color: var(--red); }
 
 .nextroute-item {
   background: var(--card-bg, var(--white));
@@ -614,6 +742,9 @@ body {
     <button class="tab-btn" id="tab-btn-nextroute" onclick="switchTab('nextroute')">
       📅 ルート設定
     </button>
+    <button class="tab-btn" id="tab-btn-torioki" onclick="switchTab('torioki')">
+      🍱 取り置き
+    </button>
   </div>
 
   <div id="tab-collection" class="tab-panel active">
@@ -680,6 +811,74 @@ body {
     </div>
   </div>
 
+  <div id="tab-torioki" class="tab-panel">
+    <div class="tk-header">
+      <div class="tk-title">🍱 取り置き</div>
+      <div class="tk-date-row">
+        <label for="tk-date-picker" class="tk-date-label">対象日:</label>
+        <input type="date" id="tk-date-picker" class="tk-date-picker" onchange="onToriokiDateChange(this.value)">
+        <span class="tk-date-weekday" id="tk-date-weekday">--</span>
+      </div>
+    </div>
+
+    <div class="tk-form">
+      <div class="tk-editing-banner" id="tk-editing-banner">
+        <span id="tk-editing-label">編集中</span>
+        <button onclick="resetToriokiForm()">新規に戻す</button>
+      </div>
+
+      <div class="tk-section-title">予約情報</div>
+      <div class="tk-row-2">
+        <div class="tk-field">
+          <label class="tk-field-label">拠点</label>
+          <select id="tk-location" class="tk-select"></select>
+        </div>
+        <div class="tk-field">
+          <label class="tk-field-label">時間</label>
+          <input type="time" id="tk-time" class="tk-time">
+        </div>
+      </div>
+      <div class="tk-field">
+        <label class="tk-field-label">お名前</label>
+        <input type="text" id="tk-name" class="tk-input" placeholder="お客様のお名前">
+      </div>
+      <div class="tk-field">
+        <label class="tk-field-label">連絡先</label>
+        <input type="tel" id="tk-contact" class="tk-input" placeholder="電話番号など（任意）">
+      </div>
+      <div class="tk-field">
+        <label class="tk-field-label">会計</label>
+        <div class="tk-pay-toggle">
+          <button type="button" class="tk-pay-btn active" id="tk-pay-unpaid" onclick="setToriokiPayment('未会計')">未会計</button>
+          <button type="button" class="tk-pay-btn paid" id="tk-pay-paid" onclick="setToriokiPayment('会計済み')">会計済み</button>
+        </div>
+      </div>
+      <div class="tk-field">
+        <label class="tk-field-label">備考</label>
+        <textarea id="tk-note" class="tk-textarea" placeholder="メモ（任意）"></textarea>
+      </div>
+
+      <div class="tk-section-title">商品（個数）</div>
+      <div class="tk-show-delivery-row">
+        <label for="tk-show-delivery">配達商品も表示する</label>
+        <span class="tk-switch">
+          <input type="checkbox" id="tk-show-delivery" onchange="onToggleShowDelivery(this.checked)">
+          <span class="slider"></span>
+        </span>
+      </div>
+      <div id="tk-products">
+        <p class="tk-empty">商品を読み込み中…</p>
+      </div>
+    </div>
+
+    <div class="tk-list">
+      <div class="tk-list-title" id="tk-list-title">この日の取り置き一覧</div>
+      <div id="tk-list">
+        <p class="tk-empty">読み込み中…</p>
+      </div>
+    </div>
+  </div>
+
   <div class="sticky-bottom" id="sticky-collection">
     <button class="btn-primary" onclick="switchTab('residual')">
       📦 残数入力へ切り替え
@@ -690,6 +889,9 @@ body {
   </div>
   <div class="sticky-bottom" id="sticky-nextroute" style="display:none;">
     <button class="save-route-btn" id="save-nextroute-btn" onclick="saveNextDayRoute()" disabled>変更を保存</button>
+  </div>
+  <div class="sticky-bottom" id="sticky-torioki" style="display:none;">
+    <button class="tk-save-btn" id="tk-save-btn" onclick="saveToriokiForm()">取り置きを登録</button>
   </div>
 </div>
 
@@ -730,6 +932,16 @@ const state = {
     selectedDate: '',                   // ★ v1.1：選択中の日付（YYYY-MM-DD）
     locations: [],
     modified: {},
+  },
+  torioki: {                            // ★ NEW（v1.3 取り置き）
+    inited: false,
+    date: '',
+    products: { nonDelivery: [], delivery: [] },
+    productMap: {},
+    listItems: [],
+    editingId: '',
+    showDelivery: false,
+    payment: '未会計',
   },
 };
 
@@ -1545,16 +1757,24 @@ function switchTab(tab) {
   document.getElementById('tab-collection').classList.toggle('active', tab === 'collection');
   document.getElementById('tab-residual').classList.toggle('active', tab === 'residual');
   document.getElementById('tab-nextroute').classList.toggle('active', tab === 'nextroute');
+  document.getElementById('tab-torioki').classList.toggle('active', tab === 'torioki');
   document.getElementById('tab-btn-collection').classList.toggle('active', tab === 'collection');
   document.getElementById('tab-btn-residual').classList.toggle('active', tab === 'residual');
   document.getElementById('tab-btn-nextroute').classList.toggle('active', tab === 'nextroute');
+  document.getElementById('tab-btn-torioki').classList.toggle('active', tab === 'torioki');
   document.getElementById('sticky-collection').style.display = tab === 'collection' ? 'block' : 'none';
   document.getElementById('sticky-residual').style.display   = tab === 'residual'   ? 'block' : 'none';
   document.getElementById('sticky-nextroute').style.display  = tab === 'nextroute'  ? 'block' : 'none';
+  document.getElementById('sticky-torioki').style.display    = tab === 'torioki'    ? 'block' : 'none';
 
   // ★ NEW（v1.0）：翌日のルートタブ初回タップでロード
   if (tab === 'nextroute' && !state.nextRoute.loaded) {
     loadNextDayRoute();
+  }
+
+  // ★ NEW（v1.3）：取り置きタブ初回タップで初期化
+  if (tab === 'torioki') {
+    initToriokiTab_();
   }
 
   window.scrollTo(0, 0);
@@ -1865,6 +2085,325 @@ async function saveNextDayRoute() {
 }
 
 init();
+
+// ═══════════════════════════════════════════════════════════════
+// 🍱 取り置きタブ（v1.3 NEW）
+//   - 真実の源は GAS「取り置きデータ」シート。配達扱いで仕込み/盛り出しに反映。
+//   - 当日朝10:00一括＋当日追加は即時LINE（GAS側）。
+// ═══════════════════════════════════════════════════════════════
+
+function initToriokiTab_() {
+  if (state.torioki.inited) {
+    // 2回目以降：一覧だけ再取得
+    loadToriokiList_();
+    return;
+  }
+  state.torioki.inited = true;
+  initToriokiDatePicker_();
+  populateToriokiLocations_();
+  loadToriokiProducts_();
+  loadToriokiList_();
+}
+
+function initToriokiDatePicker_() {
+  const picker = document.getElementById('tk-date-picker');
+  const today = getDateStrOffset_(0);
+  picker.min = today;
+  picker.max = getDateStrOffset_(60);
+  if (!state.torioki.date) state.torioki.date = today;
+  picker.value = state.torioki.date;
+  updateToriokiWeekday_();
+}
+
+function updateToriokiWeekday_() {
+  const el = document.getElementById('tk-date-weekday');
+  el.textContent = state.torioki.date ? `(${getWeekdayJa_(state.torioki.date)})` : '--';
+}
+
+async function populateToriokiLocations_() {
+  const sel = document.getElementById('tk-location');
+  let names = (state.locations || []).map(l => l.name).filter(Boolean);
+
+  // フォールバック：マスタ未ロード時は当日割当から拠点名を取得
+  if (names.length === 0) {
+    try {
+      const res = await fetch(`${GAS_URL}?action=getLocationsWithAssignment&date=${getDateStrOffset_(0)}`, { redirect: 'follow' });
+      const data = await res.json();
+      names = (Array.isArray(data) ? data : []).map(a => a.locationName).filter(Boolean);
+    } catch (e) { /* noop */ }
+  }
+
+  const opts = names.map(n => `<option value="${_esc(n)}">${_esc(n)}</option>`);
+  opts.push(`<option value="店前">店前</option>`);   // 末尾に店前
+  sel.innerHTML = opts.join('');
+}
+
+async function loadToriokiProducts_() {
+  const box = document.getElementById('tk-products');
+  box.innerHTML = `<p class="tk-empty">商品を読み込み中…</p>`;
+  try {
+    const res = await fetch(`${GAS_URL}?action=getToriokiProductLists`, { redirect: 'follow' });
+    const data = await res.json();
+    state.torioki.products = {
+      nonDelivery: Array.isArray(data.nonDelivery) ? data.nonDelivery : [],
+      delivery:    Array.isArray(data.delivery)    ? data.delivery    : [],
+    };
+    // ルックアップマップ
+    const map = {};
+    state.torioki.products.nonDelivery.forEach(p => { map[p.id] = { ...p, _isDelivery: false }; });
+    state.torioki.products.delivery.forEach(p => { map[p.id] = { ...p, _isDelivery: true }; });
+    state.torioki.productMap = map;
+    renderToriokiProducts_();
+  } catch (e) {
+    box.innerHTML = `<p class="tk-empty" style="color:var(--red);">商品の読み込みに失敗しました：${_esc(e.message || e)}</p>`;
+  }
+}
+
+function collectToriokiQtys_() {
+  const m = {};
+  const inputs = document.querySelectorAll('#tk-products .tk-qty');
+  inputs.forEach(inp => {
+    const pid = inp.getAttribute('data-pid');
+    const q = parseInt(inp.value, 10) || 0;
+    if (pid && q > 0) m[pid] = q;
+  });
+  return m;
+}
+
+function renderToriokiProducts_(presetQtys) {
+  const box = document.getElementById('tk-products');
+  // 現在の入力値を退避（presetQtys が渡された場合はそれを優先）
+  const saved = presetQtys || collectToriokiQtys_();
+
+  const list = [];
+  state.torioki.products.nonDelivery.forEach(p => list.push({ ...p, _isDelivery: false }));
+  if (state.torioki.showDelivery) {
+    state.torioki.products.delivery.forEach(p => list.push({ ...p, _isDelivery: true }));
+  }
+  if (list.length === 0) {
+    box.innerHTML = `<p class="tk-empty">商品がありません</p>`;
+    return;
+  }
+
+  // カテゴリ別グルーピング（並び順は表示順ソート済みリストの出現順）
+  const groups = [];
+  const idx = {};
+  list.forEach(p => {
+    const cat = p.category || 'その他';
+    if (idx[cat] === undefined) { idx[cat] = groups.length; groups.push({ cat, items: [] }); }
+    groups[idx[cat]].items.push(p);
+  });
+
+  let html = '';
+  groups.forEach(g => {
+    html += `<div class="tk-prod-cat">${_esc(g.cat)}</div>`;
+    g.items.forEach(p => {
+      const tag = p._isDelivery ? `<span class="deliv-tag">配達</span>` : '';
+      const v = saved[p.id] ? String(saved[p.id]) : '';
+      const label = p.displayName ? p.displayName : p.name;
+      html += `
+        <div class="tk-prod-row">
+          <span class="tk-prod-name">${_esc(label)}${tag}</span>
+          <input type="number" inputmode="numeric" min="0" class="tk-qty${v ? ' filled' : ''}"
+                 data-pid="${_esc(p.id)}" data-name="${_esc(p.name)}" value="${v}"
+                 oninput="onToriokiQtyInput(this)">
+        </div>`;
+    });
+  });
+  box.innerHTML = html;
+}
+
+function onToriokiQtyInput(inp) {
+  const q = parseInt(inp.value, 10) || 0;
+  inp.classList.toggle('filled', q > 0);
+}
+
+function onToggleShowDelivery(checked) {
+  state.torioki.showDelivery = checked;
+  renderToriokiProducts_();   // 入力済み数量は退避→復元される
+}
+
+function setToriokiPayment(val) {
+  state.torioki.payment = val;
+  document.getElementById('tk-pay-unpaid').classList.toggle('active', val === '未会計');
+  document.getElementById('tk-pay-paid').classList.toggle('active', val === '会計済み');
+}
+
+async function onToriokiDateChange(value) {
+  state.torioki.date = value;
+  updateToriokiWeekday_();
+  resetToriokiForm();        // 日付を変えたら入力をクリア（新規入力コンテキスト）
+  await loadToriokiList_();
+}
+
+async function loadToriokiList_() {
+  const box = document.getElementById('tk-list');
+  document.getElementById('tk-list-title').textContent =
+    `${state.torioki.date}（${getWeekdayJa_(state.torioki.date)}）の取り置き一覧`;
+  box.innerHTML = `<p class="tk-empty">読み込み中…</p>`;
+  try {
+    const res = await fetch(`${GAS_URL}?action=getToriokiByDate&date=${state.torioki.date}`, { redirect: 'follow' });
+    const data = await res.json();
+    state.torioki.listItems = (data && data.items) ? data.items : [];
+    renderToriokiList_();
+  } catch (e) {
+    box.innerHTML = `<p class="tk-empty" style="color:var(--red);">読み込みエラー：${_esc(e.message || e)}</p>`;
+  }
+}
+
+function renderToriokiList_() {
+  const box = document.getElementById('tk-list');
+  const items = state.torioki.listItems || [];
+  if (items.length === 0) {
+    box.innerHTML = `<p class="tk-empty">この日の取り置きはありません</p>`;
+    return;
+  }
+  box.innerHTML = items.map(rv => {
+    const binLabel = rv.bin ? (rv.bin === '1' ? '午前1便' : '午後2便') : '';
+    const paid = rv.payment === '会計済み';
+    const itemsHtml = (rv.items || [])
+      .map(it => `・${_esc(it.productName || it.productId)} ×${it.qty}`)
+      .join('<br>');
+    return `
+      <div class="tk-card">
+        <div class="tk-card-head">
+          <div><span class="tk-card-time">${_esc(rv.time || '')}</span><span class="tk-card-bin">${binLabel}</span></div>
+          <span class="tk-card-pay ${paid ? 'paid' : 'unpaid'}">${paid ? '会計済み' : '未会計'}</span>
+        </div>
+        <div class="tk-card-loc">${_esc(rv.location || '')}</div>
+        <div class="tk-card-name">👤 ${_esc(rv.name || '(名前なし)')}${rv.contact ? '　📞 ' + _esc(rv.contact) : ''}</div>
+        <div class="tk-card-items">${itemsHtml || '（商品なし）'}</div>
+        ${rv.note ? `<div class="tk-card-note">📝 ${_esc(rv.note)}</div>` : ''}
+        <div class="tk-card-btns">
+          <button class="tk-card-btn edit" onclick="loadToriokiToForm('${_esc(rv.toriokiId)}')">✏️ 編集</button>
+          <button class="tk-card-btn del" onclick="deleteToriokiCard('${_esc(rv.toriokiId)}')">🗑 削除</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function loadToriokiToForm(toriokiId) {
+  const rv = (state.torioki.listItems || []).find(x => x.toriokiId === toriokiId);
+  if (!rv) return;
+
+  // 基本フィールド
+  document.getElementById('tk-location').value = rv.location || '';
+  document.getElementById('tk-time').value     = rv.time || '';
+  document.getElementById('tk-name').value      = rv.name || '';
+  document.getElementById('tk-contact').value   = rv.contact || '';
+  document.getElementById('tk-note').value      = rv.note || '';
+  setToriokiPayment(rv.payment === '会計済み' ? '会計済み' : '未会計');
+
+  // 配達商品が含まれる場合は配達商品表示をON
+  const hasDelivery = (rv.items || []).some(it => {
+    const p = state.torioki.productMap[it.productId];
+    return p && p._isDelivery;
+  });
+  if (hasDelivery && !state.torioki.showDelivery) {
+    state.torioki.showDelivery = true;
+    document.getElementById('tk-show-delivery').checked = true;
+  }
+
+  // 数量をプリセットして再描画
+  const preset = {};
+  (rv.items || []).forEach(it => { preset[it.productId] = it.qty; });
+  renderToriokiProducts_(preset);
+
+  // 編集状態
+  state.torioki.editingId = toriokiId;
+  const banner = document.getElementById('tk-editing-banner');
+  banner.classList.add('show');
+  document.getElementById('tk-editing-label').textContent =
+    `編集中：${rv.location || ''} ${rv.time || ''} ${rv.name || ''}`;
+  document.getElementById('tk-save-btn').textContent = '取り置きを更新';
+
+  window.scrollTo(0, 0);
+}
+
+async function deleteToriokiCard(toriokiId) {
+  if (!confirm('この取り置きを削除します。よろしいですか？')) return;
+  try {
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'deleteTorioki', toriokiId: toriokiId }),
+    });
+    const data = await res.json();
+    if (!data || !data.success) {
+      alert('削除に失敗しました：' + ((data && data.error) || '不明なエラー'));
+      return;
+    }
+    if (state.torioki.editingId === toriokiId) resetToriokiForm();
+    await loadToriokiList_();
+  } catch (e) {
+    alert('削除エラー：' + (e.message || e));
+  }
+}
+
+function resetToriokiForm() {
+  state.torioki.editingId = '';
+  document.getElementById('tk-editing-banner').classList.remove('show');
+  document.getElementById('tk-name').value = '';
+  document.getElementById('tk-contact').value = '';
+  document.getElementById('tk-note').value = '';
+  document.getElementById('tk-time').value = '';
+  setToriokiPayment('未会計');
+  // 数量クリア（表示状態は維持）
+  renderToriokiProducts_({});
+  const btn = document.getElementById('tk-save-btn');
+  btn.textContent = '取り置きを登録';
+  btn.disabled = false;
+}
+
+async function saveToriokiForm() {
+  const date     = state.torioki.date || document.getElementById('tk-date-picker').value;
+  const location = document.getElementById('tk-location').value || '';
+  const time     = document.getElementById('tk-time').value || '';
+  const name     = document.getElementById('tk-name').value.trim();
+  const contact  = document.getElementById('tk-contact').value.trim();
+  const note     = document.getElementById('tk-note').value.trim();
+  const payment  = state.torioki.payment || '未会計';
+
+  // 商品収集
+  const qtys = collectToriokiQtys_();
+  const items = Object.keys(qtys).map(pid => ({
+    productId: pid,
+    productName: (state.torioki.productMap[pid] && state.torioki.productMap[pid].name) || '',
+    qty: qtys[pid],
+  }));
+
+  // バリデーション
+  if (!location) { alert('拠点を選択してください'); return; }
+  if (!time)     { alert('時間を入力してください'); return; }
+  if (items.length === 0) { alert('商品の個数を1つ以上入力してください'); return; }
+
+  const payload = {
+    action: 'saveTorioki',
+    toriokiId: state.torioki.editingId || '',
+    date, location, name, contact, time, payment, note, items,
+  };
+
+  const btn = document.getElementById('tk-save-btn');
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '登録中…';
+  try {
+    const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) });
+    const data = await res.json();
+    if (!data || !data.success) {
+      alert('登録に失敗しました：' + ((data && data.error) || '不明なエラー'));
+      btn.disabled = false; btn.textContent = orig;
+      return;
+    }
+    btn.textContent = state.torioki.editingId ? '✅ 更新しました' : '✅ 登録しました';
+    resetToriokiForm();
+    await loadToriokiList_();
+    setTimeout(() => { btn.textContent = '取り置きを登録'; btn.disabled = false; }, 1200);
+  } catch (e) {
+    alert('登録エラー：' + (e.message || e));
+    btn.disabled = false; btn.textContent = orig;
+  }
+}
+
 </script>
 
 <!-- BREAKDOWN MODAL -->
