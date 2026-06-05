@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- お江戸弁当 営業報告アプリ sales-report.html v1.0 (2026-06-05) -->
+<!-- お江戸弁当 営業報告アプリ sales-report.html v1.1 (2026-06-05) 作成日表示・目標の期限(カレンダー)追加 -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">
@@ -89,6 +89,7 @@ select:disabled{background:#f3f3ef;color:#999;}
 .loc-row .mets .m b{font-weight:600;color:#333;}
 .cmp{font-size:10px;margin-left:4px;font-weight:400;}
 .up{color:var(--green);} .down{color:var(--red);} .flat{color:#999;}
+.overdue{color:var(--red);font-weight:600;margin-left:4px;}
 
 /* 企画リスト */
 .plan-title{font-size:13px;margin:7px 0 4px;font-weight:500;}
@@ -149,6 +150,8 @@ select:disabled{background:#f3f3ef;color:#999;}
         <textarea id="plan-content" placeholder="例）新メニューの試食会を実施し新規開拓"></textarea>
         <p class="lbl">目標</p>
         <input type="text" id="plan-goal" placeholder="例）新規10社開拓 / 完売率+5pt">
+        <p class="lbl">目標の期限</p>
+        <input type="date" id="plan-deadline">
         <p class="lbl">ステータス</p>
         <select id="plan-status"><option>進行中</option><option>完了</option><option>中止</option></select>
         <button class="btn" id="plan-create-btn"><i class="ti ti-plus" aria-hidden="true"></i> 企画を登録</button>
@@ -185,7 +188,7 @@ select:disabled{background:#f3f3ef;color:#999;}
     </div>
 
   </div>
-  <div class="ver">v1.0</div>
+  <div class="ver">v1.1</div>
 </div>
 
 <div class="overlay" id="overlay">
@@ -204,7 +207,7 @@ select:disabled{background:#f3f3ef;color:#999;}
    設定
    ★ LIFF_ID は新規LIFF発行後に差し替える（チャネル 2009637457 / エンドポイント /sales-report.html）
    ============================================================ */
-var LIFF_ID  = '2009637457-KycV9WYD';
+var LIFF_ID  = '2009637457-XXXXXXXX';
 var SALES_API = 'https://script.google.com/macros/s/AKfycbyYFiCThF2bjcXABLqkTESbfsskSXURKzfGOACihV1CE5-yGbS53iDghhO7ROr_pRyfGQ/exec';
 var MAIN_GAS  = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5AawPDc7aluPokONkYz6f2ikwl0S487JvhKdKh6QSp1xhEhA/exec';
 var UNASSIGNED_ID = '__UNASSIGNED__';
@@ -243,6 +246,16 @@ function fmtMD(s){
   return String(s);
 }
 function ymdDash(s){ return String(s||'').replace(/\//g,'-'); }
+function fmtDate(s){
+  if(!s) return '';
+  var d = String(s).split(/[ T]/)[0].replace(/-/g,'/').split('/');
+  if(d.length>=3) return d[0] + '/' + ('0'+d[1]).slice(-2) + '/' + ('0'+d[2]).slice(-2);
+  return String(s);
+}
+function todayDash(){
+  var d = new Date();
+  return d.getFullYear() + '-' + ('0'+(d.getMonth()+1)).slice(-2) + '-' + ('0'+d.getDate()).slice(-2);
+}
 function rateColor(r){ r=Number(r)||0; return r>=85 ? 'var(--green)' : (r>=70 ? 'var(--orange)' : 'var(--red)'); }
 function diffCls(d){ d=Number(d)||0; return d>0?'up':(d<0?'down':'flat'); }
 function ppStr(d){ d=Number(d)||0; return d>0?('▲'+rate1(d)):(d<0?('▼'+rate1(Math.abs(d))):'±0'); }
@@ -391,13 +404,19 @@ function statusTag(st){
   if(st === '中止') return '<span class="st st-stop">中止</span>';
   return '<span class="st st-go">進行中</span>';
 }
+function deadlineLabel(p){
+  if(!p.deadline) return '';
+  var overdue = (p.status === '進行中' && String(p.deadline) < todayDash());
+  return ' ／ 期限：' + esc(fmtDate(p.deadline)) + (overdue ? '<span class="overdue">⚠超過</span>' : '');
+}
 function renderPlans(){
   if(!S.plans.length){ $('plan-list').innerHTML = '<div class="empty">まだ企画がありません。</div>'; return; }
   var html = S.plans.map(function(p){
     return '<div class="card" data-pid="'+esc(p.id)+'">'
       + '<div>' + planBadge(p) + statusTag(p.status) + '</div>'
       + '<div class="plan-title">' + esc(p.content || '') + '</div>'
-      + '<div class="plan-meta">目標：' + esc(p.goal || '—') + ' ／ 作成：' + esc(userName(p.creatorUserId)) + '</div>'
+      + '<div class="plan-meta">目標：' + esc(p.goal || '—') + deadlineLabel(p) + '</div>'
+      + '<div class="plan-meta">作成：' + esc(userName(p.creatorUserId)) + ' ・ ' + esc(fmtDate(p.createdAt)) + '</div>'
       + '<button class="plan-edit-link" data-edit="'+esc(p.id)+'">編集 / ステータス変更</button>'
       + '</div>';
   }).join('');
@@ -415,6 +434,8 @@ function openPlanEdit(id){
     + '<textarea data-f="content">' + esc(p.content || '') + '</textarea>'
     + '<p class="lbl">目標</p>'
     + '<input type="text" data-f="goal" value="' + esc(p.goal || '') + '">'
+    + '<p class="lbl">目標の期限</p>'
+    + '<input type="date" data-f="deadline" value="' + esc(p.deadline || '') + '">'
     + '<p class="lbl">ステータス</p>'
     + '<select data-f="status">'
       + '<option'+(p.status==='進行中'?' selected':'')+'>進行中</option>'
@@ -430,9 +451,10 @@ function openPlanEdit(id){
     var content = card.querySelector('[data-f="content"]').value.trim();
     var goal    = card.querySelector('[data-f="goal"]').value.trim();
     var status  = card.querySelector('[data-f="status"]').value;
+    var deadline = card.querySelector('[data-f="deadline"]').value;
     if(!content){ toast('内容を入力してください', true); return; }
     var btn = this; btn.disabled = true; btn.textContent = '保存中…';
-    apiPost(SALES_API, 'updateSalesPlan', { id:id, content:content, goal:goal, status:status }).then(function(res){
+    apiPost(SALES_API, 'updateSalesPlan', { id:id, content:content, goal:goal, status:status, deadline:deadline }).then(function(res){
       if(res && res.ok){ toast('企画を更新しました'); loadPlans(); }
       else { toast('更新に失敗しました', true); btn.disabled=false; btn.textContent='保存'; }
     }).catch(function(){ toast('通信エラー', true); btn.disabled=false; btn.textContent='保存'; });
@@ -442,17 +464,18 @@ function createPlan(){
   var content = $('plan-content').value.trim();
   var goal    = $('plan-goal').value.trim();
   var status  = $('plan-status').value;
+  var deadline = $('plan-deadline').value;
   var targetValue = (planTargetKind === 'all') ? '' : $('plan-target').value;
   if(!content){ toast('内容を入力してください', true); return; }
   if(planTargetKind !== 'all' && !targetValue){ toast('対象を選択してください', true); return; }
   var btn = $('plan-create-btn'); btn.disabled = true;
   apiPost(SALES_API, 'createSalesPlan', {
-    userId:S.userId, targetType:planTargetKind, targetValue:targetValue, content:content, goal:goal
+    userId:S.userId, targetType:planTargetKind, targetValue:targetValue, content:content, goal:goal, deadline:deadline
   }).then(function(res){
     btn.disabled = false;
     if(res && res.ok){
       toast('企画を登録しました');
-      $('plan-content').value = ''; $('plan-goal').value = '';
+      $('plan-content').value = ''; $('plan-goal').value = ''; $('plan-deadline').value = '';
       if(status && status !== '進行中'){
         apiPost(SALES_API, 'updateSalesPlan', { id:res.id, status:status }).then(loadPlans);
       } else { loadPlans(); }
