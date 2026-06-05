@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<!-- お江戸弁当 営業報告アプリ sales-report.html v1.0 (2026-06-05) -->
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>お江戸弁当 営業</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.3.0/dist/tabler-icons.min.css">
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+:root{
+  --navy:#1A3C5E; --bg:#F2F2EE; --panel:#F6F6F3; --card:#fff;
+  --line:rgba(0,0,0,.10); --line2:rgba(0,0,0,.14); --muted:#7a7a74; --text:#222;
+  --green:#3B6D11; --orange:#854F0B; --red:#A32D2D;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP",Meiryo,sans-serif;color:var(--text);-webkit-text-size-adjust:100%;}
+.app{max-width:480px;margin:0 auto;min-height:100vh;background:var(--panel);display:flex;flex-direction:column;}
+
+/* ヘッダー + タブ（上部固定） */
+.topbar{position:sticky;top:0;z-index:20;}
+.hdr{background:var(--navy);color:#fff;padding:13px 16px;display:flex;align-items:center;gap:8px;}
+.hdr i{font-size:20px;}
+.hdr .t{font-size:16px;font-weight:500;}
+.hdr .s{font-size:12px;opacity:.85;margin-left:auto;white-space:nowrap;}
+.tabs{display:flex;background:#fff;border-bottom:.5px solid var(--line2);}
+.tab{flex:1;padding:9px 4px;text-align:center;font-size:11px;color:var(--muted);background:none;border:none;cursor:pointer;border-bottom:2px solid transparent;font-family:inherit;}
+.tab i{display:block;font-size:18px;margin-bottom:2px;}
+.tab.on{color:var(--navy);border-bottom-color:var(--navy);font-weight:500;}
+
+.body{padding:14px;flex:1;}
+.panel{display:none;}
+.panel.on{display:block;}
+.h{font-size:12px;font-weight:500;color:#555;margin:14px 0 8px;}
+.h:first-child{margin-top:0;}
+
+/* カード・フォーム */
+.card{background:var(--card);border:.5px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px;}
+.lbl{font-size:11px;color:var(--muted);margin:0 0 4px;}
+.seg{display:flex;gap:6px;margin-bottom:10px;}
+.seg button{flex:1;padding:7px 4px;font-size:12px;border:.5px solid rgba(0,0,0,.15);background:#fff;border-radius:8px;cursor:pointer;color:#555;font-family:inherit;}
+.seg button.on{background:var(--navy);color:#fff;border-color:var(--navy);}
+input,select,textarea{width:100%;font-size:13px;padding:8px;border:.5px solid rgba(0,0,0,.18);border-radius:8px;font-family:inherit;color:var(--text);background:#fff;margin-bottom:10px;}
+textarea{resize:vertical;min-height:54px;}
+select:disabled{background:#f3f3ef;color:#999;}
+.btn{background:var(--navy);color:#fff;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:500;width:100%;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px;}
+.btn:disabled{opacity:.5;cursor:default;}
+.btn.sub{background:#fff;color:var(--navy);border:.5px solid var(--navy);}
+.btn.danger{background:#fff;color:var(--red);border:.5px solid var(--red);}
+.btn-row{display:flex;gap:8px;}
+.btn-row .btn{flex:1;}
+
+/* バッジ・ステータス */
+.badge{display:inline-block;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:500;}
+.b-loc{background:#E6F1FB;color:#0C447C;}
+.b-area{background:#E1F5EE;color:#0F6E56;}
+.b-all{background:#FAEEDA;color:#854F0B;}
+.st{font-size:10px;padding:2px 8px;border-radius:10px;margin-left:6px;}
+.st-go{background:#EAF3DE;color:#3B6D11;}
+.st-done{background:#F1EFE8;color:#5F5E5A;}
+.st-stop{background:#F6E3E3;color:#A32D2D;}
+
+.warn{background:#FAEEDA;border:.5px solid #EF9F27;color:#854F0B;border-radius:8px;padding:8px 10px;font-size:11px;margin-bottom:10px;display:flex;gap:6px;align-items:flex-start;line-height:1.4;}
+.note{background:#EEF1F4;border:.5px solid #CBD5DF;color:#456;border-radius:8px;padding:8px 10px;font-size:11px;margin-bottom:10px;line-height:1.45;}
+.cap{font-size:10px;color:#8a8a84;margin:6px 2px 0;line-height:1.4;}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;border:.5px solid rgba(0,0,0,.3);margin-right:6px;vertical-align:-1px;}
+.muted{color:#b9b9b2;}
+.empty{background:#fff;border:.5px dashed var(--line2);border-radius:10px;padding:18px;text-align:center;color:#9a9a93;font-size:12px;}
+
+/* タブ②（販売実績）KPI・グラフ・拠点内訳 */
+.drv-head{display:flex;align-items:center;gap:6px;font-size:14px;font-weight:600;margin:2px 0 8px;}
+.kpis{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;}
+.kpi{background:var(--card);border:.5px solid var(--line);border-radius:12px;padding:10px 6px;text-align:center;}
+.kpi .k{font-size:10px;color:var(--muted);margin-bottom:4px;}
+.kpi .v{font-size:15px;font-weight:600;color:var(--navy);line-height:1.15;}
+.kpi .v.minus{color:var(--red);}
+.kpi .v.na{color:#bbb;font-weight:500;}
+.kpi .sub{font-size:9px;color:#9a9a93;margin-top:3px;}
+.chart-wrap{background:var(--card);border:.5px solid var(--line);border-radius:12px;padding:10px 10px 6px;margin-bottom:10px;}
+.chart-ttl{font-size:11px;color:#555;margin:0 0 6px;font-weight:500;}
+.chart-box{position:relative;height:150px;}
+.loc-row{background:var(--card);border:.5px solid var(--line);border-radius:10px;padding:9px 10px;margin-bottom:8px;}
+.loc-row .top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px;gap:8px;}
+.loc-row .nm{font-size:13px;font-weight:500;}
+.loc-row .sell{font-size:13px;font-weight:600;}
+.loc-row .mets{display:flex;gap:14px;font-size:11px;color:#666;flex-wrap:wrap;}
+.loc-row .mets .m b{font-weight:600;color:#333;}
+.cmp{font-size:10px;margin-left:4px;font-weight:400;}
+.up{color:var(--green);} .down{color:var(--red);} .flat{color:#999;}
+
+/* 企画リスト */
+.plan-title{font-size:13px;margin:7px 0 4px;font-weight:500;}
+.plan-meta{font-size:11px;color:#777;}
+.plan-edit-link{font-size:11px;color:var(--navy);background:none;border:none;cursor:pointer;padding:4px 0 0;font-family:inherit;text-decoration:underline;width:auto;margin:0;}
+
+/* 営業報告タブ */
+.plan-item{display:flex;gap:9px;align-items:flex-start;padding:9px;border:.5px solid var(--line);border-radius:8px;margin-bottom:8px;cursor:pointer;background:#fff;}
+.plan-item.sel{border-color:var(--navy);background:#F2F7FB;}
+.plan-item input{width:auto;margin:1px 0 0;}
+.rep{background:#fff;border:.5px solid var(--line);border-radius:8px;padding:9px;margin-bottom:8px;font-size:12px;line-height:1.5;}
+.rep .meta{font-size:10px;color:#8a8a84;margin-bottom:3px;}
+
+/* オーバーレイ・トースト */
+.overlay{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:28px;gap:12px;color:var(--muted);z-index:60;}
+.overlay .msg{font-size:13px;line-height:1.6;max-width:300px;}
+.overlay i{font-size:34px;color:var(--navy);}
+.spinner{width:30px;height:30px;border:3px solid rgba(0,0,0,.12);border-top-color:var(--navy);border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.inline-loading{display:flex;align-items:center;justify-content:center;gap:8px;color:#9a9a93;font-size:12px;padding:18px;}
+.inline-loading .spinner{width:18px;height:18px;border-width:2px;}
+.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;border-radius:9px;font-size:13px;z-index:70;opacity:0;transition:opacity .25s;pointer-events:none;max-width:88%;box-shadow:0 4px 14px rgba(0,0,0,.25);}
+.toast.show{opacity:.96;}
+.toast.err{background:var(--red);}
+.ver{font-size:9px;color:#c4c4bd;text-align:center;padding:6px 0 2px;}
+</style>
+</head>
+<body>
+
+<div class="app" id="app" style="display:none;">
+  <div class="topbar">
+    <div class="hdr">
+      <i class="ti ti-building-store" aria-hidden="true"></i>
+      <span class="t">お江戸弁当 営業</span>
+      <span class="s" id="hdr-user"></span>
+    </div>
+    <div class="tabs">
+      <button class="tab on" data-t="kikaku"><i class="ti ti-clipboard-list" aria-hidden="true"></i>営業企画</button>
+      <button class="tab" data-t="jisseki"><i class="ti ti-chart-bar" aria-hidden="true"></i>販売実績</button>
+      <button class="tab" data-t="houkoku"><i class="ti ti-message-report" aria-hidden="true"></i>営業報告</button>
+    </div>
+  </div>
+
+  <div class="body">
+
+    <!-- ① 営業企画 -->
+    <div class="panel on" id="p-kikaku">
+      <div class="card">
+        <p class="lbl">対象種別</p>
+        <div class="seg" id="seg-target">
+          <button class="on" data-k="loc">拠点別</button>
+          <button data-k="area">エリア別</button>
+          <button data-k="all">全社</button>
+        </div>
+        <p class="lbl" id="lbl-target">拠点を選択</p>
+        <select id="plan-target"></select>
+        <p class="lbl">内容</p>
+        <textarea id="plan-content" placeholder="例）新メニューの試食会を実施し新規開拓"></textarea>
+        <p class="lbl">目標</p>
+        <input type="text" id="plan-goal" placeholder="例）新規10社開拓 / 完売率+5pt">
+        <p class="lbl">ステータス</p>
+        <select id="plan-status"><option>進行中</option><option>完了</option><option>中止</option></select>
+        <button class="btn" id="plan-create-btn"><i class="ti ti-plus" aria-hidden="true"></i> 企画を登録</button>
+      </div>
+      <p class="h">登録済みの企画</p>
+      <div id="plan-list"><div class="inline-loading"><span class="spinner"></span>読み込み中…</div></div>
+    </div>
+
+    <!-- ② 販売実績 -->
+    <div class="panel" id="p-jisseki">
+      <div id="perf-warn"></div>
+      <div class="seg" id="seg-period">
+        <button class="on" data-p="d">日（前日比）</button>
+        <button data-p="w">週（前週比）</button>
+      </div>
+      <p class="lbl">ドライバーを選択</p>
+      <select id="drv-sel"></select>
+      <div id="perf-content"><div class="inline-loading"><span class="spinner"></span>読み込み中…</div></div>
+    </div>
+
+    <!-- ③ 営業報告 -->
+    <div class="panel" id="p-houkoku">
+      <div class="card">
+        <p class="lbl">拠点を選択</p>
+        <select id="hk-loc"></select>
+        <p class="lbl">紐付く企画（拠点別＋エリア別＋全社｜進行中・完了）</p>
+        <div id="hk-plans"><div class="inline-loading"><span class="spinner"></span>読み込み中…</div></div>
+        <p class="lbl" style="margin-top:6px;">報告内容</p>
+        <textarea id="hk-content" placeholder="例）試食会に12名参加。3社が前向き、来週見積提示予定。"></textarea>
+        <button class="btn" id="hk-create-btn"><i class="ti ti-send" aria-hidden="true"></i> 報告する</button>
+      </div>
+      <p class="h">最近の報告</p>
+      <div id="hk-history"></div>
+    </div>
+
+  </div>
+  <div class="ver">v1.0</div>
+</div>
+
+<div class="overlay" id="overlay">
+  <span class="spinner" id="overlay-spinner"></span>
+  <i class="ti ti-alert-circle" id="overlay-icon" style="display:none;" aria-hidden="true"></i>
+  <div class="msg" id="overlay-msg">LINEと連携中…</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+'use strict';
+
+/* ============================================================
+   設定
+   ★ LIFF_ID は新規LIFF発行後に差し替える（チャネル 2009637457 / エンドポイント /sales-report.html）
+   ============================================================ */
+var LIFF_ID  = '2009637457-KycV9WYD';
+var SALES_API = 'https://script.google.com/macros/s/AKfycbyYFiCThF2bjcXABLqkTESbfsskSXURKzfGOACihV1CE5-yGbS53iDghhO7ROr_pRyfGQ/exec';
+var MAIN_GAS  = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5AawPDc7aluPokONkYz6f2ikwl0S487JvhKdKh6QSp1xhEhA/exec';
+var UNASSIGNED_ID = '__UNASSIGNED__';
+
+/* ============================================================
+   状態
+   ============================================================ */
+var S = {
+  userId:'', me:{}, locations:[], areas:[], drivers:[],
+  locById:{}, userById:{},
+  plans:[], plansById:{},
+  perf:null, perfLoaded:false, perfLoading:false,
+  profitByLoc:{}, profitMeta:{ hasCostData:true },
+  period:'d', selectedDriverId:'',
+  hkLocId:'', hkPlanId:'', hkHistoryLoaded:false
+};
+var salesChart = null;
+
+/* ============================================================
+   汎用ヘルパー
+   ============================================================ */
+function $(id){ return document.getElementById(id); }
+function esc(s){
+  return String(s==null?'':s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function clean(o){ var r={}; for(var k in o){ if(o.hasOwnProperty(k) && o[k]!==undefined && o[k]!==null) r[k]=o[k]; } return r; }
+function yen(n){ return '¥' + (Number(n)||0).toLocaleString('ja-JP'); }
+function num(n){ return (Number(n)||0).toLocaleString('ja-JP'); }
+function rate1(n){ return (Math.round((Number(n)||0)*10)/10); }
+function fmtMD(s){
+  if(!s) return '';
+  var p = String(s).replace(/-/g,'/').split('/');
+  if(p.length===3) return Number(p[1]) + '/' + Number(p[2]);
+  return String(s);
+}
+function ymdDash(s){ return String(s||'').replace(/\//g,'-'); }
+function rateColor(r){ r=Number(r)||0; return r>=85 ? 'var(--green)' : (r>=70 ? 'var(--orange)' : 'var(--red)'); }
+function diffCls(d){ d=Number(d)||0; return d>0?'up':(d<0?'down':'flat'); }
+function ppStr(d){ d=Number(d)||0; return d>0?('▲'+rate1(d)):(d<0?('▼'+rate1(Math.abs(d))):'±0'); }
+function yenDiffStr(d){ d=Number(d)||0; return d>0?('▲'+yen(Math.abs(d))):(d<0?('▼'+yen(Math.abs(d))):'±0'); }
+
+function apiGet(base, action, params){
+  var qs = new URLSearchParams(clean(Object.assign({action:action}, params||{}))).toString();
+  return fetch(base + '?' + qs).then(function(r){ return r.json(); });
+}
+function apiPost(base, action, params){
+  var body = new URLSearchParams(clean(Object.assign({action:action}, params||{})));
+  return fetch(base, { method:'POST', body:body }).then(function(r){ return r.json(); });
+}
+
+var _toastTimer = null;
+function toast(msg, isErr){
+  var t = $('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (isErr?' err':'');
+  if(_toastTimer) clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(function(){ t.className = 'toast' + (isErr?' err':''); }, 2600);
+}
+function showOverlay(msg, isErr){
+  $('overlay').style.display = 'flex';
+  $('overlay-msg').textContent = msg;
+  $('overlay-spinner').style.display = isErr ? 'none' : 'block';
+  $('overlay-icon').style.display = isErr ? 'block' : 'none';
+}
+function hideOverlay(){ $('overlay').style.display = 'none'; $('app').style.display = 'flex'; }
+
+/* ============================================================
+   起動（LIFF → 認証 → 初期データ）
+   ============================================================ */
+function boot(){
+  showOverlay('LINEと連携中…');
+  liff.init({ liffId: LIFF_ID }).then(function(){
+    if(!liff.isLoggedIn()){ liff.login(); return; }
+    return liff.getProfile().then(function(profile){
+      S.userId = profile.userId;
+      return apiGet(SALES_API, 'getSalesReportInit', { userId:S.userId });
+    }).then(function(init){
+      if(!init){ showOverlay('サーバーから応答がありません。時間をおいて再度お試しください。', true); return; }
+      if(init.ok === false){ showOverlay('初期化に失敗しました（' + esc(init.error||'') + '）', true); return; }
+      if(!init.allowed){
+        var nm = (init.currentUser && init.currentUser.name) ? init.currentUser.name : '';
+        showOverlay((nm?nm+'さんは':'') + 'このアプリの利用対象外です。アクセスが必要な場合は管理者にご連絡ください。', true);
+        return;
+      }
+      S.me        = init.currentUser || {};
+      S.locations = init.locations || [];
+      S.areas     = (init.areas || []).filter(function(a){ return !!a; });
+      S.drivers   = init.drivers || [];
+      buildMaps();
+      renderHeader();
+      bindTabs();
+      bindKikaku();
+      bindJisseki();
+      bindHoukoku();
+      hideOverlay();
+      loadPlans();
+    });
+  }).catch(function(e){
+    showOverlay('LINE認証に失敗しました。LINEアプリ内で開いているかご確認ください。\n（' + esc(e && e.message ? e.message : e) + '）', true);
+  });
+}
+
+function buildMaps(){
+  S.locById = {};
+  S.locations.forEach(function(l){ S.locById[l.id] = l; });
+  S.userById = {};
+  S.drivers.forEach(function(d){ if(d.userId) S.userById[d.userId] = d.name || ''; });
+  if(S.me && S.me.userId) S.userById[S.me.userId] = S.me.name || S.userById[S.me.userId] || '';
+}
+function locName(id){
+  var l = S.locById[id];
+  return l ? (l.displayName || l.name || id) : (id || '');
+}
+function userName(id){ return S.userById[id] || id || '—'; }
+function renderHeader(){ $('hdr-user').textContent = (S.me.name || '') + (S.me.name ? 'さん' : ''); }
+
+/* ============================================================
+   タブ切替
+   ============================================================ */
+function bindTabs(){
+  Array.prototype.forEach.call(document.querySelectorAll('.tab'), function(b){
+    b.addEventListener('click', function(){
+      Array.prototype.forEach.call(document.querySelectorAll('.tab'), function(x){ x.classList.remove('on'); });
+      b.classList.add('on');
+      Array.prototype.forEach.call(document.querySelectorAll('.panel'), function(p){ p.classList.remove('on'); });
+      $('p-' + b.dataset.t).classList.add('on');
+      if(b.dataset.t === 'jisseki' && !S.perfLoaded && !S.perfLoading) loadPerformance();
+      if(b.dataset.t === 'houkoku' && !S.hkHistoryLoaded) loadHistory();
+    });
+  });
+}
+
+/* ============================================================
+   ① 営業企画
+   ============================================================ */
+var planTargetKind = 'loc';
+function bindKikaku(){
+  Array.prototype.forEach.call(document.querySelectorAll('#seg-target button'), function(b){
+    b.addEventListener('click', function(){
+      Array.prototype.forEach.call(document.querySelectorAll('#seg-target button'), function(x){ x.classList.remove('on'); });
+      b.classList.add('on');
+      planTargetKind = b.dataset.k;
+      fillPlanTarget();
+    });
+  });
+  fillPlanTarget();
+  $('plan-create-btn').addEventListener('click', createPlan);
+}
+function fillPlanTarget(){
+  var sel = $('plan-target'), lbl = $('lbl-target');
+  if(planTargetKind === 'all'){
+    sel.innerHTML = '<option value="">全社（対象指定なし）</option>';
+    sel.disabled = true; lbl.textContent = '全社向け企画';
+  } else if(planTargetKind === 'area'){
+    sel.disabled = false; lbl.textContent = 'エリアを選択';
+    sel.innerHTML = S.areas.map(function(a){ return '<option value="'+esc(a)+'">'+esc(a)+'</option>'; }).join('')
+      || '<option value="">（エリア未登録）</option>';
+  } else {
+    sel.disabled = false; lbl.textContent = '拠点を選択';
+    sel.innerHTML = S.locations.map(function(l){
+      return '<option value="'+esc(l.id)+'">'+esc(l.displayName || l.name || l.id)+'</option>';
+    }).join('') || '<option value="">（拠点未登録）</option>';
+  }
+}
+function loadPlans(){
+  $('plan-list').innerHTML = '<div class="inline-loading"><span class="spinner"></span>読み込み中…</div>';
+  apiGet(SALES_API, 'getSalesPlans', {}).then(function(res){
+    S.plans = (res && res.plans) ? res.plans : [];
+    S.plans.forEach(function(p){ S.plansById[p.id] = p; });
+    renderPlans();
+  }).catch(function(){
+    $('plan-list').innerHTML = '<div class="empty">企画の読み込みに失敗しました。</div>';
+  });
+}
+function planBadge(p){
+  if(p.targetType === 'loc')  return '<span class="badge b-loc">拠点別・'+esc(locName(p.targetValue))+'</span>';
+  if(p.targetType === 'area') return '<span class="badge b-area">エリア別・'+esc(p.targetValue)+'</span>';
+  return '<span class="badge b-all">全社</span>';
+}
+function statusTag(st){
+  if(st === '完了') return '<span class="st st-done">完了</span>';
+  if(st === '中止') return '<span class="st st-stop">中止</span>';
+  return '<span class="st st-go">進行中</span>';
+}
+function renderPlans(){
+  if(!S.plans.length){ $('plan-list').innerHTML = '<div class="empty">まだ企画がありません。</div>'; return; }
+  var html = S.plans.map(function(p){
+    return '<div class="card" data-pid="'+esc(p.id)+'">'
+      + '<div>' + planBadge(p) + statusTag(p.status) + '</div>'
+      + '<div class="plan-title">' + esc(p.content || '') + '</div>'
+      + '<div class="plan-meta">目標：' + esc(p.goal || '—') + ' ／ 作成：' + esc(userName(p.creatorUserId)) + '</div>'
+      + '<button class="plan-edit-link" data-edit="'+esc(p.id)+'">編集 / ステータス変更</button>'
+      + '</div>';
+  }).join('');
+  $('plan-list').innerHTML = html;
+  Array.prototype.forEach.call(document.querySelectorAll('[data-edit]'), function(b){
+    b.addEventListener('click', function(){ openPlanEdit(b.dataset.edit); });
+  });
+}
+function openPlanEdit(id){
+  var p = S.plansById[id]; if(!p) return;
+  var card = document.querySelector('.card[data-pid="'+CSS.escape(id)+'"]'); if(!card) return;
+  card.innerHTML =
+      '<div>' + planBadge(p) + '</div>'
+    + '<p class="lbl" style="margin-top:8px;">内容</p>'
+    + '<textarea data-f="content">' + esc(p.content || '') + '</textarea>'
+    + '<p class="lbl">目標</p>'
+    + '<input type="text" data-f="goal" value="' + esc(p.goal || '') + '">'
+    + '<p class="lbl">ステータス</p>'
+    + '<select data-f="status">'
+      + '<option'+(p.status==='進行中'?' selected':'')+'>進行中</option>'
+      + '<option'+(p.status==='完了'?' selected':'')+'>完了</option>'
+      + '<option'+(p.status==='中止'?' selected':'')+'>中止</option>'
+    + '</select>'
+    + '<div class="btn-row">'
+      + '<button class="btn sub" data-cancel="1">キャンセル</button>'
+      + '<button class="btn" data-save="'+esc(id)+'">保存</button>'
+    + '</div>';
+  card.querySelector('[data-cancel]').addEventListener('click', renderPlans);
+  card.querySelector('[data-save]').addEventListener('click', function(){
+    var content = card.querySelector('[data-f="content"]').value.trim();
+    var goal    = card.querySelector('[data-f="goal"]').value.trim();
+    var status  = card.querySelector('[data-f="status"]').value;
+    if(!content){ toast('内容を入力してください', true); return; }
+    var btn = this; btn.disabled = true; btn.textContent = '保存中…';
+    apiPost(SALES_API, 'updateSalesPlan', { id:id, content:content, goal:goal, status:status }).then(function(res){
+      if(res && res.ok){ toast('企画を更新しました'); loadPlans(); }
+      else { toast('更新に失敗しました', true); btn.disabled=false; btn.textContent='保存'; }
+    }).catch(function(){ toast('通信エラー', true); btn.disabled=false; btn.textContent='保存'; });
+  });
+}
+function createPlan(){
+  var content = $('plan-content').value.trim();
+  var goal    = $('plan-goal').value.trim();
+  var status  = $('plan-status').value;
+  var targetValue = (planTargetKind === 'all') ? '' : $('plan-target').value;
+  if(!content){ toast('内容を入力してください', true); return; }
+  if(planTargetKind !== 'all' && !targetValue){ toast('対象を選択してください', true); return; }
+  var btn = $('plan-create-btn'); btn.disabled = true;
+  apiPost(SALES_API, 'createSalesPlan', {
+    userId:S.userId, targetType:planTargetKind, targetValue:targetValue, content:content, goal:goal
+  }).then(function(res){
+    btn.disabled = false;
+    if(res && res.ok){
+      toast('企画を登録しました');
+      $('plan-content').value = ''; $('plan-goal').value = '';
+      if(status && status !== '進行中'){
+        apiPost(SALES_API, 'updateSalesPlan', { id:res.id, status:status }).then(loadPlans);
+      } else { loadPlans(); }
+    } else { toast('登録に失敗しました', true); }
+  }).catch(function(){ btn.disabled = false; toast('通信エラー', true); });
+}
+
+/* ============================================================
+   ② 販売実績（ドライバー別カード＋グラフ・粗利は2API合成）
+   ============================================================ */
+function bindJisseki(){
+  Array.prototype.forEach.call(document.querySelectorAll('#seg-period button'), function(b){
+    b.addEventListener('click', function(){
+      if(b.classList.contains('on')) return;
+      Array.prototype.forEach.call(document.querySelectorAll('#seg-period button'), function(x){ x.classList.remove('on'); });
+      b.classList.add('on');
+      S.period = b.dataset.p;
+      loadPerformance();
+    });
+  });
+  $('drv-sel').addEventListener('change', function(){ S.selectedDriverId = $('drv-sel').value; renderPerf(); });
+}
+function loadPerformance(){
+  S.perfLoading = true;
+  $('perf-content').innerHTML = '<div class="inline-loading"><span class="spinner"></span>読み込み中…</div>';
+  $('perf-warn').innerHTML = '';
+  // 粗利：日=その日の day、週=直近1週間（1w）
+  var profitParams = (S.period === 'd') ? { period:'day' } : { period:'1w' };
+  apiGet(SALES_API, 'getSalesPerformance', { period:S.period }).then(function(perf){
+    S.perf = perf || {};
+    S.perfLoaded = true; S.perfLoading = false;
+    if(S.period === 'd' && S.perf.curDate) profitParams.date = ymdDash(S.perf.curDate);
+    // ドライバー選択肢を構築
+    buildDriverSelect();
+    // 粗利取得（locationId で突合）
+    return apiGet(MAIN_GAS, 'getProfitData', profitParams);
+  }).then(function(profit){
+    S.profitByLoc = {};
+    S.profitMeta = { hasCostData: !(profit && profit.hasCostData === false) };
+    if(profit && profit.rows){
+      profit.rows.forEach(function(r){
+        if(r && r.locationId) S.profitByLoc[String(r.locationId)] = (r.hasReport === false) ? null : (Number(r.profit)||0);
+      });
+    }
+    renderPerf();
+  }).catch(function(){
+    S.perfLoading = false;
+    $('perf-content').innerHTML = '<div class="empty">販売実績の読み込みに失敗しました。</div>';
+  });
+}
+function allDriverGroups(){
+  var groups = (S.perf && S.perf.drivers) ? S.perf.drivers.slice() : [];
+  if(S.perf && S.perf.unassigned && S.perf.unassigned.length){
+    groups.push({ userId:UNASSIGNED_ID, name:'未割当', color:'', locations:S.perf.unassigned });
+  }
+  return groups;
+}
+function buildDriverSelect(){
+  var groups = allDriverGroups();
+  var sel = $('drv-sel');
+  if(!groups.length){ sel.innerHTML = '<option value="">—</option>'; return; }
+  // 既定：自分が担当グループにいれば自分、無ければ先頭
+  var def = '';
+  for(var i=0;i<groups.length;i++){ if(groups[i].userId && groups[i].userId === S.userId){ def = groups[i].userId; break; } }
+  if(!def) def = groups[0].userId || '';
+  if(!S.selectedDriverId || !groups.some(function(g){ return g.userId === S.selectedDriverId; })) S.selectedDriverId = def;
+  sel.innerHTML = groups.map(function(g){
+    var label = (g.userId === S.userId) ? (g.name + '（自分）') : g.name;
+    return '<option value="'+esc(g.userId)+'"'+(g.userId===S.selectedDriverId?' selected':'')+'>'+esc(label)+'</option>';
+  }).join('');
+}
+function periodCaption(){
+  if(S.period === 'd'){
+    return '集計日 ' + fmtMD(S.perf.curDate) + (S.perf.prevDate ? '（前日 ' + fmtMD(S.perf.prevDate) + ' と比較）' : '（比較対象なし）');
+  }
+  var cw = S.perf.curWeek || {}, pw = S.perf.prevWeek || {};
+  return '今週 ' + fmtMD(cw.start) + '〜' + fmtMD(cw.end) + '（前週 ' + fmtMD(pw.start) + '〜' + fmtMD(pw.end) + ' と比較）';
+}
+function renderPerf(){
+  if(salesChart){ salesChart.destroy(); salesChart = null; }
+  if(!S.perf || S.perf.ok === false || !S.perf.curDate){
+    $('perf-content').innerHTML = '<div class="empty">まだ実績データがありません。<br>当日分は21:00のバッチ後に反映されます。</div>';
+    return;
+  }
+  // 未割当バナー
+  var w = S.perf.warnings || {};
+  $('perf-warn').innerHTML = (w.unassignedCount > 0)
+    ? '<div class="warn"><i class="ti ti-alert-triangle" aria-hidden="true" style="margin-top:1px;"></i><span>'
+      + esc(w.message || ('未割当: ' + w.unassignedCount + '拠点'))
+      + '（担当ドライバー未設定の拠点は「未割当」に集約しています）</span></div>'
+    : '';
+
+  var groups = allDriverGroups();
+  var g = null;
+  for(var i=0;i<groups.length;i++){ if(groups[i].userId === S.selectedDriverId){ g = groups[i]; break; } }
+  if(!g){ $('perf-content').innerHTML = '<div class="empty">ドライバーを選択してください。</div>'; return; }
+
+  var locs = g.locations || [];
+  var curSales = 0, prevSales = 0, profitSum = 0, profitKnown = false, rateSum = 0, rateCnt = 0;
+  locs.forEach(function(l){
+    curSales  += (Number(l.sales)||0);
+    prevSales += (Number(l.sales)||0) - (Number(l.salesDiff)||0);
+    if(typeof l.selloutRate === 'number'){ rateSum += l.selloutRate; rateCnt++; }
+    var pf = S.profitByLoc[String(l.locationId)];
+    if(pf !== undefined && pf !== null){ profitSum += pf; profitKnown = true; }
+  });
+  var avgRate = rateCnt ? rate1(rateSum / rateCnt) : 0;
+  var salesDiffTotal = curSales - prevSales;
+  var prevLabel = (S.period === 'd') ? '前日' : '前週';
+  var curLabel  = (S.period === 'd') ? '当日' : '今週';
+
+  // KPI
+  var profitHtml = !S.profitMeta.hasCostData
+    ? '<div class="v na">—</div><div class="sub">原価未入力</div>'
+    : (profitKnown ? '<div class="v'+(profitSum<0?' minus':'')+'">'+yen(profitSum)+'</div>' : '<div class="v na">—</div><div class="sub">報告待ち</div>');
+
+  var html = ''
+    + '<div class="drv-head"><span class="dot" style="background:'+(g.color||'#CBD5DF')+';"></span>'+esc(g.name)+'</div>'
+    + '<div class="kpis">'
+      + '<div class="kpi"><div class="k">売上</div><div class="v">'+yen(curSales)+'</div>'
+        + '<div class="sub '+diffCls(salesDiffTotal)+'">'+(salesDiffTotal>=0?'▲':'▼')+yen(Math.abs(salesDiffTotal))+'</div></div>'
+      + '<div class="kpi"><div class="k">平均完売率</div><div class="v" style="color:'+rateColor(avgRate)+';">'+avgRate+'%</div>'
+        + '<div class="sub">拠点平均</div></div>'
+      + '<div class="kpi"><div class="k">粗利</div>'+profitHtml+'</div>'
+    + '</div>'
+    + '<div class="chart-wrap"><p class="chart-ttl">売上（'+prevLabel+' → '+curLabel+'）</p><div class="chart-box"><canvas id="sales-chart"></canvas></div></div>'
+    + '<p class="h">拠点別の内訳</p>'
+    + '<div id="loc-breakdown"></div>'
+    + '<p class="cap">'+esc(periodCaption())+'<br>完売率はお茶を除外。100%超は補充販売（そのまま表示）。粗利＝売上−原価−ギャラ−その他経費。</p>';
+  $('perf-content').innerHTML = html;
+
+  // 拠点別内訳
+  if(!locs.length){
+    $('loc-breakdown').innerHTML = '<div class="empty">担当拠点が登録されていません。</div>';
+  } else {
+    var lh = locs.slice().sort(function(a,b){ return (a.order||9999)-(b.order||9999); }).map(function(l){
+      var pf = S.profitByLoc[String(l.locationId)];
+      var pfTxt = !S.profitMeta.hasCostData ? '<span class="muted">—</span>'
+        : (pf===undefined||pf===null ? '<span class="muted">報告待ち</span>' : '<b>'+yen(pf)+'</b>');
+      var rd = Number(l.rateDiff)||0;
+      var sd = Number(l.salesDiff)||0;
+      return '<div class="loc-row">'
+        + '<div class="top"><span class="nm">'+esc(l.displayName || l.locationName || l.locationId)+'</span>'
+          + '<span class="sell" style="color:'+rateColor(l.selloutRate)+';">'+rate1(l.selloutRate)+'%'
+          + '<span class="cmp '+diffCls(rd)+'">'+ppStr(rd)+'pp</span></span></div>'
+        + '<div class="mets">'
+          + '<span class="m">売上 <b>'+yen(l.sales)+'</b><span class="cmp '+diffCls(sd)+'">'+yenDiffStr(sd)+'</span></span>'
+          + '<span class="m">販売数 <b>'+num(l.sold)+'個</b></span>'
+          + '<span class="m">粗利 '+pfTxt+'</span>'
+        + '</div>'
+      + '</div>';
+    }).join('');
+    $('loc-breakdown').innerHTML = lh;
+  }
+
+  // グラフ（売上：前期 → 当期）
+  var ctx = $('sales-chart');
+  if(ctx && window.Chart){
+    salesChart = new Chart(ctx.getContext('2d'), {
+      type:'bar',
+      data:{
+        labels:[prevLabel, curLabel],
+        datasets:[{
+          data:[Math.round(prevSales), Math.round(curSales)],
+          backgroundColor:['#C9CFD6', '#1A3C5E'],
+          borderRadius:6, maxBarThickness:64
+        }]
+      },
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        plugins:{
+          legend:{ display:false },
+          tooltip:{ callbacks:{ label:function(c){ return yen(c.parsed.y); } } }
+        },
+        scales:{
+          y:{ beginAtZero:true, ticks:{ callback:function(v){ return '¥' + (v>=10000 ? (v/10000)+'万' : Number(v).toLocaleString()); }, font:{ size:10 } }, grid:{ color:'rgba(0,0,0,.05)' } },
+          x:{ ticks:{ font:{ size:11 } }, grid:{ display:false } }
+        }
+      }
+    });
+  }
+}
+
+/* ============================================================
+   ③ 営業報告
+   ============================================================ */
+function bindHoukoku(){
+  var sel = $('hk-loc');
+  sel.innerHTML = '<option value="">拠点を選択…</option>' + S.locations.map(function(l){
+    return '<option value="'+esc(l.id)+'">'+esc(l.displayName || l.name || l.id)+'</option>';
+  }).join('');
+  sel.addEventListener('change', function(){
+    S.hkLocId = sel.value; S.hkPlanId = '';
+    if(S.hkLocId) loadPlansForLocation(S.hkLocId);
+    else $('hk-plans').innerHTML = '<div class="empty">拠点を選択すると企画が表示されます。</div>';
+  });
+  $('hk-plans').innerHTML = '<div class="empty">拠点を選択すると企画が表示されます。</div>';
+  $('hk-create-btn').addEventListener('click', createReport);
+}
+function loadPlansForLocation(locId){
+  $('hk-plans').innerHTML = '<div class="inline-loading"><span class="spinner"></span>読み込み中…</div>';
+  apiGet(SALES_API, 'getPlansForLocation', { locationId:locId }).then(function(res){
+    var plans = (res && res.plans) ? res.plans : [];
+    plans.forEach(function(p){ S.plansById[p.id] = p; });
+    renderHkPlans(plans);
+  }).catch(function(){
+    $('hk-plans').innerHTML = '<div class="empty">企画の読み込みに失敗しました。</div>';
+  });
+}
+function renderHkPlans(plans){
+  var html = '<div class="plan-item sel" data-pid=""><input type="radio" name="hkplan" checked>'
+    + '<div><span class="badge b-all" style="background:#eee;color:#666;">企画に紐付けない</span></div></div>';
+  html += plans.map(function(p){
+    return '<div class="plan-item" data-pid="'+esc(p.id)+'"><input type="radio" name="hkplan">'
+      + '<div>' + planBadge(p) + statusTag(p.status)
+      + '<div class="plan-title" style="margin-top:5px;">'+esc(p.content||'')+'</div></div></div>';
+  }).join('');
+  $('hk-plans').innerHTML = html;
+  S.hkPlanId = '';
+  Array.prototype.forEach.call(document.querySelectorAll('#hk-plans .plan-item'), function(it){
+    it.addEventListener('click', function(){
+      Array.prototype.forEach.call(document.querySelectorAll('#hk-plans .plan-item'), function(x){ x.classList.remove('sel'); });
+      it.classList.add('sel');
+      var r = it.querySelector('input'); if(r) r.checked = true;
+      S.hkPlanId = it.getAttribute('data-pid') || '';
+    });
+  });
+}
+function createReport(){
+  var content = $('hk-content').value.trim();
+  if(!S.hkLocId){ toast('拠点を選択してください', true); return; }
+  if(!content){ toast('報告内容を入力してください', true); return; }
+  var btn = $('hk-create-btn'); btn.disabled = true;
+  var params = { userId:S.userId, locationId:S.hkLocId, content:content };
+  if(S.hkPlanId) params.planId = S.hkPlanId;
+  apiPost(SALES_API, 'createSalesReport', params).then(function(res){
+    btn.disabled = false;
+    if(res && res.ok){
+      toast('報告を送信しました');
+      $('hk-content').value = '';
+      loadHistory();
+    } else { toast('送信に失敗しました', true); }
+  }).catch(function(){ btn.disabled = false; toast('通信エラー', true); });
+}
+function loadHistory(){
+  S.hkHistoryLoaded = true;
+  $('hk-history').innerHTML = '<div class="inline-loading"><span class="spinner"></span>読み込み中…</div>';
+  apiGet(SALES_API, 'getSalesReports', { limit:30 }).then(function(res){
+    var reports = (res && res.reports) ? res.reports : [];
+    if(!reports.length){ $('hk-history').innerHTML = '<div class="empty">まだ報告がありません。</div>'; return; }
+    $('hk-history').innerHTML = reports.map(function(r){
+      var plan = r.planId ? S.plansById[r.planId] : null;
+      var planTxt = plan ? (' ・ ' + (plan.content || '').slice(0, 18)) : '';
+      return '<div class="rep"><div class="meta">' + esc(fmtMD(r.reportedAt)) + ' ・ '
+        + esc(locName(r.locationId)) + planTxt + ' ・ ' + esc(userName(r.reporterUserId))
+        + '</div>' + esc(r.content || '') + '</div>';
+    }).join('');
+  }).catch(function(){
+    $('hk-history').innerHTML = '<div class="empty">報告履歴の読み込みに失敗しました。</div>';
+  });
+}
+
+/* ============================================================
+   起動
+   ============================================================ */
+if(window.liff){ boot(); }
+else { showOverlay('LIFF SDK の読み込みに失敗しました。通信環境をご確認ください。', true); }
+
+})();
+</script>
+</body>
+</html>
