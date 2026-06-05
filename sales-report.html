@@ -298,7 +298,7 @@ function boot(){
       return apiGet(SALES_API, 'getSalesReportInit', { userId:S.userId });
     }).then(function(init){
       if(!init){ showOverlay('サーバーから応答がありません。時間をおいて再度お試しください。', true); return; }
-      if(init.ok === false){ showOverlay('初期化に失敗しました（' + esc(init.error||'') + '）', true); return; }
+      if(init.ok === false){ showOverlay('初期化に失敗しました（' + (init.error||'') + '）', true); return; }
       if(!init.allowed){
         var nm = (init.currentUser && init.currentUser.name) ? init.currentUser.name : '';
         showOverlay((nm?nm+'さんは':'') + 'このアプリの利用対象外です。アクセスが必要な場合は管理者にご連絡ください。', true);
@@ -318,7 +318,7 @@ function boot(){
       loadPlans();
     });
   }).catch(function(e){
-    showOverlay('LINE認証に失敗しました。LINEアプリ内で開いているかご確認ください。\n（' + esc(e && e.message ? e.message : e) + '）', true);
+    showOverlay('LINE認証に失敗しました。LINEアプリ内で開いているかご確認ください。\n（' + (e && e.message ? e.message : e) + '）', true);
   });
 }
 
