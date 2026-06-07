@@ -291,8 +291,9 @@ body {
 }
 .btn-warn { background: var(--orange); color: #FFF; }
 
-/* ===== COMPLETE ===== */
-#screen-complete {
+/* ===== COMPLETE / KITCHEN ===== */
+#screen-complete,
+#screen-kitchen {
   background: var(--primary);
   align-items: center;
   justify-content: center;
@@ -543,6 +544,21 @@ body {
   </div>
 </div>
 
+<!-- ====== KITCHEN (調理スタッフ案内) ====== -->
+<div id="screen-kitchen" class="screen">
+  <div class="complete-icon">🍳</div>
+  <div class="complete-title" id="kitchen-title">ありがとうございます</div>
+  <div class="complete-sub">
+    キッチンスタッフとして登録しました。<br>
+    シフトが確定するとLINEに通知が届きます。<br>
+    最新のシフトはいつでも下のボタンから確認できます。
+  </div>
+  <div class="complete-btn-area">
+    <button class="complete-btn" onclick="openKitchenShift()">📅 シフトを確認する</button>
+    <button class="complete-btn outline" onclick="closeApp()">LINEに戻る</button>
+  </div>
+</div>
+
 <!-- ====== ERROR ====== -->
 <div id="screen-error" class="screen">
   <div class="error-icon">⚠️</div>
@@ -562,6 +578,8 @@ body {
 // ═══════════════════════════════════════════════════════════════
 const LIFF_ID = '2009637457-ECOGmo94';
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5AawPDc7aluPokONkYz6f2ikwl0S487JvhKdKh6QSp1xhEhA/exec';
+// 調理スタッフ用 閲覧リンク（GitHub Pages・ログイン不要）
+const KITCHEN_SHIFT_URL = 'https://akiotogasaki-bit.github.io/shift-app/kitchen-shift.html';
 
 // ═══════════════════════════════════════════════════════════════
 // STATE
@@ -570,6 +588,7 @@ const state = {
   userId: '',
   userName: '',
   displayName: '',     // LINEのプロフィール名
+  role: '',            // スタッフ設定 H列（'調理' など）
   dates: [],           // 来週の平日 [{label: '5/12(月)', selected: false}, ...]
   alreadySubmitted: false,
   isTestMode: false,
@@ -577,7 +596,7 @@ const state = {
 
 // ═══════════════════════════════════════════════════════════════
 // 案B Phase-2：シフト提出 localStorage キャッシュ（v2026-05-18 B案）
-//   - 登録チェック（userName）：30日 TTL（販売員の名前は頻繁に変わらない）
+//   - 登録チェック（userName／role）：30日 TTL（販売員の名前は頻繁に変わらない）
 //   - 来週日付（dates）：5分 TTL
 //   - 既提出（myShift）：5分 TTL
 // ═══════════════════════════════════════════════════════════════
@@ -650,6 +669,32 @@ function closeApp() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// KITCHEN（調理スタッフ案内）
+// ═══════════════════════════════════════════════════════════════
+function updateKitchenName() {
+  const nm = (state.userName || state.displayName || '').trim();
+  const titleEl = document.getElementById('kitchen-title');
+  if (titleEl) {
+    titleEl.textContent = nm ? (nm + ' さん、ありがとうございます') : 'ありがとうございます';
+  }
+}
+
+function showKitchenScreen() {
+  updateKitchenName();
+  showScreen('kitchen');
+}
+
+function openKitchenShift() {
+  try {
+    if (typeof liff !== 'undefined' && liff.isInClient && liff.isInClient() && liff.openWindow) {
+      liff.openWindow({ url: KITCHEN_SHIFT_URL, external: true });
+      return;
+    }
+  } catch (e) { console.warn('openKitchenShift liff error:', e); }
+  window.open(KITCHEN_SHIFT_URL, '_blank');
+}
+
+// ═══════════════════════════════════════════════════════════════
 // API
 // ═══════════════════════════════════════════════════════════════
 async function apiGet(params) {
@@ -674,8 +719,9 @@ async function apiPost(payload) {
 // INIT
 // ═══════════════════════════════════════════════════════════════
 async function init() {
-  // テストモード（?test=1 でLIFFをバイパス）
-  const isTest = new URLSearchParams(location.search).get('test') === '1';
+  // テストモード（?test=1 でLIFFをバイパス。?test=1&role=調理 で案内画面の表示確認）
+  const params = new URLSearchParams(location.search);
+  const isTest = params.get('test') === '1';
   state.isTestMode = isTest;
 
   try {
@@ -683,6 +729,12 @@ async function init() {
       state.userId = 'TEST_USER';
       state.userName = 'テストユーザー';
       state.displayName = 'テストユーザー';
+      // ?role=調理 を付けると案内画面のレイアウトだけ確認できる
+      if (params.get('role') === '調理') {
+        state.role = '調理';
+        showKitchenScreen();
+        return;
+      }
     } else {
       await liff.init({ liffId: LIFF_ID });
       if (!liff.isLoggedIn()) {
@@ -695,35 +747,64 @@ async function init() {
     }
 
     // ─────────────────────────────────────────────────────────
-    // Phase A：登録チェックキャッシュから即復元（v2026-05-18 案B Phase-2）
-    //   キャッシュの userId が一致すれば、check API待たずに日付選択画面へ
+    // Phase A：キャッシュから即復元（role を含めて分岐）
+    //   調理ロールはキャッシュ段階で先に分岐し、提出フローのすり抜けを防ぐ
     // ─────────────────────────────────────────────────────────
     const cachedUser = loadIdxUserCache();
     let prevName = null;
-    if (cachedUser && cachedUser.userId === state.userId && cachedUser.name) {
-      state.userName = cachedUser.name;
-      prevName = cachedUser.name;
-      // 登録済として日付選択画面へ即進行（内部でさらにdates/myShiftキャッシュチェック）
-      loadDatesAndShowSelect();
+    let prevRole = null;
+    if (cachedUser && cachedUser.userId === state.userId) {
+      prevName = cachedUser.name || null;
+      prevRole = (cachedUser.role || '').trim() || null;
+      if (cachedUser.name) state.userName = cachedUser.name;
+      if (prevRole) state.role = prevRole;
+
+      if (prevRole === '調理') {
+        // 調理：即・案内画面（提出フローには進ませない）
+        showKitchenScreen();
+      } else if (cachedUser.name) {
+        // 販売員ら：従来通り即・選択画面へ（表示速度を維持）
+        loadDatesAndShowSelect();
+      }
     }
 
     // ─────────────────────────────────────────────────────────
-    // Phase B：登録チェックAPIをバックグラウンド実行（差分検出）
+    // Phase B：check と getRole を並列取得 → role確定 → 差分があれば silent 切替
     // ─────────────────────────────────────────────────────────
-    const checkRes = await apiGet({ action: 'check', userId: state.userId });
-    if (checkRes.status === 'ok' && checkRes.name) {
-      state.userName = checkRes.name;
-      saveIdxUserCache({ userId: state.userId, name: checkRes.name });
+    const [checkRes, roleRes] = await Promise.all([
+      apiGet({ action: 'check', userId: state.userId }),
+      apiGet({ action: 'getRole', userId: state.userId }).catch(e => {
+        console.warn('getRole 取得エラー:', e.message);
+        return null;
+      }),
+    ]);
+    const role = (roleRes && typeof roleRes.role === 'string') ? roleRes.role.trim() : '';
+    state.role = role;
 
-      if (prevName === null) {
-        // キャッシュなし：通常通り日付画面へ
-        await loadDatesAndShowSelect();
-      } else if (prevName !== checkRes.name) {
-        // キャッシュと違う＝管理側で名前変更があった。silent反映。
-        console.log('[案B] 登録名変更検出（旧 ' + prevName + ' → 新 ' + checkRes.name + '）');
+    if (checkRes.status === 'ok' && checkRes.name) {
+      // 登録済
+      state.userName = checkRes.name;
+      saveIdxUserCache({ userId: state.userId, name: checkRes.name, role: role });
+
+      if (role === '調理') {
+        // 調理：案内画面（未表示なら表示、表示中なら名前だけ更新）
+        if (prevRole !== '調理') {
+          showKitchenScreen();
+        } else {
+          updateKitchenName();
+        }
+      } else {
+        // 非調理（販売員ら）
+        if (prevName === null || prevRole === '調理') {
+          // 初回 or ロールが調理から変わった → 選択画面へ
+          await loadDatesAndShowSelect();
+        } else if (prevName !== checkRes.name) {
+          // キャッシュと違う＝管理側で名前変更があった。silent反映。
+          console.log('[案B] 登録名変更検出（旧 ' + prevName + ' → 新 ' + checkRes.name + '）');
+        }
       }
     } else {
-      // 未登録
+      // 未登録（調理スタッフも初回はここ。登録後に btn-register 側で再判定）
       if (prevName !== null) {
         // キャッシュは登録済だがサーバーは未登録 → 削除済の可能性
         localStorage.removeItem(IDX_USER_CACHE_KEY);
@@ -759,10 +840,26 @@ document.getElementById('btn-register').addEventListener('click', async () => {
     const res = await apiGet({ action: 'register', userId: state.userId, name });
     if (res.status === 'error') throw new Error(res.message || '登録に失敗しました');
     state.userName = name;
-    saveIdxUserCache({ userId: state.userId, name: name });
+
+    // 登録直後にロール再判定（userId が調理行に紐付いたか確認）
+    let role = '';
+    try {
+      const roleRes = await apiGet({ action: 'getRole', userId: state.userId });
+      if (roleRes && typeof roleRes.role === 'string') role = roleRes.role.trim();
+    } catch (e2) {
+      console.warn('登録後 getRole エラー:', e2.message);
+    }
+    state.role = role;
+    saveIdxUserCache({ userId: state.userId, name: name, role: role });
     toast('登録しました');
+
     setTimeout(async () => {
-      await loadDatesAndShowSelect();
+      if (role === '調理') {
+        // 調理スタッフ：提出フローではなく案内画面へ
+        showKitchenScreen();
+      } else {
+        await loadDatesAndShowSelect();
+      }
     }, 600);
   } catch (e) {
     toast(`登録失敗: ${e.message}`);
