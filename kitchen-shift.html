@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>お江戸弁当 キッチンシフト</title>
+<style>
+  :root {
+    --navy: #1A3C5E;
+    --navy-d: #122c46;
+    --green: #0E7C66;
+    --bg: #f4f6f9;
+    --line: #e2e7ec;
+    --off: #b6bcc4;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", sans-serif;
+    background: var(--bg);
+    color: #1c2733;
+    line-height: 1.5;
+    -webkit-text-size-adjust: 100%;
+  }
+  .app { max-width: 720px; margin: 0 auto; min-height: 100vh; background: var(--bg); }
+
+  header {
+    background: linear-gradient(135deg, var(--navy), var(--navy-d));
+    color: #fff;
+    padding: 16px 16px 14px;
+    position: sticky; top: 0; z-index: 5;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  }
+  header .brand { font-size: 12px; opacity: 0.82; letter-spacing: 0.04em; }
+  header h1 { margin: 2px 0 0; font-size: 19px; font-weight: 800; letter-spacing: 0.02em; }
+
+  .toolbar { display: flex; align-items: center; gap: 8px; padding: 12px 12px 4px; flex-wrap: wrap; }
+  .seg { display: inline-flex; background: #e7ecf2; border-radius: 999px; padding: 3px; }
+  .seg button {
+    border: 0; background: transparent; color: #4a5a6b;
+    font-size: 13px; font-weight: 700; padding: 7px 16px; border-radius: 999px; cursor: pointer;
+  }
+  .seg button.active { background: #fff; color: var(--navy); box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+  .reload {
+    margin-left: auto; border: 1px solid var(--line); background: #fff; color: var(--navy);
+    font-size: 13px; font-weight: 700; padding: 7px 12px; border-radius: 8px; cursor: pointer;
+  }
+  .reload:active { background: #eef2f6; }
+
+  .weekrange { padding: 4px 14px 0; font-size: 13px; font-weight: 700; color: var(--navy); }
+  .status { padding: 6px 14px; font-size: 12px; color: #7a8694; min-height: 18px; }
+  .status.err { color: #c0392b; }
+
+  .tablewrap { overflow-x: auto; padding: 4px 12px 24px; }
+  table.roster { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 520px; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+  table.roster th, table.roster td { padding: 9px 10px; text-align: center; font-size: 13px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  table.roster thead th { background: var(--navy); color: #fff; font-weight: 700; font-size: 12.5px; position: sticky; top: 0; }
+  table.roster thead th.namecol { text-align: left; }
+  .namecell { text-align: left !important; font-weight: 800; background: #f8fafc; border-left: 4px solid var(--navy); }
+  .on { color: var(--green); font-weight: 800; }
+  .off { color: var(--off); }
+  tr.sumrow td { background: #eef3f8; font-weight: 800; color: var(--navy); border-bottom: 0; }
+  tr.sumrow td:first-child { text-align: left; }
+
+  .empty {
+    margin: 24px 14px; padding: 32px 18px; background: #fff; border-radius: 12px;
+    text-align: center; color: #7a8694; font-size: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  }
+  .empty .ico { font-size: 34px; margin-bottom: 8px; }
+
+  footer { text-align: center; padding: 8px 16px 28px; font-size: 11px; color: #9aa5b1; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">お江戸弁当</div>
+    <h1>🍳 キッチンシフト</h1>
+  </header>
+
+  <div class="toolbar">
+    <div class="seg">
+      <button id="segThis" class="active" onclick="switchWeek('this')">今週</button>
+      <button id="segNext" onclick="switchWeek('next')">来週</button>
+    </div>
+    <button class="reload" onclick="load()">🔄 更新</button>
+  </div>
+
+  <div class="weekrange" id="weekRange">　</div>
+  <div class="status" id="status">読み込み中...</div>
+
+  <div id="content"></div>
+
+  <footer>お江戸弁当 キッチンシフト（閲覧用）</footer>
+</div>
+
+<script>
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5AawPDc7aluPokONkYz6f2ikwl0S487JvhKdKh6QSp1xhEhA/exec';
+const DAYS = ['月', '火', '水', '木', '金'];
+const COLORS = ['#1A3C5E', '#0E7C66', '#B5651D', '#6A4C93', '#1E6091', '#9A3B3B', '#3A7D44', '#7A5195'];
+
+const state = { week: 'this', weekTarget: null, dates: [], staff: [] };
+
+// ── 週解決（client側でISO週を算出）──
+function isoWeekTargetOfDate(d) {
+  const tmp = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = tmp.getUTCDay() || 7;
+  tmp.setUTCDate(tmp.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(tmp.getUTCFullYear(), 0, 1));
+  const weekNum = Math.ceil((((tmp - yearStart) / 86400000) + 1) / 7);
+  return tmp.getUTCFullYear() + '-W' + String(weekNum).padStart(2, '0');
+}
+function thisWeekTarget() {
+  const today = new Date();
+  const dow = today.getDay();
+  const hour = today.getHours();
+  const isNext = (dow === 5 && hour >= 18) || dow === 6 || dow === 0;
+  let mon;
+  if (isNext) {
+    const add = dow === 0 ? 1 : 8 - dow;
+    mon = new Date(today); mon.setDate(today.getDate() + add);
+  } else {
+    const sub = dow - 1;
+    mon = new Date(today); mon.setDate(today.getDate() - sub);
+  }
+  return isoWeekTargetOfDate(mon);
+}
+function mondayOfWeekTarget(wt) {
+  const m = String(wt || '').match(/^(\d{4})-W(\d{1,2})$/);
+  if (!m) return null;
+  const year = parseInt(m[1], 10), week = parseInt(m[2], 10);
+  const jan4 = new Date(year, 0, 4);
+  const dow = jan4.getDay() || 7;
+  const w1mon = new Date(jan4);
+  w1mon.setDate(jan4.getDate() - dow + 1);
+  const mon = new Date(w1mon);
+  mon.setDate(w1mon.getDate() + (week - 1) * 7);
+  return mon;
+}
+function resolveWeekTarget() {
+  const thisWt = thisWeekTarget();
+  if (state.week === 'this') return thisWt;
+  const mon = mondayOfWeekTarget(thisWt);
+  if (!mon) return thisWt;
+  const t = new Date(mon);
+  t.setDate(mon.getDate() + 7);
+  return isoWeekTargetOfDate(t);
+}
+
+function switchWeek(w) {
+  if (state.week === w) return;
+  state.week = w;
+  document.getElementById('segThis').classList.toggle('active', w === 'this');
+  document.getElementById('segNext').classList.toggle('active', w === 'next');
+  load();
+}
+
+function setStatus(msg, isErr) {
+  const el = document.getElementById('status');
+  el.textContent = msg || '';
+  el.className = 'status' + (isErr ? ' err' : '');
+}
+
+async function load() {
+  setStatus('読み込み中...');
+  document.getElementById('weekRange').innerHTML = '　';
+  try {
+    const wt = resolveWeekTarget();
+    const qs = new URLSearchParams({ action: 'getKitchenShift', weekTarget: wt }).toString();
+    const res = await fetch(GAS_URL + '?' + qs, { redirect: 'follow' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if (data.ok === false) throw new Error(data.error || '取得失敗');
+
+    state.weekTarget = data.weekTarget || wt;
+    state.dates = data.dates || [];
+    state.staff = data.staff || [];
+
+    const ds = state.dates;
+    document.getElementById('weekRange').textContent =
+      (ds.length >= 5 ? ds[0] + ' 〜 ' + ds[4] : state.weekTarget);
+
+    render();
+    setStatus('');
+  } catch (e) {
+    state.staff = [];
+    document.getElementById('content').innerHTML = '';
+    setStatus('読み込みに失敗しました：' + e.message + '（通信環境を確認して「更新」を押してください）', true);
+  }
+}
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+
+function render() {
+  const host = document.getElementById('content');
+  const staff = state.staff;
+  const dates = state.dates;
+
+  // 出勤が1件でもあるか（全員空でも休だけなら表示はする。行が無ければ未公開）
+  if (!staff.length) {
+    const label = state.week === 'this' ? '今週' : '来週';
+    host.innerHTML =
+      '<div class="empty"><div class="ico">🍳</div>' +
+      '<div>' + label + 'のキッチンシフトはまだ公開されていません。</div></div>';
+    return;
+  }
+
+  let html = '<div class="tablewrap"><table class="roster"><thead><tr>';
+  html += '<th class="namecol">スタッフ</th>';
+  for (let d = 0; d < 5; d++) html += '<th>' + esc(dates[d] || DAYS[d]) + '</th>';
+  html += '</tr></thead><tbody>';
+
+  const counts = [0, 0, 0, 0, 0];
+  staff.forEach(function (s, si) {
+    const color = COLORS[si % COLORS.length];
+    const days = s.days || [];
+    html += '<tr><td class="namecell" style="border-left-color:' + color + '">' + esc(s.name) + '</td>';
+    for (let d = 0; d < 5; d++) {
+      const v = String(days[d] || '').trim();
+      if (!v || v === '休') {
+        html += '<td class="off">休</td>';
+      } else {
+        counts[d]++;
+        html += '<td class="on">' + esc(v.replace('-', '〜')) + '</td>';
+      }
+    }
+    html += '</tr>';
+  });
+
+  html += '<tr class="sumrow"><td>出勤人数</td>';
+  for (let d = 0; d < 5; d++) html += '<td>' + counts[d] + '</td>';
+  html += '</tr>';
+  html += '</tbody></table></div>';
+
+  host.innerHTML = html;
+}
+
+load();
+</script>
+</body>
+</html>
