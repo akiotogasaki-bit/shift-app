@@ -5,6 +5,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>お江戸弁当 社員ダッシュボード</title>
+<!-- dashboard v5 (2026-06-06): リアルタイムタブに「サマリー/エリア別マトリクス」サブ切替を追加。GAS変更なし。 -->
+
 <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
 :root {
@@ -1510,6 +1512,72 @@ font-family: inherit;
   cursor: pointer;
 }
 .profit-day-input:focus { outline: none; }
+/* ═══════════ リアルタイム エリア別マトリクス（v5 / 2026-06-06）═══════════ */
+.rt-subtabs {
+  display: flex; gap: 6px; margin-bottom: 16px;
+  background: var(--cream-dark); padding: 4px; border-radius: 10px;
+}
+.rt-subtab {
+  flex: 1; padding: 9px 8px; border: none; border-radius: 7px;
+  background: transparent; color: var(--ink-mute);
+  font-size: 13px; font-weight: 700; cursor: pointer;
+  font-family: inherit; transition: .15s;
+}
+.rt-subtab.active { background: var(--white); color: var(--red); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+
+.area-block {
+  background: var(--white); border: 1px solid var(--border);
+  border-radius: 12px; padding: 14px; margin-bottom: 18px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.04);
+}
+.area-block-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.area-name { font-size: 15px; font-weight: 800; color: var(--ink); letter-spacing: .04em; }
+.area-name::before {
+  content: ''; display: inline-block; width: 4px; height: 16px;
+  background: var(--red); border-radius: 2px; margin-right: 8px; vertical-align: -2px;
+}
+.area-loc-count { font-size: 11px; color: var(--ink-mute); font-weight: 600; }
+.area-updated { font-size: 11px; color: var(--green); font-weight: 700; white-space: nowrap; }
+.area-refresh-btn {
+  margin-left: auto; padding: 6px 12px; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--cream); color: var(--ink-soft);
+  font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit;
+  transition: .15s; white-space: nowrap;
+}
+.area-refresh-btn:hover { background: var(--gold-light); border-color: var(--gold); }
+.area-refresh-btn:disabled { opacity: .5; cursor: default; }
+
+.matrix-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 8px; }
+.matrix-table { border-collapse: separate; border-spacing: 0; font-size: 12px; min-width: 100%; }
+.matrix-table th, .matrix-table td {
+  padding: 8px 10px; text-align: center; white-space: nowrap; border-bottom: 1px solid var(--border);
+}
+.matrix-table thead th {
+  background: var(--cream-dark); color: var(--ink-soft);
+  font-weight: 700; vertical-align: top; min-width: 80px;
+}
+.matrix-table thead th:first-child,
+.matrix-table tbody th:first-child {
+  position: sticky; left: 0; z-index: 2;
+  background: var(--cream); text-align: left;
+  border-right: 2px solid var(--border);
+  font-weight: 700; color: var(--ink); min-width: 122px;
+}
+.matrix-table thead th:first-child { z-index: 3; }
+.matrix-loc-name { font-size: 12px; font-weight: 800; color: var(--ink); }
+.matrix-loc-rate { font-size: 11px; font-weight: 700; margin-top: 3px; }
+.matrix-loc-rate.high { color: var(--green); }
+.matrix-loc-rate.mid  { color: var(--gold); }
+.matrix-loc-rate.low  { color: var(--red); }
+.matrix-loc-rate.none { color: var(--ink-mute); }
+.matrix-table tbody tr:last-child th,
+.matrix-table tbody tr:last-child td { border-bottom: none; }
+.matrix-cell { color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.matrix-cell .sold { font-weight: 800; color: var(--ink); }
+.matrix-cell.soldout { background: var(--green-light); }
+.matrix-cell.soldout .sold { color: #1A7A42; }
+.matrix-cell.zero { color: var(--ink-mute); }
+.matrix-empty { padding: 20px; text-align: center; color: var(--ink-mute); font-size: 13px; }
 </style>
 
 </head>
@@ -1577,6 +1645,15 @@ font-family: inherit;
   </div>
   <div id="rt-content" style="display:none;">
 
+    <!-- ───────── リアルタイム サブ切替（v5 新規） ───────── -->
+    <div class="rt-subtabs">
+      <button class="rt-subtab active" id="rtsub-summary" onclick="switchRtView('summary')">サマリー</button>
+      <button class="rt-subtab" id="rtsub-area" onclick="switchRtView('area')">エリア別マトリクス</button>
+    </div>
+
+    <!-- ───────── サマリービュー（既存一式） ───────── -->
+    <div id="rt-view-summary">
+
     <!-- 天気 -->
     <div class="weather-bar" id="weather-bar">
       <span>🌤</span>
@@ -1620,6 +1697,13 @@ font-family: inherit;
       </thead>
       <tbody id="location-tbody"></tbody>
     </table>
+    </div><!-- /#rt-view-summary -->
+
+    <!-- ───────── エリア別ビュー（v5 新規） ───────── -->
+    <div id="rt-view-area" style="display:none;">
+      <div id="area-matrix-wrap"></div>
+    </div>
+
   </div>
 </div>
 
@@ -2330,6 +2414,9 @@ function renderRealtime() {
   renderLocationTable();
 
   document.getElementById('reported-count').textContent = `${reported.length}/${totalLocs}拠点 報告済み`;
+
+  // v5: エリア別マトリクスも同時更新（5分自動更新・グローバル更新ボタンと連動）
+  renderAreaMatrix();
 }
 
 function renderDailySummary(reported) {
@@ -2509,6 +2596,217 @@ function renderLocationTable() {
         <td>${badge}</td>
       </tr>`;
   }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// エリア別マトリクス（v2026-06-06 v5）
+//   - リアルタイムタブ内サブビュー。masterData + allData から描画
+//   - 行: そのエリアで納品>0 の商品（お茶除外） / 列: 拠点（表示順）
+//   - セル: 販売数/納品数, 列ヘッダー下: 完売率(お茶抜き)
+//   - GAS 変更なし（getMaster の area, deliveryCountJson, productSalesJson を使用）
+// ═══════════════════════════════════════════════════════════════
+let rtCurrentView = 'summary';
+
+function switchRtView(view) {
+  rtCurrentView = view;
+  document.getElementById('rt-view-summary').style.display = (view === 'summary') ? 'block' : 'none';
+  document.getElementById('rt-view-area').style.display    = (view === 'area')    ? 'block' : 'none';
+  document.getElementById('rtsub-summary').classList.toggle('active', view === 'summary');
+  document.getElementById('rtsub-area').classList.toggle('active', view === 'area');
+  if (view === 'area') renderAreaMatrix();
+}
+
+// お茶商品ID一覧
+function _teaIds_() {
+  return (masterData.products || []).filter(p => p.name.includes('お茶')).map(p => p.id);
+}
+
+// 1拠点の 完売率(お茶抜き)。既存リアルタイム一覧と同一基準
+function _locSelloutRate_(r) {
+  const teaIds = _teaIds_();
+  if (!r.isIntermediate) {
+    const n = Number(r.sellRate);
+    return isNaN(n) ? null : n;
+  }
+  let delivery = 0;
+  try {
+    const dObj = JSON.parse(r.deliveryCountJson || '{}');
+    Object.entries(dObj).forEach(([id, v]) => { if (!teaIds.includes(id)) delivery += Number(v) || 0; });
+  } catch (e) {}
+  let teaSold = 0;
+  try {
+    const sObj = JSON.parse(r.productSalesJson || '{}');
+    teaIds.forEach(id => { teaSold += Number(sObj[id] || 0); });
+  } catch (e) {}
+  const sold = Math.max(0, (r.soldCount || 0) - teaSold);
+  return delivery > 0 ? Math.round(sold / delivery * 1000) / 10 : null;
+}
+
+function _rateClass_(rate) {
+  if (rate === null) return 'none';
+  if (rate >= 80) return 'high';
+  if (rate >= 50) return 'mid';
+  return 'low';
+}
+
+// エリア名 → DOM ID 用キー（日本語/記号を安全化）
+function _areaKey_(area) {
+  return 'a' + Array.from(String(area)).map(c => c.charCodeAt(0).toString(16)).join('');
+}
+
+// メイン描画
+function renderAreaMatrix() {
+  const wrap = document.getElementById('area-matrix-wrap');
+  if (!wrap) return;
+
+  const locations = masterData.locations || [];
+  const products  = masterData.products  || [];
+  const teaIds    = _teaIds_();
+
+  // 拠点ID → 本日データ
+  const dataById = {};
+  allData.forEach(r => { if (r.locationId) dataById[r.locationId] = r; });
+
+  // エリア → 拠点[]（表示順）。エリア未設定は除外
+  const areaMap = {};
+  locations.forEach(loc => {
+    const area = (loc.area || '').trim();
+    if (!area) return;
+    if (!areaMap[area]) areaMap[area] = { locs: [], minOrder: 99999 };
+    areaMap[area].locs.push(loc);
+    areaMap[area].minOrder = Math.min(areaMap[area].minOrder, (loc.order != null ? loc.order : 9999));
+  });
+
+  // エリア順: 内拠点の最小表示順 → 同値はエリア名
+  const areaNames = Object.keys(areaMap).sort((a, b) => {
+    if (areaMap[a].minOrder !== areaMap[b].minOrder) return areaMap[a].minOrder - areaMap[b].minOrder;
+    return a.localeCompare(b, 'ja');
+  });
+
+  if (areaNames.length === 0) {
+    wrap.innerHTML = '<div class="matrix-empty">エリアが設定された拠点がありません（拠点マスタ C列「エリア」をご確認ください）</div>';
+    return;
+  }
+
+  const areaNameByKey = {};
+  let html = '';
+
+  areaNames.forEach(area => {
+    const key  = _areaKey_(area);
+    areaNameByKey[key] = area;
+    const locs = areaMap[area].locs; // 表示順済み
+
+    // 各拠点の納品/販売を解析
+    const perLoc = locs.map(loc => {
+      const r = dataById[loc.id];
+      const inactive = inactiveLocationIds.has(String(loc.id).trim());
+      let delivery = {}, sales = {};
+      if (r) {
+        try { delivery = JSON.parse(r.deliveryCountJson || '{}'); } catch (e) {}
+        try { sales    = JSON.parse(r.productSalesJson  || '{}'); } catch (e) {}
+      }
+      const rate   = r ? _locSelloutRate_(r) : null;
+      const status = inactive ? 'inactive' : (!r ? 'none' : (r.isIntermediate ? 'selling' : 'done'));
+      return { loc, delivery, sales, rate, status };
+    });
+
+    // 行に出す商品 = このエリアで納品>0（お茶除外）。商品マスタ順を保持
+    const rowProducts = products.filter(p => {
+      if (teaIds.includes(p.id)) return false;
+      return perLoc.some(pl => Number(pl.delivery[p.id] || 0) > 0);
+    });
+
+    // ヘッダー
+    let head = '<th>商品 \\ 拠点</th>';
+    perLoc.forEach(pl => {
+      const rateStr = pl.status === 'inactive' ? '休止'
+                    : pl.status === 'none'     ? '未報告'
+                    : (pl.rate === null ? '—' : pl.rate + '%');
+      const rc = (pl.status === 'inactive' || pl.status === 'none') ? 'none' : _rateClass_(pl.rate);
+      const nm = pl.loc.displayName ? pl.loc.displayName : pl.loc.name;
+      head += `<th><div class="matrix-loc-name">${escapeHtml(nm)}</div><div class="matrix-loc-rate ${rc}">${rateStr}</div></th>`;
+    });
+
+    // ボディ
+    let body = '';
+    if (rowProducts.length === 0) {
+      body = `<tr><td class="matrix-empty" colspan="${perLoc.length + 1}">本日の納品データがありません</td></tr>`;
+    } else {
+      rowProducts.forEach(p => {
+        let tr = `<th>${escapeHtml(p.name)}</th>`;
+        perLoc.forEach(pl => {
+          const d = Number(pl.delivery[p.id] || 0);
+          const s = Number(pl.sales[p.id]    || 0);
+          if (d === 0 && s === 0) {
+            tr += `<td class="matrix-cell zero">—</td>`;
+          } else {
+            const cls = (d > 0 && s >= d) ? 'matrix-cell soldout' : 'matrix-cell';
+            tr += `<td class="${cls}"><span class="sold">${s}</span>/${d}</td>`;
+          }
+        });
+        body += `<tr>${tr}</tr>`;
+      });
+    }
+
+    html += `
+      <div class="area-block" id="area-block-${key}">
+        <div class="area-block-head">
+          <span class="area-name">${escapeHtml(area)}</span>
+          <span class="area-loc-count">${perLoc.length}拠点</span>
+          <span class="area-updated" id="area-stamp-${key}"></span>
+          <button class="area-refresh-btn" id="area-btn-${key}" onclick="refreshArea('${key}')">🔄 更新</button>
+        </div>
+        <div class="matrix-scroll">
+          <table class="matrix-table">
+            <thead><tr>${head}</tr></thead>
+            <tbody>${body}</tbody>
+          </table>
+        </div>
+      </div>`;
+  });
+
+  window._areaNameByKey = areaNameByKey;
+  wrap.innerHTML = html;
+}
+
+// 単一エリアの更新ボタン:
+//   本日データを全取得 → 全マトリクス再描画 → 押下エリアのみ「✓ HH:MM 更新」表示
+async function refreshArea(key) {
+  const btn = document.getElementById('area-btn-' + key);
+  if (btn) { btn.disabled = true; btn.textContent = '更新中…'; }
+  try {
+    const [reports, intermediate, driverState] = await Promise.all([
+      fetchJSON(`${GAS_URL}?action=getTodayReports`),
+      fetchJSON(`${GAS_URL}?action=getTodayIntermediate`),
+      fetchJSON(`${GAS_URL}?action=getDriverState`).catch(() => ({ inactive: [] })),
+    ]);
+    inactiveLocationIds = new Set(
+      (driverState.inactive || []).map(x => String(x.locationId || '').trim())
+    );
+    const finalMap = {};
+    (reports.data || []).forEach(r => { finalMap[r.locationId] = r; });
+    const merged = [...(reports.data || [])];
+    (intermediate.data || []).forEach(r => { if (!finalMap[r.locationId]) merged.push(r); });
+    allData = merged;
+    saveDashRealtimeCache({ allData: merged, inactiveIds: Array.from(inactiveLocationIds) });
+
+    // 全マトリクス再描画（データは全エリア最新化）＋ サマリー側も整合
+    renderAreaMatrix();
+    try { renderLocationTable(); } catch (e) {}
+
+    // 押したエリアだけ「✓ HH:MM 更新」を表示
+    const now  = new Date();
+    const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const stamp = document.getElementById('area-stamp-' + key);
+    if (stamp) { stamp.style.color = 'var(--green)'; stamp.textContent = '✓ ' + hhmm + ' 更新'; }
+  } catch (e) {
+    const stamp = document.getElementById('area-stamp-' + key);
+    if (stamp) { stamp.style.color = 'var(--red)'; stamp.textContent = '更新失敗'; }
+    console.error('refreshArea error:', e);
+  } finally {
+    const btn2 = document.getElementById('area-btn-' + key);
+    if (btn2) { btn2.disabled = false; btn2.textContent = '🔄 更新'; }
+  }
 }
 
 function sortLocations(type) {
