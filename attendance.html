@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>出退勤 | お江戸弁当</title>
+<script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<style>
+  :root{
+    --navy:#1A3C5E;
+    --accent:#C8A45C;
+    --bg:#F5F6F8;
+    --text:#23303C;
+    --muted:#7A8794;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Hiragino Sans","Noto Sans JP",Meiryo,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    min-height:100vh;
+    min-height:100dvh;
+    padding:24px;
+    -webkit-text-size-adjust:100%;
+  }
+  .card{
+    width:100%;
+    max-width:420px;
+    background:#fff;
+    border-radius:18px;
+    box-shadow:0 10px 30px rgba(26,60,94,0.12);
+    overflow:hidden;
+    text-align:center;
+  }
+  .head{
+    background:var(--navy);
+    color:#fff;
+    padding:22px 20px;
+  }
+  .brand{
+    font-size:13px;
+    letter-spacing:.18em;
+    opacity:.85;
+  }
+  .title{
+    font-size:22px;
+    font-weight:700;
+    margin-top:6px;
+  }
+  .body{
+    padding:36px 24px 30px;
+  }
+  .icon{
+    font-size:54px;
+    line-height:1;
+  }
+  .status{
+    margin-top:16px;
+    font-size:20px;
+    font-weight:700;
+    color:var(--navy);
+  }
+  .desc{
+    margin-top:12px;
+    font-size:14px;
+    line-height:1.8;
+    color:var(--muted);
+  }
+  .bar{
+    height:4px;
+    width:64px;
+    margin:22px auto 0;
+    border-radius:4px;
+    background:var(--accent);
+  }
+  .foot{
+    padding:14px 20px 20px;
+    font-size:11px;
+    color:var(--muted);
+  }
+</style>
+</head>
+<body>
+  <main class="card">
+    <div class="head">
+      <div class="brand">お江戸弁当</div>
+      <div class="title">出退勤</div>
+    </div>
+    <div class="body">
+      <div class="icon">🛠️</div>
+      <div class="status">準備中です</div>
+      <p class="desc">出退勤アプリは現在準備中です。<br>公開までもうしばらくお待ちください。</p>
+      <div class="bar"></div>
+    </div>
+    <div class="foot">© お江戸弁当 / T&amp;A BROTHERS</div>
+  </main>
+
+  <script>
+    // ───────────────────────────────────────────────
+    // LIFF 初期化（雛形）
+    // 本番アプリ作成時に LIFF_ID を実際のIDに差し替えてください。
+    // 準備中ページの段階では空のままでOK（初期化はスキップされ、準備中表示のまま）。
+    // ───────────────────────────────────────────────
+    var LIFF_ID = ''; // ← 例: '2009637457-xxxxxxxx'
+
+    (function () {
+      if (!LIFF_ID || typeof liff === 'undefined') return; // 未設定なら何もしない
+      liff.init({ liffId: LIFF_ID })
+        .then(function () {
+          // 本番ではここで liff.getProfile() を使い userId を取得する
+        })
+        .catch(function (e) {
+          console.log('liff.init error:', e);
+        });
+    })();
+  </script>
+</body>
+</html>
