@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>🍱 納品管理</title>
-<!-- kanri.html v3.35 (2026-06-09) 設定タブに「🚫 除外日（天候等で計算から外す日）」セクションを追加（sb*をミラーしたex*・日付＋理由select[台風/大雨/猛暑/休業/その他]・行追加/削除/💾保存して再計算）。指定日を翌週推奨の加重平均から外し残り週で再配分（前週=台風休業でも推奨が落ち込まない）。理由は記録用で計算に影響しない。過去4週がすべて除外なら除外を無視して生4週平均にフォールバック。読込=getExcludedDates / 保存=saveExcludedDates（保存と同時に全曜日を即再計算→配分調整を自動再描画）。要メインGASパッチ（除外日API＝getExcludedDates/getExcludedDatesSet_/saveExcludedDates追加・getBasicMasterMatrixとcalculateNextWeekProposals_の2か所に除外反映・doGet/doPostルーティング・clearAllMasterCacheキー追加）。 / v3.34 (2026-06-09) 配分調整:拠点合計クランプの内訳表示をマージ。翌週推奨は商品ごと±1/2のまま、拠点の合計納品数を今週比の上限/下限(±%・設定シートclamp_location_pct)に収め、完売頻度門番(clamp_gate_count・直近4週)未満は増やさず、はみ出た分は完売の強い順に増やす/弱い順に削る。内訳モーダルに調整時の🔧行を追加(c.clamped)。要メインGAS(getBasicMasterMatrixにbmApplyLocationClamp_を1行挿入＋関数bmGetClampSettings_/bmSelloutTimeRank_/bmApplyLocationClamp_を追加＋設定シートclamp_enabled/clamp_location_pct/clamp_gate_count)。※前のv3.33(新規拠点upsert)の上に重ねた版。 / v3.33 (2026-06-09) 配分調整:新規拠点に配分を入力して💾保存しても数字が保存されない不具合を修正。GAS保存系をupsert化（行が無い編集セルは新規行を追加）＝saveBasicMasterNumbers/confirmBasicMasterLocation/confirmBasicMasterAll。フロントは保存後に実保存数(r.saved)を要求セル数と照合し、不一致なら「保存完了」を出さず警告＋新規追加数を表示。要GASパッチ(bmMetaMaps_/bmAppendRows_追加＋保存系3関数差し替え)。 / v3.32 (2026-06-07) 盛り出し:配達カードに「午前/午後 便移動」ボタンを追加(オーダー番号キーでGAS「便上書き」に保存・再取込でも保持)。便振り分けはGAS側で開始時刻+手動上書き判定に変更(;区切り対応・14:00境界)。要GASパッチ(parseStartTime_/getBin_/getSheet2-3/setBinOverride)。 / v3.31 (2026-06-03) — 発注タブ・定数発注：入力欄の既定値を「定数」から「0」に変更し、定数は入力欄の右に小さく参考表示（「定数 N」）。inputmode=numericでOS標準テンキー。フォーカス時に既定の「0」は消し（非0は全選択）、空欄で離れたら0に戻す。変化が無いタップは保存しない（data-savedで判定）。発注文は従来通り0スキップ。GAS変更なし。※定数品目は「既定で発注しない」挙動に変更（実際に出す品目だけ数量入力）。v3.30 — 配分調整：個別セルに入力した0が未入力扱いになるバグを修正。bmOnSalesBlurの「表示値と一致なら破棄」最適化を撤廃し、数字/Backspace/Deleteキーで実際に編集した時だけ記録する方式に変更（0も明示入力として保持）。focus/key/blurの3関数を改修。GAS変更なし。v3.29 — 仕込みタブ：合計/午前/午後の「盛り出し別」トグルを追加。午前=拠点分(全部)+配達1便／午後=配達2便のみ／合計=従来。米・解凍・仕込み表すべてを区分で切替。データが無い区分(主に午後)のボタンは非表示。解凍の予備+2は合計のみ（午前/午後は実数packCeil）。発注タブは変更なし(トータル基準のまま)。要GASパッチ：_aggregateOrderItems_にbinFilter追加＋getSheet4Data v2.6書き換え＋_sheet4BuildSections_新設。v3.28 — スマホ対応：タブバーを横スクロール化（display:flexのはみ出しで白背景に白文字が乗り見えなくなる問題を解消）。.tab-barにoverflow-x:auto＋慣性スクロール＋スクロールバー非表示、.tab-btnにflex:0 0 auto（縮小防止）。PC表示は変化なし。GAS変更なし。v3.27 — 設定タブに「📊 加重平均（W1〜W4の重み）」セクションを追加（最小UI：4つの数値入力＋合計表示＋💾保存して再計算・最上部に配置）。読込=getSettingWeights / 保存=saveSettingWeights（保存と同時に全曜日を即再計算→配分調整を自動再描画）。※完売増量の「内訳表示だけ+0」バグはGAS側で修正（bmSelloutBonus_の時刻取り出しを堅牢化・kanri変更なし）。v3.26 — 設定タブに「🔴 完売増量」セクションを追加（案B：時間帯[開始〜終了]＋個数を自由に追加/削除・HH:MMタイムピッカー・天気プリセットの上に同居）。読込=getSelloutBonusRules / 保存=saveSelloutBonusRules（保存と同時にサーバーで全曜日を即再計算→配分調整を自動再描画）。完売増量の実値はサーバー「完売増量マスタ」が唯一の真実（BM_SELLOUT_RULES/bmGetSelloutBonusは未使用化・残置）。表示の+Nはサーバー値(c.selloutBonus/c.refSelloutBonus)依存のためGAS差し替えで自動追従。要GASパッチ（完売増量マスタ作成・読込/保存API・getSelloutBonusByTime_差し替え・doGet/doPostルーティング・clearAllMasterCacheキー追加）。v3.25 — 配分調整: v3.24完売表示の体裁修正。①完売時刻を必ずHH:MMに整形（表記ゆれ吸収・bmFmtSelloutTime）。②未来日付セルは完売時刻をセル上部のストリップに表示し、推奨数と重ならないようにセルを少し縦に伸ばす。GAS変更不要（kanriのみ差し替え）。v3.24 — 配分調整: ③未来日付（翌週）のセルに反映元（直近同曜=「先週」）の完売情報を🔴＋時刻で表示。完売サマリー・完売モーダルも未来日付では反映元基準で表示。過去日・当日は従来通り。要：getBasicMasterMatrixが各セルに refSelloutTime/refSelloutBonus を返す（GAS追記）。v3.23 — 配分調整: ①「数字の保存」と「確定」を完全分離（案A／K列=確定フラグ）。💾保存=編集セルのみG列に保存しK列は触らない。✓全拠点確定/拠点単位確定=即サーバーでK列フラグをトグル（解除可能）。確定判定をG列の有無→K列フラグに変更。確定時の空セルはH列補完・既存G列は維持。②拠点名の下に販売担当者名（先頭4文字・横書き小）を表示（データ源=getSalesPersonMapForDate_／日付別・未割当は非表示）。要：メインGAS側の対応関数デプロイ（saveBasicMasterNumbers/unconfirmBasicMasterAll追加、confirm系のK列対応、getBasicMasterMatrixがconfirmedLocsとlocations[].salesPersonを返す）。v3.21: 配分調整: ①「数字の保存」と「確定」を完全分離（案A／K列=確定フラグ）。💾保存=編集セルのみG列に保存しK列は触らない。✓全拠点確定/拠点単位確定=即サーバーでK列フラグをトグル（解除可能）。確定判定をG列の有無→K列フラグに変更。確定時の空セルはH列補完・既存G列は維持。②拠点名の下に販売担当者名（先頭4文字・横書き小）を表示（データ源=getSalesPersonMapForDate_／日付別・未割当は非表示）。要：メインGAS側の対応関数デプロイ（saveBasicMasterNumbers/unconfirmBasicMasterAll追加、confirm系のK列対応、getBasicMasterMatrixがconfirmedLocsとlocations[].salesPersonを返す）。v3.21: bmGetDisplaySales修正（G列確定値confirmedを表示優先・weekSalesは未確定時のみ表示）。保存後に値が戻る問題を修正。v3.20: 保存ワークフロー改善（部分編集モード/拠点確定モードを区別）。v3.19: ローカル確定ワークフロー化（拠点確定/全拠点確定/→推奨はサーバー送信せずローカル状態のみ更新、💾 保存ボタンで一括サーバー送信＋再描画）。商品行コピーを推奨値ベースに変更。商品確定ボタン✓廃止。v3.18: 全編集操作のDOM直更新化。v3.17: セル編集時のみ高速化。v3.16: 商品単位の確定/解除ボタン追加。v3.15: 推奨0かつ売上0のゼロセルも編集可能化。v3.14: 保存POSTのCORS preflight対応。v3.13: 主菜候補マスタ対応。v3.12: 業者カードに定数発注セクション追加。v3.11: copyOrderText を食材ごと unitMode 切替。v3.10: 一括印刷ボタン追加。 -->
+<!-- kanri.html v3.36 (2026-06-10) ①ヘッダーに「🔄 配達を再取込」ボタン追加（押下=silent取込→トースト→現在タブ自動再取得／GAS=reimportDelivery・reimportDeliveryNow・importDeliveryOrdersDaily(opts.silent)）。②午前/午後 盛り出し表の最下部に合計バー（白米/玄米/全体・拠点分＋配達分・お茶除外・renderSheet2/3のみ・GAS変更なし）。 / v3.35 (2026-06-09)
 <style id="app-style">
 /* @page は全環境で確実に効く静的指定（用紙＝縦）。横向きはシート1・2をCSS回転で実現（A案） */
 @page { size: A4; margin: 3mm; }
@@ -36,7 +36,39 @@ body {
   z-index: 100;
 }
 .app-header h1 { font-size: 15px; font-weight: bold; }
-
+/* ── v3.36: 再取込ボタン（ヘッダー右） ── */
+.reimport-btn {
+  margin-left: auto;
+  background: #2e7d32;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: bold;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.reimport-btn:disabled { opacity: .6; cursor: default; }
+/* ── v3.36: 盛り出し 合計バー（白米/玄米/全体） ── */
+.morirashi-totals {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 18px;
+  margin: 10px 0 4px;
+  padding: 8px 14px;
+  border: 2px solid #1a3c5e;
+  border-radius: 8px;
+  background: #f1f5f9;
+  font-size: 13px;
+  font-weight: bold;
+}
+.morirashi-totals .mt-label { color: #1a3c5e; font-size: 14px; }
+.morirashi-totals .mt-rice  { color: #37474f; }
+.morirashi-totals .mt-brown { color: #8d6e63; }
+.morirashi-totals .mt-grand { color: #1a3c5e; margin-left: auto; font-size: 14px; }
+.morirashi-totals b { font-size: 16px; }
 /* ── タブバー ── */
 .tab-bar {
   background: #1a3c5e;
@@ -1851,6 +1883,7 @@ body {
 
 <div class="app-header">
   <h1>🍱 納品管理</h1>
+  <button id="reimport-btn" class="reimport-btn" onclick="reimportDelivery()">🔄 配達を再取込</button>
 </div>
 
 <div class="tab-bar">
@@ -2916,6 +2949,17 @@ function renderSheet2(data) {
     });
   }
 
+  // ── 合計（白米/玄米/全体・拠点分＋配達分）v3.36 ──
+  const sumTotal = (arr) => (arr || []).reduce((s, r) => s + (Number(r.total) || 0), 0);
+  const whiteTot = sumTotal(rice), brownTot = sumTotal(brown), grandTot = whiteTot + brownTot;
+  const totalsHTML = `
+    <div class="morirashi-totals">
+      <span class="mt-label">合計</span>
+      <span class="mt-rice">白米 <b>${whiteTot}</b></span>
+      <span class="mt-brown">玄米 <b>${brownTot}</b></span>
+      <span class="mt-grand">全体 <b>${grandTot}</b></span>
+    </div>`;
+ 
   // ── 組み合わせ ──
   body.innerHTML = `
     <div class="page-title">📋 ${escHtml(dateLabel)}　1便盛り出し表（配達 ${dCount} 件）</div>
@@ -2923,8 +2967,8 @@ function renderSheet2(data) {
       <div class="table-wrap">${riceHTML}</div>
       <div class="table-wrap">${brownHTML}</div>
       <div class="delivery-area">${cardsHTML}</div>
-    </div>`;
-}
+    </div>
+    ${totalsHTML}`;
 
 // ═══════════════════════════════════════
 // シート3（2便盛り出し表）
@@ -3045,6 +3089,17 @@ function renderSheet3(data) {
       </div>`;
   });
 
+  // ── 合計（白米/玄米/全体・午後便）v3.36 ──
+  const sumTotal = (arr) => (arr || []).reduce((s, r) => s + (Number(r.total) || 0), 0);
+  const whiteTot = sumTotal(rice), brownTot = sumTotal(brown), grandTot = whiteTot + brownTot;
+  const totalsHTML = `
+    <div class="morirashi-totals">
+      <span class="mt-label">合計</span>
+      <span class="mt-rice">白米 <b>${whiteTot}</b></span>
+      <span class="mt-brown">玄米 <b>${brownTot}</b></span>
+      <span class="mt-grand">全体 <b>${grandTot}</b></span>
+    </div>`;
+ 
   // ── 組み合わせ ──
   body.innerHTML = `
     <div class="page-title">📋 ${escHtml(dateLabel)}　2便盛り出し表（配達 ${dCount} 件）</div>
@@ -3054,8 +3109,8 @@ function renderSheet3(data) {
         <div class="table-wrap">${brownHTML}</div>
       </div>
       <div class="sheet3-delivery">${cardsHTML}</div>
-    </div>`;
-}
+    </div>
+    ${totalsHTML}`;
 
 // ═══════════════════════════════════════
 // 便 移動（午前/午後）— カードのボタンから呼ぶ（v3.32）
@@ -4594,7 +4649,35 @@ function wpToast(msg, type) {
     t.className = 'wp-toast wp-' + type;
   }, 2500);
 }
-
+// ── v3.36: 配達 手動再取込（ヘッダーボタン） ──
+async function reimportDelivery() {
+  const btn = document.getElementById('reimport-btn');
+  const orig = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 取込中…'; }
+  wpToast('配達データを再取込中…', 'info');
+  try {
+    const res = await fetch(GAS_URL + '?action=reimportDelivery');
+    const r = await res.json();
+    if (r && r.ok) {
+      wpToast('✅ 取込 ' + (r.imported || 0) + '件（不明 ' + (r.unmapped || 0) + ' / エラー ' + (r.errors || 0) + '）', 'success');
+      refreshActiveTab();
+    } else {
+      wpToast('再取込エラー: ' + ((r && r.error) || '不明'), 'error');
+    }
+  } catch (e) {
+    wpToast('通信エラー: ' + e.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = orig || '🔄 配達を再取込'; }
+  }
+}
+ 
+// 現在開いているタブの「取得」ボタンを自動クリックして再表示
+function refreshActiveTab() {
+  const pane = document.querySelector('.tab-pane.active');
+  if (!pane) return;
+  const fetchBtn = pane.querySelector('.btn-primary');
+  if (fetchBtn) fetchBtn.click();
+}
 async function wpFetch(action, params) {
   const usp = new URLSearchParams();
   usp.set('action', action);
