@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>🍱 納品管理</title>
-<!-- kanri.html v3.36 (2026-06-10) ①ヘッダーに「🔄 配達を再取込」ボタン追加（押下=silent取込→トースト→現在タブ自動再取得／GAS=reimportDelivery・reimportDeliveryNow・importDeliveryOrdersDaily(opts.silent)）。②午前/午後 盛り出し表の最下部に合計バー（白米/玄米/全体・拠点分＋配達分・お茶除外・renderSheet2/3のみ・GAS変更なし）。 / v3.35 (2026-06-09)
+<!-- kanri.html v3.37 (2026-06-10) v3.36で盛り出し合計バー追加時に消えた renderSheet2 / renderSheet3 の閉じカッコ } を2か所復旧。JS全体の構文エラー（SyntaxError: Unexpected end of input）が解消し、タブ・配分調整が再び描画されるようになった。kanri.htmlを開くと素のHTML（いつもと違う画面）になる不具合の修正。GAS変更なし。 / v3.36 (2026-06-10) ①ヘッダーに「🔄 配達を再取込」ボタン追加（押下=silent取込→トースト→現在タブ自動再取得／GAS=reimportDelivery・reimportDeliveryNow・importDeliveryOrdersDaily(opts.silent)）。②午前/午後 盛り出し表の最下部に合計バー（白米/玄米/全体・拠点分＋配達分・お茶除外・renderSheet2/3のみ・GAS変更なし）。 / v3.35 (2026-06-09)
 <style id="app-style">
 /* @page は全環境で確実に効く静的指定（用紙＝縦）。横向きはシート1・2をCSS回転で実現（A案） */
 @page { size: A4; margin: 3mm; }
@@ -2969,7 +2969,7 @@ function renderSheet2(data) {
       <div class="delivery-area">${cardsHTML}</div>
     </div>
     ${totalsHTML}`;
-  }
+}
 
 // ═══════════════════════════════════════
 // シート3（2便盛り出し表）
@@ -3112,7 +3112,7 @@ function renderSheet3(data) {
       <div class="sheet3-delivery">${cardsHTML}</div>
     </div>
     ${totalsHTML}`;
-  }
+}
 
 // ═══════════════════════════════════════
 // 便 移動（午前/午後）— カードのボタンから呼ぶ（v3.32）
