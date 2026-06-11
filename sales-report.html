@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- お江戸弁当 営業報告アプリ sales-report.html v1.1 (2026-06-05) 作成日表示・目標の期限(カレンダー)追加 -->
+<!-- お江戸弁当 営業報告アプリ sales-report.html v1.2 (2026-06-12) 目標マンダラ(大谷式9×9・俯瞰⇄ブロック拡大編集・プリセット枠・AI提案・人セレクタ)タブ追加。裏側vB1.4結線・GAS無改修 -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">
@@ -115,22 +115,51 @@ select:disabled{background:#f3f3ef;color:#999;}
 .toast.show{opacity:.96;}
 .toast.err{background:var(--red);}
 .ver{font-size:9px;color:#c4c4bd;text-align:center;padding:6px 0 2px;}
-  /* ④ 目標マンダラ（大谷式9×9）*/
-  .mdl-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;}
-  .mdl-blocks{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;}
-  .mdl-block{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;background:rgba(0,0,0,.08);padding:3px;border-radius:8px;cursor:pointer;border:1.5px solid transparent;}
-  .mdl-block.center{border-color:var(--navy);}
-  .mdl-block:active{opacity:.6;}
-  .mdl-c{background:#fff;border-radius:3px;min-height:30px;padding:2px;font-size:8px;line-height:1.1;color:#333;overflow:hidden;display:flex;align-items:center;justify-content:center;text-align:center;word-break:break-word;}
-  .mdl-c.hub{background:#EAF1F8;color:var(--navy);font-weight:600;}
-  .mdl-c.goal{background:var(--navy);color:#fff;font-weight:600;}
-  .mdl-c.empty{color:#c4c4c4;}
-  .mdl-bc{font-size:12px;color:#666;margin-bottom:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
-  .mdl-grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px;}
-  .mdl-in{width:100%;min-height:64px;resize:none;font-size:11px;padding:6px;border:.5px solid rgba(0,0,0,.18);border-radius:8px;font-family:inherit;color:#222;background:#fff;box-sizing:border-box;}
-  .mdl-in.hub{background:#EAF1F8;border-color:var(--navy);font-weight:600;color:var(--navy);}
-  .mdl-in.goal{background:#FFF7E8;border-color:var(--navy);font-weight:600;}
-  .mdl-meta{font-size:10.5px;color:#888;margin-top:10px;text-align:center;}
+
+/* タブ④ 目標マンダラ */
+.m-bar{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;}
+.m-bar .who{font-size:12px;color:#555;display:flex;align-items:center;gap:5px;}
+.m-bar .who i{font-size:15px;}
+.m-bar select{width:auto;flex:1;min-width:150px;margin:0;}
+.m-bar .upd{font-size:10px;color:#9a9a93;margin-left:auto;white-space:nowrap;}
+.m-save{display:flex;gap:8px;align-items:center;margin-bottom:10px;}
+.m-save .btn{flex:1;}
+.m-save .dirty{font-size:10px;color:var(--orange);white-space:nowrap;}
+
+/* 俯瞰：3×3ブロック（各ブロックは3×3ミニ） */
+.m-blocks{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;}
+.m-blk{background:var(--line2);border-radius:8px;padding:3px;cursor:pointer;display:grid;grid-template-columns:repeat(3,1fr);gap:2px;}
+.m-blk.center{outline:2px solid var(--navy);outline-offset:1px;}
+.m-blk:active{filter:brightness(.97);}
+.m-cellm{background:#fff;border-radius:3px;aspect-ratio:1;display:flex;align-items:center;justify-content:center;text-align:center;font-size:7.5px;line-height:1.05;color:#444;padding:1px;overflow:hidden;word-break:break-all;}
+.m-cellm.anchor{background:var(--navy);color:#fff;font-weight:600;font-size:8px;}
+.m-cellm.theme{background:#E6EEF5;color:#143A5E;font-weight:600;}
+.m-ovhint{font-size:11px;color:#8a8a84;text-align:center;margin:10px 2px 0;line-height:1.45;}
+
+/* 拡大編集 */
+.m-crumb{display:flex;align-items:center;gap:6px;font-size:12px;color:#555;margin-bottom:10px;flex-wrap:wrap;}
+.m-crumb .bk{background:#fff;border:.5px solid var(--line2);border-radius:8px;padding:5px 10px;font-size:12px;color:var(--navy);cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:4px;}
+.m-crumb .cur{font-weight:600;color:var(--navy);}
+.m-edit-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px;}
+.m-cell{background:#fff;border:.5px solid var(--line2);border-radius:8px;padding:5px;display:flex;flex-direction:column;min-height:78px;}
+.m-cell .ci{font-size:8px;color:#b0b0a9;margin-bottom:2px;}
+.m-cell textarea{flex:1;border:none;background:none;resize:none;font-size:11px;line-height:1.3;padding:0;margin:0;min-height:50px;color:var(--text);width:100%;}
+.m-cell textarea:focus{outline:none;}
+.m-cell.anchor{background:var(--navy);border-color:var(--navy);}
+.m-cell.anchor .ci{color:rgba(255,255,255,.7);}
+.m-cell.anchor textarea{color:#fff;font-weight:600;}
+.m-cell.theme{background:#EAF1F8;border-color:#BCD3E6;}
+
+.m-ai{margin-bottom:10px;}
+.m-ai .btn{background:#2E5A86;}
+.m-suggest{background:#F3F7FB;border:.5px solid #CFE0EF;border-radius:10px;padding:10px;margin-bottom:10px;}
+.m-suggest .st{font-size:11px;color:#456;margin:0 0 8px;display:flex;align-items:center;gap:6px;}
+.m-chips{display:flex;flex-direction:column;gap:6px;}
+.m-chip{display:flex;align-items:center;gap:8px;background:#fff;border:.5px solid var(--line2);border-radius:8px;padding:7px 9px;font-size:12px;color:#333;cursor:pointer;text-align:left;font-family:inherit;line-height:1.35;width:100%;}
+.m-chip:active{background:#eef3f8;}
+.m-chip .n{flex:none;width:18px;height:18px;border-radius:50%;background:var(--navy);color:#fff;font-size:10px;display:flex;align-items:center;justify-content:center;}
+.m-chip .x{flex:1;}
+.m-suggest .allbtn{margin-top:8px;}
 </style>
 </head>
 <body>
@@ -146,7 +175,7 @@ select:disabled{background:#f3f3ef;color:#999;}
       <button class="tab on" data-t="kikaku"><i class="ti ti-clipboard-list" aria-hidden="true"></i>営業企画</button>
       <button class="tab" data-t="jisseki"><i class="ti ti-chart-bar" aria-hidden="true"></i>販売実績</button>
       <button class="tab" data-t="houkoku"><i class="ti ti-message-report" aria-hidden="true"></i>営業報告</button>
-      <button class="tab" data-t="mokuhyo"><i class="ti ti-target" aria-hidden="true"></i>目標</button>
+      <button class="tab" data-t="mokuhyo"><i class="ti ti-target-arrow" aria-hidden="true"></i>目標</button>
     </div>
   </div>
 
@@ -205,7 +234,9 @@ select:disabled{background:#f3f3ef;color:#999;}
     </div>
 
     <!-- ④ 目標マンダラ -->
-    <div class="panel" id="p-mokuhyo"><div class="inline-loading"><span class="spinner"></span>読み込み中…</div></div>
+    <div class="panel" id="p-mokuhyo">
+      <div id="m-root"><div class="inline-loading"><span class="spinner"></span>読み込み中…</div></div>
+    </div>
 
   </div>
   <div class="ver">v1.2</div>
@@ -231,6 +262,8 @@ var LIFF_ID  = '2009637457-KycV9WYD';
 var SALES_API = 'https://script.google.com/macros/s/AKfycbyYFiCThF2bjcXABLqkTESbfsskSXURKzfGOACihV1CE5-yGbS53iDghhO7ROr_pRyfGQ/exec';
 var MAIN_GAS  = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5AawPDc7aluPokONkYz6f2ikwl0S487JvhKdKh6QSp1xhEhA/exec';
 var UNASSIGNED_ID = '__UNASSIGNED__';
+// 新規マンダラの初期テーマ枠（消す・直す・足す自由）
+var PRESET_THEMES = ['新規開拓','リピート率向上','客単価アップ','完売率改善','エリア拡大','商品力強化','接客・関係づくり','業務効率化'];
 
 /* ============================================================
    状態
@@ -243,7 +276,9 @@ var S = {
   profitByLoc:{}, profitMeta:{ hasCostData:true },
   period:'d', selectedDriverId:'',
   hkLocId:'', hkPlanId:'', hkHistoryLoaded:false,
-  mokuhyo:{ loaded:false, isSuper:false, owners:[], targetUserId:'', ownerName:'', data:null, view:'overview', blockIndex:-1 }
+  mdLoaded:false, mdView:'overview', mdBlock:null,
+  mandala:null, mdTarget:'', mdOwner:{}, mdDirty:false,
+  mdSuperLoaded:false, mdIsSuper:false, mdOwners:[], mdSuggest:null, mdSuggesting:false
 };
 var salesChart = null;
 
@@ -335,7 +370,6 @@ function boot(){
       bindKikaku();
       bindJisseki();
       bindHoukoku();
-      bindMokuhyo();
       hideOverlay();
       loadPlans();
     });
@@ -370,7 +404,7 @@ function bindTabs(){
       $('p-' + b.dataset.t).classList.add('on');
       if(b.dataset.t === 'jisseki' && !S.perfLoaded && !S.perfLoading) loadPerformance();
       if(b.dataset.t === 'houkoku' && !S.hkHistoryLoaded) loadHistory();
-      if(b.dataset.t === 'mokuhyo' && !S.mokuhyo.loaded) loadMokuhyo();
+      if(b.dataset.t === 'mokuhyo' && !S.mdLoaded) loadMandala();
     });
   });
 }
@@ -762,209 +796,283 @@ function loadHistory(){
 }
 
 /* ============================================================
-   起動
+   ④ 目標マンダラ（大谷式9×9）
+   ブロック位置 0..8（4=中心ブロック）。中心=大目標+8テーマ／外周=各テーマ+8行動。
+   スロット 0..8（4=anchor）。anchor以外の0..7が「サブ番号」に対応。
    ============================================================ */
-/* ============================================================
-   ④ 目標マンダラ（大谷式9×9・各自1枚・AI提案つき）
-   ============================================================ */
-var MDL_PRESET = ['新規開拓','リピート率','客単価','完売率','エリア拡大','商品力','接客','効率化'];
-// 3x3内の位置(0..8, 4=中心) → テーマ/行動のindex（中心を除いた8個へ写像）
-var MDL_POS2IDX = { 0:0, 1:1, 2:2, 3:3, 5:4, 6:5, 7:6, 8:7 };
+function mdBlockToTheme(pos){ return pos < 4 ? pos : pos - 1; }   // 0,1,2,3,(4=中心),5,6,7,8 -> theme 0..7
+function mdSlotToIdx(slot){ return slot < 4 ? slot : slot - 1; }  // slot -> サブ番号 0..7
+function mdIdxToSlot(idx){ return idx < 4 ? idx : idx + 1; }      // サブ番号 -> slot
 
-function mdlEmpty(){
-  var actions=[]; for(var i=0;i<8;i++) actions.push(['','','','','','','','']);
-  return { center:'', themes:['','','','','','','',''], actions:actions, updatedAt:'', updatedBy:'' };
+function emptyMandala(){
+  var a = []; for(var i=0;i<8;i++) a.push(['','','','','','','','']);
+  return { center:'', themes:['','','','','','','',''], actions:a, updatedAt:'', updatedBy:'' };
 }
-function mdlIsAllEmpty(m){
-  if(!m) return true;
-  if(m.center) return false;
-  for(var i=0;i<8;i++){ if(m.themes[i]) return false; }
-  for(var t=0;t<8;t++){ for(var a=0;a<8;a++){ if(m.actions[t][a]) return false; } }
-  return true;
-}
-function bindMokuhyo(){ /* リスナーはレンダ時に都度付与 */ }
 
-function loadMokuhyo(){
-  S.mokuhyo.loaded = true;
-  $('p-mokuhyo').innerHTML = '<div class="inline-loading"><span class="spinner"></span>読み込み中…</div>';
-  apiGet(SALES_API, 'listMandalaOwners', { userId:S.userId }).then(function(res){
-    var owners = (res && res.owners) ? res.owners : [];
-    S.mokuhyo.isSuper = owners.length > 0;
-    S.mokuhyo.owners = owners;
-    var target = S.userId;
-    if(S.mokuhyo.isSuper){
-      var meIn = owners.some(function(o){ return o.userId === S.userId; });
-      target = meIn ? S.userId : owners[0].userId;
-    }
-    loadMandalaFor(target);
+function loadMandala(){
+  S.mdLoaded = true;
+  $('m-root').innerHTML = '<div class="inline-loading"><span class="spinner"></span>読み込み中…</div>';
+  // スーパーエディタ（社長・戸賀崎＝他人分も編集可）判定：listMandalaOwners が非空かどうか
+  var ownersP = S.mdSuperLoaded
+    ? Promise.resolve(null)
+    : apiGet(SALES_API, 'listMandalaOwners', { userId:S.userId }).then(function(res){
+        S.mdSuperLoaded = true;
+        S.mdOwners = (res && res.owners) ? res.owners : [];
+        S.mdIsSuper = S.mdOwners.length > 0;
+        return null;
+      }).catch(function(){ S.mdSuperLoaded = true; S.mdOwners = []; S.mdIsSuper = false; return null; });
+  ownersP.then(function(){ return fetchMandala(S.mdTarget); }).then(function(){
+    S.mdView = 'overview'; S.mdSuggest = null;
+    renderMandala();
   }).catch(function(){
-    $('p-mokuhyo').innerHTML = '<div class="empty">読み込みに失敗しました。</div>';
+    $('m-root').innerHTML = '<div class="empty">マンダラの読み込みに失敗しました。</div>';
+  });
+}
+function fetchMandala(target){
+  return apiGet(SALES_API, 'getMandala', { userId:S.userId, targetUserId:(target||'') }).then(function(res){
+    if(!res || res.ok === false){ throw new Error(res && res.error ? res.error : 'failed'); }
+    S.mandala = res.mandala || emptyMandala();
+    S.mdOwner = res.owner || { userId:(target||S.userId), name:'' };
+    S.mdDirty = false;
+    // 新規（中心も全テーマも全行動も空）ならプリセットのテーマを初期表示
+    var blank = !S.mandala.center
+      && (S.mandala.themes||[]).every(function(t){ return !t; })
+      && (S.mandala.actions||[]).every(function(row){ return (row||[]).every(function(c){ return !c; }); });
+    if(blank){ for(var i=0;i<8;i++){ S.mandala.themes[i] = PRESET_THEMES[i] || ''; } }
+    return res;
   });
 }
 
-function loadMandalaFor(targetUserId){
-  S.mokuhyo.targetUserId = targetUserId;
-  S.mokuhyo.view = 'overview';
-  S.mokuhyo.blockIndex = -1;
-  $('p-mokuhyo').innerHTML = '<div class="inline-loading"><span class="spinner"></span>読み込み中…</div>';
-  var params = { userId:S.userId };
-  if(targetUserId && targetUserId !== S.userId) params.targetUserId = targetUserId;
-  apiGet(SALES_API, 'getMandala', params).then(function(res){
-    var m = (res && res.mandala) ? res.mandala : mdlEmpty();
-    if(!m.themes) m.themes=['','','','','','','',''];
-    if(!m.actions){ m.actions=[]; for(var i=0;i<8;i++) m.actions.push(['','','','','','','','']); }
-    if(mdlIsAllEmpty(m)){ m.themes = MDL_PRESET.slice(); }   // 新規はプリセット初期表示
-    S.mokuhyo.data = m;
-    S.mokuhyo.ownerName = (res && res.owner && res.owner.name) ? res.owner.name : '';
-    renderMokuhyo();
-  }).catch(function(){
-    $('p-mokuhyo').innerHTML = '<div class="empty">マンダラの読み込みに失敗しました。</div>';
-  });
-}
-
-function renderMokuhyo(){
-  if(S.mokuhyo.view === 'block') renderMandalaBlock();
+function renderMandala(){
+  if(S.mdView === 'editor' && S.mdBlock !== null) renderMandalaEditor();
   else renderMandalaOverview();
 }
 
-function mdlOwnerSelectHtml(){
-  if(!S.mokuhyo.isSuper) return '';
-  var opts = S.mokuhyo.owners.map(function(o){
-    var sel = o.userId === S.mokuhyo.targetUserId ? ' selected' : '';
-    return '<option value="'+esc(o.userId)+'"'+sel+'>'+esc(o.name||o.userId)+'</option>';
-  }).join('');
-  return '<div class="card" style="padding:10px;margin-bottom:10px;">'
-    + '<p class="lbl" style="margin-bottom:4px;">対象スタッフ（社長・戸賀崎は全員分を編集できます）</p>'
-    + '<select id="mdl-owner">'+opts+'</select></div>';
-}
-
-function mdlOverviewCell(m, block, pos){
-  var txt='', cls='mdl-c';
-  if(block===4){
-    if(pos===4){ txt=m.center; cls+=' goal'; }
-    else { txt=m.themes[MDL_POS2IDX[pos]]; cls+=' hub'; }
+function mdBar(){
+  var html = '<div class="m-bar">';
+  if(S.mdIsSuper){
+    var opts = '<option value="">自分（'+esc(S.me.name||'')+'）</option>';
+    opts += S.mdOwners.filter(function(o){ return o.userId !== S.userId; }).map(function(o){
+      return '<option value="'+esc(o.userId)+'"'+(o.userId===S.mdTarget?' selected':'')+'>'
+        + esc(o.name||o.userId) + (o.updatedAt?'（記入済）':'') + '</option>';
+    }).join('');
+    html += '<span class="who"><i class="ti ti-user" aria-hidden="true"></i></span><select id="md-owner">'+opts+'</select>';
   } else {
-    var t = MDL_POS2IDX[block];
-    if(pos===4){ txt=m.themes[t]; cls+=' hub'; }
-    else { txt=m.actions[t][MDL_POS2IDX[pos]]; }
+    html += '<span class="who"><i class="ti ti-user" aria-hidden="true"></i> '+esc((S.mdOwner.name||S.me.name||'')+'さんの目標')+'</span>';
   }
-  if(!txt){ cls+=' empty'; txt = (block===4 && pos===4) ? '大目標' : ''; }
-  return '<div class="'+cls+'">'+esc(txt)+'</div>';
+  var upd = (S.mandala && S.mandala.updatedAt) ? ('更新 '+fmtDate(S.mandala.updatedAt)) : '未保存';
+  html += '<span class="upd">'+esc(upd)+'</span></div>';
+  return html;
+}
+function mdSaveBar(btnId){
+  return '<div class="m-save"><button class="btn" id="'+btnId+'"'+(S.mdDirty?'':' disabled')+'>'
+    + '<i class="ti ti-device-floppy" aria-hidden="true"></i> 保存</button>'
+    + (S.mdDirty?'<span class="dirty">未保存の変更があります</span>':'') + '</div>';
 }
 
 function renderMandalaOverview(){
-  var m = S.mokuhyo.data || mdlEmpty();
-  var blocks='';
-  for(var b=0;b<9;b++){
-    var cells='';
-    for(var pos=0;pos<9;pos++) cells += mdlOverviewCell(m, b, pos);
-    blocks += '<div class="mdl-block'+(b===4?' center':'')+'" data-block="'+b+'">'+cells+'</div>';
+  var m = S.mandala || emptyMandala();
+  var html = mdBar() + mdSaveBar('md-save');
+  html += '<div class="m-blocks">';
+  for(var pos=0; pos<9; pos++){
+    var isCenter = (pos === 4);
+    html += '<div class="m-blk'+(isCenter?' center':'')+'" data-blk="'+(isCenter?'center':mdBlockToTheme(pos))+'">';
+    for(var slot=0; slot<9; slot++){ html += mdMiniCell(m, pos, slot); }
+    html += '</div>';
   }
-  var who = (S.mokuhyo.isSuper && S.mokuhyo.ownerName) ? ('（'+esc(S.mokuhyo.ownerName)+'さん）') : '';
-  var meta = (S.mokuhyo.data && S.mokuhyo.data.updatedAt) ? ('最終更新 '+esc(S.mokuhyo.data.updatedAt)) : '未保存';
-  $('p-mokuhyo').innerHTML =
-      mdlOwnerSelectHtml()
-    + '<div class="mdl-toolbar"><div style="font-size:12px;color:#888;">マスをタップして編集'+who+'</div>'
-    +   '<button class="btn" id="mdl-save" style="width:auto;padding:8px 16px;margin-left:auto;"><i class="ti ti-device-floppy" aria-hidden="true"></i> 保存</button></div>'
-    + '<div class="mdl-blocks" id="mdl-blocks">'+blocks+'</div>'
-    + '<p class="mdl-meta">'+meta+'</p>';
-  if(S.mokuhyo.isSuper){
-    var sel=$('mdl-owner');
-    if(sel) sel.addEventListener('change', function(){ loadMandalaFor(sel.value); });
+  html += '</div>';
+  html += '<div class="m-ovhint">9つのブロックをタップすると拡大して編集できます。<br>中央＝大目標＋テーマ、外周＝各テーマの行動。</div>';
+  $('m-root').innerHTML = html;
+  bindOverview();
+}
+function mdMiniCell(m, pos, slot){
+  var txt = '', cls = 'm-cellm';
+  if(pos === 4){
+    if(slot === 4){ txt = m.center; cls += ' anchor'; }
+    else { txt = m.themes[mdSlotToIdx(slot)] || ''; cls += ' theme'; }
+  } else {
+    var t = mdBlockToTheme(pos);
+    if(slot === 4){ txt = m.themes[t] || ''; cls += ' anchor'; }
+    else { txt = (m.actions[t] || [])[mdSlotToIdx(slot)] || ''; }
   }
-  Array.prototype.forEach.call(document.querySelectorAll('#mdl-blocks .mdl-block'), function(el){
-    el.addEventListener('click', function(){
-      S.mokuhyo.blockIndex = Number(el.getAttribute('data-block'));
-      S.mokuhyo.view = 'block';
-      renderMandalaBlock();
+  return '<div class="'+cls+'">'+(txt ? esc(txt) : '')+'</div>';
+}
+function bindOverview(){
+  var sv = $('md-save'); if(sv) sv.addEventListener('click', saveMandalaNow);
+  var ow = $('md-owner');
+  if(ow) ow.addEventListener('change', function(){
+    if(S.mdDirty && !confirm('未保存の変更があります。対象者を切り替えると破棄されます。よろしいですか？')){ ow.value = S.mdTarget; return; }
+    S.mdTarget = ow.value;
+    $('m-root').innerHTML = '<div class="inline-loading"><span class="spinner"></span>読み込み中…</div>';
+    fetchMandala(S.mdTarget).then(function(){ S.mdView='overview'; S.mdSuggest=null; renderMandala(); })
+      .catch(function(){ $('m-root').innerHTML = '<div class="empty">読み込みに失敗しました（権限がない可能性）。</div>'; });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('#m-root .m-blk'), function(b){
+    b.addEventListener('click', function(){
+      var k = b.getAttribute('data-blk');
+      S.mdBlock = (k === 'center') ? 'center' : Number(k);
+      S.mdView = 'editor'; S.mdSuggest = null;
+      renderMandala();
     });
   });
-  $('mdl-save').addEventListener('click', function(){ saveMokuhyo(); });
 }
 
-function mdlBlockInput(m, block, pos, isCenter, t){
-  var val='', cls='mdl-in', ph='', data='';
+function renderMandalaEditor(){
+  var m = S.mandala || emptyMandala();
+  var blk = S.mdBlock;
+  var isCenter = (blk === 'center');
+  var t = isCenter ? -1 : Number(blk);
+  var curLabel = isCenter ? '中央ブロック（大目標＋テーマ）' : ('テーマ：' + (m.themes[t] || ('テーマ'+(t+1))));
+  var html = '<div class="m-crumb"><button class="bk" id="md-back"><i class="ti ti-arrow-left" aria-hidden="true"></i> 俯瞰へ</button>'
+    + '<span>目標 ／</span><span class="cur">'+esc(curLabel)+'</span></div>';
+  html += '<div class="m-edit-grid">';
+  for(var slot=0; slot<9; slot++){ html += mdEditCell(m, blk, slot); }
+  html += '</div>';
+  var aiLabel = isCenter ? 'AIにテーマを提案してもらう' : 'AIに行動を提案してもらう';
+  html += '<div class="m-ai"><button class="btn" id="md-ai"'+(S.mdSuggesting?' disabled':'')+'>'
+    + (S.mdSuggesting
+        ? '<span class="spinner" style="width:16px;height:16px;border-width:2px;"></span> 考え中…'
+        : '<i class="ti ti-wand" aria-hidden="true"></i> '+aiLabel)
+    + '</button></div>';
+  html += '<div id="md-suggest"></div>';
+  html += mdSaveBar('md-save2');
+  $('m-root').innerHTML = html;
+  bindEditor();
+  if(S.mdSuggest) renderSuggest();
+}
+function mdEditCell(m, blk, slot){
+  var isCenter = (blk === 'center');
+  var t = isCenter ? -1 : Number(blk);
+  var val = '', cls = 'm-cell', label = '', ph = '';
   if(isCenter){
-    if(pos===4){ val=m.center; cls+=' goal'; ph='大目標'; data='data-kind="center"'; }
-    else { var ti=MDL_POS2IDX[pos]; val=m.themes[ti]; cls+=' hub'; ph='テーマ'+(ti+1); data='data-kind="theme" data-i="'+ti+'"'; }
+    if(slot === 4){ val = m.center; cls += ' anchor'; label = '大目標'; ph = '例）年間売上◯◯円達成'; }
+    else { val = m.themes[mdSlotToIdx(slot)] || ''; cls += ' theme'; label = 'テーマ'+(mdSlotToIdx(slot)+1); ph = 'テーマ'; }
   } else {
-    if(pos===4){ val=m.themes[t]; cls+=' hub'; ph='テーマ名'; data='data-kind="theme" data-i="'+t+'"'; }
-    else { var ai=MDL_POS2IDX[pos]; val=m.actions[t][ai]; ph='行動'+(ai+1); data='data-kind="action" data-t="'+t+'" data-i="'+ai+'"'; }
+    if(slot === 4){ val = m.themes[t] || ''; cls += ' anchor'; label = 'テーマ'; ph = 'テーマ名'; }
+    else { val = (m.actions[t] || [])[mdSlotToIdx(slot)] || ''; label = '行動'+(mdSlotToIdx(slot)+1); ph = '明日からやれる行動'; }
   }
-  return '<textarea class="'+cls+'" '+data+' placeholder="'+esc(ph)+'">'+esc(val)+'</textarea>';
+  return '<div class="'+cls+'"><div class="ci">'+esc(label)+'</div>'
+    + '<textarea data-slot="'+slot+'" placeholder="'+esc(ph)+'">'+esc(val)+'</textarea></div>';
 }
-
-function renderMandalaBlock(){
-  var m = S.mokuhyo.data;
-  var b = S.mokuhyo.blockIndex;
-  var isCenter = (b===4);
-  var t = isCenter ? -1 : MDL_POS2IDX[b];
-  var title = isCenter ? '中心（大目標＋8テーマ）' : ('テーマ：'+(m.themes[t]||'（未設定）'));
-  var grid='';
-  for(var pos=0;pos<9;pos++) grid += mdlBlockInput(m, b, pos, isCenter, t);
-  var aiLabel = isCenter ? 'AIにテーマを提案' : 'AIに行動を提案';
-  $('p-mokuhyo').innerHTML =
-      '<div class="mdl-bc"><button class="plan-edit-link" id="mdl-back" style="text-decoration:none;"><i class="ti ti-arrow-left" aria-hidden="true"></i> 戻る</button>'
-    +   '<span>目標マンダラ ＞ '+esc(title)+'</span></div>'
-    + '<div class="mdl-grid3" id="mdl-grid3">'+grid+'</div>'
-    + '<button class="btn sub" id="mdl-ai"><i class="ti ti-sparkles" aria-hidden="true"></i> '+aiLabel+'</button>'
-    + '<div style="height:8px;"></div>'
-    + '<button class="btn" id="mdl-save2"><i class="ti ti-device-floppy" aria-hidden="true"></i> 保存して戻る</button>';
-  Array.prototype.forEach.call(document.querySelectorAll('#mdl-grid3 textarea'), function(ta){
-    ta.addEventListener('input', function(){ mdlOnInput(ta); });
+function mdWriteCell(blk, slot, value){
+  var m = S.mandala;
+  if(blk === 'center'){
+    if(slot === 4) m.center = value;
+    else m.themes[mdSlotToIdx(slot)] = value;
+  } else {
+    var t = Number(blk);
+    if(slot === 4) m.themes[t] = value;
+    else m.actions[t][mdSlotToIdx(slot)] = value;
+  }
+  S.mdDirty = true;
+}
+function bindEditor(){
+  var bk = $('md-back');
+  if(bk) bk.addEventListener('click', function(){ S.mdView='overview'; S.mdSuggest=null; renderMandala(); });
+  Array.prototype.forEach.call(document.querySelectorAll('#m-root .m-cell textarea'), function(ta){
+    ta.addEventListener('input', function(){
+      mdWriteCell(S.mdBlock, Number(ta.getAttribute('data-slot')), ta.value);
+      var sv = $('md-save2'); if(sv) sv.disabled = false; // 再描画せずフォーカス維持
+    });
   });
-  $('mdl-back').addEventListener('click', function(){ S.mokuhyo.view='overview'; renderMandalaOverview(); });
-  $('mdl-ai').addEventListener('click', function(){ mdlSuggest(isCenter, t); });
-  $('mdl-save2').addEventListener('click', function(){ saveMokuhyo(function(){ S.mokuhyo.view='overview'; renderMandalaOverview(); }); });
+  var ai = $('md-ai'); if(ai) ai.addEventListener('click', runSuggest);
+  var sv2 = $('md-save2'); if(sv2) sv2.addEventListener('click', saveMandalaNow);
 }
 
-function mdlOnInput(ta){
-  var m=S.mokuhyo.data, kind=ta.getAttribute('data-kind'), v=ta.value;
-  if(kind==='center') m.center=v;
-  else if(kind==='theme') m.themes[Number(ta.getAttribute('data-i'))]=v;
-  else if(kind==='action') m.actions[Number(ta.getAttribute('data-t'))][Number(ta.getAttribute('data-i'))]=v;
-}
-
-function mdlSuggest(isCenter, t){
-  var m=S.mokuhyo.data;
-  var btn=$('mdl-ai'), old=btn.innerHTML;
-  btn.disabled=true; btn.innerHTML='<span class="spinner" style="width:14px;height:14px;border-width:2px;"></span> AI考え中…';
-  var params={ userId:S.userId, center:m.center||'', mode:isCenter?'themes':'actions' };
-  if(!isCenter){ params.themeIndex=t; params.themeName=m.themes[t]||''; }
+function runSuggest(){
+  if(S.mdSuggesting) return;
+  var m = S.mandala;
+  var isCenter = (S.mdBlock === 'center');
+  var params;
+  if(isCenter){
+    params = { userId:S.userId, center:(m.center||''), mode:'themes' };
+  } else {
+    var t = Number(S.mdBlock);
+    if(!(m.themes[t]||'').trim()){ toast('先にテーマ名を入力してください', true); return; }
+    params = { userId:S.userId, center:(m.center||''), themeName:(m.themes[t]||''), mode:'actions' };
+  }
+  S.mdSuggesting = true; S.mdSuggest = null;
+  renderMandalaEditor();
   apiGet(SALES_API, 'suggestMandala', params).then(function(res){
-    btn.disabled=false; btn.innerHTML=old;
-    if(!res || !res.ok){ toast('AI提案に失敗しました（'+((res&&res.error)||'')+'）', true); return; }
-    var sug = res.suggestions||{};
-    if(isCenter){
-      var th=sug.themes||[];
-      if(m.themes.some(function(x){return !!x;}) && !confirm('現在のテーマをAIの提案で上書きしますか？')) return;
-      for(var i=0;i<8;i++) m.themes[i]=th[i]||m.themes[i]||'';
-    } else {
-      var ac=sug.actions||[];
-      if(m.actions[t].some(function(x){return !!x;}) && !confirm('このテーマの行動をAIの提案で上書きしますか？')) return;
-      for(var j=0;j<8;j++) m.actions[t][j]=ac[j]||m.actions[t][j]||'';
+    S.mdSuggesting = false;
+    if(!res || res.ok === false){
+      renderMandalaEditor();
+      toast((res && res.error) ? ('AI提案エラー：'+res.error) : 'AI提案に失敗しました', true);
+      return;
     }
-    renderMandalaBlock();
-    toast('AI提案を反映しました');
-  }).catch(function(){ btn.disabled=false; btn.innerHTML=old; toast('通信エラー', true); });
+    var sug = res.suggestions || {};
+    S.mdSuggest = isCenter ? (sug.themes || []) : (sug.actions || []);
+    renderMandalaEditor();
+  }).catch(function(){
+    S.mdSuggesting = false; renderMandalaEditor();
+    toast('AI提案の通信に失敗しました', true);
+  });
+}
+function renderSuggest(){
+  var host = $('md-suggest'); if(!host) return;
+  var list = (S.mdSuggest || []).filter(function(x){ return !!x; });
+  if(!list.length){ host.innerHTML = ''; return; }
+  var isCenter = (S.mdBlock === 'center');
+  var label = isCenter ? 'テーマ候補（タップで枠に入る）' : '行動候補（タップで枠に入る）';
+  var html = '<div class="m-suggest"><p class="st"><i class="ti ti-bulb" aria-hidden="true"></i>'+esc(label)+'</p><div class="m-chips">';
+  html += (S.mdSuggest || []).map(function(x, i){
+    if(!x) return '';
+    return '<button class="m-chip" data-i="'+i+'"><span class="n">'+(i+1)+'</span><span class="x">'+esc(x)+'</span></button>';
+  }).join('');
+  html += '</div><button class="btn sub allbtn" id="md-applyall">すべて反映（上書き確認）</button></div>';
+  host.innerHTML = html;
+  Array.prototype.forEach.call(host.querySelectorAll('.m-chip'), function(c){
+    c.addEventListener('click', function(){ applySuggestOne(Number(c.getAttribute('data-i'))); });
+  });
+  var all = $('md-applyall'); if(all) all.addEventListener('click', applySuggestAll);
+}
+function applySuggestOne(i){
+  var list = S.mdSuggest || [];
+  var val = list[i] || ''; if(!val) return;
+  mdWriteCell(S.mdBlock, mdIdxToSlot(i), val);
+  renderMandalaEditor();
+  toast((S.mdBlock==='center'?'テーマ':'行動')+(i+1)+'に反映しました');
+}
+function applySuggestAll(){
+  var list = S.mdSuggest || [];
+  var m = S.mandala;
+  var isCenter = (S.mdBlock === 'center');
+  var t = isCenter ? -1 : Number(S.mdBlock);
+  var hasContent = false;
+  for(var i=0;i<8;i++){
+    var cur = isCenter ? (m.themes[i]||'') : ((m.actions[t]||[])[i]||'');
+    if(cur && (list[i]||'') && cur !== list[i]){ hasContent = true; break; }
+  }
+  if(hasContent && !confirm('既存の入力を上書きします。よろしいですか？')) return;
+  for(var j=0;j<8;j++){ if(list[j]) mdWriteCell(S.mdBlock, mdIdxToSlot(j), list[j]); }
+  renderMandalaEditor();
+  toast('候補を反映しました');
 }
 
-function saveMokuhyo(cb){
-  var m=S.mokuhyo.data;
-  var params={ userId:S.userId, json:JSON.stringify(m) };
-  if(S.mokuhyo.isSuper && S.mokuhyo.targetUserId && S.mokuhyo.targetUserId !== S.userId) params.targetUserId = S.mokuhyo.targetUserId;
-  var ids=['mdl-save','mdl-save2'];
-  ids.forEach(function(id){ var b=$(id); if(b) b.disabled=true; });
-  apiPost(SALES_API, 'saveMandala', params).then(function(res){
-    ids.forEach(function(id){ var b=$(id); if(b) b.disabled=false; });
+function saveMandalaNow(){
+  if(!S.mandala) return;
+  var payload = { center:S.mandala.center||'', themes:S.mandala.themes||[], actions:S.mandala.actions||[] };
+  var btns = [ $('md-save'), $('md-save2') ];
+  btns.forEach(function(b){ if(b) b.disabled = true; });
+  apiPost(SALES_API, 'saveMandala', { userId:S.userId, targetUserId:(S.mdTarget||''), json:JSON.stringify(payload) }).then(function(res){
     if(res && res.ok){
-      if(S.mokuhyo.data) S.mokuhyo.data.updatedAt = res.updatedAt || S.mokuhyo.data.updatedAt;
+      S.mdDirty = false;
+      if(res.updatedAt) S.mandala.updatedAt = res.updatedAt;
       toast('保存しました');
-      if(typeof cb==='function') cb();
-    } else { toast('保存に失敗しました（'+((res&&res.error)||'')+'）', true); }
-  }).catch(function(){ ids.forEach(function(id){ var b=$(id); if(b) b.disabled=false; }); toast('通信エラー', true); });
+      renderMandala();
+    } else {
+      toast((res && res.error) ? ('保存失敗：'+res.error) : '保存に失敗しました', true);
+      btns.forEach(function(b){ if(b) b.disabled = false; });
+    }
+  }).catch(function(){
+    toast('保存の通信に失敗しました', true);
+    btns.forEach(function(b){ if(b) b.disabled = false; });
+  });
 }
 
+/* ============================================================
+   起動
+   ============================================================ */
 if(window.liff){ boot(); }
 else { showOverlay('LIFF SDK の読み込みに失敗しました。通信環境をご確認ください。', true); }
 
