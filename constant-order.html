@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>お江戸弁当 定数発注 棚卸し</title>
+<script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<style>
+  :root {
+    --navy: #1A3C5E;
+    --navy-d: #122c46;
+    --green: #0E7C66;
+    --green-l: #e6f3ef;
+    --bg: #f4f6f9;
+    --line: #e2e7ec;
+    --off: #b6bcc4;
+    --amber: #b9770e;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", sans-serif;
+    background: var(--bg);
+    color: #1c2733;
+    line-height: 1.5;
+    -webkit-text-size-adjust: 100%;
+  }
+  .app { max-width: 720px; margin: 0 auto; min-height: 100vh; background: var(--bg); }
+
+  header {
+    background: linear-gradient(135deg, var(--navy), var(--navy-d));
+    color: #fff;
+    padding: 14px 16px 12px;
+    position: sticky; top: 0; z-index: 5;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  }
+  header .brand { font-size: 12px; opacity: 0.82; letter-spacing: 0.04em; }
+  header h1 { margin: 2px 0 0; font-size: 19px; font-weight: 800; letter-spacing: 0.02em; }
+  header .who { font-size: 11px; opacity: 0.7; margin-top: 3px; }
+
+  /* 対象日バー */
+  .datebar {
+    background: #fff; border-bottom: 1px solid var(--line);
+    padding: 12px 14px; position: sticky; top: 56px; z-index: 4;
+  }
+  .datebar label { display:block; font-size: 12px; font-weight: 700; color: var(--navy); margin-bottom: 6px; }
+  .date-row { display: flex; gap: 8px; align-items: center; }
+  select#dateSel {
+    flex: 1; font-size: 16px; font-weight: 700; color: #1c2733;
+    padding: 11px 12px; border: 1.5px solid var(--line); border-radius: 10px; background: #fff;
+    -webkit-appearance: none; appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2 4l4 4 4-4' stroke='%231A3C5E' stroke-width='1.6' fill='none' stroke-linecap='round'/></svg>");
+    background-repeat: no-repeat; background-position: right 12px center;
+  }
+  .reload {
+    border: 1.5px solid var(--line); background: #fff; color: var(--navy);
+    font-size: 18px; padding: 9px 12px; border-radius: 10px; cursor: pointer;
+  }
+  .reload:active { background: #eef2f6; }
+
+  .hint { padding: 10px 14px 2px; font-size: 12.5px; color: #5a6a7a; }
+  .hint b { color: var(--green); }
+  .status { padding: 6px 14px; font-size: 12px; color: #7a8694; min-height: 16px; }
+  .status.err { color: #c0392b; }
+
+  /* 業者カード */
+  .vendor {
+    background: #fff; margin: 10px 12px; border-radius: 14px;
+    box-shadow: 0 1px 5px rgba(0,0,0,0.06); overflow: hidden;
+    border-left: 5px solid var(--navy);
+  }
+  .vendor-head {
+    display: flex; align-items: center; gap: 8px;
+    padding: 13px 14px; cursor: pointer; user-select: none;
+  }
+  .vendor-name { font-size: 16px; font-weight: 800; color: var(--navy); }
+  .vendor-sum { font-size: 12px; color: #8a96a3; margin-left: 2px; }
+  .vendor-badge {
+    margin-left: auto; font-size: 12px; font-weight: 800; color: #fff;
+    background: var(--green); border-radius: 999px; padding: 3px 10px; min-width: 26px; text-align: center;
+  }
+  .vendor-badge.zero { background: #c3ccd6; }
+  .arrow { font-size: 12px; color: var(--off); transition: transform .15s; }
+  .vendor.collapsed .vendor-body { display: none; }
+  .vendor.collapsed .arrow { transform: rotate(-90deg); }
+
+  .vendor-body { padding: 2px 12px 12px; }
+
+  .item {
+    border-top: 1px solid var(--line); padding: 11px 2px 12px;
+  }
+  .item:first-child { border-top: 0; }
+  .item-top { display: flex; align-items: baseline; gap: 8px; }
+  .item-name { font-size: 15px; font-weight: 700; }
+  .item-target { margin-left: auto; font-size: 12px; color: #8a96a3; white-space: nowrap; }
+  .item-target b { color: var(--navy); font-size: 13px; }
+
+  .item-calc { display: flex; align-items: center; gap: 10px; margin-top: 9px; flex-wrap: wrap; }
+  .stock-box { display: flex; align-items: center; gap: 6px; }
+  .stock-box label { font-size: 12.5px; color: #5a6a7a; font-weight: 700; }
+  input.stock {
+    width: 72px; font-size: 18px; font-weight: 800; text-align: center;
+    padding: 8px 6px; border: 1.5px solid var(--line); border-radius: 10px; background: #fff; color: #1c2733;
+    -moz-appearance: textfield;
+  }
+  input.stock::-webkit-outer-spin-button, input.stock::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  input.stock:focus { outline: none; border-color: var(--navy); box-shadow: 0 0 0 3px rgba(26,60,94,0.10); }
+  input.stock.saving { border-color: var(--amber); }
+  input.stock.saved { border-color: var(--green); }
+
+  .arrow-mid { font-size: 16px; color: var(--off); font-weight: 700; }
+
+  .order-box {
+    display: flex; align-items: baseline; gap: 5px;
+    background: var(--green-l); border-radius: 10px; padding: 7px 12px;
+  }
+  .order-box .lbl { font-size: 12px; color: var(--green); font-weight: 700; }
+  .order-box .num { font-size: 22px; font-weight: 900; color: var(--green); line-height: 1; }
+  .order-box .u { font-size: 12px; color: var(--green); }
+  .order-box.dim { background: #eef1f4; }
+  .order-box.dim .lbl, .order-box.dim .num, .order-box.dim .u { color: #9aa6b2; }
+
+  .save-tag { font-size: 11px; font-weight: 800; min-width: 16px; }
+  .save-tag.ok { color: var(--green); }
+  .save-tag.ing { color: var(--amber); }
+  .save-tag.err { color: #c0392b; }
+
+  .note-row { margin-top: 6px; font-size: 11.5px; color: var(--amber); }
+
+  .empty { padding: 40px 20px; text-align: center; color: #8a96a3; font-size: 14px; }
+
+  /* LIFFローディング / エラー */
+  .overlay {
+    position: fixed; inset: 0; background: var(--bg);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px; z-index: 50; padding: 24px; text-align: center;
+  }
+  .spinner {
+    width: 38px; height: 38px; border: 4px solid #dfe5ec; border-top-color: var(--navy);
+    border-radius: 50%; animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .overlay .msg { font-size: 14px; color: #5a6a7a; }
+  .overlay .err-title { font-size: 16px; font-weight: 800; color: #c0392b; }
+  .hide { display: none !important; }
+
+  .foot { padding: 18px 14px 40px; text-align: center; font-size: 11px; color: #aab4bf; }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header>
+    <div class="brand">お江戸弁当</div>
+    <h1>📦 定数発注 棚卸し</h1>
+    <div class="who" id="whoTag"></div>
+  </header>
+
+  <div class="datebar">
+    <label>対象日（この日の発注分）</label>
+    <div class="date-row">
+      <select id="dateSel"></select>
+      <button class="reload" id="reloadBtn" title="再読込">🔄</button>
+    </div>
+  </div>
+
+  <div class="hint">在庫を数えて <b>在庫</b> 欄に入力すると、<b>発注数（目標−在庫）</b> が自動で計算され保存されます。</div>
+  <div class="status" id="statusMsg"></div>
+
+  <div id="vendorList"></div>
+
+  <div class="foot">入力は自動保存されます／管理画面の発注タブに反映されます</div>
+</div>
+
+<!-- LIFFローディング -->
+<div class="overlay" id="loading">
+  <div class="spinner"></div>
+  <div class="msg">読み込み中…</div>
+</div>
+
+<!-- LIFFエラー -->
+<div class="overlay hide" id="liffError">
+  <div class="err-title">起動できませんでした</div>
+  <div class="msg" id="liffErrorMsg">LINEアプリから開き直してください。</div>
+</div>
+
+<script>
+// ════════════════════════════════════════════
+//  定数発注 棚卸しアプリ  v1 (2026-06-11)
+// ════════════════════════════════════════════
+
+// ★ 新規LIFFを登録して、ここに LIFF ID を貼り付けてください
+const LIFF_ID = 'REPLACE_WITH_NEW_LIFF_ID';
+
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5AawPDc7aluPokONkYz6f2ikwl0S487JvhKdKh6QSp1xhEhA/exec';
+
+const DOW = ['日','月','火','水','木','金','土'];
+
+let USER_ID = '';
+let DISPLAY_NAME = '';
+let _loading = false;
+
+function escHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function setStatus(msg, isErr) {
+  const el = document.getElementById('statusMsg');
+  el.textContent = msg || '';
+  el.className = 'status' + (isErr ? ' err' : '');
+}
+
+// ── 対象日セレクト（翌日〜・発注タブと同じ選択可能範囲） ──
+function buildDateOptions() {
+  const jstNow = new Date(Date.now() + 9 * 3600 * 1000);
+  const todayStr = jstNow.toISOString().slice(0, 10);
+  const [ty, tm, td] = todayStr.split('-').map(Number);
+  const startUtc = new Date(Date.UTC(ty, tm - 1, td + 1)); // 翌日
+  const startDow = startUtc.getUTCDay();
+  const daysFromMon = (startDow === 0) ? 6 : startDow - 1;
+  const thisMon = new Date(startUtc.getTime() - daysFromMon * 86400000);
+
+  const sel = document.getElementById('dateSel');
+  sel.innerHTML = '';
+  for (let i = 0; i < 14; i++) {
+    const d = new Date(thisMon.getTime() + i * 86400000);
+    const ds = d.toISOString().slice(0, 10);
+    if (ds <= todayStr) continue; // 翌日以降のみ
+    const lbl = `${d.getUTCMonth() + 1}/${d.getUTCDate()}（${DOW[d.getUTCDay()]}）`;
+    const opt = document.createElement('option');
+    opt.value = ds;
+    opt.textContent = lbl;
+    sel.appendChild(opt);
+  }
+}
+
+// ── データ取得 ──
+async function loadStock() {
+  if (_loading) return;
+  _loading = true;
+  const date = document.getElementById('dateSel').value;
+  const listEl = document.getElementById('vendorList');
+  setStatus('読み込み中…');
+  listEl.innerHTML = '';
+  try {
+    const res = await fetch(GAS_URL + '?action=getConstantOrderForStaff&date=' + encodeURIComponent(date), { redirect: 'follow' });
+    const data = await res.json();
+    if (!data || !data.ok) {
+      setStatus((data && data.error) ? ('取得エラー: ' + data.error) : '取得エラー', true);
+      _loading = false;
+      return;
+    }
+    setStatus('');
+    renderVendors(data);
+  } catch (e) {
+    setStatus('通信エラー: ' + e.message, true);
+  }
+  _loading = false;
+}
+
+// ── 描画 ──
+function renderVendors(data) {
+  const listEl = document.getElementById('vendorList');
+  const vendors = (data.vendors || []).filter(v => v.items && v.items.length > 0);
+  if (vendors.length === 0) {
+    listEl.innerHTML = '<div class="empty">定数発注の品目がありません。</div>';
+    return;
+  }
+
+  let html = '';
+  vendors.forEach((v, vi) => {
+    const safeV = escHtml(v.name);
+    const collapsed = vi > 0 ? '' : ''; // 既定は全部開く
+    let rows = '';
+    v.items.forEach(it => {
+      const target = Number(it.target) || 0;
+      const hasSaved = (it.currentOrderQty !== null && it.currentOrderQty !== undefined);
+      const savedOrder = hasSaved ? Number(it.currentOrderQty) : '';
+      const dispOrder = hasSaved ? Number(it.currentOrderQty) : 0;
+      const dim = hasSaved ? '' : ' dim'; // 未入力は薄く
+      rows += `
+        <div class="item">
+          <div class="item-top">
+            <span class="item-name">${escHtml(it.name)}</span>
+            <span class="item-target">目標 <b>${target}</b>${escHtml(it.unit || '')}</span>
+          </div>
+          <div class="item-calc">
+            <div class="stock-box">
+              <label>在庫</label>
+              <input class="stock" type="number" inputmode="numeric" min="0" step="1"
+                placeholder="—"
+                data-vendor="${safeV}" data-const-id="${escHtml(it.id)}"
+                data-target="${target}" data-saved-order="${savedOrder}"
+                oninput="onStockInput(this)" onblur="saveOrder(this)">
+            </div>
+            <span class="arrow-mid">→</span>
+            <div class="order-box${dim}">
+              <span class="lbl">発注</span>
+              <span class="num js-order">${dispOrder}</span>
+              <span class="u">${escHtml(it.unit || '')}</span>
+            </div>
+            <span class="save-tag js-tag"></span>
+          </div>
+          <div class="note-row js-note"></div>
+        </div>`;
+    });
+
+    html += `
+      <div class="vendor${collapsed ? ' collapsed' : ''}" data-vendor="${safeV}">
+        <div class="vendor-head" onclick="toggleVendor(this)">
+          <span class="vendor-name">${safeV}</span>
+          <span class="vendor-sum">（${v.items.length}品目）</span>
+          <span class="vendor-badge js-vbadge">0</span>
+          <span class="arrow">▼</span>
+        </div>
+        <div class="vendor-body">${rows}</div>
+      </div>`;
+  });
+  listEl.innerHTML = html;
+
+  // 各業者バッジ初期化（発注数>0の品目数）
+  document.querySelectorAll('.vendor').forEach(updateVendorBadge);
+}
+
+function toggleVendor(headEl) {
+  headEl.parentElement.classList.toggle('collapsed');
+}
+
+// 発注数>0の品目数を業者バッジに反映
+function updateVendorBadge(vendorEl) {
+  let cnt = 0;
+  vendorEl.querySelectorAll('.item').forEach(item => {
+    const numEl = item.querySelector('.js-order');
+    const orderBox = item.querySelector('.order-box');
+    const isDim = orderBox.classList.contains('dim');
+    const n = parseInt(numEl.textContent, 10) || 0;
+    if (!isDim && n > 0) cnt++;
+  });
+  const badge = vendorEl.querySelector('.js-vbadge');
+  badge.textContent = String(cnt);
+  badge.classList.toggle('zero', cnt === 0);
+}
+
+// ── 在庫入力 → 発注数ライブ計算 ──
+function onStockInput(inputEl) {
+  const item = inputEl.closest('.item');
+  const numEl = item.querySelector('.js-order');
+  const orderBox = item.querySelector('.order-box');
+  const noteEl = item.querySelector('.js-note');
+  const target = parseInt(inputEl.dataset.target, 10) || 0;
+  const raw = inputEl.value.trim();
+
+  if (raw === '') {
+    // 未入力に戻った → 前回保存値を表示（薄く）
+    const prev = inputEl.dataset.savedOrder;
+    const hasPrev = (prev !== '' && prev !== undefined);
+    numEl.textContent = hasPrev ? String(Number(prev)) : '0';
+    orderBox.classList.toggle('dim', !hasPrev);
+    noteEl.textContent = '';
+    return;
+  }
+
+  let stock = parseInt(raw, 10);
+  if (isNaN(stock) || stock < 0) stock = 0;
+  const order = Math.max(0, target - stock);
+  numEl.textContent = String(order);
+  orderBox.classList.remove('dim');
+
+  // 余剰（在庫が目標以上）のとき注記
+  noteEl.textContent = (stock >= target && target > 0) ? '在庫が目標数に達しています（発注 0）' : '';
+}
+
+// ── 保存（blur時・既存 saveConstantOrderInput を流用） ──
+async function saveOrder(inputEl) {
+  const raw = inputEl.value.trim();
+  if (raw === '') return; // 在庫未入力は保存しない
+
+  const item = inputEl.closest('.item');
+  const tagEl = item.querySelector('.js-tag');
+  const target = parseInt(inputEl.dataset.target, 10) || 0;
+  let stock = parseInt(raw, 10);
+  if (isNaN(stock) || stock < 0) stock = 0;
+  inputEl.value = String(stock);
+  const order = Math.max(0, target - stock);
+
+  // 変化なしは保存しない（未保存=''は常に保存して0も明示記録）
+  const prev = inputEl.dataset.savedOrder;
+  if (prev !== '' && Number(prev) === order) return;
+
+  const date = document.getElementById('dateSel').value;
+  const vendorName = inputEl.dataset.vendor;
+  const constId = inputEl.dataset.constId;
+
+  inputEl.classList.remove('saved'); inputEl.classList.add('saving');
+  tagEl.textContent = '保存中'; tagEl.className = 'save-tag js-tag ing';
+
+  try {
+    const params = new URLSearchParams();
+    params.append('action', 'saveConstantOrderInput');
+    params.append('date', date);
+    params.append('vendorName', vendorName);
+    params.append('constId', constId);
+    params.append('qty', String(order));
+    params.append('userId', USER_ID);
+
+    const res = await fetch(GAS_URL, { method: 'POST', body: params });
+    const json = await res.json();
+
+    inputEl.classList.remove('saving');
+    if (json && json.success) {
+      inputEl.classList.add('saved');
+      tagEl.textContent = '✓ 保存'; tagEl.className = 'save-tag js-tag ok';
+      inputEl.dataset.savedOrder = String(order);
+      updateVendorBadge(item.closest('.vendor'));
+      setTimeout(() => {
+        inputEl.classList.remove('saved');
+        if (tagEl.textContent === '✓ 保存') { tagEl.textContent = ''; tagEl.className = 'save-tag js-tag'; }
+      }, 1600);
+    } else {
+      tagEl.textContent = '保存失敗'; tagEl.className = 'save-tag js-tag err';
+      setStatus('保存失敗: ' + (json && json.error ? json.error : '不明'), true);
+    }
+  } catch (e) {
+    inputEl.classList.remove('saving');
+    tagEl.textContent = '通信エラー'; tagEl.className = 'save-tag js-tag err';
+    setStatus('保存通信エラー: ' + e.message, true);
+  }
+}
+
+// ── イベント ──
+document.getElementById('dateSel').addEventListener('change', loadStock);
+document.getElementById('reloadBtn').addEventListener('click', loadStock);
+
+// ── LIFF起動 ──
+window.addEventListener('load', async function() {
+  try {
+    await liff.init({ liffId: LIFF_ID });
+    if (!liff.isLoggedIn()) {
+      liff.login({ redirectUri: window.location.href });
+      return;
+    }
+    const profile = await liff.getProfile();
+    USER_ID = profile.userId || '';
+    DISPLAY_NAME = profile.displayName || '';
+    document.getElementById('whoTag').textContent = DISPLAY_NAME ? ('担当：' + DISPLAY_NAME) : '';
+
+    buildDateOptions();
+    document.getElementById('loading').classList.add('hide');
+
+    if (document.getElementById('dateSel').options.length === 0) {
+      setStatus('選択できる対象日がありません。', true);
+      return;
+    }
+    loadStock();
+  } catch (e) {
+    document.getElementById('loading').classList.add('hide');
+    document.getElementById('liffError').classList.remove('hide');
+    document.getElementById('liffErrorMsg').textContent = 'エラー: ' + (e && e.message ? e.message : e);
+  }
+});
+</script>
+</body>
+</html>
