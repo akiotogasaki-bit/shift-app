@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- お江戸弁当 営業報告アプリ sales-report.html v1.2 (2026-06-12) 目標マンダラ(大谷式9×9・俯瞰⇄ブロック拡大編集・プリセット枠・AI提案・人セレクタ)タブ追加。裏側vB1.4結線・GAS無改修 -->
+<!-- お江戸弁当 営業報告アプリ sales-report.html v1.3 (2026-06-12) 目標マンダラに行動メモ機能を追加(案A:行動セル選択で下部にメモ欄・遷移なし/メモは行動64セルのみ)。裏側vB1.5(actionMemos)結線。 -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">
@@ -160,6 +160,22 @@ select:disabled{background:#f3f3ef;color:#999;}
 .m-chip .n{flex:none;width:18px;height:18px;border-radius:50%;background:var(--navy);color:#fff;font-size:10px;display:flex;align-items:center;justify-content:center;}
 .m-chip .x{flex:1;}
 .m-suggest .allbtn{margin-top:8px;}
+.m-cell.act .ci{display:flex;align-items:center;justify-content:space-between;gap:4px;}
+.m-cell.act .ci .cl{flex:1;}
+.m-cell.act.sel{border-color:var(--navy);box-shadow:0 0 0 1.5px var(--navy) inset;}
+.memo-dot{flex:none;width:15px;height:15px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#c9c9c2;}
+.memo-dot i{font-size:11px;}
+.memo-dot.on{color:#fff;background:var(--green);}
+.m-memo{background:#FBF7EF;border:.5px solid #E6D9C0;border-radius:10px;padding:10px;margin-bottom:10px;}
+.m-memo .mt{font-size:11px;color:#7a5a1a;margin:0 0 8px;display:flex;align-items:center;gap:6px;}
+.m-mp-pills{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px;}
+.m-mp-pill{position:relative;width:30px;height:30px;border-radius:8px;border:.5px solid var(--line2);background:#fff;color:#555;font-size:12px;font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.m-mp-pill.on{background:var(--navy);color:#fff;border-color:var(--navy);font-weight:600;}
+.m-mp-pill .d{position:absolute;top:3px;right:3px;width:6px;height:6px;border-radius:50%;background:var(--green);}
+.m-mp-pill.on .d{background:#fff;}
+.m-mp-subj{font-size:11px;color:#8a6a2a;margin-bottom:6px;font-weight:600;word-break:break-all;}
+.m-memo textarea{width:100%;min-height:88px;border:.5px solid #E6D9C0;border-radius:8px;background:#fff;font-size:12px;line-height:1.4;padding:8px;margin:0;color:var(--text);resize:vertical;font-family:inherit;}
+.m-memo textarea:focus{outline:none;border-color:#c9b487;}
 </style>
 </head>
 <body>
@@ -239,7 +255,7 @@ select:disabled{background:#f3f3ef;color:#999;}
     </div>
 
   </div>
-  <div class="ver">v1.2</div>
+  <div class="ver">v1.3</div>
 </div>
 
 <div class="overlay" id="overlay">
@@ -278,7 +294,8 @@ var S = {
   hkLocId:'', hkPlanId:'', hkHistoryLoaded:false,
   mdLoaded:false, mdView:'overview', mdBlock:null,
   mandala:null, mdTarget:'', mdOwner:{}, mdDirty:false,
-  mdSuperLoaded:false, mdIsSuper:false, mdOwners:[], mdSuggest:null, mdSuggesting:false
+  mdSuperLoaded:false, mdIsSuper:false, mdOwners:[], mdSuggest:null, mdSuggesting:false,
+  mdMemoIdx:0
 };
 var salesChart = null;
 
@@ -805,8 +822,20 @@ function mdSlotToIdx(slot){ return slot < 4 ? slot : slot - 1; }  // slot -> サ
 function mdIdxToSlot(idx){ return idx < 4 ? idx : idx + 1; }      // サブ番号 -> slot
 
 function emptyMandala(){
-  var a = []; for(var i=0;i<8;i++) a.push(['','','','','','','','']);
-  return { center:'', themes:['','','','','','','',''], actions:a, updatedAt:'', updatedBy:'' };
+  var a = [], mm = [];
+  for(var i=0;i<8;i++){ a.push(['','','','','','','','']); mm.push(['','','','','','','','']); }
+  return { center:'', themes:['','','','','','','',''], actions:a, actionMemos:mm, updatedAt:'', updatedBy:'' };
+}
+function normalizeMemos(src){
+  src = Array.isArray(src) ? src : [];
+  var out = [];
+  for(var i=0;i<8;i++){
+    var row = Array.isArray(src[i]) ? src[i] : [];
+    var r = [];
+    for(var j=0;j<8;j++) r.push(String(row[j]==null?'':row[j]));
+    out.push(r);
+  }
+  return out;
 }
 
 function loadMandala(){
@@ -832,6 +861,7 @@ function fetchMandala(target){
   return apiGet(SALES_API, 'getMandala', { userId:S.userId, targetUserId:(target||'') }).then(function(res){
     if(!res || res.ok === false){ throw new Error(res && res.error ? res.error : 'failed'); }
     S.mandala = res.mandala || emptyMandala();
+    S.mandala.actionMemos = normalizeMemos(S.mandala.actionMemos);
     S.mdOwner = res.owner || { userId:(target||S.userId), name:'' };
     S.mdDirty = false;
     // 新規（中心も全テーマも全行動も空）ならプリセットのテーマを初期表示
@@ -911,7 +941,7 @@ function bindOverview(){
     b.addEventListener('click', function(){
       var k = b.getAttribute('data-blk');
       S.mdBlock = (k === 'center') ? 'center' : Number(k);
-      S.mdView = 'editor'; S.mdSuggest = null;
+      S.mdView = 'editor'; S.mdSuggest = null; S.mdMemoIdx = 0;
       renderMandala();
     });
   });
@@ -935,23 +965,32 @@ function renderMandalaEditor(){
         : '<i class="ti ti-wand" aria-hidden="true"></i> '+aiLabel)
     + '</button></div>';
   html += '<div id="md-suggest"></div>';
+  if(!isCenter) html += '<div id="md-memo"></div>';
   html += mdSaveBar('md-save2');
   $('m-root').innerHTML = html;
   bindEditor();
   if(S.mdSuggest) renderSuggest();
+  if(!isCenter) renderMemoPanel();
 }
 function mdEditCell(m, blk, slot){
   var isCenter = (blk === 'center');
   var t = isCenter ? -1 : Number(blk);
-  var val = '', cls = 'm-cell', label = '', ph = '';
+  var val = '', cls = 'm-cell', label = '', ph = '', badge = '', attr = '';
   if(isCenter){
     if(slot === 4){ val = m.center; cls += ' anchor'; label = '大目標'; ph = '例）年間売上◯◯円達成'; }
     else { val = m.themes[mdSlotToIdx(slot)] || ''; cls += ' theme'; label = 'テーマ'+(mdSlotToIdx(slot)+1); ph = 'テーマ'; }
   } else {
     if(slot === 4){ val = m.themes[t] || ''; cls += ' anchor'; label = 'テーマ'; ph = 'テーマ名'; }
-    else { val = (m.actions[t] || [])[mdSlotToIdx(slot)] || ''; label = '行動'+(mdSlotToIdx(slot)+1); ph = '明日からやれる行動'; }
+    else {
+      var ai = mdSlotToIdx(slot);
+      val = (m.actions[t] || [])[ai] || ''; label = '行動'+(ai+1); ph = '明日からやれる行動';
+      cls += ' act'; attr = ' data-act="'+ai+'"';
+      if(ai === S.mdMemoIdx) cls += ' sel';
+      var hasMemo = !!(((m.actionMemos||[])[t]||[])[ai] || '').trim();
+      badge = '<span class="memo-dot'+(hasMemo?' on':'')+'" title="メモ"><i class="ti ti-note" aria-hidden="true"></i></span>';
+    }
   }
-  return '<div class="'+cls+'"><div class="ci">'+esc(label)+'</div>'
+  return '<div class="'+cls+'"'+attr+'><div class="ci"><span class="cl">'+esc(label)+'</span>'+badge+'</div>'
     + '<textarea data-slot="'+slot+'" placeholder="'+esc(ph)+'">'+esc(val)+'</textarea></div>';
 }
 function mdWriteCell(blk, slot, value){
@@ -970,9 +1009,17 @@ function bindEditor(){
   var bk = $('md-back');
   if(bk) bk.addEventListener('click', function(){ S.mdView='overview'; S.mdSuggest=null; renderMandala(); });
   Array.prototype.forEach.call(document.querySelectorAll('#m-root .m-cell textarea'), function(ta){
+    var actIdx = ta.parentNode.getAttribute('data-act'); // 行動セルのみ非null
+    ta.addEventListener('focus', function(){
+      if(actIdx !== null && S.mdBlock !== 'center'){ S.mdMemoIdx = Number(actIdx); renderMemoPanel(); }
+    });
     ta.addEventListener('input', function(){
       mdWriteCell(S.mdBlock, Number(ta.getAttribute('data-slot')), ta.value);
       var sv = $('md-save2'); if(sv) sv.disabled = false; // 再描画せずフォーカス維持
+      if(actIdx !== null && S.mdBlock !== 'center' && Number(actIdx) === S.mdMemoIdx){
+        var subj = document.querySelector('#md-memo .m-mp-subj');
+        if(subj){ var nm = ta.value.trim(); subj.textContent = nm ? ('行動'+(S.mdMemoIdx+1)+'：'+nm) : ('行動'+(S.mdMemoIdx+1)+'（未入力）'); }
+      }
     });
   });
   var ai = $('md-ai'); if(ai) ai.addEventListener('click', runSuggest);
@@ -1051,7 +1098,7 @@ function applySuggestAll(){
 
 function saveMandalaNow(){
   if(!S.mandala) return;
-  var payload = { center:S.mandala.center||'', themes:S.mandala.themes||[], actions:S.mandala.actions||[] };
+  var payload = { center:S.mandala.center||'', themes:S.mandala.themes||[], actions:S.mandala.actions||[], actionMemos:S.mandala.actionMemos||[] };
   var btns = [ $('md-save'), $('md-save2') ];
   btns.forEach(function(b){ if(b) b.disabled = true; });
   apiPost(SALES_API, 'saveMandala', { userId:S.userId, targetUserId:(S.mdTarget||''), json:JSON.stringify(payload) }).then(function(res){
@@ -1067,6 +1114,43 @@ function saveMandalaNow(){
   }).catch(function(){
     toast('保存の通信に失敗しました', true);
     btns.forEach(function(b){ if(b) b.disabled = false; });
+  });
+}
+
+function renderMemoPanel(){
+  var host = $('md-memo'); if(!host) return;
+  if(S.mdBlock === 'center'){ host.innerHTML = ''; return; }
+  var m = S.mandala, t = Number(S.mdBlock);
+  var idx = S.mdMemoIdx; if(idx == null || idx < 0 || idx > 7){ idx = 0; S.mdMemoIdx = 0; }
+  if(!Array.isArray(m.actionMemos)) m.actionMemos = normalizeMemos(m.actionMemos);
+  var actName = ((m.actions[t] || [])[idx] || '').trim();
+  var memoVal = ((m.actionMemos[t] || [])[idx]) || '';
+  var pills = '';
+  for(var i=0;i<8;i++){
+    var has = !!(((m.actionMemos[t] || [])[i]) || '').trim();
+    pills += '<button class="m-mp-pill'+(i===idx?' on':'')+'" data-mi="'+i+'">'+(i+1)+(has?'<span class="d"></span>':'')+'</button>';
+  }
+  var subj = actName ? ('行動'+(idx+1)+'：'+esc(actName)) : ('行動'+(idx+1)+'（未入力）');
+  host.innerHTML = '<div class="m-memo">'
+    + '<p class="mt"><i class="ti ti-note" aria-hidden="true"></i>メモ（選択中の行動の詳細）</p>'
+    + '<div class="m-mp-pills">'+pills+'</div>'
+    + '<div class="m-mp-subj">'+subj+'</div>'
+    + '<textarea id="md-memo-ta" placeholder="この行動の詳細・手順・補足などを自由に記入">'+esc(memoVal)+'</textarea>'
+    + '</div>';
+  Array.prototype.forEach.call(host.querySelectorAll('.m-mp-pill'), function(b){
+    b.addEventListener('click', function(){ S.mdMemoIdx = Number(b.getAttribute('data-mi')); renderMemoPanel(); });
+  });
+  var ta = $('md-memo-ta');
+  if(ta) ta.addEventListener('input', function(){
+    var tt = Number(S.mdBlock), ii = S.mdMemoIdx;
+    if(!Array.isArray(m.actionMemos[tt])) m.actionMemos[tt] = ['','','','','','','',''];
+    m.actionMemos[tt][ii] = ta.value;
+    S.mdDirty = true;
+    var sv = $('md-save2'); if(sv) sv.disabled = false;
+  });
+  // グリッド側の選択ハイライトを再描画なしで同期（フォーカスは奪わない）
+  Array.prototype.forEach.call(document.querySelectorAll('#m-root .m-cell.act'), function(c){
+    c.classList.toggle('sel', Number(c.getAttribute('data-act')) === idx);
   });
 }
 
