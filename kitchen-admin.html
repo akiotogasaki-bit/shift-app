@@ -7,7 +7,7 @@
 <style>
   :root{
     --navy:#1A3C5E; --navy-d:#122c46; --green:#0E7C66; --green-d:#0a5f4e;
-    --blue:#2471A3; --orange:#E67E22; --red:#C0392B;
+    --blue:#2471A3; --orange:#E67E22; --red:#C0392B; --purple:#6A4C93;
     --bg:#f4f6f9; --card:#ffffff; --line:#e2e7ec; --off:#b6bcc4; --ink:#1c2733; --mute:#7a8694;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
@@ -45,6 +45,28 @@
   .coverage .cv{flex:1;text-align:center;font-size:11px;color:var(--mute);}
   .coverage .cv b{display:block;font-size:16px;color:var(--navy);font-weight:800;}
 
+  .copyall{margin:8px 12px 0;width:calc(100% - 24px);border:1.5px dashed var(--green);background:#eafaf4;color:var(--green-d);border-radius:10px;padding:10px;font-size:13px;font-weight:800;cursor:pointer;}
+  .copyall:active{background:#dcf3ea;}
+  .note{margin:6px 14px 0;font-size:12px;color:var(--red);min-height:0;}
+
+  /* ── 時間×曜日グリッド ── */
+  .gridwrap{margin:8px 12px 4px;overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:12px;background:var(--card);}
+  table.grid{border-collapse:separate;border-spacing:0;width:100%;min-width:560px;}
+  table.grid th,table.grid td{border-bottom:1px solid var(--line);border-right:1px solid var(--line);vertical-align:top;}
+  table.grid th:last-child,table.grid td:last-child{border-right:0;}
+  table.grid tbody tr:last-child td{border-bottom:0;}
+  table.grid thead th{background:#eef3f8;color:var(--navy);font-size:12px;font-weight:800;padding:7px 4px;text-align:center;position:sticky;top:0;z-index:2;}
+  table.grid thead th .dow{display:block;font-size:13px;}
+  table.grid thead th .md{display:block;font-size:11px;color:var(--mute);font-weight:700;}
+  .tcol{position:sticky;left:0;z-index:1;background:#f8fafc;width:56px;min-width:56px;text-align:center;font-weight:800;font-size:12px;color:var(--navy);padding:6px 2px;}
+  .tcol .x{display:block;margin:2px auto 0;border:0;background:transparent;color:var(--off);font-size:14px;cursor:pointer;line-height:1;}
+  thead th.tcol{z-index:3;background:#e7eef5;}
+  td.cell{min-width:90px;padding:4px;cursor:pointer;}
+  td.cell:active{background:#eef7ff;}
+  .chip{display:block;margin:2px 0;padding:4px 7px;border-radius:7px;color:#fff;font-size:12px;font-weight:800;line-height:1.25;word-break:break-all;}
+  .chip .ct{display:block;font-size:10px;font-weight:700;opacity:.92;}
+  .cell-add{display:block;text-align:center;color:#c2cdd9;font-size:15px;padding:3px 0;}
+
   /* ── アクションバー ── */
   .actionbar{position:sticky;bottom:0;z-index:6;background:rgba(244,246,249,.96);backdrop-filter:blur(4px);border-top:1px solid var(--line);padding:8px 10px;display:flex;gap:7px;flex-wrap:wrap;}
   .act{flex:1;min-width:84px;border:0;border-radius:10px;padding:11px 6px;font-size:13px;font-weight:800;cursor:pointer;color:#fff;display:flex;align-items:center;justify-content:center;gap:4px;}
@@ -54,35 +76,34 @@
   .act:disabled{opacity:.5;}
   .act .bdg{background:rgba(255,255,255,.28);border-radius:999px;font-size:11px;padding:1px 7px;font-weight:800;}
 
-  .copyall{margin:8px 12px 0;width:calc(100% - 24px);border:1.5px dashed var(--green);background:#eafaf4;color:var(--green-d);border-radius:10px;padding:10px;font-size:13px;font-weight:800;cursor:pointer;}
-  .copyall:active{background:#dcf3ea;}
-
-  .note{margin:6px 14px 0;font-size:12px;color:var(--red);min-height:0;}
-
-  .list{padding:8px 12px 16px;}
-  .cook{background:var(--card);border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.06);margin-bottom:12px;overflow:hidden;}
-  .cook-head{display:flex;align-items:center;gap:8px;padding:10px 12px;background:#f8fafc;border-bottom:1px solid var(--line);border-left:4px solid var(--navy);}
-  .cook-name{font-weight:800;font-size:15px;}
-  .cook-unreg{font-size:11px;color:var(--red);font-weight:700;}
-  .cook-copy{margin-left:auto;border:1px solid var(--green);background:#fff;color:var(--green-d);font-size:11.5px;font-weight:800;border-radius:8px;padding:6px 9px;cursor:pointer;}
-  .cook-copy:disabled{opacity:.4;border-color:var(--line);color:var(--mute);}
-
-  .drow{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid #f0f3f6;flex-wrap:wrap;}
-  .drow:last-child{border-bottom:0;}
-  .dlabel{width:62px;font-weight:800;font-size:13px;color:var(--navy);}
-  .dhint{font-size:11px;color:var(--mute);min-width:96px;}
-  .dhint.on{color:var(--green-d);}
-  .dtoggle{display:inline-flex;background:#eef2f6;border-radius:8px;padding:2px;}
-  .dtg{border:0;background:transparent;font-size:12px;font-weight:800;padding:6px 11px;border-radius:7px;cursor:pointer;color:#5a6b7b;}
-  .dtg.rest.active{background:#fff;color:var(--off);box-shadow:0 1px 2px rgba(0,0,0,.1);}
-  .dtg.work.active{background:var(--green);color:#fff;}
-  .dtimes{display:flex;align-items:center;gap:6px;margin-left:auto;}
-  .dsel{border:1px solid var(--line);border-radius:8px;padding:7px 8px;font-size:14px;background:#fff;}
-  .dsel.bad{border-color:var(--red);background:#fdecea;}
-  .dtilde{color:var(--mute);font-weight:700;}
-
   .empty{margin:24px 14px;padding:32px 18px;background:#fff;border-radius:12px;text-align:center;color:var(--mute);font-size:14px;box-shadow:0 1px 4px rgba(0,0,0,.06);}
   .empty .ico{font-size:34px;margin-bottom:8px;}
+
+  /* ── 追加シート（bottom sheet） ── */
+  #sheet{position:fixed;inset:0;z-index:48;display:none;}
+  #sheet.show{display:block;}
+  .sheet-bd{position:absolute;inset:0;background:rgba(18,28,40,.45);}
+  .sheet-panel{position:absolute;left:0;right:0;bottom:0;max-width:760px;margin:0 auto;background:#fff;border-radius:16px 16px 0 0;max-height:86vh;display:flex;flex-direction:column;box-shadow:0 -6px 24px rgba(0,0,0,.22);}
+  .sheet-head{padding:14px 16px 8px;border-bottom:1px solid var(--line);}
+  .sheet-head h3{margin:0;font-size:16px;color:var(--navy);font-weight:800;}
+  .sheet-head .sub{font-size:12px;color:var(--mute);margin-top:3px;}
+  .sheet-body{padding:6px 14px 4px;overflow-y:auto;}
+  .sec-t{font-size:12px;font-weight:800;color:var(--navy);margin:10px 2px 6px;}
+  .sec-empty{font-size:12px;color:var(--mute);padding:4px 2px 8px;}
+  .pl{display:flex;align-items:center;gap:6px;padding:8px;border:1px solid var(--line);border-radius:9px;margin-bottom:7px;background:#f8fafc;flex-wrap:wrap;}
+  .pl .nm{font-weight:800;font-size:13px;min-width:72px;}
+  .pl .emp{font-size:10px;color:var(--purple);font-weight:800;border:1px solid #d9cef0;border-radius:6px;padding:1px 5px;}
+  .pl .sel{border:1px solid var(--line);border-radius:8px;padding:6px 6px;font-size:13px;background:#fff;}
+  .pl .sel.bad{border-color:var(--red);background:#fdecea;}
+  .pl .til{color:var(--mute);font-weight:700;font-size:12px;}
+  .pl .rm{margin-left:auto;border:1px solid var(--red);background:#fff;color:var(--red);font-size:11.5px;font-weight:800;border-radius:8px;padding:6px 9px;cursor:pointer;}
+  .cand{display:flex;align-items:center;gap:8px;padding:9px;border:1px solid var(--line);border-radius:9px;margin-bottom:7px;}
+  .cand .nm{font-weight:800;font-size:13px;}
+  .cand .hint{font-size:11px;color:var(--mute);}
+  .cand .hint.emp{color:var(--purple);}
+  .cand .add{margin-left:auto;border:0;background:var(--green);color:#fff;font-size:12.5px;font-weight:800;border-radius:8px;padding:8px 13px;cursor:pointer;}
+  .sheet-foot{padding:10px 14px;border-top:1px solid var(--line);}
+  .sheet-close{width:100%;border:0;background:var(--navy);color:#fff;font-size:14px;font-weight:800;border-radius:10px;padding:12px;cursor:pointer;}
 
   /* ── トースト ── */
   #toast{position:fixed;left:50%;bottom:74px;transform:translateX(-50%) translateY(20px);background:#1c2733;color:#fff;padding:11px 18px;border-radius:10px;font-size:13px;font-weight:700;opacity:0;pointer-events:none;transition:.25s;z-index:40;max-width:88%;text-align:center;}
@@ -133,14 +154,34 @@
   <button class="copyall" id="copyAllBtn" style="display:none;" onclick="copyReqAll()">📥 提出された希望をすべて確定へコピー</button>
   <div class="note" id="validNote"></div>
 
-  <div class="list" id="list"></div>
+  <div id="grid"></div>
 
-  <footer>お江戸弁当 キッチンシフト管理 v1.0</footer>
+  <footer>お江戸弁当 キッチンシフト管理 v2.0</footer>
 
   <div class="actionbar" id="actionbar" style="display:none;">
     <button class="act save" id="btnSave" onclick="doSave()">💾 保存</button>
     <button class="act all" id="btnAll" onclick="doSendAll()">📣 一括送信</button>
     <button class="act diff" id="btnDiff" onclick="doSendDiff()">✏️ 差分送信 <span class="bdg" id="diffBadge">0</span></button>
+  </div>
+</div>
+
+<!-- 追加シート -->
+<div id="sheet">
+  <div class="sheet-bd" onclick="closeSheet()"></div>
+  <div class="sheet-panel">
+    <div class="sheet-head">
+      <h3 id="shTitle"></h3>
+      <div class="sub" id="shSub"></div>
+    </div>
+    <div class="sheet-body">
+      <div class="sec-t">配置済み（この曜日）</div>
+      <div id="shPlaced"></div>
+      <div class="sec-t">候補（希望者＋社員）</div>
+      <div id="shCand"></div>
+    </div>
+    <div class="sheet-foot">
+      <button class="sheet-close" onclick="closeSheet()">閉じる</button>
+    </div>
   </div>
 </div>
 
@@ -152,25 +193,68 @@ const GAS_URL  = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5
 const PASSWORD = '1115';
 const DAYS = ['月','火','水','木','金'];
 const COLORS = ['#1A3C5E','#0E7C66','#B5651D','#6A4C93','#1E6091','#9A3B3B','#3A7D44','#7A5195'];
-const DEF_START = '09:00', DEF_END = '14:00';
+const DEF_START = '05:00';
+const LS_AXIS = 'oedo_kitchen_axis_pinned_v2';
+const AXIS_MAX_H = 10;          // 既定の時間軸レンジ 0:00〜10:00（30分刻み）
+const SLOT_MIN_H = 0, SLOT_MAX_H = 15;  // 開始/終了ドロップダウンの範囲 0:00〜15:00
 
-const state = { week:'this', weekTarget:null, dates:[], cooks:[] };
-// cooks[i] = { name, userId, registered, hasReq, req:['HH:MM-HH:MM'|'休'|''×5], days:[{off,start,end}×5], base:['休'|'HH:MM-HH:MM'×5] }
+const state = { week:'this', weekTarget:null, dates:[], cooks:[], axis:[] };
+// cooks[i] = { name, userId, registered, isEmployee, hasReq, req:[5], days:[{off,start,end}×5], base:[5], color }
+let sheetDay = -1, sheetSlot = null;
 
 /* ───────── 時刻ユーティリティ ───────── */
-function timeOptions(){
-  const o=[];
-  for(let h=2;h<=15;h++){ for(let m=0;m<60;m+=30){ if(h===15&&m>0)break; o.push((h<10?'0':'')+h+':'+(m===0?'00':'30')); } }
-  return o; // 02:00 ... 15:00
-}
+function pad2(n){ n=parseInt(n,10)||0; return (n<10?'0':'')+n; }
+function padTime(t){ const p=String(t||'').split(':'); if(p.length<2) return ''; const h=parseInt(p[0],10), m=parseInt(p[1],10); if(isNaN(h)||isNaN(m)) return ''; return pad2(h)+':'+pad2(m); }
+function dispTime(t){ const c=padTime(t); if(!c) return String(t||''); const p=c.split(':'); return (parseInt(p[0],10))+':'+p[1]; }
 function toMin(t){ const p=String(t).split(':'); return (parseInt(p[0],10)||0)*60+(parseInt(p[1],10)||0); }
+function slotOptions(){ const o=[]; for(let h=SLOT_MIN_H;h<=SLOT_MAX_H;h++){ for(let m=0;m<60;m+=30){ if(h===SLOT_MAX_H&&m>0)break; o.push(pad2(h)+':'+pad2(m)); } } return o; }
+function defaultAxis(){ const o=[]; for(let h=0;h<=AXIS_MAX_H;h++){ for(let m=0;m<60;m+=30){ if(h===AXIS_MAX_H&&m>0)break; o.push(pad2(h)+':'+pad2(m)); } } return o; }
+function uniqSortTimes(arr){ const mp=new Map(); arr.forEach(t=>{ const c=padTime(t); if(c) mp.set(toMin(c),c); }); return Array.from(mp.values()).sort((a,b)=>toMin(a)-toMin(b)); }
+function isDefaultTime(t){ const min=toMin(padTime(t)); return (min>=0 && min<=AXIS_MAX_H*60 && (min%30===0)); }
+
+/* セル表現：'HH:MM-HH:MM'（開始-終了）/ 'HH:MM'（社員=終了なし・開始のみ）/ '休' / 空 */
 function parseCell(v){
   v=String(v||'').trim();
-  if(v && v!=='休' && v.indexOf('-')>0){ const p=v.split('-'); return {off:false,start:p[0],end:p[1]}; }
-  return {off:true,start:DEF_START,end:DEF_END};
+  if(v && v!=='休'){
+    if(v.indexOf('-')>0){ const p=v.split('-'); return {off:false,start:(padTime(p[0])||DEF_START),end:(padTime(p[1])||'')}; }
+    if(/^\d{1,2}:\d{2}$/.test(v)){ return {off:false,start:padTime(v),end:''}; }
+  }
+  return {off:true,start:DEF_START,end:''};
 }
-function serialize(d){ return d.off ? '休' : (d.start+'-'+d.end); }
-function normNV(v){ v=String(v||'').trim(); return (v===''||v==='休') ? '休' : v; }
+function serialize(d){ if(d.off) return '休'; return d.end ? (d.start+'-'+d.end) : d.start; }
+function normNV(v){
+  v=String(v||'').trim();
+  if(v===''||v==='休') return '休';
+  if(v.indexOf('-')>0){ const p=v.split('-'); return padTime(p[0])+'-'+(p[1]?padTime(p[1]):''); }
+  if(/^\d{1,2}:\d{2}$/.test(v)) return padTime(v);
+  return v;
+}
+
+/* ───────── 時間軸の永続化（localStorage：設定した時間を翌週もデフォルト表示） ───────── */
+function loadPinned(){ try{ const r=localStorage.getItem(LS_AXIS); const a=r?JSON.parse(r):[]; return Array.isArray(a)?uniqSortTimes(a):[]; }catch(e){ return []; } }
+function savePinned(arr){ try{ localStorage.setItem(LS_AXIS, JSON.stringify(uniqSortTimes(arr))); }catch(e){} }
+function dynamicTimes(){
+  const out=[];
+  state.cooks.forEach(c=>{ for(let d=0;d<5;d++){ const x=c.days[d]; if(x&&!x.off&&x.start) out.push(padTime(x.start)); } });
+  return out;
+}
+function buildAxis(){
+  const all = defaultAxis().concat(loadPinned()).concat(dynamicTimes());
+  state.axis = uniqSortTimes(all);
+}
+function persistUsedTimes(){
+  const placed = dynamicTimes().filter(t=>!isDefaultTime(t));
+  savePinned(uniqSortTimes(loadPinned().concat(placed)));
+}
+function removeAxisRow(t){
+  const keep = loadPinned().filter(x=>toMin(x)!==toMin(t));
+  savePinned(keep);
+  buildAxis(); renderGrid();
+}
+function rowEmpty(slot){
+  for(const c of state.cooks){ for(let d=0;d<5;d++){ const x=c.days[d]; if(x&&!x.off&&toMin(x.start)===toMin(slot)) return false; } }
+  return true;
+}
 
 /* ───────── 週解決（kitchen-shift.html と同一・サーバの当週/翌週基準に一致） ───────── */
 function isoWeekTargetOfDate(d){
@@ -217,6 +301,7 @@ async function apiPost(payload){
 
 /* ───────── UI小物 ───────── */
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function stripDow(lab){ return String(lab==null?'':lab).replace(/\([^)]*\)/,'').trim(); }
 function setStatus(msg,kind){ const el=document.getElementById('status'); el.textContent=msg||''; el.className='status'+(kind?(' '+kind):''); }
 let toastT=null;
 function toast(msg,kind){ const el=document.getElementById('toast'); el.textContent=msg; el.className='show'+(kind?(' '+kind):''); clearTimeout(toastT); toastT=setTimeout(()=>el.className='',2600); }
@@ -246,12 +331,13 @@ function switchWeek(w){
 
 /* ───────── 読み込み（3並列） ───────── */
 async function load(){
+  closeSheet();
   setStatus('読み込み中...');
   document.getElementById('weekRange').innerHTML='　';
   document.getElementById('coverage').style.display='none';
   document.getElementById('copyAllBtn').style.display='none';
   document.getElementById('actionbar').style.display='none';
-  document.getElementById('list').innerHTML='';
+  document.getElementById('grid').innerHTML='';
   try{
     const wt=resolveWeekTarget();
     const [staffR,reqR,confR]=await Promise.all([
@@ -269,106 +355,169 @@ async function load(){
     ((confR&&confR.staff)||[]).forEach(s=>{ confMap[s.name]=s.days||[]; });
 
     const roster=(staffR.staff||[]);
-    state.cooks=roster.map(s=>{
+    state.cooks=roster.map((s,idx)=>{
       const conf=confMap[s.name]||['','','','',''];
       const req =reqMap[s.name]||null;
       return {
         name:s.name, userId:s.userId||'', registered:!!s.registered,
+        isEmployee:!!s.isEmployee,
         hasReq:!!req,
         req: req || ['','','','',''],
         days: conf.map(parseCell),
         base: conf.map(normNV),
+        color: COLORS[idx%COLORS.length],
       };
     });
 
+    buildAxis();
     const ds=state.dates;
-    document.getElementById('weekRange').textContent=(ds.length>=5?ds[0]+' 〜 '+ds[4]:state.weekTarget);
-    renderCards();
+    document.getElementById('weekRange').textContent=(ds.length>=5?stripDow(ds[0])+' 〜 '+stripDow(ds[4]):state.weekTarget);
+    renderGrid();
     document.getElementById('coverage').style.display='flex';
     document.getElementById('copyAllBtn').style.display='block';
     document.getElementById('actionbar').style.display='flex';
     updateMeta();
-    setStatus('読込完了：調理スタッフ '+state.cooks.length+'名','ok');
+    setStatus('読込完了：キッチン対象 '+state.cooks.length+'名','ok');
   }catch(e){
-    state.cooks=[];
-    document.getElementById('list').innerHTML='';
+    state.cooks=[]; state.axis=[];
+    document.getElementById('grid').innerHTML='';
     setStatus('読み込みに失敗しました：'+e.message+'（通信環境を確認して「更新」）','err');
   }
 }
 
-/* ───────── 描画 ───────── */
-function reqHint(c,d){
-  if(!c.hasReq) return '希望：未提出';
-  const v=String(c.req[d]||'').trim();
-  if(!v||v==='休') return '希望：休み';
-  return '希望：'+v.replace('-','〜');
-}
-function renderCards(){
-  const host=document.getElementById('list');
+/* ───────── グリッド描画 ───────── */
+function renderGrid(){
+  const host=document.getElementById('grid');
   if(!state.cooks.length){
-    host.innerHTML='<div class="empty"><div class="ico">🍳</div><div>属性が「調理」のスタッフが登録されていません。<br>メインSSのスタッフ設定 H列＝「調理」を設定してください。</div></div>';
+    host.innerHTML='<div class="empty"><div class="ico">🍳</div><div>キッチン対象スタッフが登録されていません。<br>メインSSのスタッフ設定 H列＝「調理」または「社員」を設定してください。</div></div>';
     return;
   }
-  const opts=timeOptions();
-  let html='';
-  state.cooks.forEach((c,ci)=>{
-    const color=COLORS[ci%COLORS.length];
-    html+='<div class="cook">';
-    html+='<div class="cook-head" style="border-left-color:'+color+'">';
-    html+='<span class="cook-name">'+esc(c.name)+'</span>';
-    if(!c.registered) html+='<span class="cook-unreg">未連携</span>';
-    html+='<button class="cook-copy" onclick="copyReqRow('+ci+')"'+(c.hasReq?'':' disabled')+'>希望→確定</button>';
-    html+='</div>';
+  buildAxis();
+  const ds=state.dates;
+  let h='<div class="gridwrap"><table class="grid"><thead><tr>';
+  h+='<th class="tcol">時間</th>';
+  for(let d=0;d<5;d++){
+    h+='<th><span class="dow">'+DAYS[d]+'</span><span class="md">'+esc(stripDow(ds[d]||''))+'</span></th>';
+  }
+  h+='</tr></thead><tbody>';
 
+  state.axis.forEach(slot=>{
+    const showX=(!isDefaultTime(slot) && rowEmpty(slot));
+    h+='<tr>';
+    h+='<td class="tcol">'+esc(dispTime(slot))+(showX?'<button class="x" title="この時間行を削除" onclick="event.stopPropagation();removeAxisRow(\''+slot+'\')">×</button>':'')+'</td>';
     for(let d=0;d<5;d++){
-      const day=c.days[d]||{off:true,start:DEF_START,end:DEF_END};
-      const label=(state.dates[d]||DAYS[d]);
-      const startOpts=opts.map(t=>'<option value="'+t+'"'+(t===day.start?' selected':'')+'>'+t+'</option>').join('');
-      const endOpts  =opts.map(t=>'<option value="'+t+'"'+(t===day.end?' selected':'')+'>'+t+'</option>').join('');
-      const bad=(!day.off && toMin(day.start)>=toMin(day.end));
-      const hint=reqHint(c,d);
-      const hintOn=(c.hasReq && day && String(c.req[d]||'').trim() && String(c.req[d]||'').trim()!=='休');
-      html+='<div class="drow">';
-      html+='<span class="dlabel">'+esc(label)+'</span>';
-      html+='<span class="dhint'+(hintOn?' on':'')+'">'+esc(hint)+'</span>';
-      html+='<div class="dtoggle">';
-      html+='<button class="dtg rest'+(day.off?' active':'')+'" onclick="setOff('+ci+','+d+')">休</button>';
-      html+='<button class="dtg work'+(day.off?'':' active')+'" onclick="setOn('+ci+','+d+')">出勤</button>';
-      html+='</div>';
-      html+='<div class="dtimes" style="display:'+(day.off?'none':'flex')+'">';
-      html+='<select class="dsel'+(bad?' bad':'')+'" onchange="onSel('+ci+','+d+',\'start\',this.value)">'+startOpts+'</select>';
-      html+='<span class="dtilde">〜</span>';
-      html+='<select class="dsel'+(bad?' bad':'')+'" onchange="onSel('+ci+','+d+',\'end\',this.value)">'+endOpts+'</select>';
-      html+='</div>';
-      html+='</div>';
+      h+='<td class="cell" onclick="openSheet('+d+',\''+slot+'\')">';
+      let any=false;
+      state.cooks.forEach(c=>{
+        const x=c.days[d];
+        if(x && !x.off && toMin(x.start)===toMin(slot)){
+          any=true;
+          const tlabel = x.end ? (dispTime(x.start)+'-'+dispTime(x.end)) : (dispTime(x.start)+'〜');
+          h+='<span class="chip" style="background:'+c.color+'">'+esc(c.name)+'<span class="ct">'+esc(tlabel)+'</span></span>';
+        }
+      });
+      if(!any) h+='<span class="cell-add">＋</span>';
+      h+='</td>';
     }
-    html+='</div>';
+    h+='</tr>';
   });
-  host.innerHTML=html;
+  h+='</tbody></table></div>';
+  host.innerHTML=h;
 }
 
-/* ───────── 編集 ───────── */
-function setOff(ci,d){ state.cooks[ci].days[d].off=true;  renderCards(); updateMeta(); }
-function setOn(ci,d){  state.cooks[ci].days[d].off=false; renderCards(); updateMeta(); }
-function onSel(ci,d,field,val){
-  if(!state.cooks[ci]||!state.cooks[ci].days[d]) return;
-  state.cooks[ci].days[d][field]=val;
-  updateMeta(); // selectの操作感維持のため全再描画しない
+/* ───────── 追加シート ───────── */
+function reqParse(c,d){ return parseCell(c.req[d]); }
+function isCandidate(c,d){
+  if(c.isEmployee) return true;
+  const v=String(c.req[d]||'').trim();
+  return !!(v && v!=='休');
 }
 
-function copyReqRow(ci){
-  const c=state.cooks[ci];
-  if(!c.hasReq) return;
-  c.days=c.req.map(parseCell);
-  renderCards(); updateMeta();
-  toast(c.name+' に希望を反映','ok');
+function openSheet(d,slot){
+  sheetDay=d; sheetSlot=padTime(slot)||'00:00';
+  renderSheet();
+  document.getElementById('sheet').classList.add('show');
 }
+function closeSheet(){ document.getElementById('sheet').classList.remove('show'); sheetDay=-1; sheetSlot=null; }
+
+function renderSheet(){
+  const d=sheetDay; if(d<0) return;
+  const lab=state.dates[d]||DAYS[d];
+  document.getElementById('shTitle').textContent=DAYS[d]+'曜日　'+stripDow(lab);
+  document.getElementById('shSub').textContent='タップ位置：'+dispTime(sheetSlot)+'　／　候補をタップで追加・×で外す（社員は終了「指定なし」）';
+
+  // 配置済み（この曜日）
+  const placed=[];
+  state.cooks.forEach((c,ci)=>{ if(!c.days[d].off) placed.push(ci); });
+  placed.sort((a,b)=>toMin(state.cooks[a].days[d].start)-toMin(state.cooks[b].days[d].start));
+  let ph='';
+  if(!placed.length){ ph='<div class="sec-empty">まだ誰も配置されていません</div>'; }
+  placed.forEach(ci=>{
+    const c=state.cooks[ci], x=c.days[d];
+    const bad=(x.end && toMin(x.start)>=toMin(x.end));
+    let sOpts=''; slotOptions().forEach(t=>{ sOpts+='<option value="'+t+'"'+(toMin(t)===toMin(x.start)?' selected':'')+'>'+dispTime(t)+'</option>'; });
+    let eOpts='<option value=""'+(x.end?'':' selected')+'>指定なし</option>'; slotOptions().forEach(t=>{ eOpts+='<option value="'+t+'"'+(x.end&&toMin(t)===toMin(x.end)?' selected':'')+'>'+dispTime(t)+'</option>'; });
+    ph+='<div class="pl">';
+    ph+='<span class="nm">'+esc(c.name)+'</span>';
+    if(c.isEmployee) ph+='<span class="emp">社員</span>';
+    ph+='<select class="sel'+(bad?' bad':'')+'" onchange="plSel('+ci+',\'start\',this.value)">'+sOpts+'</select>';
+    ph+='<span class="til">〜</span>';
+    ph+='<select class="sel'+(bad?' bad':'')+'" onchange="plSel('+ci+',\'end\',this.value)">'+eOpts+'</select>';
+    ph+='<button class="rm" onclick="rmPlaced('+ci+')">× 外す</button>';
+    ph+='</div>';
+  });
+  document.getElementById('shPlaced').innerHTML=ph;
+
+  // 候補（希望者＋社員、未配置のみ）
+  const cand=[];
+  state.cooks.forEach((c,ci)=>{ if(c.days[d].off && isCandidate(c,d)) cand.push(ci); });
+  cand.sort((a,b)=>{
+    const ca=state.cooks[a], cb=state.cooks[b];
+    const ea=ca.isEmployee?1:0, eb=cb.isEmployee?1:0;
+    if(ea!==eb) return ea-eb;
+    if(!ca.isEmployee){ return toMin(reqParse(ca,d).start)-toMin(reqParse(cb,d).start); }
+    return ca.name.localeCompare(cb.name,'ja');
+  });
+  let ch='';
+  if(!cand.length){ ch='<div class="sec-empty">この曜日に追加できる候補がいません（希望未提出／休み希望／全員配置済み）</div>'; }
+  cand.forEach(ci=>{
+    const c=state.cooks[ci];
+    let hint, hintcls='';
+    if(c.isEmployee){ hint='社員（終日・終了指定なし）'; hintcls=' emp'; }
+    else { const r=reqParse(c,d); hint='希望 '+dispTime(r.start)+(r.end?('〜'+dispTime(r.end)):'〜'); }
+    ch+='<div class="cand">';
+    ch+='<span class="nm">'+esc(c.name)+'</span>';
+    ch+='<span class="hint'+hintcls+'">'+esc(hint)+'</span>';
+    ch+='<button class="add" onclick="addCand('+ci+')">追加</button>';
+    ch+='</div>';
+  });
+  document.getElementById('shCand').innerHTML=ch;
+}
+
+function plSel(ci,field,val){
+  const c=state.cooks[ci]; if(!c||sheetDay<0) return;
+  c.days[sheetDay][field]=val;
+  renderGrid(); renderSheet(); updateMeta();
+}
+function rmPlaced(ci){
+  const c=state.cooks[ci]; if(!c||sheetDay<0) return;
+  c.days[sheetDay]={off:true,start:DEF_START,end:''};
+  renderGrid(); renderSheet(); updateMeta();
+}
+function addCand(ci){
+  const c=state.cooks[ci]; if(!c||sheetDay<0) return; const d=sheetDay;
+  if(c.isEmployee){ c.days[d]={off:false,start:sheetSlot,end:''}; }
+  else { const r=reqParse(c,d); c.days[d]={off:false,start:r.start,end:r.end}; }
+  renderGrid(); renderSheet(); updateMeta();
+}
+
+/* ───────── 一括コピー（希望→確定） ───────── */
 function copyReqAll(){
   const targets=state.cooks.filter(c=>c.hasReq);
   if(!targets.length){ toast('提出済みの希望がありません'); return; }
-  if(!confirm('提出された希望を、各スタッフの確定へ反映します。\n（'+targets.length+'名／未提出者は変更なし）\nよろしいですか？')) return;
+  if(!confirm('提出された希望を全員ぶん確定へ反映します。\n（'+targets.length+'名／社員・未提出者は変更なし）\nよろしいですか？')) return;
   targets.forEach(c=>{ c.days=c.req.map(parseCell); });
-  renderCards(); updateMeta();
+  renderGrid(); updateMeta();
   toast('希望を反映しました（'+targets.length+'名）','ok');
 }
 
@@ -386,22 +535,21 @@ function computeChanges(){
   return ch;
 }
 function hasInvalid(){
-  for(const c of state.cooks){ for(let d=0;d<5;d++){ const x=c.days[d]; if(!x.off && toMin(x.start)>=toMin(x.end)) return true; } }
+  for(const c of state.cooks){ for(let d=0;d<5;d++){ const x=c.days[d]; if(!x.off && x.end && toMin(x.start)>=toMin(x.end)) return true; } }
   return false;
 }
 function updateMeta(){
-  // 出勤人数
   const counts=[0,0,0,0,0];
   state.cooks.forEach(c=>{ for(let d=0;d<5;d++){ if(!c.days[d].off) counts[d]++; } });
   let cv='';
-  for(let d=0;d<5;d++){ cv+='<div class="cv">'+esc(state.dates[d]||DAYS[d])+'<b>'+counts[d]+'</b></div>'; }
+  for(let d=0;d<5;d++){ cv+='<div class="cv">'+DAYS[d]+'<b>'+counts[d]+'</b></div>'; }
   document.getElementById('coverage').innerHTML=cv;
 
   const changes=computeChanges();
   document.getElementById('diffBadge').textContent=changes.length;
 
   const invalid=hasInvalid();
-  document.getElementById('validNote').textContent=invalid?'⚠ 終了時刻は開始時刻より後にしてください（赤枠の行）':'';
+  document.getElementById('validNote').textContent=invalid?'⚠ 終了は開始より後にしてください（社員＝終了「指定なし」はOK）':'';
   document.getElementById('btnSave').disabled=invalid;
   document.getElementById('btnAll').disabled=invalid;
   document.getElementById('btnDiff').disabled=invalid||changes.length===0;
@@ -416,6 +564,7 @@ async function doSave(){
     const data=await apiPost({action:'saveKitchenShift',weekTarget:state.weekTarget,rows:rows});
     if(!data.success) throw new Error(data.error||'保存失敗');
     state.cooks.forEach(c=>{ c.base=c.days.map(d=>normNV(serialize(d))); });
+    persistUsedTimes();
     updateMeta();
     setStatus('保存完了（'+data.saved+'名）','ok');
     toast('保存しました（'+data.saved+'名）','ok');
@@ -427,13 +576,14 @@ async function doSave(){
 async function doSendAll(){
   if(hasInvalid()){ toast('時刻を修正してください','err'); return; }
   const n=state.cooks.length;
-  if(!confirm('現在の内容を保存し、調理スタッフ全員（'+n+'名）へ確定シフトをLINE通知します。\n（過去日・休は通知されません）\nよろしいですか？')) return;
+  if(!confirm('現在の内容を保存し、キッチン対象 全員（'+n+'名）へ確定シフトをLINE通知します。\n（過去日・休は通知されません）\nよろしいですか？')) return;
   showLoading('保存＋一括通知中...'); setStatus('保存＋一括通知中...');
   try{
     const rows=state.cooks.map(c=>({name:c.name,days:c.days.map(serialize)}));
     const sv=await apiPost({action:'saveKitchenShift',weekTarget:state.weekTarget,rows:rows});
     if(!sv.success) throw new Error(sv.error||'保存失敗');
     state.cooks.forEach(c=>{ c.base=c.days.map(d=>normNV(serialize(d))); });
+    persistUsedTimes();
     const data=await apiPost({action:'sendKitchenShiftNotify',weekTarget:state.weekTarget,source:'manual'});
     if(!data.success) throw new Error(data.error||'通知失敗');
     updateMeta();
@@ -458,6 +608,7 @@ async function doSendDiff(){
     const data=await apiPost({action:'sendKitchenShiftDiff',weekTarget:state.weekTarget,changes:changes});
     if(!data.success) throw new Error(data.error||'通知失敗');
     state.cooks.forEach(c=>{ c.base=c.days.map(d=>normNV(serialize(d))); });
+    persistUsedTimes();
     updateMeta();
     setStatus('差分送信完了（送信'+data.sent+'名 / スキップ'+data.skipped+'名）','ok');
     toast('差分送信：'+data.sent+'名へ通知','ok');
