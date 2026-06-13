@@ -1205,30 +1205,6 @@ input { font-family: inherit; }
   cursor: pointer;
 }
 .bulk-base-item:active { background: var(--cream); }
-  /* ── キッチンシフト（方式B）── */
-#panel-kitchen { padding: 8px 0; }
-.k-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 12px; }
-.k-weeklabel { font-size: 13px; font-weight: 700; color: #1A3C5E; }
-.k-actions { display: flex; gap: 8px; padding: 4px 12px 8px; }
-.k-subtitle { font-size: 13px; font-weight: 700; margin: 14px 12px 6px; color: #444; }
-.k-empty { padding: 24px 16px; text-align: center; color: #888; font-size: 13px; }
-.k-card { background: #fff; border: 1px solid #e3e8ee; border-left: 4px solid #1A3C5E; border-radius: 10px; margin: 8px 12px; padding: 10px 12px; }
-.k-card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
-.k-name { font-size: 14px; font-weight: 700; }
-.k-badge-unreg { font-size: 11px; color: #B5651D; background: #FFF2E2; border: 1px solid #F0C088; border-radius: 999px; padding: 2px 8px; }
-.k-day { display: flex; align-items: center; gap: 6px; padding: 4px 0; }
-.k-daylabel { width: 88px; font-size: 12px; color: #555; flex: none; }
-.k-day select { flex: 1; min-width: 0; padding: 6px 4px; font-size: 13px; border: 1px solid #cfd6de; border-radius: 6px; background: #fff; }
-.k-day select:disabled { background: #f1f3f5; color: #aaa; }
-.k-tilde { color: #888; flex: none; }
-.k-prev-wrap { overflow-x: auto; margin: 0 12px; }
-.k-prev { border-collapse: collapse; width: 100%; font-size: 12px; }
-.k-prev th, .k-prev td { border: 1px solid #e0e5ea; padding: 6px 8px; text-align: center; white-space: nowrap; }
-.k-prev thead th { background: #1A3C5E; color: #fff; font-weight: 700; }
-.k-prev-name { text-align: left !important; font-weight: 700; background: #f7f9fb; }
-.k-prev-on { color: #0E7C66; font-weight: 700; }
-.k-prev-off { color: #bbb; }
-.k-prev-sum td { background: #eef3f8; font-weight: 700; }
 </style>
 </head>
 <body>
@@ -1259,7 +1235,7 @@ input { font-family: inherit; }
   <div class="tab-bar">
     <button class="tab-btn active" id="tab-shift" onclick="switchTab('shift')">📋 シフト管理</button>
     <button class="tab-btn" id="tab-staff" onclick="switchTab('staff')">👥 スタッフ管理<span class="badge-tab" id="orphanBadge" hidden>0</span></button>
-    <button class="tab-btn" id="tab-kitchen" onclick="switchTab('kitchen')">🍳 キッチン</button>
+    <button class="tab-btn" id="tab-kitchen" onclick="window.open('https://akiotogasaki-bit.github.io/shift-app/kitchen-admin.html','_blank')">🍳 キッチン ↗</button>
   </div>
 
   <div class="tab-panel active" id="panel-shift">
@@ -1381,45 +1357,6 @@ input { font-family: inherit; }
     </div>
 
   </div><!-- /panel-staff -->
-<!-- ═══ キッチンシフト（方式B：社長が組む版）═══ -->
-  <div class="tab-panel" id="panel-kitchen">
-    <div class="k-head">
-      <div class="week-nav">
-        <button class="week-nav-btn" id="kBtnPrev" onclick="kSwitchWeek('prev')">◀ 前週</button>
-        <button class="week-nav-btn" id="kBtnThis" onclick="kSwitchWeek('this')">今週</button>
-        <button class="week-nav-btn active" id="kBtnNext" onclick="kSwitchWeek('next')">来週 ▶</button>
-      </div>
-      <div class="k-weeklabel" id="kWeekLabel">読み込み中...</div>
-      <button class="reload-btn" onclick="loadKitchenTab()">🔄 再読み込み</button>
-    </div>
- 
-    <div class="k-actions">
-      <button class="act-btn save" onclick="kSave()"><span class="ico">💾</span><span>保存</span></button>
-      <button class="act-btn batch" onclick="kConfirmNotify()"><span class="ico">📣</span><span>確定・通知</span></button>
-    </div>
- 
-    <div class="status" id="kStatus">準備中...</div>
- 
-    <div id="kitchenInput"></div>
- 
-    <h3 class="k-subtitle">組み上がりプレビュー（横＝日付）</h3>
-    <div id="kitchenPreview"></div>
-  </div><!-- /panel-kitchen -->
- 
-  <!-- キッチン確認モーダル -->
-  <div class="modal-overlay" id="kConfirmModal">
-    <div class="modal">
-      <div class="modal-head"><h2>確認</h2>
-        <button class="modal-close" onclick="kCloseConfirm(false)">✕</button></div>
-      <div class="modal-body">
-        <div id="kConfirmMsg" style="white-space:pre-wrap;line-height:1.6;font-size:13px;"></div>
-        <div style="display:flex;gap:8px;margin-top:16px;">
-          <button class="act-btn" style="flex:1;background:#888;" onclick="kCloseConfirm(false)">キャンセル</button>
-          <button class="act-btn batch" style="flex:1;" onclick="kCloseConfirm(true)">送信する</button>
-        </div>
-      </div>
-    </div>
-  </div>
 </div>
 
 <div class="sheet-overlay" id="sheetOverlay" onclick="if(event.target===this)closeSheet()">
@@ -1631,13 +1568,6 @@ const state = {
   staffTabLoaded: false,
   editingIndex: -1,
   editMode: null,
-  // ── キッチンシフト（方式B）──
-  kitchenWeek: 'next',
-  kitchenWeekTarget: null,
-  kitchenStaff: [],
-  kitchenDates: [],
-  kitchenSaved: {},
-  kitchenLoaded: false,
 };
 
 function login() {
@@ -2911,16 +2841,11 @@ function switchTab(tab) {
   state.activeTab = tab;
   document.getElementById('tab-shift').classList.toggle('active', tab === 'shift');
   document.getElementById('tab-staff').classList.toggle('active', tab === 'staff');
-  document.getElementById('tab-kitchen').classList.toggle('active', tab === 'kitchen');
   document.getElementById('panel-shift').classList.toggle('active', tab === 'shift');
   document.getElementById('panel-staff').classList.toggle('active', tab === 'staff');
-  document.getElementById('panel-kitchen').classList.toggle('active', tab === 'kitchen');
- 
+
   if (tab === 'staff' && !state.staffTabLoaded) {
     loadStaffTab();
-  }
-  if (tab === 'kitchen' && !state.kitchenLoaded) {
-    loadKitchenTab();
   }
 }
 
