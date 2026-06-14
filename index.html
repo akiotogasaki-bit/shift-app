@@ -645,6 +645,13 @@ body {
 'use strict';
 
 // ═══════════════════════════════════════════════════════════════
+// お江戸弁当 シフト提出 LIFF（提出側）
+//   v2026-06-15 kitchen-submit-fixedstart
+//   変更：キッチン提出の「入り（開始）」を admin固定グリッド一致の9項目に制限。
+//         上がり・保存形式（'HH:MM-HH:MM'/'休'）・GASは従来どおり（型化対策不要）。
+// ═══════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════
 // 設定
 // ═══════════════════════════════════════════════════════════════
 const LIFF_ID = '2009637457-ECOGmo94';
@@ -652,9 +659,17 @@ const GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5A
 // 調理スタッフ用 確定シフト閲覧リンク（GitHub Pages・ログイン不要）
 const KITCHEN_SHIFT_URL = 'https://akiotogasaki-bit.github.io/shift-app/kitchen-shift.html';
 
-// キッチン提出フォーム：時刻ドロップダウンの範囲（2:00〜15:00・30分単位）
-const KS_DEFAULT_START = '09:00';
+// キッチン提出フォーム
+//   入り（開始）：admin固定グリッドと一致する9項目に制限（'HH:MM' padded）
+//   上がり（終了）：従来どおり 02:00〜15:00・30分（27項目）
+const KS_DEFAULT_START = '05:00';   // 未提出日で「出勤」を押した時の入り初期値（9固定のいずれか）
 const KS_DEFAULT_END   = '14:00';
+
+// 入り（開始）の固定9項目。kitchen-admin の FIXED_TIMES（0:00,2:00,3:00,4:00,5:00,6:00,6:30,7:00,8:00）と一致（padded）
+function ksStartOptions() {
+  return ['00:00','02:00','03:00','04:00','05:00','06:00','06:30','07:00','08:00'];
+}
+// 上がり（終了）の選択肢：02:00〜15:00・30分（27個）
 function ksTimeOptions() {
   const opts = [];
   for (let h = 2; h <= 15; h++) {
@@ -668,6 +683,17 @@ function ksTimeOptions() {
 function ksToMin(t) {
   const p = String(t).split(':');
   return (parseInt(p[0], 10) || 0) * 60 + (parseInt(p[1], 10) || 0);
+}
+// 任意の開始時刻を、入り固定9項目のうち最寄りへ寄せる（既存データ再表示用）
+function ksSnapStart(t) {
+  const opts = ksStartOptions();
+  const m = ksToMin(t);
+  let best = opts[0], bd = Infinity;
+  for (const o of opts) {
+    const diff = Math.abs(ksToMin(o) - m);
+    if (diff < bd) { bd = diff; best = o; }
+  }
+  return best;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1184,13 +1210,16 @@ async function submitShift() {
 let ksLoading = false;
 
 // サーバーのセル（'HH:MM-HH:MM' | '休' | ''）→ {off,start,end}
+//   入りは固定9項目へスナップ（旧データの非固定値も最寄りへ寄せて初期選択を成立させる）
 function buildKsDaysFromServer(cells) {
   const out = [];
   for (let i = 0; i < 5; i++) {
     const v = String((cells && cells[i]) || '').trim();
     if (v && v !== '休' && v.indexOf('-') > 0) {
       const parts = v.split('-');
-      out.push({ off: false, start: (parts[0] || KS_DEFAULT_START).trim(), end: (parts[1] || KS_DEFAULT_END).trim() });
+      const startRaw = (parts[0] || KS_DEFAULT_START).trim();
+      const endRaw   = (parts[1] || KS_DEFAULT_END).trim();
+      out.push({ off: false, start: ksSnapStart(startRaw), end: endRaw });
     } else {
       out.push({ off: true, start: KS_DEFAULT_START, end: KS_DEFAULT_END });
     }
@@ -1244,14 +1273,15 @@ function renderKitchenForm() {
   }
   document.getElementById('ks-resubmit-notice').style.display = state.ksAlreadySubmitted ? 'block' : 'none';
 
-  const opts = ksTimeOptions();
+  const startList = ksStartOptions();   // 入り：固定9項目（adminグリッド一致）
+  const endList   = ksTimeOptions();    // 上がり：02:00〜15:00・30分
   const list = document.getElementById('ks-day-list');
   list.innerHTML = '';
 
   state.ksDates.forEach((label, i) => {
     const day = state.ksDays[i] || { off: true, start: KS_DEFAULT_START, end: KS_DEFAULT_END };
-    const startOpts = opts.map(t => `<option value="${t}"${t === day.start ? ' selected' : ''}>${t}</option>`).join('');
-    const endOpts   = opts.map(t => `<option value="${t}"${t === day.end ? ' selected' : ''}>${t}</option>`).join('');
+    const startOpts = startList.map(t => `<option value="${t}"${t === day.start ? ' selected' : ''}>${t}</option>`).join('');
+    const endOpts   = endList.map(t => `<option value="${t}"${t === day.end ? ' selected' : ''}>${t}</option>`).join('');
 
     const row = document.createElement('div');
     row.className = 'ks-day' + (day.off ? '' : ' on');
