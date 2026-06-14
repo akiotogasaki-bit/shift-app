@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>🍱 納品管理</title>
-<!-- kanri.html v3.37 (2026-06-12) ②「📅 シフト閲覧」タブ新設（読取専用）：販売員=getShiftMatrixを拠点×日付/キッチン=getKitchenShiftをスタッフ×月〜金で表示。今週/来週トグル。初期表示種別はlocalStorage(kanri_sv_kind)に記憶。バックエンド追加なし（既存GETを流用）。関数は全てsv*接頭辞で既存と無衝突。 -->
+<!-- kanri.html v3.38 (2026-06-15) シフト閲覧タブのキッチン表示を「時間(縦)×曜日(横)」グリッドに刷新（kitchen-admin準拠・読取専用）。出勤者がいる時間行のみ＋仕込み行のコンパクト表示。セル＝スタッフ名＋終了時刻。終了は「キッチン希望」シート(getKitchenRequests)を並列取得して補完（確定がレンジならそれを優先）。チップは単色。販売員タブ・GASは変更なし。希望取得が失敗しても確定グリッドは表示（終了が出ないだけ）。 / v3.37 (2026-06-12) ②「📅 シフト閲覧」タブ新設（読取専用）：販売員=getShiftMatrixを拠点×日付/キッチン=getKitchenShiftをスタッフ×月〜金で表示。今週/来週トグル。初期表示種別はlocalStorage(kanri_sv_kind)に記憶。バックエンド追加なし（既存GETを流用）。関数は全てsv*接頭辞で既存と無衝突。 -->
 <!-- kanri.html v3.36 (2026-06-10) ①ヘッダーに「🔄 配達を再取込」ボタン追加（押下=silent取込→トースト→現在タブ自動再取得／GAS=reimportDelivery・reimportDeliveryNow・importDeliveryOrdersDaily(opts.silent)）。②午前/午後 盛り出し表の最下部に合計バー（白米/玄米/全体・拠点分＋配達分・お茶除外・renderSheet2/3のみ・GAS変更なし）。 / v3.35 (2026-06-09) 設定タブに「🚫 除外日（天候等で計算から外す日）」セクションを追加（sb*をミラーしたex*・日付＋理由select[台風/大雨/猛暑/休業/その他]・行追加/削除/💾保存して再計算）。指定日を翌週推奨の加重平均から外し残り週で再配分（前週=台風休業でも推奨が落ち込まない）。理由は記録用で計算に影響しない。過去4週がすべて除外なら除外を無視して生4週平均にフォールバック。読込=getExcludedDates / 保存=saveExcludedDates（保存と同時に全曜日を即再計算→配分調整を自動再描画）。要メインGASパッチ（除外日API＝getExcludedDates/getExcludedDatesSet_/saveExcludedDates追加・getBasicMasterMatrixとcalculateNextWeekProposals_の2か所に除外反映・doGet/doPostルーティング・clearAllMasterCacheキー追加）。 / v3.34 (2026-06-09) 配分調整:拠点合計クランプの内訳表示をマージ。翌週推奨は商品ごと±1/2のまま、拠点の合計納品数を今週比の上限/下限(±%・設定シートclamp_location_pct)に収め、完売頻度門番(clamp_gate_count・直近4週)未満は増やさず、はみ出た分は完売の強い順に増やす/弱い順に削る。内訳モーダルに調整時の🔧行を追加(c.clamped)。要メインGAS(getBasicMasterMatrixにbmApplyLocationClamp_を1行挿入＋関数bmGetClampSettings_/bmSelloutTimeRank_/bmApplyLocationClamp_を追加＋設定シートclamp_enabled/clamp_location_pct/clamp_gate_count)。※前のv3.33(新規拠点upsert)の上に重ねた版。 / v3.33 (2026-06-09) 配分調整:新規拠点に配分を入力して💾保存しても数字が保存されない不具合を修正。GAS保存系をupsert化（行が無い編集セルは新規行を追加）＝saveBasicMasterNumbers/confirmBasicMasterLocation/confirmBasicMasterAll。フロントは保存後に実保存数(r.saved)を要求セル数と照合し、不一致なら「保存完了」を出さず警告＋新規追加数を表示。要GASパッチ(bmMetaMaps_/bmAppendRows_追加＋保存系3関数差し替え)。 / v3.32 (2026-06-07) 盛り出し:配達カードに「午前/午後 便移動」ボタンを追加(オーダー番号キーでGAS「便上書き」に保存・再取込でも保持)。便振り分けはGAS側で開始時刻+手動上書き判定に変更(;区切り対応・14:00境界)。要GASパッチ(parseStartTime_/getBin_/getSheet2-3/setBinOverride)。 / v3.31 (2026-06-03) — 発注タブ・定数発注：入力欄の既定値を「定数」から「0」に変更し、定数は入力欄の右に小さく参考表示（「定数 N」）。inputmode=numericでOS標準テンキー。フォーカス時に既定の「0」は消し（非0は全選択）、空欄で離れたら0に戻す。変化が無いタップは保存しない（data-savedで判定）。発注文は従来通り0スキップ。GAS変更なし。※定数品目は「既定で発注しない」挙動に変更（実際に出す品目だけ数量入力）。v3.30 — 配分調整：個別セルに入力した0が未入力扱いになるバグを修正。bmOnSalesBlurの「表示値と一致なら破棄」最適化を撤廃し、数字/Backspace/Deleteキーで実際に編集した時だけ記録する方式に変更（0も明示入力として保持）。focus/key/blurの3関数を改修。GAS変更なし。v3.29 — 仕込みタブ：合計/午前/午後の「盛り出し別」トグルを追加。午前=拠点分(全部)+配達1便／午後=配達2便のみ／合計=従来。米・解凍・仕込み表すべてを区分で切替。データが無い区分(主に午後)のボタンは非表示。解凍の予備+2は合計のみ（午前/午後は実数packCeil）。発注タブは変更なし(トータル基準のまま)。要GASパッチ：_aggregateOrderItems_にbinFilter追加＋getSheet4Data v2.6書き換え＋_sheet4BuildSections_新設。v3.28 — スマホ対応：タブバーを横スクロール化（display:flexのはみ出しで白背景に白文字が乗り見えなくなる問題を解消）。.tab-barにoverflow-x:auto＋慣性スクロール＋スクロールバー非表示、.tab-btnにflex:0 0 auto（縮小防止）。PC表示は変化なし。GAS変更なし。v3.27 — 設定タブに「📊 加重平均（W1〜W4の重み）」セクションを追加（最小UI：4つの数値入力＋合計表示＋💾保存して再計算・最上部に配置）。読込=getSettingWeights / 保存=saveSettingWeights（保存と同時に全曜日を即再計算→配分調整を自動再描画）。※完売増量の「内訳表示だけ+0」バグはGAS側で修正（bmSelloutBonus_の時刻取り出しを堅牢化・kanri変更なし）。v3.26 — 設定タブに「🔴 完売増量」セクションを追加（案B：時間帯[開始〜終了]＋個数を自由に追加/削除・HH:MMタイムピッカー・天気プリセットの上に同居）。読込=getSelloutBonusRules / 保存=saveSelloutBonusRules（保存と同時にサーバーで全曜日を即再計算→配分調整を自動再描画）。完売増量の実値はサーバー「完売増量マスタ」が唯一の真実（BM_SELLOUT_RULES/bmGetSelloutBonusは未使用化・残置）。表示の+Nはサーバー値(c.selloutBonus/c.refSelloutBonus)依存のためGAS差し替えで自動追従。要GASパッチ（完売増量マスタ作成・読込/保存API・getSelloutBonusByTime_差し替え・doGet/doPostルーティング・clearAllMasterCacheキー追加）。v3.25 — 配分調整: v3.24完売表示の体裁修正。①完売時刻を必ずHH:MMに整形（表記ゆれ吸収・bmFmtSelloutTime）。②未来日付セルは完売時刻をセル上部のストリップに表示し、推奨数と重ならないようにセルを少し縦に伸ばす。GAS変更不要（kanriのみ差し替え）。v3.24 — 配分調整: ③未来日付（翌週）のセルに反映元（直近同曜=「先週」）の完売情報を🔴＋時刻で表示。完売サマリー・完売モーダルも未来日付では反映元基準で表示。過去日・当日は従来通り。要：getBasicMasterMatrixが各セルに refSelloutTime/refSelloutBonus を返す（GAS追記）。v3.23 — 配分調整: ①「数字の保存」と「確定」を完全分離（案A／K列=確定フラグ）。💾保存=編集セルのみG列に保存しK列は触らない。✓全拠点確定/拠点単位確定=即サーバーでK列フラグをトグル（解除可能）。確定判定をG列の有無→K列フラグに変更。確定時の空セルはH列補完・既存G列は維持。②拠点名の下に販売担当者名（先頭4文字・横書き小）を表示（データ源=getSalesPersonMapForDate_／日付別・未割当は非表示）。要：メインGAS側の対応関数デプロイ（saveBasicMasterNumbers/unconfirmBasicMasterAll追加、confirm系のK列対応、getBasicMasterMatrixがconfirmedLocsとlocations[].salesPersonを返す）。v3.21: 配分調整: ①「数字の保存」と「確定」を完全分離（案A／K列=確定フラグ）。💾保存=編集セルのみG列に保存しK列は触らない。✓全拠点確定/拠点単位確定=即サーバーでK列フラグをトグル（解除可能）。確定判定をG列の有無→K列フラグに変更。確定時の空セルはH列補完・既存G列は維持。②拠点名の下に販売担当者名（先頭4文字・横書き小）を表示（データ源=getSalesPersonMapForDate_／日付別・未割当は非表示）。要：メインGAS側の対応関数デプロイ（saveBasicMasterNumbers/unconfirmBasicMasterAll追加、confirm系のK列対応、getBasicMasterMatrixがconfirmedLocsとlocations[].salesPersonを返す）。v3.21: bmGetDisplaySales修正（G列確定値confirmedを表示優先・weekSalesは未確定時のみ表示）。保存後に値が戻る問題を修正。v3.20: 保存ワークフロー改善（部分編集モード/拠点確定モードを区別）。v3.19: ローカル確定ワークフロー化（拠点確定/全拠点確定/→推奨はサーバー送信せずローカル状態のみ更新、💾 保存ボタンで一括サーバー送信＋再描画）。商品行コピーを推奨値ベースに変更。商品確定ボタン✓廃止。v3.18: 全編集操作のDOM直更新化。v3.17: セル編集時のみ高速化。v3.16: 商品単位の確定/解除ボタン追加。v3.15: 推奨0かつ売上0のゼロセルも編集可能化。v3.14: 保存POSTのCORS preflight対応。v3.13: 主菜候補マスタ対応。v3.12: 業者カードに定数発注セクション追加。v3.11: copyOrderText を食材ごと unitMode 切替。v3.10: 一括印刷ボタン追加。 -->
 <style id="app-style">
 /* @page は全環境で確実に効く静的指定（用紙＝縦）。横向きはシート1・2をCSS回転で実現（A案） */
@@ -1901,6 +1901,21 @@ body {
     table.sv-table td.sv-unassigned { color:#b6bcc4; }
     .sv-empty { margin:18px 0; padding:30px 18px; background:#fff; border-radius:10px; text-align:center; color:#7a8694; font-size:14px; box-shadow:0 1px 4px rgba(0,0,0,.06); }
     .sv-empty .sv-ico { font-size:32px; margin-bottom:8px; }
+    /* ── v3.38 キッチン 時間×曜日グリッド（単色チップ・読取専用） ── */
+    table.sv-kgrid { border-collapse:separate; border-spacing:0; width:100%; min-width:560px; background:#fff; border-radius:10px; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,.06); }
+    table.sv-kgrid th, table.sv-kgrid td { border-bottom:1px solid #e2e7ec; border-right:1px solid #eef1f4; vertical-align:top; }
+    table.sv-kgrid th:last-child, table.sv-kgrid td:last-child { border-right:0; }
+    table.sv-kgrid tbody tr:last-child td { border-bottom:0; }
+    table.sv-kgrid thead th { background:#37474f; color:#fff; font-weight:700; font-size:12.5px; padding:8px 6px; text-align:center; position:sticky; top:0; white-space:nowrap; }
+    table.sv-kgrid thead th .sv-dow { display:block; font-size:13px; }
+    table.sv-kgrid thead th .sv-md { display:block; font-size:11px; color:#cfd8e3; font-weight:700; }
+    table.sv-kgrid th.sv-tcol { width:60px; min-width:54px; }
+    table.sv-kgrid td.sv-tcol { width:60px; min-width:54px; text-align:center; background:#f8fafc; font-weight:800; color:#37474f; font-size:13px; padding:8px 4px; white-space:nowrap; }
+    table.sv-kgrid td.sv-tcol.sv-prep { color:#7b3fa0; }
+    td.sv-kcell { min-width:96px; padding:5px; text-align:center; }
+    .sv-chip { display:block; background:#e8f0f7; color:#1f3b53; font-size:12px; font-weight:700; border-radius:7px; padding:3px 7px; margin:2px 0; white-space:nowrap; }
+    .sv-chip .sv-end { color:#5a6b7d; font-weight:600; margin-left:3px; }
+    .sv-kcell .sv-none { display:block; color:#d3d9df; font-size:13px; }
 </style>
 </head>
 <body>
@@ -2734,23 +2749,44 @@ function svLoad() {
   document.getElementById('sv-content').innerHTML = '';
   var wt = svResolveWeekTarget();
   var kindAtCall = svState.kind;
-  var action = (kindAtCall === 'kitchen') ? 'getKitchenShift' : 'getShiftMatrix';
-  var qs = new URLSearchParams({ action: action, weekTarget: wt }).toString();
-  fetch(GAS_URL + '?' + qs, { redirect: 'follow' })
-    .then(function (res) { if (!res.ok) throw new Error('HTTP ' + res.status); return res.json(); })
+
+  function svJson(action) {
+    var qs = new URLSearchParams({ action: action, weekTarget: wt }).toString();
+    return fetch(GAS_URL + '?' + qs, { redirect: 'follow' })
+      .then(function (res) { if (!res.ok) throw new Error('HTTP ' + res.status); return res.json(); });
+  }
+  function svFail(e) {
+    if (myReq !== svState.reqId) return;
+    document.getElementById('sv-content').innerHTML = '';
+    document.getElementById('sv-weekrange').textContent = '　';
+    svSetStatus('読み込みに失敗しました：' + e.message + '（通信環境を確認して「更新」を押してください）', true);
+  }
+
+  if (kindAtCall === 'kitchen') {
+    // 確定（キッチンシフト＝開始のみ）＋希望（キッチン希望＝終了補完用レンジ）を並列取得（v3.38）
+    var reqP = svJson('getKitchenRequests').catch(function () { return {}; }); // 希望は失敗しても致命ではない（終了が出ないだけ）
+    Promise.all([svJson('getKitchenShift'), reqP])
+      .then(function (arr) {
+        if (myReq !== svState.reqId) return;
+        var shiftData = arr[0] || {};
+        var reqData = arr[1] || {};
+        if (shiftData.ok === false || shiftData.success === false) throw new Error(shiftData.error || '取得失敗');
+        svRenderKitchen(shiftData, reqData, wt);
+        svSetStatus('');
+      })
+      .catch(svFail);
+    return;
+  }
+
+  // 販売員（従来どおり）
+  svJson('getShiftMatrix')
     .then(function (data) {
       if (myReq !== svState.reqId) return;
       if (data && (data.ok === false || data.success === false)) throw new Error(data.error || '取得失敗');
-      if (kindAtCall === 'kitchen') svRenderKitchen(data, wt);
-      else svRenderSales(data, wt);
+      svRenderSales(data, wt);
       svSetStatus('');
     })
-    .catch(function (e) {
-      if (myReq !== svState.reqId) return;
-      document.getElementById('sv-content').innerHTML = '';
-      document.getElementById('sv-weekrange').textContent = '　';
-      svSetStatus('読み込みに失敗しました：' + e.message + '（通信環境を確認して「更新」を押してください）', true);
-    });
+    .catch(svFail);
 }
 
 // 販売員：拠点(行)×日付(列)・セル=担当者名
@@ -2790,14 +2826,37 @@ function svRenderSales(data, wt) {
   host.innerHTML = html;
 }
 
-// キッチン：スタッフ(行)×月〜金・セル=時間/休（サマリー行なし）
-function svRenderKitchen(data, wt) {
+// ── v3.38 キッチン時間グリッド用ヘルパー（kitchen-admin準拠） ──
+var SV_FIXED_TIMES = ['0:00','2:00','3:00','4:00','5:00','6:00','6:30','7:00','8:00'];
+var SV_PREP_LABEL = '仕込み';
+function svPad2(n) { n = parseInt(n, 10) || 0; return (n < 10 ? '0' : '') + n; }
+function svPadTime(t) { var p = String(t || '').split(':'); if (p.length < 2) return ''; var h = parseInt(p[0], 10), m = parseInt(p[1], 10); if (isNaN(h) || isNaN(m)) return ''; return svPad2(h) + ':' + svPad2(m); }
+function svDispTime(t) { var c = svPadTime(t); if (!c) return String(t || ''); var p = c.split(':'); return (parseInt(p[0], 10)) + ':' + p[1]; }
+function svToMin(t) { var p = String(t).split(':'); return (parseInt(p[0], 10) || 0) * 60 + (parseInt(p[1], 10) || 0); }
+function svStripDow(s) { return String(s == null ? '' : s).replace(/[（(][^）)]*[）)]/, '').trim(); }
+// 確定セル値：'' / '休' → off ／ 'HH:MM-HH:MM' or 'HH:MM' → time(start, end?) ／ それ以外 → prep(label)
+function svParseCell(v) {
+  v = String(v || '').trim();
+  if (v === '' || v === '休') return { off: true };
+  if (v.indexOf('-') > 0) { var p = v.split('-'); var s = svPadTime(p[0]); var e = svPadTime(p[1]); if (s) return { time: true, start: s, end: (e || '') }; }
+  if (/^\d{1,2}:\d{2}$/.test(v)) return { time: true, start: svPadTime(v), end: '' };
+  return { prep: true, label: v };
+}
+// 希望値からの終了抽出：'HH:MM-HH:MM' → 'HH:MM' ／ それ以外 → ''
+function svCellEnd(v) {
+  v = String(v || '').trim();
+  if (v.indexOf('-') > 0) { var p = v.split('-'); var e = svPadTime(p[1]); return e || ''; }
+  return '';
+}
+
+// キッチン：時間(行)×月〜金・セル=出勤スタッフ名（＋終了時刻／単色チップ）。終了は確定レンジ優先→無ければ希望シートから補完
+function svRenderKitchen(data, reqData, wt) {
   var host = document.getElementById('sv-content');
   var staff = (data && data.staff) || [];
   var dates = (data && data.dates) || [];
   var DAYS = ['月','火','水','木','金'];
   var wr = document.getElementById('sv-weekrange');
-  wr.textContent = (dates.length >= 5 ? dates[0] + ' 〜 ' + dates[4] : ((data && data.weekTarget) || wt));
+  wr.textContent = (dates.length >= 5 ? svStripDow(dates[0]) + ' 〜 ' + svStripDow(dates[4]) : ((data && data.weekTarget) || wt));
 
   if (!staff.length) {
     var label1 = svState.week === 'this' ? '今週' : '来週';
@@ -2805,21 +2864,74 @@ function svRenderKitchen(data, wt) {
     return;
   }
 
-  var html = '<div class="sv-tablewrap"><table class="sv-table"><thead><tr>';
-  html += '<th class="sv-rowhead">スタッフ</th>';
-  for (var d = 0; d < 5; d++) html += '<th>' + svEsc(dates[d] || DAYS[d]) + '</th>';
-  html += '</tr></thead><tbody>';
+  // 希望シートから「名前→[終了×5]」を作成（終了補完用）
+  var reqEnd = {};
+  ((reqData && reqData.staff) || []).forEach(function (s) {
+    var rd = s.days || [];
+    var arr = [];
+    for (var i = 0; i < 5; i++) arr.push(svCellEnd(rd[i]));
+    reqEnd[s.name] = arr;
+  });
+
+  // 固定9時間行（＋仕込み）を用意
+  var rows = [];
+  for (var t = 0; t < SV_FIXED_TIMES.length; t++) {
+    rows.push({ type: 'time', time: SV_FIXED_TIMES[t], cells: [[], [], [], [], []] });
+  }
+  var prepRow = { type: 'prep', label: SV_PREP_LABEL, cells: [[], [], [], [], []] };
+
+  function svExactRow(start) { for (var i = 0; i < rows.length; i++) { if (svToMin(rows[i].time) === svToMin(start)) return rows[i]; } return null; }
+  function svNearestRow(start) { var m = svToMin(start), best = null, bd = Infinity; for (var i = 0; i < rows.length; i++) { var diff = Math.abs(svToMin(rows[i].time) - m); if (diff < bd) { bd = diff; best = rows[i]; } } return best; }
 
   staff.forEach(function (s) {
-    var days = s.days || [];
-    html += '<tr><td class="sv-rowhead">' + svEsc(s.name) + '</td>';
-    for (var d2 = 0; d2 < 5; d2++) {
-      var v = String(days[d2] || '').trim();
-      if (!v || v === '休') {
-        html += '<td class="sv-off">休</td>';
+    var dys = s.days || [];
+    var ends = reqEnd[s.name] || ['', '', '', '', ''];
+    for (var d = 0; d < 5; d++) {
+      var pc = svParseCell(dys[d]);
+      if (pc.off) continue;
+      if (pc.time) {
+        var endT = pc.end || ends[d] || '';   // 確定にレンジがあればそれ優先・無ければ希望から
+        var row = svExactRow(pc.start) || svNearestRow(pc.start);
+        if (row) row.cells[d].push({ name: s.name, end: endT });
       } else {
-        html += '<td class="sv-on">' + svEsc(v.replace('-', '〜')) + '</td>';
+        prepRow.cells[d].push({ name: s.name, end: '' });
       }
+    }
+  });
+
+  // コンパクト：出勤者がいる時間行のみ＋仕込み行（配置があれば末尾）
+  var visible = rows.filter(function (r) { return r.cells.some(function (a) { return a.length > 0; }); });
+  if (prepRow.cells.some(function (a) { return a.length > 0; })) visible.push(prepRow);
+
+  if (!visible.length) {
+    var label2 = svState.week === 'this' ? '今週' : '来週';
+    host.innerHTML = '<div class="sv-empty"><div class="sv-ico">🍳</div><div>' + label2 + 'は出勤予定のスタッフがいません（全員休）。</div></div>';
+    return;
+  }
+
+  var html = '<div class="sv-tablewrap"><table class="sv-kgrid"><thead><tr>';
+  html += '<th class="sv-tcol">時間</th>';
+  for (var c = 0; c < 5; c++) {
+    html += '<th><span class="sv-dow">' + DAYS[c] + '</span><span class="sv-md">' + svEsc(svStripDow(dates[c] || '')) + '</span></th>';
+  }
+  html += '</tr></thead><tbody>';
+
+  visible.forEach(function (r) {
+    var isPrep = (r.type === 'prep');
+    html += '<tr>';
+    html += '<td class="sv-tcol' + (isPrep ? ' sv-prep' : '') + '">' + (isPrep ? svEsc(r.label) : svEsc(svDispTime(r.time))) + '</td>';
+    for (var d2 = 0; d2 < 5; d2++) {
+      html += '<td class="sv-kcell">';
+      var arr = r.cells[d2];
+      if (!arr.length) {
+        html += '<span class="sv-none">—</span>';
+      } else {
+        arr.forEach(function (ch) {
+          var endHtml = ch.end ? ('<span class="sv-end">〜' + svEsc(svDispTime(ch.end)) + '</span>') : '';
+          html += '<span class="sv-chip">' + svEsc(ch.name) + endHtml + '</span>';
+        });
+      }
+      html += '</td>';
     }
     html += '</tr>';
   });
