@@ -154,12 +154,12 @@
   <div class="status" id="status">読み込み中...</div>
 
   <div class="coverage" id="coverage" style="display:none;"></div>
-  <button class="copyall" id="copyAllBtn" style="display:none;" onclick="copyReqAll()">🔁 希望どおりに配置</button>
+  <button class="copyall" id="copyAllBtn" style="display:none;" onclick="copyReqAll()">🔁 希望＋社員デフォルトで配置</button>
   <div class="hint-line" id="hintLine"></div>
 
   <div id="grid"></div>
 
-  <footer>お江戸弁当 キッチンシフト管理 v3.1</footer>
+  <footer>お江戸弁当 キッチンシフト管理 v3.2</footer>
 
   <div class="actionbar" id="actionbar" style="display:none;">
     <button class="act save" id="btnSave" onclick="doSave()">💾 保存</button>
@@ -254,6 +254,14 @@ function assignDay(raw){
   if(raw.type==='off') return { off:true, rowId:null };
   if(raw.type==='time'){ const r=findTimeRow(raw.start)||snapTimeRow(raw.start); return r ? { off:false, rowId:r.id } : { off:true, rowId:null }; }
   const p=firstPrepRow(); return p ? { off:false, rowId:p.id } : { off:true, rowId:null };
+}
+/* 希望＞社員デフォルト＞休 で raw を決める（確定は含めない） */
+function rawReqDef(c,d){
+  const rv=c.req[d];
+  const hasReqDay=String(rv==null?'':rv).trim()!=='';
+  if(hasReqDay) return parseCellRaw(rv);
+  if(c.isEmployee && c.defaultStart) return parseCellRaw(c.defaultStart);
+  return parseCellRaw('');
 }
 
 /* ───────── 週解決（kitchen-shift.html と同一・サーバの当週/翌週基準に一致） ───────── */
@@ -360,25 +368,27 @@ async function load(){
     // 固定10行を構築
     buildRows();
 
-    // 自動配置：確定（保存済み）があればそれ優先・無ければ希望
+    // 自動配置：確定（保存済み）＞希望＞社員デフォルト＞休
     state.cooks=roster.map((s,idx)=>{
       const conf=confMap[s.name]||['','','','',''];
       const req =reqMap[s.name]||null;
-      const days=[0,1,2,3,4].map(d=>{
-        const cv=conf[d];
-        const hasConf=String(cv==null?'':cv).trim()!=='';
-        const raw=hasConf ? parseCellRaw(cv) : parseCellRaw((req&&req[d])||'');
-        return assignDay(raw);
-      });
-      return {
+      const c={
         name:s.name, userId:s.userId||'', registered:!!s.registered,
         isEmployee:!!s.isEmployee,
+        defaultStart:String(s.defaultStart||'').trim(),
         hasReq:!!req,
         req: req || ['','','','',''],
-        days: days,
+        days: [],
         base: [0,1,2,3,4].map(d=>normNV(conf[d])),
         color: COLORS[idx%COLORS.length],
       };
+      c.days=[0,1,2,3,4].map(d=>{
+        const cv=conf[d];
+        const hasConf=String(cv==null?'':cv).trim()!=='';
+        if(hasConf) return assignDay(parseCellRaw(cv));
+        return assignDay(rawReqDef(c,d));
+      });
+      return c;
     });
 
     const ds=state.dates;
@@ -387,7 +397,7 @@ async function load(){
     document.getElementById('coverage').style.display='flex';
     document.getElementById('copyAllBtn').style.display='block';
     document.getElementById('actionbar').style.display='flex';
-    document.getElementById('hintLine').textContent='提出された希望は自動配置済み。枠タップで追加・移動・×。社員は常に候補表示。固定の時間に無い希望は最寄りの時間へ寄せます。未保存ぶんは差分バッジに出るので保存で確定。';
+    document.getElementById('hintLine').textContent='希望は自動配置済み。社員は「デフォルト開始」で自動配置（確定＞希望＞社員デフォルト＞休）。枠タップで追加・移動・×。固定時間に無い値は最寄り時間へ寄せます。未保存ぶんは差分バッジ→保存で確定。';
     updateMeta();
     setStatus('読込完了：キッチン対象 '+state.cooks.length+'名','ok');
   }catch(e){
@@ -489,7 +499,11 @@ function renderSheet(){
     const cur=(!c.days[d].off) ? curRowLabel(c,d) : null;   // 他の枠に配置済みか
     const placedElsewhere=!!cur;
     let baseHint, hintcls='';
-    if(c.isEmployee){ baseHint='社員'; hintcls=' emp'; }
+    if(c.isEmployee){
+      hintcls=' emp';
+      if(c.defaultStart){ const dr=parseCellRaw(c.defaultStart); baseHint='社員 '+(dr.type==='time'?dispTime(dr.start):(dr.type==='prep'?dr.label:c.defaultStart)); }
+      else baseHint='社員';
+    }
     else { const rr=parseCellRaw(c.req[d]); baseHint='希望 '+(rr.type==='time'?dispTime(rr.start):(rr.type==='prep'?rr.label:'—')); }
     ch+='<div class="cand'+(placedElsewhere?' placed':'')+'">';
     ch+='<span class="nm">'+esc(c.name)+'</span>';
@@ -513,14 +527,14 @@ function rmPlaced(ci){
 
 /* ───────── 希望どおりに配置（手動再適用） ───────── */
 function copyReqAll(){
-  const targets=state.cooks.filter(c=>c.hasReq);
-  if(!targets.length){ toast('提出済みの希望がありません'); return; }
-  if(!confirm('提出された希望どおりに '+targets.length+'名 を配置し直します。\n（社員・未提出者は変更なし。現在の手動配置は上書きされます）\nよろしいですか？')) return;
+  const targets=state.cooks.filter(c=>c.hasReq || (c.isEmployee && c.defaultStart));
+  if(!targets.length){ toast('再適用できる対象がいません'); return; }
+  if(!confirm('希望どおり＋社員デフォルトで '+targets.length+'名 を配置し直します。\n（未提出かつデフォルト無しの人は変更なし。現在の手動配置は上書きされます）\nよろしいですか？')) return;
   targets.forEach(c=>{
-    for(let d=0;d<5;d++){ c.days[d]=assignDay(parseCellRaw(c.req[d])); }
+    for(let d=0;d<5;d++){ c.days[d]=assignDay(rawReqDef(c,d)); }
   });
   renderGrid(); renderSheetIfOpen(); updateMeta();
-  toast('希望どおりに配置しました（'+targets.length+'名）','ok');
+  toast('希望＋社員デフォルトで配置しました（'+targets.length+'名）','ok');
 }
 
 /* ───────── メタ更新（出勤人数・差分・ボタン） ───────── */
