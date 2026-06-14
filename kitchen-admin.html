@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<!-- kitchen-admin v3.3 (2026-06-15) グリッドのスタッフチップに終了時刻「〜HH:MM」を併記（B案＝終了は「キッチン希望」c.req[d]のレンジから補完／確定は開始のみ保存のため）。時間行のみ付与・仕込み行は名前のみ。希望未提出（社員等）は終了なし。GAS変更なし。 -->
 <title>お江戸弁当 キッチンシフト管理</title>
 <style>
   :root{
@@ -67,6 +68,7 @@
   td.cell:active{background:#eef7ff;}
   tr.preprow td.cell:active{background:#f3ecfb;}
   .chip{display:block;margin:2px 0;padding:5px 7px;border-radius:7px;color:#fff;font-size:12px;font-weight:800;line-height:1.2;word-break:break-all;}
+  .chip .chipend{font-weight:600;opacity:.82;margin-left:3px;}
   .cell-add{display:block;text-align:center;color:#c2cdd9;font-size:15px;padding:3px 0;}
 
   /* ── アクションバー ── */
@@ -159,7 +161,7 @@
 
   <div id="grid"></div>
 
-  <footer>お江戸弁当 キッチンシフト管理 v3.2</footer>
+  <footer>お江戸弁当 キッチンシフト管理 v3.3</footer>
 
   <div class="actionbar" id="actionbar" style="display:none;">
     <button class="act save" id="btnSave" onclick="doSave()">💾 保存</button>
@@ -227,6 +229,8 @@ function normNV(v){
   if(/^\d{1,2}:\d{2}$/.test(v)) return padTime(v);
   return v;
 }
+/* v3.3: 希望値からの終了抽出（'HH:MM-HH:MM'→'HH:MM'／それ以外→''） */
+function cellEnd(v){ v=String(v||'').trim(); if(v.indexOf('-')>0){ const p=v.split('-'); const e=padTime(p[1]); return e||''; } return ''; }
 function rowById(id){ for(const r of state.rows){ if(r.id===id) return r; } return null; }
 function findTimeRow(t){ for(const r of state.rows){ if(r.type==='time' && toMin(r.time)===toMin(t)) return r; } return null; }
 function snapTimeRow(t){
@@ -432,7 +436,7 @@ function renderGrid(){
     for(let d=0;d<5;d++){
       h+='<td class="cell" onclick="openSheet(\''+row.id+'\','+d+')">';
       let any=false;
-      state.cooks.forEach(c=>{ const dd=c.days[d]; if(dd && !dd.off && dd.rowId===row.id){ any=true; h+='<span class="chip" style="background:'+c.color+'">'+esc(c.name)+'</span>'; } });
+      state.cooks.forEach(c=>{ const dd=c.days[d]; if(dd && !dd.off && dd.rowId===row.id){ any=true; const ev=(row.type==='time')?cellEnd(c.req[d]):''; h+='<span class="chip" style="background:'+c.color+'">'+esc(c.name)+(ev?'<span class="chipend">〜'+esc(dispTime(ev))+'</span>':'')+'</span>'; } });
       if(!any) h+='<span class="cell-add">＋</span>';
       h+='</td>';
     }
