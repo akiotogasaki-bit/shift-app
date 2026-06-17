@@ -5,7 +5,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>お江戸弁当 社員ダッシュボード</title>
-<!-- dashboard v5 (2026-06-06): リアルタイムタブに「サマリー/エリア別マトリクス」サブ切替を追加。GAS変更なし。 -->
+<!-- dashboard v6 (2026-06-18): リアルタイムの「販売数」をお茶抜きに統一（拠点一覧/拠点モーダル/上部KPI総販売数）。完売率と数値基準を一致。GAS変更なし。 -->
 
 <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
@@ -2366,7 +2366,7 @@ function renderRealtime() {
 
   const reported   = allData.filter(r => r.reported);
   const totalLocs  = masterData.locations.length;
-  const totalSold  = reported.reduce((s, r) => s + (r.soldCount || 0), 0);
+  const totalSold  = reported.reduce((s, r) => s + _rowNonTeaSold_(r), 0);  // v6: お茶抜き
   const totalSales = reported.reduce((s, r) => s + (r.totalSales || 0), 0);
   const avgRate    = reported.length > 0
     ? Math.round(reported.reduce((s, r) => s + (r.sellRate || 0), 0) / reported.length * 10) / 10
@@ -2590,7 +2590,7 @@ function renderLocationTable() {
       <tr onclick="openModal('${loc.id}')">
         <td>${loc.name}</td>
         <td>${r.userName || '—'}</td>
-        <td>${r.soldCount || 0}個</td>
+        <td>${_rowNonTeaSold_(r)}個</td>
         <td class="rate-cell ${typeof sellRate === 'number' ? rateClass : ''}">${rateStr}</td>
         <td>¥${totalSales.toLocaleString()}</td>
         <td>${badge}</td>
@@ -2619,6 +2619,20 @@ function switchRtView(view) {
 // お茶商品ID一覧
 function _teaIds_() {
   return (masterData.products || []).filter(p => p.name.includes('お茶')).map(p => p.id);
+}
+
+// 1拠点の お茶抜き販売数（リアルタイム/締め後 共通・v6）
+//   soldCount からお茶分（productSalesJson のお茶ID合計）を差し引く。
+//   productSalesJson が無い/壊れている場合は soldCount をそのまま返す（安全側）。
+function _rowNonTeaSold_(r) {
+  if (!r) return 0;
+  const teaIds = _teaIds_();
+  let teaSold = 0;
+  try {
+    const ps = JSON.parse(r.productSalesJson || '{}');
+    teaIds.forEach(id => { teaSold += Number(ps[id] || 0); });
+  } catch (e) {}
+  return Math.max(0, (r.soldCount || 0) - teaSold);
 }
 
 // 1拠点の 完売率(お茶抜き)。既存リアルタイム一覧と同一基準
@@ -2992,7 +3006,7 @@ function openModal(locationId) {
 
   let bodyHtml = `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
-      <div class="kpi-card green"><div class="kpi-label">販売数</div><div class="kpi-value">${r.soldCount || 0}<span> 個</span></div></div>
+      <div class="kpi-card green"><div class="kpi-label">販売数</div><div class="kpi-value">${_rowNonTeaSold_(r)}<span> 個</span></div></div>
       <div class="kpi-card gold"><div class="kpi-label">完売率</div><div class="kpi-value">${r.sellRate || 0}<span> %</span></div></div>
       <div class="kpi-card red"><div class="kpi-label">売上合計</div><div class="kpi-value" style="font-size:16px;">¥${(r.totalSales||0).toLocaleString()}</div></div>
       <div class="kpi-card blue"><div class="kpi-label">本日ギャラ</div><div class="kpi-value" style="font-size:16px;">¥${(r.totalSalary||0).toLocaleString()}</div></div>
