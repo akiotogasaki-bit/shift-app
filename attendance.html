@@ -8,10 +8,15 @@
 <style>
   :root{
     --navy:#1A3C5E;
+    --navy-d:#142F4A;
     --accent:#C8A45C;
+    --accent-d:#B08E45;
     --bg:#F5F6F8;
     --text:#23303C;
     --muted:#7A8794;
+    --line:#E4E7EB;
+    --green:#2F8F5B;
+    --red:#C0504D;
   }
   *{box-sizing:border-box;margin:0;padding:0;}
   html,body{height:100%;}
@@ -19,69 +24,123 @@
     font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Hiragino Sans","Noto Sans JP",Meiryo,sans-serif;
     background:var(--bg);
     color:var(--text);
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    min-height:100vh;
-    min-height:100dvh;
-    padding:24px;
+    display:flex;align-items:center;justify-content:center;
+    min-height:100vh;min-height:100dvh;
+    padding:20px;
     -webkit-text-size-adjust:100%;
   }
   .card{
-    width:100%;
-    max-width:420px;
-    background:#fff;
-    border-radius:18px;
-    box-shadow:0 10px 30px rgba(26,60,94,0.12);
-    overflow:hidden;
-    text-align:center;
+    width:100%;max-width:440px;background:#fff;border-radius:18px;
+    box-shadow:0 10px 30px rgba(26,60,94,0.12);overflow:hidden;
   }
-  .head{
-    background:var(--navy);
-    color:#fff;
-    padding:22px 20px;
+  .head{background:var(--navy);color:#fff;padding:20px;text-align:center;}
+  .brand{font-size:12px;letter-spacing:.18em;opacity:.85;}
+  .title{font-size:21px;font-weight:700;margin-top:5px;}
+  .body{padding:24px 22px 22px;}
+
+  .who{font-size:15px;color:var(--muted);text-align:center;}
+  .who b{color:var(--text);font-size:19px;}
+  .date{margin-top:4px;text-align:center;font-size:14px;color:var(--muted);}
+  .clock{
+    margin-top:10px;text-align:center;font-size:40px;font-weight:700;
+    color:var(--navy);font-variant-numeric:tabular-nums;letter-spacing:.02em;
   }
-  .brand{
-    font-size:13px;
-    letter-spacing:.18em;
-    opacity:.85;
-  }
-  .title{
-    font-size:22px;
-    font-weight:700;
-    margin-top:6px;
-  }
-  .body{
-    padding:36px 24px 30px;
-  }
-  .icon{
-    font-size:54px;
-    line-height:1;
-  }
+
   .status{
-    margin-top:16px;
-    font-size:20px;
-    font-weight:700;
-    color:var(--navy);
+    margin:16px 0 4px;padding:12px;border-radius:12px;text-align:center;
+    font-size:15px;font-weight:700;background:#EEF2F6;color:var(--navy);
   }
-  .desc{
-    margin-top:12px;
-    font-size:14px;
-    line-height:1.8;
-    color:var(--muted);
+  .status.working{background:#EAF5EF;color:var(--green);}
+  .status.done{background:#FBF4E6;color:var(--accent-d);}
+  .status.err{background:#FBEAEA;color:var(--red);}
+
+  .btns{margin-top:16px;display:flex;flex-direction:column;gap:12px;}
+  .btn{
+    border:none;border-radius:14px;padding:18px;font-size:19px;font-weight:700;
+    color:#fff;cursor:pointer;transition:transform .05s,opacity .2s;
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    -webkit-tap-highlight-color:transparent;
   }
-  .bar{
-    height:4px;
-    width:64px;
-    margin:22px auto 0;
-    border-radius:4px;
-    background:var(--accent);
+  .btn:active{transform:scale(.98);}
+  .btn-in{background:var(--navy);}
+  .btn-out{background:var(--accent);}
+  .btn:disabled{background:#CDD3DA;color:#8A93A0;cursor:default;}
+  .btn .ic{font-size:20px;}
+
+  .times{margin-top:18px;border-top:1px solid var(--line);padding-top:14px;display:none;}
+  .times.show{display:block;}
+  .trow{display:flex;justify-content:space-between;align-items:center;padding:7px 2px;font-size:15px;}
+  .trow .lbl{color:var(--muted);}
+  .trow .val{font-weight:700;font-size:18px;font-variant-numeric:tabular-nums;}
+  .trow.work .val{color:var(--accent-d);}
+
+  .foot{padding:13px 20px 18px;text-align:center;font-size:11px;color:var(--muted);}
+  .tag{
+    display:inline-block;margin-left:6px;font-size:10px;color:#fff;
+    background:var(--accent);padding:2px 8px;border-radius:10px;letter-spacing:.05em;
   }
-  .foot{
-    padding:14px 20px 20px;
-    font-size:11px;
-    color:var(--muted);
+
+  .overlay{
+    position:fixed;inset:0;background:rgba(245,246,248,.78);
+    display:none;align-items:center;justify-content:center;z-index:50;
   }
+  .overlay.show{display:flex;}
+  .spin{
+    width:42px;height:42px;border:4px solid #D9DEE4;border-top-color:var(--navy);
+    border-radius:50%;animation:sp .8s linear infinite;
+  }
+  @keyframes sp{to{transform:rotate(360deg);}}
+
+  /* ── 時刻ピッカー（ボトムシート＋ホイール）── */
+  .sheet-bg{position:fixed;inset:0;background:rgba(20,30,40,.45);display:none;z-index:60;}
+  .sheet-bg.show{display:block;}
+  .sheet{
+    position:fixed;left:0;right:0;bottom:0;z-index:70;
+    background:#fff;border-radius:18px 18px 0 0;
+    box-shadow:0 -8px 30px rgba(0,0,0,.18);
+    transform:translateY(110%);transition:transform .25s ease;
+    padding:0 18px max(18px,env(safe-area-inset-bottom));
+    max-width:440px;margin:0 auto;
+  }
+  .sheet.show{transform:translateY(0);}
+  .sheet-head{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:16px 2px 4px;font-size:17px;font-weight:700;color:var(--navy);
+  }
+  .sheet-x{
+    border:none;background:#EEF2F6;color:var(--muted);
+    width:32px;height:32px;border-radius:50%;font-size:15px;cursor:pointer;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .picker{
+    position:relative;display:flex;align-items:center;justify-content:center;
+    gap:4px;height:220px;margin:6px 0 4px;
+  }
+  .pick-band{
+    position:absolute;left:50%;transform:translateX(-50%);
+    width:210px;top:88px;height:44px;
+    background:rgba(26,60,94,.07);
+    border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+    border-radius:8px;pointer-events:none;
+  }
+  .pick-col{
+    height:220px;width:88px;overflow-y:scroll;
+    scroll-snap-type:y mandatory;-webkit-overflow-scrolling:touch;
+    scrollbar-width:none;text-align:center;padding:88px 0;
+  }
+  .pick-col::-webkit-scrollbar{display:none;}
+  .pick-item{
+    height:44px;line-height:44px;scroll-snap-align:center;
+    font-size:27px;font-weight:700;color:#B9C1CB;font-variant-numeric:tabular-nums;
+    transition:color .12s,transform .12s;
+  }
+  .pick-item.on{color:var(--navy);transform:scale(1.06);}
+  .pick-sep{font-size:27px;font-weight:700;color:var(--navy);padding-bottom:2px;}
+  .pick-preview{
+    text-align:center;font-size:14px;color:var(--muted);margin:2px 0 12px;
+  }
+  .pick-preview b{font-size:22px;color:var(--navy);font-variant-numeric:tabular-nums;margin-left:6px;}
+  .sheet-confirm{margin-bottom:6px;}
 </style>
 </head>
 <body>
@@ -91,32 +150,329 @@
       <div class="title">出退勤</div>
     </div>
     <div class="body">
-      <div class="icon">🛠️</div>
-      <div class="status">準備中です</div>
-      <p class="desc">出退勤アプリは現在準備中です。<br>公開までもうしばらくお待ちください。</p>
-      <div class="bar"></div>
+      <div class="who"><b id="who">—</b> さん</div>
+      <div class="date" id="date">—</div>
+      <div class="clock" id="clock">--:--:--</div>
+
+      <div class="status" id="status">読み込み中…</div>
+
+      <div class="btns">
+        <button class="btn btn-in" id="btnIn" disabled><span class="ic">🟢</span><span id="btnInLabel">出勤</span></button>
+        <button class="btn btn-out" id="btnOut" disabled><span class="ic">🔴</span><span id="btnOutLabel">退勤</span></button>
+      </div>
+
+      <div class="times" id="times">
+        <div class="trow"><span class="lbl">出勤</span><span class="val" id="tIn">—</span></div>
+        <div class="trow"><span class="lbl">退勤</span><span class="val" id="tOut">—</span></div>
+        <div class="trow work"><span class="lbl">勤務時間</span><span class="val" id="tWork">—</span></div>
+      </div>
     </div>
-    <div class="foot">© お江戸弁当 / T&amp;A BROTHERS</div>
+    <div class="foot">© お江戸弁当 / T&amp;A BROTHERS　<span id="ver">v1.1</span><span class="tag" id="testTag" style="display:none;">TEST</span></div>
   </main>
 
-  <script>
-    // ───────────────────────────────────────────────
-    // LIFF 初期化（雛形）
-    // 本番アプリ作成時に LIFF_ID を実際のIDに差し替えてください。
-    // 準備中ページの段階では空のままでOK（初期化はスキップされ、準備中表示のまま）。
-    // ───────────────────────────────────────────────
-    var LIFF_ID = ''; // ← 例: '2009637457-xxxxxxxx'
+  <div class="overlay" id="overlay"><div class="spin"></div></div>
 
-    (function () {
-      if (!LIFF_ID || typeof liff === 'undefined') return; // 未設定なら何もしない
-      liff.init({ liffId: LIFF_ID })
-        .then(function () {
-          // 本番ではここで liff.getProfile() を使い userId を取得する
-        })
-        .catch(function (e) {
-          console.log('liff.init error:', e);
-        });
-    })();
-  </script>
+  <!-- 時刻ピッカー -->
+  <div class="sheet-bg" id="sheetBg"></div>
+  <div class="sheet" id="sheet">
+    <div class="sheet-head">
+      <span id="sheetTitle">出勤 打刻</span>
+      <button class="sheet-x" id="sheetCancel" aria-label="閉じる">✕</button>
+    </div>
+    <div class="picker">
+      <div class="pick-band"></div>
+      <div class="pick-col" id="colH"></div>
+      <div class="pick-sep">:</div>
+      <div class="pick-col" id="colM"></div>
+    </div>
+    <div class="pick-preview">選択中<b id="pickPrev">--:--</b></div>
+    <button class="btn btn-in sheet-confirm" id="sheetConfirm">打刻する</button>
+  </div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// 出退勤アプリ attendance.html v1.1
+//   ・打刻＝記録のみ（出勤/退勤の2種・通知なし）
+//   ・ボタン→時刻ホイール（時24h／分5分刻み・既定=現在時刻5分丸め）→「打刻する」
+//   ・記録時刻はユーザー選択値（打刻忘れの遡り入力に対応）
+//   ・対象: 調理スタッフ（運用上）。userIdがスタッフ設定に在れば打刻可
+//   ・土日含む全曜日対応（実カレンダー日付で記録）
+//   ・テスト: ?test=1 でLIFF/GASをバイパスしUIをローカル確認
+// ═══════════════════════════════════════════════════════════
+var LIFF_ID = '2009637457-PgLXUEdN';
+var GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5AawPDc7aluPokONkYz6f2ikwl0S487JvhKdKh6QSp1xhEhA/exec';
+
+var USER_ID = '';
+var IS_TEST = false;
+var CUR  = { clockIn:'', clockOut:'' };
+var mock = { name:'テスト調理', date:'', clockIn:'', clockOut:'' };
+
+function $(id){ return document.getElementById(id); }
+function pad2(n){ return ('0'+n).slice(-2); }
+function showOverlay(b){ $('overlay').classList.toggle('show', !!b); }
+
+// ---- API（既存アプリと同方式：POSTはContent-Type非指定でCORSプリフライト回避）----
+async function apiGet(params){
+  var qs = new URLSearchParams(params||{}).toString();
+  var url = qs ? GAS_URL+'?'+qs : GAS_URL;
+  var res = await fetch(url, { method:'GET', redirect:'follow' });
+  if(!res.ok) throw new Error('HTTP '+res.status);
+  return await res.json();
+}
+async function apiPost(payload){
+  var res = await fetch(GAS_URL, { method:'POST', redirect:'follow', body:JSON.stringify(payload) });
+  if(!res.ok) throw new Error('HTTP '+res.status);
+  return await res.json();
+}
+
+// ---- 日付整形 yyyy-MM-dd → 2026年6月18日（水）----
+var WD = ['日','月','火','水','木','金','土'];
+function fmtDate(ymd){
+  if(!ymd) return '—';
+  var p = String(ymd).split('-');
+  if(p.length!==3) return ymd;
+  var y=+p[0], m=+p[1], d=+p[2];
+  var w = new Date(y, m-1, d).getDay();
+  return y+'年'+m+'月'+d+'日（'+WD[w]+'）';
+}
+
+// ---- 勤務時間 'H:MM'（サーバ値が無い場合のフォールバック）----
+function calcWork(a,b){
+  if(!a||!b) return '';
+  var ap=String(a).split(':'), bp=String(b).split(':');
+  var diff = (+bp[0]*60 + +bp[1]) - (+ap[0]*60 + +ap[1]);
+  if(diff<0) diff+=1440;
+  return Math.floor(diff/60)+':'+pad2(diff%60);
+}
+
+// ---- ライブ時計（表示専用）----
+function tickClock(){
+  var n = new Date();
+  $('clock').textContent = pad2(n.getHours())+':'+pad2(n.getMinutes())+':'+pad2(n.getSeconds());
+}
+
+// ---- 画面描画 ----
+function render(d){
+  CUR.clockIn  = d.clockIn  || '';
+  CUR.clockOut = d.clockOut || '';
+
+  $('who').textContent  = d.name || '—';
+  $('date').textContent = fmtDate(d.date);
+
+  var st = $('status');
+  var bIn = $('btnIn'), bOut = $('btnOut');
+  var inLabel = $('btnInLabel'), outLabel = $('btnOutLabel');
+  var times = $('times');
+
+  st.className = 'status';
+  inLabel.textContent = '出勤';
+  outLabel.textContent = '退勤';
+
+  var status = d.status || (d.clockOut ? 'done' : (d.clockIn ? 'working' : 'before'));
+
+  if(status === 'before'){
+    st.textContent = 'おはようございます。出勤を押してください';
+    bIn.disabled = false;
+    bOut.disabled = true;
+    times.classList.remove('show');
+  } else if(status === 'working'){
+    st.classList.add('working');
+    st.textContent = '勤務中です';
+    inLabel.textContent = '出勤済 '+d.clockIn;
+    bIn.disabled = true;
+    bOut.disabled = false;
+    times.classList.remove('show');
+  } else {
+    st.classList.add('done');
+    st.textContent = '本日の勤務、お疲れさまでした';
+    inLabel.textContent  = '出勤済 '+d.clockIn;
+    outLabel.textContent = '退勤済 '+d.clockOut;
+    bIn.disabled = true;
+    bOut.disabled = true;
+    $('tIn').textContent   = d.clockIn || '—';
+    $('tOut').textContent  = d.clockOut || '—';
+    $('tWork').textContent = d.worked || calcWork(d.clockIn, d.clockOut) || '—';
+    times.classList.add('show');
+  }
+}
+
+function showErr(msg){
+  var st = $('status');
+  st.className = 'status err';
+  st.textContent = msg;
+  $('btnIn').disabled = true;
+  $('btnOut').disabled = true;
+}
+
+// ═══════════════════════════════════════════════════════════
+// 時刻ピッカー（ホイール）
+// ═══════════════════════════════════════════════════════════
+var ITEM_H = 44;
+var pickType = 'in';
+var rafPending = false;
+
+function buildWheel(col, count, fmt){
+  var html = '';
+  for(var i=0;i<count;i++){ html += '<div class="pick-item">'+fmt(i)+'</div>'; }
+  col.innerHTML = html;
+}
+function selIndex(col, count){
+  var idx = Math.round(col.scrollTop / ITEM_H);
+  if(idx < 0) idx = 0;
+  if(idx > count-1) idx = count-1;
+  return idx;
+}
+function markCenter(col, count){
+  var idx = selIndex(col, count);
+  var items = col.children;
+  for(var i=0;i<items.length;i++){ items[i].classList.toggle('on', i===idx); }
+}
+function updatePreview(){
+  var h = selIndex($('colH'),24);
+  var m = selIndex($('colM'),12)*5;
+  $('pickPrev').textContent = pad2(h)+':'+pad2(m);
+}
+function onWheelScroll(){
+  if(rafPending) return;
+  rafPending = true;
+  requestAnimationFrame(function(){
+    markCenter($('colH'),24);
+    markCenter($('colM'),12);
+    updatePreview();
+    rafPending = false;
+  });
+}
+function openPicker(type){
+  pickType = type;
+  $('sheetTitle').textContent = (type==='in' ? '出勤' : '退勤') + ' 打刻';
+  var cf = $('sheetConfirm');
+  cf.classList.toggle('btn-in',  type==='in');
+  cf.classList.toggle('btn-out', type==='out');
+
+  // 既定＝現在時刻を5分丸め
+  var now = new Date();
+  var H = now.getHours();
+  var M = Math.round(now.getMinutes()/5)*5;
+  if(M === 60){ M = 0; H = (H+1)%24; }
+
+  $('sheetBg').classList.add('show');
+  $('sheet').classList.add('show');
+  requestAnimationFrame(function(){
+    $('colH').scrollTop = H * ITEM_H;
+    $('colM').scrollTop = (M/5) * ITEM_H;
+    requestAnimationFrame(function(){
+      markCenter($('colH'),24);
+      markCenter($('colM'),12);
+      updatePreview();
+    });
+  });
+}
+function closePicker(){
+  $('sheetBg').classList.remove('show');
+  $('sheet').classList.remove('show');
+}
+async function confirmPicker(){
+  var h = selIndex($('colH'),24);
+  var m = selIndex($('colM'),12)*5;
+  var hhmm = pad2(h)+':'+pad2(m);
+
+  // 退勤<出勤の誤操作ガード
+  if(pickType==='out' && CUR.clockIn && hhmm < CUR.clockIn){
+    if(!confirm('退勤('+hhmm+')が出勤('+CUR.clockIn+')より前です。\nこのまま打刻しますか？')) return;
+  }
+
+  closePicker();
+  if(IS_TEST){ punchMock(pickType, hhmm); return; }
+  await punch(pickType, hhmm);
+}
+
+// ---- 打刻送信 ----
+async function punch(type, time){
+  try{
+    showOverlay(true);
+    var res = await apiPost({ action:'punchAttendance', userId:USER_ID, type:type, time:time });
+    showOverlay(false);
+    if(!res || !res.success){
+      alert((res && res.message) || '打刻に失敗しました');
+      await load();
+      return;
+    }
+    render({ name:res.name, date:res.date, clockIn:res.clockIn, clockOut:res.clockOut, worked:res.worked });
+  }catch(e){
+    showOverlay(false);
+    alert('通信エラー：'+e.message);
+  }
+}
+
+// ---- 起動時ロード ----
+async function load(){
+  try{
+    showOverlay(true);
+    var d = await apiGet({ action:'getAttendanceToday', userId:USER_ID });
+    showOverlay(false);
+    if(!d || !d.ok || !d.found){
+      showErr((d && d.message) || 'スタッフ登録が見つかりません');
+      return;
+    }
+    render(d);
+  }catch(e){
+    showOverlay(false);
+    showErr('通信エラー：'+e.message);
+  }
+}
+
+// ---- テストモック（?test=1）----
+function punchMock(type, hhmm){
+  if(type==='in'){
+    if(mock.clockIn){ alert('既に出勤打刻済み（'+mock.clockIn+'）'); return; }
+    mock.clockIn = hhmm;
+  } else {
+    if(!mock.clockIn){ alert('先に出勤打刻が必要です'); return; }
+    if(mock.clockOut){ alert('既に退勤打刻済み（'+mock.clockOut+'）'); return; }
+    mock.clockOut = hhmm;
+  }
+  render({ name:mock.name, date:mock.date, clockIn:mock.clockIn, clockOut:mock.clockOut });
+}
+
+// ---- INIT ----
+async function init(){
+  buildWheel($('colH'), 24, function(i){ return pad2(i); });
+  buildWheel($('colM'), 12, function(i){ return pad2(i*5); });
+
+  tickClock();
+  setInterval(tickClock, 1000);
+
+  $('btnIn').addEventListener('click', function(){ if(!$('btnIn').disabled) openPicker('in'); });
+  $('btnOut').addEventListener('click', function(){ if(!$('btnOut').disabled) openPicker('out'); });
+  $('sheetConfirm').addEventListener('click', confirmPicker);
+  $('sheetCancel').addEventListener('click', closePicker);
+  $('sheetBg').addEventListener('click', closePicker);
+  $('colH').addEventListener('scroll', onWheelScroll, { passive:true });
+  $('colM').addEventListener('scroll', onWheelScroll, { passive:true });
+
+  var params = new URLSearchParams(location.search);
+  IS_TEST = params.get('test') === '1';
+
+  if(IS_TEST){
+    $('testTag').style.display = 'inline-block';
+    var n = new Date();
+    mock.date = n.getFullYear()+'-'+pad2(n.getMonth()+1)+'-'+pad2(n.getDate());
+    render({ name:mock.name, date:mock.date, clockIn:mock.clockIn, clockOut:mock.clockOut });
+    return;
+  }
+
+  try{
+    await liff.init({ liffId: LIFF_ID });
+    if(!liff.isLoggedIn()){ liff.login(); return; }
+    var profile = await liff.getProfile();
+    USER_ID = profile.userId;
+    await load();
+  }catch(e){
+    showErr('LIFF初期化エラー：'+e.message);
+  }
+}
+
+init();
+</script>
 </body>
 </html>
