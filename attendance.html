@@ -74,6 +74,14 @@
   .trow .val{font-weight:700;font-size:18px;font-variant-numeric:tabular-nums;}
   .trow.work .val{color:var(--accent-d);}
 
+  /* 修正・申請への導線（サブボタン） */
+  .btn-sub{
+    margin-top:14px;border:1.5px solid var(--navy);background:#fff;color:var(--navy);
+    border-radius:12px;padding:13px;font-size:15px;font-weight:700;width:100%;cursor:pointer;
+    -webkit-tap-highlight-color:transparent;transition:transform .05s;
+  }
+  .btn-sub:active{transform:scale(.99);}
+
   .foot{padding:13px 20px 18px;text-align:center;font-size:11px;color:var(--muted);}
   .tag{
     display:inline-block;margin-left:6px;font-size:10px;color:#fff;
@@ -141,6 +149,70 @@
   }
   .pick-preview b{font-size:22px;color:var(--navy);font-variant-numeric:tabular-nums;margin-left:6px;}
   .sheet-confirm{margin-bottom:6px;}
+
+  /* ── 修正・申請パネル ── */
+  .req-ov{
+    position:fixed;inset:0;background:rgba(20,30,40,.5);display:none;z-index:55;
+    align-items:flex-end;justify-content:center;
+  }
+  .req-ov.show{display:flex;}
+  .req-card{
+    width:100%;max-width:440px;background:#fff;border-radius:18px 18px 0 0;
+    max-height:92vh;overflow-y:auto;-webkit-overflow-scrolling:touch;
+    padding:0 20px max(20px,env(safe-area-inset-bottom));
+    animation:reqUp .25s ease;
+  }
+  @keyframes reqUp{from{transform:translateY(40px);opacity:.4;}to{transform:translateY(0);opacity:1;}}
+  .req-head{
+    position:sticky;top:0;background:#fff;display:flex;align-items:center;justify-content:space-between;
+    padding:18px 0 12px;border-bottom:1px solid var(--line);z-index:1;
+  }
+  .req-head .t{font-size:17px;font-weight:700;color:var(--navy);}
+  .req-x{
+    border:none;background:#EEF2F6;color:var(--muted);width:32px;height:32px;border-radius:50%;
+    font-size:15px;cursor:pointer;-webkit-tap-highlight-color:transparent;
+  }
+  .req-sec{margin-top:16px;}
+  .req-sec>.lab{font-size:13px;font-weight:700;color:var(--muted);margin-bottom:7px;}
+  .req-date{
+    width:100%;border:1.5px solid var(--line);border-radius:12px;padding:13px;
+    font-size:16px;color:var(--text);font-family:inherit;background:#fff;
+  }
+  .seg{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
+  .seg.c3{grid-template-columns:repeat(3,1fr);}
+  .seg-item{
+    border:1.5px solid var(--line);background:#fff;color:var(--text);
+    border-radius:11px;padding:12px 6px;font-size:14px;font-weight:700;text-align:center;cursor:pointer;
+    -webkit-tap-highlight-color:transparent;transition:all .12s;
+  }
+  .seg-item:active{transform:scale(.98);}
+  .seg-item.on{border-color:var(--navy);background:var(--navy);color:#fff;}
+  .tfield{
+    display:flex;align-items:center;justify-content:space-between;
+    border:1.5px solid var(--line);border-radius:12px;padding:13px 15px;cursor:pointer;background:#fff;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .tfield:active{transform:scale(.99);}
+  .tfield .tl{font-size:14px;color:var(--muted);}
+  .tfield .tv{font-size:21px;font-weight:700;color:var(--navy);font-variant-numeric:tabular-nums;}
+  .req-reason{
+    width:100%;border:1.5px solid var(--line);border-radius:12px;padding:12px;
+    font-size:15px;font-family:inherit;color:var(--text);resize:vertical;min-height:64px;
+  }
+  .req-submit{
+    margin-top:18px;width:100%;border:none;border-radius:14px;padding:17px;
+    font-size:18px;font-weight:700;color:#fff;background:var(--navy);cursor:pointer;
+    -webkit-tap-highlight-color:transparent;transition:transform .05s;
+  }
+  .req-submit:active{transform:scale(.99);}
+  .req-submit:disabled{background:#CDD3DA;color:#8A93A0;}
+  .req-result{
+    margin-top:14px;padding:13px;border-radius:12px;font-size:14px;font-weight:700;
+    display:none;line-height:1.5;word-break:break-word;
+  }
+  .req-result.ok{background:#EAF5EF;color:var(--green);}
+  .req-result.err{background:#FBEAEA;color:var(--red);}
+  .req-hint{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.5;}
 </style>
 </head>
 <body>
@@ -166,8 +238,10 @@
         <div class="trow"><span class="lbl">退勤</span><span class="val" id="tOut">—</span></div>
         <div class="trow work"><span class="lbl">勤務時間</span><span class="val" id="tWork">—</span></div>
       </div>
+
+      <button class="btn-sub" id="btnReq">打刻の修正・申請</button>
     </div>
-    <div class="foot">© お江戸弁当 / T&amp;A BROTHERS　<span id="ver">v1.1</span><span class="tag" id="testTag" style="display:none;">TEST</span></div>
+    <div class="foot">© お江戸弁当 / T&amp;A BROTHERS　<span id="ver">v1.3</span><span class="tag" id="testTag" style="display:none;">TEST</span></div>
   </main>
 
   <div class="overlay" id="overlay"><div class="spin"></div></div>
@@ -189,15 +263,69 @@
     <button class="btn btn-in sheet-confirm" id="sheetConfirm">打刻する</button>
   </div>
 
+  <!-- 修正・申請パネル -->
+  <div class="req-ov" id="reqPanel">
+    <div class="req-card">
+      <div class="req-head">
+        <span class="t">打刻の修正・申請</span>
+        <button class="req-x" id="reqClose" aria-label="閉じる">✕</button>
+      </div>
+
+      <div class="req-sec">
+        <div class="lab">対象日</div>
+        <input type="date" class="req-date" id="reqDate">
+        <div class="req-hint">本日から7日前まで（本日を含む）選べます。承認されると勤怠記録に反映されます。</div>
+      </div>
+
+      <div class="req-sec">
+        <div class="lab">種別</div>
+        <div class="seg" id="kindSeg">
+          <div class="seg-item" data-kind="出勤修正">出勤を修正</div>
+          <div class="seg-item" data-kind="退勤修正">退勤を修正</div>
+          <div class="seg-item" data-kind="後日入力">後日入力（両方）</div>
+          <div class="seg-item" data-kind="取消">打刻を取消</div>
+        </div>
+      </div>
+
+      <div class="req-sec" id="fIn" style="display:none;">
+        <div class="lab">新しい出勤時刻</div>
+        <div class="tfield" id="reqInField"><span class="tl">タップして選択</span><span class="tv" id="reqInVal">--:--</span></div>
+      </div>
+
+      <div class="req-sec" id="fOut" style="display:none;">
+        <div class="lab">新しい退勤時刻</div>
+        <div class="tfield" id="reqOutField"><span class="tl">タップして選択</span><span class="tv" id="reqOutVal">--:--</span></div>
+      </div>
+
+      <div class="req-sec" id="fCancel" style="display:none;">
+        <div class="lab">取消する対象</div>
+        <div class="seg c3" id="cancelSeg">
+          <div class="seg-item" data-cancel="in">出勤のみ</div>
+          <div class="seg-item" data-cancel="out">退勤のみ</div>
+          <div class="seg-item" data-cancel="all">全日</div>
+        </div>
+      </div>
+
+      <div class="req-sec">
+        <div class="lab">理由（任意）</div>
+        <textarea class="req-reason" id="reqReason" placeholder="例：打刻を押し忘れた／時間を間違えた など"></textarea>
+      </div>
+
+      <button class="req-submit" id="reqSubmit">申請する</button>
+      <div class="req-result" id="reqResult"></div>
+    </div>
+  </div>
+
 <script>
 // ═══════════════════════════════════════════════════════════
-// 出退勤アプリ attendance.html v1.1
-//   ・打刻＝記録のみ（出勤/退勤の2種・通知なし）
-//   ・ボタン→時刻ホイール（時24h／分5分刻み・既定=現在時刻5分丸め）→「打刻する」
-//   ・記録時刻はユーザー選択値（打刻忘れの遡り入力に対応）
-//   ・対象: 調理スタッフ（運用上）。userIdがスタッフ設定に在れば打刻可
-//   ・土日含む全曜日対応（実カレンダー日付で記録）
-//   ・テスト: ?test=1 でLIFF/GASをバイパスしUIをローカル確認
+// 出退勤アプリ attendance.html v1.3
+//   ・打刻＝記録のみ（出勤/退勤の2種・通知なし）※v1.2から継続
+//   ・【新】打刻の修正・申請（出勤修正/退勤修正/後日入力/取消）
+//       対象日=本日〜7日前／種別で入力欄切替／時刻はホイール流用
+//       送信→GAS submitAttendanceRequest（社長・井上へ通知・承認制）
+//   ・ボタン→時刻ホイール（時24h／分5分刻み・既定=現在時刻を丸め）
+//   ・既定値の丸め: 出勤=切り上げ／退勤=切り下げ（5分単位）
+//   ・テスト: ?test=1 でLIFF/GASをバイパス（申請は送信内容を表示）
 // ═══════════════════════════════════════════════════════════
 var LIFF_ID = '2009637457-PgLXUEdN';
 var GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5AawPDc7aluPokONkYz6f2ikwl0S487JvhKdKh6QSp1xhEhA/exec';
@@ -305,10 +433,12 @@ function showErr(msg){
 }
 
 // ═══════════════════════════════════════════════════════════
-// 時刻ピッカー（ホイール）
+// 時刻ピッカー（ホイール）※打刻・申請で共用
 // ═══════════════════════════════════════════════════════════
 var ITEM_H = 44;
-var pickType = 'in';
+var pickType = 'in';     // 打刻モード時の対象（in/out）
+var pickMode = 'punch';  // 'punch' | 'request'
+var pickReturn = null;   // requestモードの確定コールバック
 var rafPending = false;
 
 function buildWheel(col, count, fmt){
@@ -342,19 +472,7 @@ function onWheelScroll(){
     rafPending = false;
   });
 }
-function openPicker(type){
-  pickType = type;
-  $('sheetTitle').textContent = (type==='in' ? '出勤' : '退勤') + ' 打刻';
-  var cf = $('sheetConfirm');
-  cf.classList.toggle('btn-in',  type==='in');
-  cf.classList.toggle('btn-out', type==='out');
-
-  // 既定＝現在時刻を5分丸め
-  var now = new Date();
-  var H = now.getHours();
-  var M = Math.round(now.getMinutes()/5)*5;
-  if(M === 60){ M = 0; H = (H+1)%24; }
-
+function scrollWheelTo(H, M){
   $('sheetBg').classList.add('show');
   $('sheet').classList.add('show');
   requestAnimationFrame(function(){
@@ -367,6 +485,52 @@ function openPicker(type){
     });
   });
 }
+function openPicker(type){
+  pickMode = 'punch';
+  pickType = type;
+  $('sheetTitle').textContent = (type==='in' ? '出勤' : '退勤') + ' 打刻';
+  var cf = $('sheetConfirm');
+  cf.classList.toggle('btn-in',  type==='in');
+  cf.classList.toggle('btn-out', type==='out');
+  cf.textContent = '打刻する';
+
+  // 既定＝現在時刻を5分単位で丸め（出勤=切り上げ／退勤=切り下げ）
+  var now = new Date();
+  var H = now.getHours();
+  var M;
+  if(type === 'in'){
+    M = Math.ceil(now.getMinutes()/5)*5;   // 出勤: 切り上げ
+    if(M === 60){ M = 0; H = (H+1)%24; }
+  } else {
+    M = Math.floor(now.getMinutes()/5)*5;  // 退勤: 切り下げ
+  }
+  scrollWheelTo(H, M);
+}
+// 申請フォーム用：時刻ホイールを開き、確定値をコールバックで返す
+function openReqPicker(which){
+  pickMode = 'request';
+  pickReturn = function(hhmm){
+    if(which==='in'){ REQ.newIn = hhmm; $('reqInVal').textContent = hhmm; }
+    else { REQ.newOut = hhmm; $('reqOutVal').textContent = hhmm; }
+  };
+  $('sheetTitle').textContent = (which==='in' ? '新しい出勤時刻' : '新しい退勤時刻');
+  var cf = $('sheetConfirm');
+  cf.classList.remove('btn-out'); cf.classList.add('btn-in');
+  cf.textContent = '決定';
+
+  var cur = (which==='in' ? REQ.newIn : REQ.newOut);
+  var H, M;
+  if(cur && /^\d{2}:\d{2}$/.test(cur)){
+    H = +cur.split(':')[0]; M = +cur.split(':')[1];
+  } else {
+    var now = new Date();
+    H = now.getHours();
+    M = Math.round(now.getMinutes()/5)*5;
+    if(M === 60){ M = 0; H = (H+1)%24; }
+  }
+  M = Math.round(M/5)*5; if(M > 55) M = 55;
+  scrollWheelTo(H, M);
+}
 function closePicker(){
   $('sheetBg').classList.remove('show');
   $('sheet').classList.remove('show');
@@ -376,11 +540,17 @@ async function confirmPicker(){
   var m = selIndex($('colM'),12)*5;
   var hhmm = pad2(h)+':'+pad2(m);
 
-  // 退勤<出勤の誤操作ガード
+  // 申請モード：値を返して終了（打刻はしない）
+  if(pickMode === 'request'){
+    closePicker();
+    if(typeof pickReturn === 'function') pickReturn(hhmm);
+    return;
+  }
+
+  // 打刻モード（既存）
   if(pickType==='out' && CUR.clockIn && hhmm < CUR.clockIn){
     if(!confirm('退勤('+hhmm+')が出勤('+CUR.clockIn+')より前です。\nこのまま打刻しますか？')) return;
   }
-
   closePicker();
   if(IS_TEST){ punchMock(pickType, hhmm); return; }
   await punch(pickType, hhmm);
@@ -434,6 +604,113 @@ function punchMock(type, hhmm){
   render({ name:mock.name, date:mock.date, clockIn:mock.clockIn, clockOut:mock.clockOut });
 }
 
+// ═══════════════════════════════════════════════════════════
+// 修正・申請フォーム
+// ═══════════════════════════════════════════════════════════
+var REQ = { date:'', kind:'', newIn:'', newOut:'', cancelTarget:'', reason:'' };
+var REQ_TODAY = '', REQ_MIN = '';
+
+function ymdLocal(dt){
+  return dt.getFullYear()+'-'+pad2(dt.getMonth()+1)+'-'+pad2(dt.getDate());
+}
+function setupReqDates(){
+  var n = new Date();
+  REQ_TODAY = ymdLocal(n);
+  REQ_MIN   = ymdLocal(new Date(n.getTime() - 7*24*3600*1000));
+  var di = $('reqDate');
+  di.min = REQ_MIN; di.max = REQ_TODAY; di.value = REQ_TODAY;
+  REQ.date = REQ_TODAY;
+}
+function reqMsg(text, isErr){
+  var el = $('reqResult');
+  if(!text){ el.style.display='none'; el.textContent=''; el.className='req-result'; return; }
+  el.style.display='block';
+  el.className = 'req-result ' + (isErr ? 'err' : 'ok');
+  el.textContent = text;
+}
+function showReqFields(kind){
+  $('fIn').style.display     = (kind==='出勤修正' || kind==='後日入力') ? 'block' : 'none';
+  $('fOut').style.display    = (kind==='退勤修正' || kind==='後日入力') ? 'block' : 'none';
+  $('fCancel').style.display = (kind==='取消') ? 'block' : 'none';
+}
+function selectKind(kind){
+  REQ.kind = kind; REQ.newIn = ''; REQ.newOut = ''; REQ.cancelTarget = '';
+  $('reqInVal').textContent = '--:--';
+  $('reqOutVal').textContent = '--:--';
+  var kels = document.querySelectorAll('[data-kind]');
+  for(var i=0;i<kels.length;i++){ kels[i].classList.toggle('on', kels[i].getAttribute('data-kind')===kind); }
+  var cels = document.querySelectorAll('[data-cancel]');
+  for(var j=0;j<cels.length;j++){ cels[j].classList.remove('on'); }
+  showReqFields(kind);
+  reqMsg('', false);
+}
+function selectCancelTarget(t){
+  REQ.cancelTarget = t;
+  var cels = document.querySelectorAll('[data-cancel]');
+  for(var i=0;i<cels.length;i++){ cels[i].classList.toggle('on', cels[i].getAttribute('data-cancel')===t); }
+}
+function resetReqForm(){
+  REQ.kind=''; REQ.newIn=''; REQ.newOut=''; REQ.cancelTarget='';
+  $('reqInVal').textContent='--:--';
+  $('reqOutVal').textContent='--:--';
+  $('reqReason').value='';
+  var kels = document.querySelectorAll('[data-kind]');
+  for(var i=0;i<kels.length;i++){ kels[i].classList.remove('on'); }
+  var cels = document.querySelectorAll('[data-cancel]');
+  for(var j=0;j<cels.length;j++){ cels[j].classList.remove('on'); }
+  showReqFields('');
+}
+function openReqPanel(){
+  setupReqDates();
+  resetReqForm();
+  reqMsg('', false);
+  $('reqPanel').classList.add('show');
+}
+function closeReqPanel(){
+  $('reqPanel').classList.remove('show');
+}
+async function submitRequest(){
+  if(!REQ.date){ reqMsg('対象日を選んでください', true); return; }
+  if(REQ.date < REQ_MIN || REQ.date > REQ_TODAY){ reqMsg('対象日は本日から7日前まで（本日含む）で選んでください', true); return; }
+  if(!REQ.kind){ reqMsg('種別を選んでください', true); return; }
+  if(REQ.kind==='出勤修正' && !REQ.newIn){ reqMsg('新しい出勤時刻を選んでください', true); return; }
+  if(REQ.kind==='退勤修正' && !REQ.newOut){ reqMsg('新しい退勤時刻を選んでください', true); return; }
+  if(REQ.kind==='後日入力' && (!REQ.newIn || !REQ.newOut)){ reqMsg('出勤・退勤の両方の時刻を選んでください', true); return; }
+  if(REQ.kind==='取消' && !REQ.cancelTarget){ reqMsg('取消する対象を選んでください', true); return; }
+
+  REQ.reason = $('reqReason').value.trim();
+
+  var payload = {
+    action:'submitAttendanceRequest', userId:USER_ID,
+    targetDate:REQ.date, kind:REQ.kind,
+    newIn:REQ.newIn, newOut:REQ.newOut,
+    cancelTarget:REQ.cancelTarget, reason:REQ.reason
+  };
+
+  var btn = $('reqSubmit');
+  var orig = btn.textContent;
+  btn.disabled = true; btn.textContent = '送信中…';
+
+  if(IS_TEST){
+    setTimeout(function(){
+      btn.disabled=false; btn.textContent=orig;
+      reqMsg('【テスト】送信内容: 対象日='+REQ.date+' / 種別='+REQ.kind+' / 出勤='+(REQ.newIn||'-')+' / 退勤='+(REQ.newOut||'-')+' / 取消='+(REQ.cancelTarget||'-')+' / 理由='+(REQ.reason||'(なし)'), false);
+    }, 400);
+    return;
+  }
+
+  try{
+    var res = await apiPost(payload);
+    btn.disabled=false; btn.textContent=orig;
+    if(!res || !res.success){ reqMsg((res && res.message) || '申請に失敗しました', true); return; }
+    resetReqForm();
+    reqMsg('申請しました（申請ID: '+res.reqId+'）。社長・井上の承認をお待ちください。', false);
+  }catch(e){
+    btn.disabled=false; btn.textContent=orig;
+    reqMsg('通信エラー：'+e.message, true);
+  }
+}
+
 // ---- INIT ----
 async function init(){
   buildWheel($('colH'), 24, function(i){ return pad2(i); });
@@ -442,6 +719,7 @@ async function init(){
   tickClock();
   setInterval(tickClock, 1000);
 
+  // 打刻
   $('btnIn').addEventListener('click', function(){ if(!$('btnIn').disabled) openPicker('in'); });
   $('btnOut').addEventListener('click', function(){ if(!$('btnOut').disabled) openPicker('out'); });
   $('sheetConfirm').addEventListener('click', confirmPicker);
@@ -450,13 +728,30 @@ async function init(){
   $('colH').addEventListener('scroll', onWheelScroll, { passive:true });
   $('colM').addEventListener('scroll', onWheelScroll, { passive:true });
 
+  // 修正・申請
+  $('btnReq').addEventListener('click', openReqPanel);
+  $('reqClose').addEventListener('click', closeReqPanel);
+  $('reqPanel').addEventListener('click', function(e){ if(e.target === $('reqPanel')) closeReqPanel(); });
+  $('reqDate').addEventListener('change', function(){ REQ.date = $('reqDate').value; });
+  $('kindSeg').addEventListener('click', function(e){
+    var b = e.target.closest ? e.target.closest('[data-kind]') : null;
+    if(b) selectKind(b.getAttribute('data-kind'));
+  });
+  $('cancelSeg').addEventListener('click', function(e){
+    var b = e.target.closest ? e.target.closest('[data-cancel]') : null;
+    if(b) selectCancelTarget(b.getAttribute('data-cancel'));
+  });
+  $('reqInField').addEventListener('click', function(){ openReqPicker('in'); });
+  $('reqOutField').addEventListener('click', function(){ openReqPicker('out'); });
+  $('reqSubmit').addEventListener('click', submitRequest);
+
   var params = new URLSearchParams(location.search);
   IS_TEST = params.get('test') === '1';
 
   if(IS_TEST){
     $('testTag').style.display = 'inline-block';
     var n = new Date();
-    mock.date = n.getFullYear()+'-'+pad2(n.getMonth()+1)+'-'+pad2(n.getDate());
+    mock.date = ymdLocal(n);
     render({ name:mock.name, date:mock.date, clockIn:mock.clockIn, clockOut:mock.clockOut });
     return;
   }
