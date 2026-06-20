@@ -646,8 +646,9 @@ body {
 
 // ═══════════════════════════════════════════════════════════════
 // お江戸弁当 シフト提出 LIFF（提出側）
-//   v2026-06-15 kitchen-submit-fixedstart
-//   変更：キッチン提出の「入り（開始）」を admin固定グリッド一致の9項目に制限。
+//   v2026-06-20 kitchen-submit v2
+//   変更：キッチン提出の「入り（開始）」に 09:00・10:00 を追加（計11項目）。
+//         09:00以上の希望者は管理画面(kitchen-admin v3.4)で自動的に「仕込み」へ配置される。
 //         上がり・保存形式（'HH:MM-HH:MM'/'休'）・GASは従来どおり（型化対策不要）。
 // ═══════════════════════════════════════════════════════════════
 
@@ -660,14 +661,16 @@ const GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5A
 const KITCHEN_SHIFT_URL = 'https://akiotogasaki-bit.github.io/shift-app/kitchen-shift.html';
 
 // キッチン提出フォーム
-//   入り（開始）：admin固定グリッドと一致する9項目に制限（'HH:MM' padded）
+//   入り（開始）：0:00〜10:00 の11項目（'HH:MM' padded）。
+//                09:00・10:00 は管理画面で「仕込み」へ自動配置される枠。
 //   上がり（終了）：従来どおり 02:00〜15:00・30分（27項目）
-const KS_DEFAULT_START = '05:00';   // 未提出日で「出勤」を押した時の入り初期値（9固定のいずれか）
+const KS_DEFAULT_START = '05:00';   // 未提出日で「出勤」を押した時の入り初期値（11項目のいずれか）
 const KS_DEFAULT_END   = '14:00';
 
-// 入り（開始）の固定9項目。kitchen-admin の FIXED_TIMES（0:00,2:00,3:00,4:00,5:00,6:00,6:30,7:00,8:00）と一致（padded）
+// 入り（開始）の固定11項目。0:00〜8:00 は kitchen-admin の FIXED_TIMES と一致（padded）。
+//   09:00・10:00 は時間行を持たず、管理画面の自動配置で「仕込み」へ振り分けられる。
 function ksStartOptions() {
-  return ['00:00','02:00','03:00','04:00','05:00','06:00','06:30','07:00','08:00'];
+  return ['00:00','02:00','03:00','04:00','05:00','06:00','06:30','07:00','08:00','09:00','10:00'];
 }
 // 上がり（終了）の選択肢：02:00〜15:00・30分（27個）
 function ksTimeOptions() {
@@ -684,7 +687,7 @@ function ksToMin(t) {
   const p = String(t).split(':');
   return (parseInt(p[0], 10) || 0) * 60 + (parseInt(p[1], 10) || 0);
 }
-// 任意の開始時刻を、入り固定9項目のうち最寄りへ寄せる（既存データ再表示用）
+// 任意の開始時刻を、入り固定11項目のうち最寄りへ寄せる（既存データ再表示用）
 function ksSnapStart(t) {
   const opts = ksStartOptions();
   const m = ksToMin(t);
@@ -1210,7 +1213,7 @@ async function submitShift() {
 let ksLoading = false;
 
 // サーバーのセル（'HH:MM-HH:MM' | '休' | ''）→ {off,start,end}
-//   入りは固定9項目へスナップ（旧データの非固定値も最寄りへ寄せて初期選択を成立させる）
+//   入りは固定11項目へスナップ（旧データの非固定値も最寄りへ寄せて初期選択を成立させる）
 function buildKsDaysFromServer(cells) {
   const out = [];
   for (let i = 0; i < 5; i++) {
@@ -1273,7 +1276,7 @@ function renderKitchenForm() {
   }
   document.getElementById('ks-resubmit-notice').style.display = state.ksAlreadySubmitted ? 'block' : 'none';
 
-  const startList = ksStartOptions();   // 入り：固定9項目（adminグリッド一致）
+  const startList = ksStartOptions();   // 入り：固定11項目（0:00〜10:00／9:00以上は管理側で仕込みへ）
   const endList   = ksTimeOptions();    // 上がり：02:00〜15:00・30分
   const list = document.getElementById('ks-day-list');
   list.innerHTML = '';
