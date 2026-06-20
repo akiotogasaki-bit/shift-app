@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<!-- kitchen-admin v3.4 (2026-06-20) 提出フォームに 09:00・10:00 を追加したことに対応。自動配置で開始09:00以上は「仕込み」行へ振り分け（時間行に吸着させない／assignDay）。v3.3の終了時刻併記（時間行のみ・B案）は維持。GAS変更なし。 -->
 <!-- kitchen-admin v3.3 (2026-06-15) グリッドのスタッフチップに終了時刻「〜HH:MM」を併記（B案＝終了は「キッチン希望」c.req[d]のレンジから補完／確定は開始のみ保存のため）。時間行のみ付与・仕込み行は名前のみ。希望未提出（社員等）は終了なし。GAS変更なし。 -->
 <title>お江戸弁当 キッチンシフト管理</title>
 <style>
@@ -161,7 +162,7 @@
 
   <div id="grid"></div>
 
-  <footer>お江戸弁当 キッチンシフト管理 v3.3</footer>
+  <footer>お江戸弁当 キッチンシフト管理 v3.4</footer>
 
   <div class="actionbar" id="actionbar" style="display:none;">
     <button class="act save" id="btnSave" onclick="doSave()">💾 保存</button>
@@ -253,10 +254,14 @@ function buildRows(){
   rows.push({ id:'p0', type:'prep', time:'', label:PREP_LABEL });
   state.rows=rows;
 }
-/* 確定/希望のセル値を行へ割当（時刻は一致行→無ければ最寄り。仕込みへは流さない） */
+/* 確定/希望のセル値を行へ割当（時刻は一致行→無ければ最寄り。ただし開始09:00以上は「仕込み」へ） */
 function assignDay(raw){
   if(raw.type==='off') return { off:true, rowId:null };
-  if(raw.type==='time'){ const r=findTimeRow(raw.start)||snapTimeRow(raw.start); return r ? { off:false, rowId:r.id } : { off:true, rowId:null }; }
+  if(raw.type==='time'){
+    // v3.4: 開始09:00以上は「仕込み」行へ自動配置（時間行に吸着させない）
+    if(toMin(raw.start) >= toMin('09:00')){ const pp=firstPrepRow(); if(pp) return { off:false, rowId:pp.id }; }
+    const r=findTimeRow(raw.start)||snapTimeRow(raw.start); return r ? { off:false, rowId:r.id } : { off:true, rowId:null };
+  }
   const p=firstPrepRow(); return p ? { off:false, rowId:p.id } : { off:true, rowId:null };
 }
 /* 希望＞社員デフォルト＞休 で raw を決める（確定は含めない） */
