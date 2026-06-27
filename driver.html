@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>お江戸弁当 ドライバー報告</title>
-<!-- driver.html v1.4 (2026-06-02) — 取り置きタブ / 商品名B列表示 -->
+<!-- driver.html v1.5 (2026-06-26) — 拠点移動タブ（±移動・商品別・LINE確認ボタン・残数反映）／取り置き / 商品名B列表示 -->
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
 :root {
@@ -708,6 +708,35 @@ body {
 .breakdown-name { color: var(--ink-soft); }
 .breakdown-val { font-weight: 700; color: var(--blue); }
 .breakdown-zero { color: var(--ink-mute); }
+
+/* ===== 拠点移動 v1.5 ===== */
+.mv-header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 6px;}
+.mv-title{font-size:17px;font-weight:700;color:var(--ink);}
+.mv-date{font-size:13px;color:var(--ink-mute);}
+.mv-form{background:#FFF;border-radius:14px;margin:8px 12px;padding:12px 16px 16px;box-shadow:0 1px 4px rgba(0,0,0,.06);}
+.mv-section-title{font-size:12px;font-weight:700;color:var(--ink-soft);margin:12px 0 6px;}
+.mv-field{margin-bottom:8px;}
+.mv-field-label{display:block;font-size:12px;color:var(--ink-mute);margin-bottom:4px;}
+.mv-select{width:100%;padding:10px;border:1px solid #D5DCE5;border-radius:10px;font-size:15px;font-family:inherit;background:#FFF;}
+.mv-prod-row{display:flex;align-items:center;justify-content:space-between;padding:7px 2px;border-bottom:1px solid #F0F2F5;}
+.mv-prod-name{font-size:14px;color:var(--ink);}
+.mv-qty{width:66px;padding:8px;border:1px solid #D5DCE5;border-radius:8px;font-size:15px;text-align:center;font-family:inherit;}
+.mv-qty.filled{border-color:var(--blue);background:#EAF3FF;font-weight:700;}
+.mv-empty{text-align:center;color:var(--ink-mute);font-size:13px;padding:14px;}
+.mv-list{background:#FFF;border-radius:14px;margin:8px 12px;padding:12px 14px;box-shadow:0 1px 4px rgba(0,0,0,.06);}
+.mv-list-title{font-size:13px;font-weight:700;color:var(--ink);margin-bottom:8px;}
+.mv-card{border:1px solid #E3E8EF;border-radius:10px;padding:10px 12px;margin-bottom:8px;}
+.mv-card.done{opacity:.75;}
+.mv-card-main{font-size:14px;font-weight:700;color:var(--ink);}
+.mv-card-sub{font-size:12px;color:var(--ink-mute);margin-top:3px;line-height:1.5;}
+.mv-card-btns{display:flex;gap:8px;margin-top:9px;}
+.mv-card-btn{flex:1;padding:9px;border:none;border-radius:8px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;}
+.mv-card-btn.arrive{background:var(--blue);color:#FFF;}
+.mv-card-btn.cancel{background:#EAEAEA;color:var(--ink);}
+.mv-card-btn:active{opacity:.8;}
+.mv-save-btn{width:100%;padding:14px;border:none;border-radius:12px;background:var(--blue);color:#FFF;font-size:16px;font-weight:700;font-family:inherit;cursor:pointer;}
+.mv-save-btn:disabled{opacity:.5;}
+.mv-arrive-from{font-size:13px;color:var(--ink-mute);margin:2px 0 10px;}
 </style>
 </head>
 <body>
@@ -744,6 +773,9 @@ body {
     </button>
     <button class="tab-btn" id="tab-btn-torioki" onclick="switchTab('torioki')">
       🍱 取り置き
+    </button>
+    <button class="tab-btn" id="tab-btn-move" onclick="switchTab('move')">
+      🔄 拠点移動
     </button>
   </div>
 
@@ -879,6 +911,30 @@ body {
     </div>
   </div>
 
+  <div id="tab-move" class="tab-panel">
+    <div class="mv-header">
+      <div class="mv-title">🔄 拠点移動</div>
+      <div class="mv-date" id="mv-date">--</div>
+    </div>
+    <div class="mv-form">
+      <div class="mv-section-title">出発登録（このトラックから持ち出す分）</div>
+      <div class="mv-field">
+        <label class="mv-field-label">出発拠点</label>
+        <select id="mv-from-location" class="mv-select"></select>
+      </div>
+      <div class="mv-section-title">商品（個数）</div>
+      <div id="mv-products"><p class="mv-empty">商品を読み込み中…</p></div>
+    </div>
+    <div class="mv-list">
+      <div class="mv-list-title">到着待ち（未完結）</div>
+      <div id="mv-open-list"><p class="mv-empty">なし</p></div>
+    </div>
+    <div class="mv-list">
+      <div class="mv-list-title">本日の移動</div>
+      <div id="mv-today-list"><p class="mv-empty">なし</p></div>
+    </div>
+  </div>
+
   <div class="sticky-bottom" id="sticky-collection">
     <button class="btn-primary" onclick="switchTab('residual')">
       📦 残数入力へ切り替え
@@ -892,6 +948,9 @@ body {
   </div>
   <div class="sticky-bottom" id="sticky-torioki" style="display:none;">
     <button class="tk-save-btn" id="tk-save-btn" onclick="saveToriokiForm()">取り置きを登録</button>
+  </div>
+  <div class="sticky-bottom" id="sticky-move" style="display:none;">
+    <button class="mv-save-btn" id="mv-depart-btn" onclick="submitDepart()">出発を登録</button>
   </div>
 </div>
 
@@ -942,6 +1001,13 @@ const state = {
     editingId: '',
     showDelivery: false,
     payment: '未会計',
+  },
+  move: {                               // ★ NEW（v1.5 拠点移動）
+    inited: false,
+    date: '',
+    todayMoves: [],
+    openMoves: [],
+    arrivingId: '',
   },
 };
 
@@ -1662,6 +1728,7 @@ function getNonTeaSoldCount_(r) {
 function calculateMyExpectedResidual_() {
   const myUid = String(state.userId || '');
   if (!myUid) return 0;
+  const moveAdj = getMyMoveAdjustmentByLoc_();   // ★ v1.5：拠点移動の±を反映
   let total = 0;
   (state.locations || []).forEach(loc => {
     const assign = state.todayAssignment[loc.id];
@@ -1672,7 +1739,8 @@ function calculateMyExpectedResidual_() {
     const deliv = getNonTeaDeliveryCount_(r);
     if (deliv <= 0) return;
     const sold  = getNonTeaSoldCount_(r);
-    total += Math.max(0, deliv - sold);
+    const mv    = moveAdj[loc.id] || 0;          // ★ v1.5：移動先+/移動元-
+    total += Math.max(0, deliv + mv - sold);
   });
   return total;
 }
@@ -1758,14 +1826,17 @@ function switchTab(tab) {
   document.getElementById('tab-residual').classList.toggle('active', tab === 'residual');
   document.getElementById('tab-nextroute').classList.toggle('active', tab === 'nextroute');
   document.getElementById('tab-torioki').classList.toggle('active', tab === 'torioki');
+  document.getElementById('tab-move').classList.toggle('active', tab === 'move');
   document.getElementById('tab-btn-collection').classList.toggle('active', tab === 'collection');
   document.getElementById('tab-btn-residual').classList.toggle('active', tab === 'residual');
   document.getElementById('tab-btn-nextroute').classList.toggle('active', tab === 'nextroute');
   document.getElementById('tab-btn-torioki').classList.toggle('active', tab === 'torioki');
+  document.getElementById('tab-btn-move').classList.toggle('active', tab === 'move');
   document.getElementById('sticky-collection').style.display = tab === 'collection' ? 'block' : 'none';
   document.getElementById('sticky-residual').style.display   = tab === 'residual'   ? 'block' : 'none';
   document.getElementById('sticky-nextroute').style.display  = tab === 'nextroute'  ? 'block' : 'none';
   document.getElementById('sticky-torioki').style.display    = tab === 'torioki'    ? 'block' : 'none';
+  document.getElementById('sticky-move').style.display       = tab === 'move'       ? 'block' : 'none';
 
   // ★ NEW（v1.0）：翌日のルートタブ初回タップでロード
   if (tab === 'nextroute' && !state.nextRoute.loaded) {
@@ -1775,6 +1846,15 @@ function switchTab(tab) {
   // ★ NEW（v1.3）：取り置きタブ初回タップで初期化
   if (tab === 'torioki') {
     initToriokiTab_();
+  }
+
+  // ★ NEW（v1.5）：拠点移動タブ
+  if (tab === 'move') {
+    initMoveTab_();
+  }
+  // ★ NEW（v1.5）：残数タブ表示時に当日移動を取得して残数へ反映
+  if (tab === 'residual') {
+    loadTodayMoves_().then(updateCalculatedResidualTotal).catch(function(){});
   }
 
   window.scrollTo(0, 0);
@@ -2404,6 +2484,212 @@ async function saveToriokiForm() {
   }
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   拠点移動（±移動）v1.5  2026-06-26
+   出発で-/到着で+・商品別・LINE確認ボタン送信・残数へ反映
+   ═══════════════════════════════════════════════════════════════ */
+function _moveNonTeaProducts_() {
+  return (state.products || []).filter(p => !String(p.name || '').includes('お茶'));
+}
+function _moveLocName_(locId) {
+  const l = (state.locations || []).find(x => String(x.id) === String(locId));
+  return l ? l.name : locId;
+}
+function populateMoveLocations_(selectEl) {
+  if (!selectEl) return;
+  selectEl.innerHTML = (state.locations || [])
+    .filter(l => l && l.id && l.name)
+    .map(l => `<option value="${_esc(l.id)}">${_esc(l.name)}</option>`)
+    .join('');
+}
+function renderMoveProducts_(containerId, presetQtys) {
+  const box = document.getElementById(containerId);
+  if (!box) return;
+  const preset = presetQtys || {};
+  const list = _moveNonTeaProducts_();
+  if (list.length === 0) { box.innerHTML = '<p class="mv-empty">商品がありません</p>'; return; }
+  box.innerHTML = list.map(p => {
+    const v = preset[p.id] ? String(preset[p.id]) : '';
+    return `
+      <div class="mv-prod-row">
+        <span class="mv-prod-name">${_esc(p.name)}</span>
+        <input type="number" inputmode="numeric" min="0" class="mv-qty${v ? ' filled' : ''}"
+               data-pid="${_esc(p.id)}" value="${v}"
+               oninput="this.classList.toggle('filled',(parseInt(this.value,10)||0)>0)">
+      </div>`;
+  }).join('');
+}
+function collectMoveQtys_(containerId) {
+  const m = {};
+  document.querySelectorAll('#' + containerId + ' .mv-qty').forEach(inp => {
+    const pid = inp.getAttribute('data-pid');
+    const q = parseInt(inp.value, 10) || 0;
+    if (pid && q > 0) m[pid] = q;
+  });
+  return m;
+}
+function _fmtQtyObj_(obj) {
+  const map = {};
+  _moveNonTeaProducts_().forEach(p => { map[p.id] = p.name; });
+  let total = 0; const parts = [];
+  Object.keys(obj || {}).forEach(pid => {
+    const q = Number(obj[pid]) || 0;
+    if (q <= 0) return;
+    total += q;
+    parts.push((map[pid] || pid) + '×' + q);
+  });
+  let str = '弁当' + total + '個';
+  if (parts.length) str += '　' + parts.join('・');
+  return str;
+}
+function sumQtyObj_(obj) {
+  if (!obj || typeof obj !== 'object') return 0;
+  let s = 0; Object.keys(obj).forEach(k => { s += Number(obj[k]) || 0; });
+  return s;
+}
+function getMyMoveAdjustmentByLoc_() {
+  const adj = {};
+  ((state.move && state.move.todayMoves) ? state.move.todayMoves : []).forEach(m => {
+    if (!m || m.status === '取消') return;
+    const dq = sumQtyObj_(m.departQty);
+    if (m.fromLocationId) adj[m.fromLocationId] = (adj[m.fromLocationId] || 0) - dq;
+    const aq = sumQtyObj_(m.arriveQty);
+    if (m.toLocationId && aq > 0) adj[m.toLocationId] = (adj[m.toLocationId] || 0) + aq;
+  });
+  return adj;
+}
+function initMoveTab_() {
+  const now = new Date();
+  const el = document.getElementById('mv-date');
+  if (el) el.textContent = (now.getMonth()+1) + '/' + now.getDate() + '（' + ['日','月','火','水','木','金','土'][now.getDay()] + '）';
+  if (!state.move.inited) {
+    populateMoveLocations_(document.getElementById('mv-from-location'));
+    renderMoveProducts_('mv-products', {});
+    state.move.inited = true;
+  }
+  loadTodayMoves_();
+}
+async function submitDepart() {
+  const fromId = document.getElementById('mv-from-location').value || '';
+  if (!fromId) { showToast('出発拠点を選択してください', 'error'); return; }
+  const qty = collectMoveQtys_('mv-products');
+  if (Object.keys(qty).length === 0) { showToast('数量を入力してください', 'error'); return; }
+  const btn = document.getElementById('mv-depart-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '送信中…'; }
+  try {
+    const payload = {
+      action: 'startMove',
+      date: getDateStrOffset_(0),
+      driverUserId: state.userId,
+      driverName: state.userName,
+      fromLocationId: fromId,
+      fromLocationName: _moveLocName_(fromId),
+      qty: qty,
+    };
+    const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || '登録に失敗しました');
+    showToast('出発を登録しました');
+    renderMoveProducts_('mv-products', {});
+    await loadTodayMoves_();
+  } catch (e) {
+    showToast('エラー：' + (e.message || e), 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '出発を登録'; }
+  }
+}
+async function loadTodayMoves_() {
+  const date = getDateStrOffset_(0);
+  try {
+    const [allRes, openRes] = await Promise.all([
+      fetch(`${GAS_URL}?action=getMovesByDate&date=${date}`, { redirect: 'follow' }).then(r => r.json()).catch(() => ({ moves: [] })),
+      fetch(`${GAS_URL}?action=getOpenMoves&userId=${encodeURIComponent(state.userId)}&date=${date}`, { redirect: 'follow' }).then(r => r.json()).catch(() => ({ moves: [] })),
+    ]);
+    state.move.todayMoves = (allRes && allRes.moves) ? allRes.moves : [];
+    state.move.openMoves  = (openRes && openRes.moves) ? openRes.moves : [];
+    renderOpenMoves_();
+    renderTodayMoves_();
+    updateCalculatedResidualTotal();
+  } catch (e) { /* noop */ }
+}
+function renderOpenMoves_() {
+  const box = document.getElementById('mv-open-list');
+  if (!box) return;
+  const moves = state.move.openMoves || [];
+  if (moves.length === 0) { box.innerHTML = '<p class="mv-empty">なし</p>'; return; }
+  box.innerHTML = moves.map(m => {
+    const t = (m.departTime || '').slice(11, 16);
+    return '<div class="mv-card">' +
+      '<div class="mv-card-main">' + _esc(m.fromLocationName || '') + ' → ？</div>' +
+      '<div class="mv-card-sub">' + _esc(_fmtQtyObj_(m.qty)) + '　' + _esc(t) + ' 出発</div>' +
+      '<div class="mv-card-btns">' +
+        '<button class="mv-card-btn arrive" onclick="openArrive_(\'' + _esc(m.moveId) + '\')">到着登録</button>' +
+        '<button class="mv-card-btn cancel" onclick="cancelMove_(\'' + _esc(m.moveId) + '\')">取消</button>' +
+      '</div></div>';
+  }).join('');
+}
+function renderTodayMoves_() {
+  const box = document.getElementById('mv-today-list');
+  if (!box) return;
+  const moves = (state.move.todayMoves || []).filter(m => m && m.status !== '取消');
+  if (moves.length === 0) { box.innerHTML = '<p class="mv-empty">なし</p>'; return; }
+  box.innerHTML = moves.map(m => {
+    const arrived = m.status === '完結';
+    const to = arrived ? _esc(m.toLocationName || '') : '搬送中';
+    const sub = '出発 ' + _esc(_fmtQtyObj_(m.departQty)) + (arrived ? '<br>到着 ' + _esc(_fmtQtyObj_(m.arriveQty)) : '');
+    return '<div class="mv-card done"><div class="mv-card-main">' + _esc(m.fromLocationName || '') + ' → ' + to + '</div><div class="mv-card-sub">' + sub + '</div></div>';
+  }).join('');
+}
+function openArrive_(moveId) {
+  const m = (state.move.openMoves || []).find(x => String(x.moveId) === String(moveId));
+  if (!m) { showToast('対象が見つかりません', 'error'); return; }
+  state.move.arrivingId = moveId;
+  document.getElementById('mv-arrive-from').textContent = '出発：' + (m.fromLocationName || '') + '（' + _fmtQtyObj_(m.qty) + '）';
+  populateMoveLocations_(document.getElementById('mv-to-location'));
+  renderMoveProducts_('mv-arrive-products', m.qty);
+  document.getElementById('mv-arrive-modal').classList.add('show');
+}
+function closeArrive_() {
+  document.getElementById('mv-arrive-modal').classList.remove('show');
+  state.move.arrivingId = '';
+}
+async function submitArrive_() {
+  const moveId = state.move.arrivingId;
+  if (!moveId) return;
+  const toId = document.getElementById('mv-to-location').value || '';
+  if (!toId) { showToast('到着拠点を選択してください', 'error'); return; }
+  const qty = collectMoveQtys_('mv-arrive-products');
+  try {
+    const payload = {
+      action: 'completeMove',
+      moveId: moveId,
+      toLocationId: toId,
+      toLocationName: _moveLocName_(toId),
+      qty: qty,
+    };
+    const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || '登録に失敗しました');
+    closeArrive_();
+    showToast('到着を登録しました');
+    await loadTodayMoves_();
+  } catch (e) {
+    showToast('エラー：' + (e.message || e), 'error');
+  }
+}
+async function cancelMove_(moveId) {
+  if (!confirm('この移動を取り消しますか？')) return;
+  try {
+    const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'cancelMove', moveId: moveId }) });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || '取消に失敗しました');
+    showToast('取り消しました');
+    await loadTodayMoves_();
+  } catch (e) {
+    showToast('エラー：' + (e.message || e), 'error');
+  }
+}
+
 </script>
 
 <!-- BREAKDOWN MODAL -->
@@ -2458,6 +2744,22 @@ async function saveToriokiForm() {
       <button class="reminder-modal-btn cancel" onclick="closeInactiveModal()">キャンセル</button>
       <button class="reminder-modal-btn send inactive-action" id="inactive-send-btn" onclick="confirmToggleInactive()">休止にする</button>
     </div>
+  </div>
+</div>
+
+<!-- 拠点移動 到着登録モーダル v1.5 -->
+<div class="modal-bg" id="mv-arrive-modal" onclick="if(event.target===this)closeArrive_()">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">到着登録</div>
+    <div class="mv-arrive-from" id="mv-arrive-from">--</div>
+    <div class="mv-field">
+      <label class="mv-field-label">到着拠点</label>
+      <select id="mv-to-location" class="mv-select"></select>
+    </div>
+    <div class="mv-section-title">到着個数（出発分を初期表示・差は移動中ロス）</div>
+    <div id="mv-arrive-products"></div>
+    <button class="mv-save-btn" style="margin-top:16px;" onclick="submitArrive_()">到着を登録</button>
   </div>
 </div>
 
