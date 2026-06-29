@@ -3,6 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<!-- kitchen-shift v2.0 (2026-06-30) 確定シフト閲覧を「時間(縦)×日付(横)」グリッドに全面刷新（立てる側 kitchen-admin v3.4 / kanri シフト閲覧タブ v3.38 準拠）。
+     ・行=時間スロット（固定9行 0:00/2:00/3:00/4:00/5:00/6:00/6:30/7:00/8:00 ＋「仕込み」行）。出勤者がいる行のみ表示。
+     ・列=月〜金（日付ラベル併記）。セル=その時間に出勤するスタッフ名チップ（複数名は縦積み）。
+     ・名前チップに終了時刻「〜HH:MM」を併記（確定レンジ優先→無ければ「キッチン希望」のレンジから補完）。希望未提出（社員等）は終了なし。
+     ・開始09:00以上は kitchen-admin が確定シートへ文字列「仕込み」で保存 → 仕込み行へ表示。
+     ・最下行=出勤人数（曜日別）。GAS変更なし（getKitchenShift＋getKitchenRequestsを並列取得するのみ）。 -->
 <title>お江戸弁当 キッチンシフト</title>
 <style>
   :root {
@@ -51,16 +57,24 @@
   .status { padding: 6px 14px; font-size: 12px; color: #7a8694; min-height: 18px; }
   .status.err { color: #c0392b; }
 
+  /* ── 時間×日付グリッド（v2.0） ── */
   .tablewrap { overflow-x: auto; padding: 4px 12px 24px; }
-  table.roster { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 520px; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
-  table.roster th, table.roster td { padding: 9px 10px; text-align: center; font-size: 13px; border-bottom: 1px solid var(--line); white-space: nowrap; }
-  table.roster thead th { background: var(--navy); color: #fff; font-weight: 700; font-size: 12.5px; position: sticky; top: 0; }
-  table.roster thead th.namecol { text-align: left; }
-  .namecell { text-align: left !important; font-weight: 800; background: #f8fafc; border-left: 4px solid var(--navy); }
-  .on { color: var(--green); font-weight: 800; }
-  .off { color: var(--off); }
+  table.kgrid { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 560px; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+  table.kgrid th, table.kgrid td { border-bottom: 1px solid var(--line); border-right: 1px solid #eef1f4; vertical-align: top; }
+  table.kgrid th:last-child, table.kgrid td:last-child { border-right: 0; }
+  table.kgrid tbody tr:last-child td { border-bottom: 0; }
+  table.kgrid thead th { background: linear-gradient(135deg, var(--navy), var(--navy-d)); color: #fff; font-weight: 700; font-size: 12.5px; padding: 9px 6px; text-align: center; position: sticky; top: 0; white-space: nowrap; }
+  table.kgrid thead th .dow { display: block; font-size: 13px; }
+  table.kgrid thead th .md { display: block; font-size: 11px; color: #cfd8e3; font-weight: 700; }
+  table.kgrid th.tcol { width: 62px; min-width: 56px; }
+  table.kgrid td.tcol { width: 62px; min-width: 56px; text-align: center; background: #f8fafc; font-weight: 800; color: var(--navy); font-size: 13px; padding: 9px 4px; white-space: nowrap; }
+  table.kgrid td.tcol.prep { color: #7b3fa0; background: #f6f1fb; }
+  td.kcell { min-width: 96px; padding: 6px 5px; text-align: center; }
+  .chip { display: block; background: #e8f0f7; color: #1f3b53; font-size: 12px; font-weight: 700; border-radius: 7px; padding: 3px 7px; margin: 3px 0; white-space: nowrap; }
+  .chip .endt { color: #5a6b7d; font-weight: 600; margin-left: 3px; }
+  .kcell .none { display: block; color: #d3d9df; font-size: 13px; }
   tr.sumrow td { background: #eef3f8; font-weight: 800; color: var(--navy); border-bottom: 0; }
-  tr.sumrow td:first-child { text-align: left; }
+  tr.sumrow td.tcol { background: #eef3f8; color: var(--navy); }
 
   .empty {
     margin: 24px 14px; padding: 32px 18px; background: #fff; border-radius: 12px;
@@ -91,15 +105,18 @@
 
   <div id="content"></div>
 
-  <footer>お江戸弁当 キッチンシフト（閲覧用）</footer>
+  <footer>お江戸弁当 キッチンシフト（閲覧用）v2.0</footer>
 </div>
 
 <script>
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5AawPDc7aluPokONkYz6f2ikwl0S487JvhKdKh6QSp1xhEhA/exec';
 const DAYS = ['月', '火', '水', '木', '金'];
-const COLORS = ['#1A3C5E', '#0E7C66', '#B5651D', '#6A4C93', '#1E6091', '#9A3B3B', '#3A7D44', '#7A5195'];
 
-const state = { week: 'this', weekTarget: null, dates: [], staff: [] };
+// 固定9時間行（＋仕込み行）。kitchen-admin v3.4 / kanri v3.38 と同一。
+const FIXED_TIMES = ['0:00', '2:00', '3:00', '4:00', '5:00', '6:00', '6:30', '7:00', '8:00'];
+const PREP_LABEL = '仕込み';
+
+const state = { week: 'this', weekTarget: null, dates: [], staff: [], req: [] };
 
 // ── 週解決（client側でISO週を算出）──
 function isoWeekTargetOfDate(d) {
@@ -161,24 +178,58 @@ function setStatus(msg, isErr) {
   el.className = 'status' + (isErr ? ' err' : '');
 }
 
+// ── ユーティリティ（kanri svRenderKitchen 準拠）──
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+function pad2(n) { n = parseInt(n, 10) || 0; return (n < 10 ? '0' : '') + n; }
+function padTime(t) { const p = String(t || '').split(':'); if (p.length < 2) return ''; const h = parseInt(p[0], 10), m = parseInt(p[1], 10); if (isNaN(h) || isNaN(m)) return ''; return pad2(h) + ':' + pad2(m); }
+function dispTime(t) { const c = padTime(t); if (!c) return String(t || ''); const p = c.split(':'); return (parseInt(p[0], 10)) + ':' + p[1]; }
+function toMin(t) { const p = String(t).split(':'); return (parseInt(p[0], 10) || 0) * 60 + (parseInt(p[1], 10) || 0); }
+function stripDow(s) { return String(s == null ? '' : s).replace(/[（(][^）)]*[）)]/, '').trim(); }
+// 確定セル値：'' / '休' → off ／ 'HH:MM-HH:MM' or 'HH:MM' → time(start, end?) ／ それ以外（'仕込み'等） → prep(label)
+function parseCell(v) {
+  v = String(v || '').trim();
+  if (v === '' || v === '休') return { off: true };
+  if (v.indexOf('-') > 0) { const p = v.split('-'); const s = padTime(p[0]); const e = padTime(p[1]); if (s) return { time: true, start: s, end: (e || '') }; }
+  if (/^\d{1,2}:\d{2}$/.test(v)) return { time: true, start: padTime(v), end: '' };
+  return { prep: true, label: v };
+}
+// 希望値からの終了抽出：'HH:MM-HH:MM' → 'HH:MM' ／ それ以外 → ''
+function cellEnd(v) {
+  v = String(v || '').trim();
+  if (v.indexOf('-') > 0) { const p = v.split('-'); const e = padTime(p[1]); return e || ''; }
+  return '';
+}
+
 async function load() {
   setStatus('読み込み中...');
   document.getElementById('weekRange').innerHTML = '　';
+  document.getElementById('content').innerHTML = '';
   try {
     const wt = resolveWeekTarget();
-    const qs = new URLSearchParams({ action: 'getKitchenShift', weekTarget: wt }).toString();
-    const res = await fetch(GAS_URL + '?' + qs, { redirect: 'follow' });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
-    if (data.ok === false) throw new Error(data.error || '取得失敗');
+    function getJson(action) {
+      const qs = new URLSearchParams({ action: action, weekTarget: wt }).toString();
+      return fetch(GAS_URL + '?' + qs, { redirect: 'follow' })
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
+    }
+    // 確定（キッチンシフト＝開始のみ／'仕込み'）＋希望（終了補完用レンジ）を並列取得。希望は失敗しても致命でない（終了が出ないだけ）。
+    const reqP = getJson('getKitchenRequests').catch(function () { return {}; });
+    const arr = await Promise.all([getJson('getKitchenShift'), reqP]);
+    const shiftData = arr[0] || {};
+    const reqData = arr[1] || {};
+    if (shiftData.ok === false || shiftData.success === false) throw new Error(shiftData.error || '取得失敗');
 
-    state.weekTarget = data.weekTarget || wt;
-    state.dates = data.dates || [];
-    state.staff = data.staff || [];
+    state.weekTarget = shiftData.weekTarget || wt;
+    state.dates = shiftData.dates || [];
+    state.staff = shiftData.staff || [];
+    state.req = (reqData && reqData.staff) || [];
 
     const ds = state.dates;
     document.getElementById('weekRange').textContent =
-      (ds.length >= 5 ? ds[0] + ' 〜 ' + ds[4] : state.weekTarget);
+      (ds.length >= 5 ? stripDow(ds[0]) + ' 〜 ' + stripDow(ds[4]) : state.weekTarget);
 
     render();
     setStatus('');
@@ -189,18 +240,12 @@ async function load() {
   }
 }
 
-function esc(s) {
-  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
-    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-  });
-}
-
+// キッチン：時間(行)×月〜金・セル=出勤スタッフ名（＋終了時刻）。終了は確定レンジ優先→無ければ希望シートから補完。
 function render() {
   const host = document.getElementById('content');
   const staff = state.staff;
   const dates = state.dates;
 
-  // 出勤が1件でもあるか（全員空でも休だけなら表示はする。行が無ければ未公開）
   if (!staff.length) {
     const label = state.week === 'this' ? '今週' : '来週';
     host.innerHTML =
@@ -209,33 +254,89 @@ function render() {
     return;
   }
 
-  let html = '<div class="tablewrap"><table class="roster"><thead><tr>';
-  html += '<th class="namecol">スタッフ</th>';
-  for (let d = 0; d < 5; d++) html += '<th>' + esc(dates[d] || DAYS[d]) + '</th>';
+  // 希望シートから「名前→[終了×5]」を作成（終了補完用）
+  const reqEnd = {};
+  (state.req || []).forEach(function (s) {
+    const rd = s.days || [];
+    const a = [];
+    for (let i = 0; i < 5; i++) a.push(cellEnd(rd[i]));
+    reqEnd[s.name] = a;
+  });
+
+  // 固定9時間行（＋仕込み）を用意
+  const rows = [];
+  for (let t = 0; t < FIXED_TIMES.length; t++) {
+    rows.push({ type: 'time', time: FIXED_TIMES[t], cells: [[], [], [], [], []] });
+  }
+  const prepRow = { type: 'prep', label: PREP_LABEL, cells: [[], [], [], [], []] };
+
+  function exactRow(start) { for (let i = 0; i < rows.length; i++) { if (toMin(rows[i].time) === toMin(start)) return rows[i]; } return null; }
+  function nearestRow(start) { const m = toMin(start); let best = null, bd = Infinity; for (let i = 0; i < rows.length; i++) { const diff = Math.abs(toMin(rows[i].time) - m); if (diff < bd) { bd = diff; best = rows[i]; } } return best; }
+
+  staff.forEach(function (s) {
+    const dys = s.days || [];
+    const ends = reqEnd[s.name] || ['', '', '', '', ''];
+    for (let d = 0; d < 5; d++) {
+      const pc = parseCell(dys[d]);
+      if (pc.off) continue;
+      if (pc.time) {
+        const endT = pc.end || ends[d] || '';   // 確定にレンジがあればそれ優先・無ければ希望から
+        const row = exactRow(pc.start) || nearestRow(pc.start);
+        if (row) row.cells[d].push({ name: s.name, end: endT });
+      } else {
+        prepRow.cells[d].push({ name: s.name, end: '' });
+      }
+    }
+  });
+
+  // コンパクト：出勤者がいる時間行のみ＋仕込み行（配置があれば末尾）
+  const visible = rows.filter(function (r) { return r.cells.some(function (a) { return a.length > 0; }); });
+  if (prepRow.cells.some(function (a) { return a.length > 0; })) visible.push(prepRow);
+
+  if (!visible.length) {
+    const label2 = state.week === 'this' ? '今週' : '来週';
+    host.innerHTML =
+      '<div class="empty"><div class="ico">🍳</div>' +
+      '<div>' + label2 + 'は出勤予定のスタッフがいません（全員休）。</div></div>';
+    return;
+  }
+
+  // 曜日別 出勤人数
+  const counts = [0, 0, 0, 0, 0];
+  visible.forEach(function (r) { for (let d = 0; d < 5; d++) counts[d] += r.cells[d].length; });
+
+  let html = '<div class="tablewrap"><table class="kgrid"><thead><tr>';
+  html += '<th class="tcol">時間</th>';
+  for (let c = 0; c < 5; c++) {
+    html += '<th><span class="dow">' + DAYS[c] + '</span><span class="md">' + esc(stripDow(dates[c] || '')) + '</span></th>';
+  }
   html += '</tr></thead><tbody>';
 
-  const counts = [0, 0, 0, 0, 0];
-  staff.forEach(function (s, si) {
-    const color = COLORS[si % COLORS.length];
-    const days = s.days || [];
-    html += '<tr><td class="namecell" style="border-left-color:' + color + '">' + esc(s.name) + '</td>';
-    for (let d = 0; d < 5; d++) {
-      const v = String(days[d] || '').trim();
-      if (!v || v === '休') {
-        html += '<td class="off">休</td>';
+  visible.forEach(function (r) {
+    const isPrep = (r.type === 'prep');
+    html += '<tr>';
+    html += '<td class="tcol' + (isPrep ? ' prep' : '') + '">' + (isPrep ? esc(r.label) : esc(dispTime(r.time))) + '</td>';
+    for (let d2 = 0; d2 < 5; d2++) {
+      html += '<td class="kcell">';
+      const a = r.cells[d2];
+      if (!a.length) {
+        html += '<span class="none">—</span>';
       } else {
-        counts[d]++;
-        html += '<td class="on">' + esc(v.replace('-', '〜')) + '</td>';
+        a.forEach(function (ch) {
+          const endHtml = ch.end ? ('<span class="endt">〜' + esc(dispTime(ch.end)) + '</span>') : '';
+          html += '<span class="chip">' + esc(ch.name) + endHtml + '</span>';
+        });
       }
+      html += '</td>';
     }
     html += '</tr>';
   });
 
-  html += '<tr class="sumrow"><td>出勤人数</td>';
+  html += '<tr class="sumrow"><td class="tcol">出勤</td>';
   for (let d = 0; d < 5; d++) html += '<td>' + counts[d] + '</td>';
   html += '</tr>';
-  html += '</tbody></table></div>';
 
+  html += '</tbody></table></div>';
   host.innerHTML = html;
 }
 
