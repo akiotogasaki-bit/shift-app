@@ -547,13 +547,17 @@ body.with-tabbar .btn-area { bottom: calc(56px + var(--safe-bottom)); }
 .ps-actions .btn-secondary { margin-bottom: 0; }
 .ps-hint { font-size: 11px; color: var(--ink-mute); text-align: center; margin-top: 8px; line-height: 1.6; }
 
+/* 管理者プレビュー（?admin=1） */
+#admin-auth .btn { margin-top: 4px; }
+
 /* 印刷（給与明細のみ・PDF保存用） */
 @media print {
   .tabbar, .btn-area, .toast { display: none !important; }
   .screen { display: none !important; }
-  #screen-payslip { display: block !important; }
-  #screen-payslip .header, .ps-month-bar, .ps-actions, .ps-hint { display: none !important; }
-  #screen-payslip .body-area { padding: 0 !important; }
+  #screen-payslip, #screen-admin { display: block !important; }
+  #screen-payslip .header, #screen-admin .header,
+  .ps-month-bar, .ps-actions, .ps-hint, #admin-auth { display: none !important; }
+  #screen-payslip .body-area, #screen-admin .body-area { padding: 0 !important; }
   body { background: #FFF; }
 }
 </style>
@@ -726,12 +730,12 @@ body.with-tabbar .btn-area { bottom: calc(56px + var(--safe-bottom)); }
   </div>
 </div>
 
-<!-- ====== PAYSLIP (給与明細) 2026-07-03 追加 ====== -->
+<!-- ====== PAYSLIP (給与明細／ギャラ明細) 2026-07-03 追加 ====== -->
 <div id="screen-payslip" class="screen">
   <div class="header">
     <div class="user">
       <div>
-        <h1>💰 給与明細</h1>
+        <h1 id="ps-title">💰 給与明細</h1>
         <div class="sub" id="ps-user-name">—</div>
       </div>
     </div>
@@ -739,10 +743,47 @@ body.with-tabbar .btn-area { bottom: calc(56px + var(--safe-bottom)); }
   <div class="body-area">
     <div class="ps-month-bar">
       <label class="form-label">対象月を選択</label>
-      <select class="form-input" id="ps-month" onchange="loadPayslip(this.value)"></select>
+      <select class="form-input" id="ps-month" onchange="onPsMonthChange(this.value)"></select>
     </div>
     <div id="ps-detail">
       <div class="ps-empty">—</div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== ADMIN PREVIEW (?admin=1 給与明細プレビュー) 2026-07-03 追加 ====== -->
+<div id="screen-admin" class="screen">
+  <div class="header">
+    <h1>🔐 給与明細プレビュー</h1>
+    <div class="sub">管理者用・スタッフの明細を確認</div>
+  </div>
+  <div class="body-area">
+    <div id="admin-auth">
+      <div class="card">
+        <div class="card-title">パスワード</div>
+        <div class="card-body">
+          <label class="form-label">管理パスワード</label>
+          <input type="password" id="admin-pw" class="form-input" placeholder="パスワード" autocomplete="off">
+        </div>
+      </div>
+      <button class="btn btn-primary" id="admin-login-btn" onclick="adminLogin()">認証する</button>
+    </div>
+    <div id="admin-main" style="display:none;">
+      <div class="ps-month-bar">
+        <label class="form-label">時給スタッフ（給与明細）</label>
+        <select class="form-input" id="admin-staff" onchange="adminOnStaffChange(this.value)"></select>
+      </div>
+      <div class="ps-month-bar">
+        <label class="form-label">販売員（ギャラ明細）</label>
+        <select class="form-input" id="admin-sales-staff" onchange="adminOnSalesStaffChange(this.value)"></select>
+      </div>
+      <div class="ps-month-bar">
+        <label class="form-label">対象月</label>
+        <select class="form-input" id="admin-month" onchange="adminOnMonthChange(this.value)"></select>
+      </div>
+      <div id="admin-detail">
+        <div class="ps-empty">スタッフ（または販売員）と月を選択してください</div>
+      </div>
     </div>
   </div>
 </div>
@@ -773,13 +814,14 @@ body.with-tabbar .btn-area { bottom: calc(56px + var(--safe-bottom)); }
 
 // ═══════════════════════════════════════════════════════════════
 // お江戸弁当 シフト提出 LIFF（提出側）
-//   v2026-07-03 payslip v1
-//   変更：下部タブバー（シフト／給与明細）と「給与明細」画面を追加。
-//         ・対象月（直近6ヶ月）を選び、日次内訳付き明細を画面表示。
-//         ・サーバ生成PDFのダウンロード＋印刷/PDF保存に対応。
-//         ・金額はメインGASの給与明細API（getPayslip系）から取得。
-//         ・既存のシフト提出／キッチン提出フローは一切変更なし。
-//   基盤：v2026-06-20 kitchen-submit v2（キッチン入り09:00・10:00追加）。
+//   v2026-07-03 salespay v3
+//   変更：給与明細タブを role で「時給明細／ギャラ明細」に出し分け。
+//         ・販売員(role==='販売員')：報告ログ由来のギャラ明細（日単位合算）。
+//           氏名は編集可能な入力欄（初期値＝報告ログの販売員名）→PDF/印刷に反映。
+//         ・時給スタッフ：従来の勤怠ベース給与明細（変更なし）。
+//         ・管理者プレビュー(?admin=1)に「販売員」ドロップダウンを追加。
+//   基盤：v2026-07-03 payslip v2（給与明細タブ＋管理者プレビュー）。
+//         既存のシフト提出／キッチン提出フローは一切変更なし。
 // ═══════════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════════
@@ -839,7 +881,7 @@ const state = {
   userId: '',
   userName: '',
   displayName: '',     // LINEのプロフィール名
-  role: '',            // スタッフ設定 H列（'調理' など）
+  role: '',            // スタッフ設定 H列（'調理' / '販売員' など）
   dates: [],           // 来週の平日 [{label: '5/12(月)', selected: false}, ...]
   alreadySubmitted: false,
   isTestMode: false,
@@ -848,11 +890,16 @@ const state = {
   ksWeekTarget: '',       // 'YYYY-Www'
   ksDays: [],             // [{off:bool, start:'HH:MM', end:'HH:MM'} ×5]
   ksAlreadySubmitted: false,
-  // ── 給与明細（2026-07-03 追加）──
+  // ── 給与明細（時給・2026-07-03 追加）──
   psMonths: [],           // [{ym, label, hasData, current}]
   psYm: '',               // 現在表示中の 'YYYY-MM'
   psLoaded: false,        // 月一覧を取得済みか
   psData: null,           // 直近に取得した明細データ
+  // ── ギャラ明細（販売員・2026-07-03 salespay v3 追加）──
+  spMonths: [],           // [{ym, label, hasData, current}]
+  spLoaded: false,        // ギャラ月一覧を取得済みか
+  spData: null,           // 直近に取得したギャラ明細データ
+  adminMode: 'hourly',    // 管理者プレビューの現在モード 'hourly' | 'sales'
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -983,6 +1030,12 @@ async function init() {
   const params = new URLSearchParams(location.search);
   const isTest = params.get('test') === '1';
   state.isTestMode = isTest;
+
+  // 管理者プレビュー（?admin=1）：LINEログイン不要。パスワード認証で任意スタッフの明細を確認。
+  if (params.get('admin') === '1') {
+    enterAdminPreview();
+    return;
+  }
 
   try {
     if (isTest) {
@@ -1547,9 +1600,9 @@ function goBackToKitchenSubmit() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// 給与明細（2026-07-03 追加）
-//   メインGASの getPayslipMonths / getPayslip / getPayslipPdf を利用。
-//   金額は勤怠記録＋時給マスタから再計算（給与計算 v2.0 と同一ロジック）。
+// 給与明細タブ（2026-07-03）
+//   role で「時給明細（getPayslip系）」か「ギャラ明細（getSalesPay系）」を
+//   出し分ける。本人タブの描画先は 'ps-detail'、管理者プレビューは 'admin-detail'。
 // ═══════════════════════════════════════════════════════════════
 
 // 下部タブバーの切り替え
@@ -1571,13 +1624,33 @@ function homeShiftScreen() {
   return (state.role === '調理') ? 'kitchen-submit' : 'select';
 }
 
-// 給与明細画面を開く（初回のみ月一覧を取得）
+// 明細の描画先要素ID（本人タブ='ps-detail' / 管理者プレビュー='admin-detail'）
+let psTarget = 'ps-detail';
+
+// 販売員かどうか（本人タブのモード判定）
+function isSalesRole() { return state.role === '販売員'; }
+
+// 給与明細画面を開く（初回のみ月一覧を取得）。role で時給/ギャラを出し分け。
 async function openPayslip() {
+  psTarget = 'ps-detail';
   showScreen('payslip');
-  if (!state.psLoaded) {
-    await loadPayslipMonths();
+  const title = document.getElementById('ps-title');
+  if (isSalesRole()) {
+    if (title) title.textContent = '💰 ギャラ明細';
+    if (!state.spLoaded) { await loadSalesPayMonths(); }
+  } else {
+    if (title) title.textContent = '💰 給与明細';
+    if (!state.psLoaded) { await loadPayslipMonths(); }
   }
 }
+
+// 対象月プルダウンの onchange ディスパッチ（本人タブ）
+function onPsMonthChange(ym) {
+  if (isSalesRole()) { loadSalesPay(ym); }
+  else { loadPayslip(ym); }
+}
+
+// ───────── 時給明細（従来）─────────
 
 // 直近6ヶ月の一覧を取得してプルダウンへ。データのある最新月を初期選択。
 async function loadPayslipMonths() {
@@ -1619,7 +1692,7 @@ async function loadPayslipMonths() {
 async function loadPayslip(ym) {
   if (!ym) return;
   state.psYm = ym;
-  const detail = document.getElementById('ps-detail');
+  const detail = document.getElementById(psTarget);
   detail.innerHTML = '<div class="ps-empty">読み込み中...</div>';
   try {
     const d = await apiPost({ action: 'getPayslip', userId: state.userId, ym: ym });
@@ -1663,7 +1736,7 @@ function renderPayslip(d) {
     ? ''
     : '<div class="ps-note warn">※ 時給マスタ未登録のため、通常時給・交通費が¥0で計算されています。管理者にご確認ください。</div>';
 
-  document.getElementById('ps-detail').innerHTML =
+  document.getElementById(psTarget).innerHTML =
     '<div id="ps-print-area">' +
       '<div class="ps-sheet-head">' +
         '<div class="ps-sheet-title">給与明細</div>' +
@@ -1726,6 +1799,315 @@ async function downloadPayslipPdf() {
 // 画面の明細を印刷（PDF保存）
 function printPayslip() {
   window.print();
+}
+
+// ───────── ギャラ明細（販売員・2026-07-03 salespay v3）─────────
+
+// 直近6ヶ月の一覧（ギャラ）を取得してプルダウンへ。
+async function loadSalesPayMonths() {
+  const sel = document.getElementById('ps-month');
+  const detail = document.getElementById('ps-detail');
+  detail.innerHTML = '<div class="ps-empty">読み込み中...</div>';
+  try {
+    const res = await apiPost({ action: 'getSalesPayMonths', userId: state.userId });
+    if (!res.ok) throw new Error(res.message || '月一覧の取得に失敗しました');
+
+    state.spMonths = res.months || [];
+    if (res.name) document.getElementById('ps-user-name').textContent = res.name + ' さん';
+
+    sel.innerHTML = '';
+    let defaultYm = '';
+    state.spMonths.forEach(m => {
+      const o = document.createElement('option');
+      o.value = m.ym;
+      o.textContent = m.label + (m.current ? '（今月）' : '') + (m.hasData ? '' : '（記録なし）');
+      sel.appendChild(o);
+      if (!defaultYm && m.hasData) defaultYm = m.ym;
+    });
+    if (!defaultYm && state.spMonths.length) defaultYm = state.spMonths[0].ym;
+
+    state.spLoaded = true;
+
+    if (defaultYm) {
+      sel.value = defaultYm;
+      await loadSalesPay(defaultYm);
+    } else {
+      detail.innerHTML = '<div class="ps-empty">表示できる月がありません。</div>';
+    }
+  } catch (e) {
+    detail.innerHTML = '<div class="ps-empty">取得エラー：' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+// 指定月のギャラ明細を取得して描画
+async function loadSalesPay(ym) {
+  if (!ym) return;
+  state.psYm = ym;
+  const detail = document.getElementById(psTarget);
+  detail.innerHTML = '<div class="ps-empty">読み込み中...</div>';
+  try {
+    const d = await apiPost({ action: 'getSalesPay', userId: state.userId, ym: ym });
+    if (!d.ok) throw new Error(d.message || '明細の取得に失敗しました');
+    state.spData = d;
+    renderSalesPay(d);
+  } catch (e) {
+    detail.innerHTML = '<div class="ps-empty">取得エラー：' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+// ギャラ明細の描画（氏名編集欄＋日単位内訳＋合計＋操作ボタン）
+function renderSalesPay(d) {
+  const t = d.totals;
+  let rows = '';
+  if (d.daily && d.daily.length) {
+    d.daily.forEach(r => {
+      rows +=
+        '<tr>' +
+          '<td>' + escapeHtml(r.date) + '(' + escapeHtml(r.weekday) + ')</td>' +
+          '<td>' + escapeHtml(r.loc || '-') + '</td>' +
+          '<td class="r">¥' + comma(r.base) + '</td>' +
+          '<td class="r">¥' + comma(r.inc) + '</td>' +
+          '<td class="r">¥' + comma(r.total) + '</td>' +
+        '</tr>';
+    });
+  } else {
+    rows = '<tr><td class="ps-none" colspan="5">この月の出勤記録はありません</td></tr>';
+  }
+
+  const partial = d.partial
+    ? '<div class="ps-note">※ 当月は集計途中です。確定額は月末後に変動する場合があります。</div>'
+    : '';
+
+  document.getElementById(psTarget).innerHTML =
+    '<div class="ps-month-bar">' +
+      '<label class="form-label">氏名（明細に表示・編集できます）</label>' +
+      '<input type="text" id="sp-name" class="form-input" maxlength="30" value="' + escapeHtml(d.name || '') + '" placeholder="お名前">' +
+    '</div>' +
+    '<div id="ps-print-area">' +
+      '<div class="ps-sheet-head">' +
+        '<div class="ps-sheet-title">ギャラ明細</div>' +
+        '<div class="ps-sheet-sub">' + d.year + '年' + d.month + '月分 ・ <span id="sp-name-echo">' + escapeHtml(d.name || '') + '</span> 様</div>' +
+      '</div>' +
+      '<table class="ps-table">' +
+        '<thead><tr><th>日付</th><th>拠点</th><th>基本</th><th>インセ</th><th>合計</th></tr></thead>' +
+        '<tbody>' + rows + '</tbody>' +
+      '</table>' +
+      '<div class="ps-sum">' +
+        '<div class="ps-sum-row"><span>出勤日数</span><span>' + t.days + ' 日</span></div>' +
+        '<div class="ps-sum-row"><span>基本ギャラ計</span><span>¥' + comma(t.base) + '</span></div>' +
+        '<div class="ps-sum-row"><span>インセンティブ計</span><span>¥' + comma(t.inc) + '</span></div>' +
+        '<div class="ps-sum-row gross"><span>合計ギャラ</span><span>¥' + comma(t.gross) + '</span></div>' +
+      '</div>' +
+      partial +
+    '</div>' +
+    '<div class="ps-actions">' +
+      '<button class="btn btn-primary" id="sp-dl" onclick="downloadSalesPayPdf()">PDFをダウンロード</button>' +
+      '<button class="btn btn-secondary" onclick="printPayslip()">印刷 / PDF保存</button>' +
+    '</div>' +
+    '<div class="ps-hint">氏名を編集するとPDF・印刷に反映されます。ダウンロードが始まらない場合は「印刷 / PDF保存」から保存できます。</div>';
+
+  // 氏名入力 → シート上の表示名（echo）へ即時反映（印刷にも効く）
+  const nameEl = document.getElementById('sp-name');
+  if (nameEl) {
+    nameEl.addEventListener('input', function () {
+      const ec = document.getElementById('sp-name-echo');
+      if (ec) ec.textContent = nameEl.value;
+    });
+  }
+}
+
+// サーバ生成PDF（ギャラ）をダウンロード。氏名は入力欄の値で上書き。
+async function downloadSalesPayPdf() {
+  const btn = document.getElementById('sp-dl');
+  if (!btn) return;
+  const old = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'PDF生成中...';
+  try {
+    const nameEl = document.getElementById('sp-name');
+    const nm = nameEl ? (nameEl.value || '') : '';
+    const res = await apiPost({ action: 'getSalesPayPdf', userId: state.userId, ym: state.psYm, name: nm });
+    if (!res.ok) throw new Error(res.message || 'PDF生成に失敗しました');
+
+    const bytes = atob(res.base64);
+    const arr = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+    const blob = new Blob([arr], { type: 'application/pdf' });
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = res.filename || ('ギャラ明細_' + state.psYm + '.pdf');
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    toast('PDFをダウンロードしました');
+  } catch (e) {
+    toast('PDF失敗: ' + e.message, 3500);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = old;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 管理者プレビュー（?admin=1）
+//   パスワード認証 → 時給スタッフ or 販売員を選択 → 対象月選択 → 実データ明細。
+//   描画・PDF・印刷は本人タブと同じ関数を再利用（psTarget='admin-detail'）。
+// ═══════════════════════════════════════════════════════════════
+function enterAdminPreview() {
+  showScreen('admin');
+  const pw = document.getElementById('admin-pw');
+  if (pw) {
+    pw.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); adminLogin(); }
+    });
+  }
+}
+
+async function adminLogin() {
+  const pwEl = document.getElementById('admin-pw');
+  const pw = (pwEl.value || '').trim();
+  if (!pw) { toast('パスワードを入力してください'); return; }
+
+  const btn = document.getElementById('admin-login-btn');
+  btn.disabled = true;
+  btn.textContent = '認証中...';
+  try {
+    // 時給スタッフ一覧（認証も兼ねる）
+    const res = await apiPost({ action: 'getPayslipStaffList', pw: pw });
+    if (!res.ok) throw new Error(res.message || '認証に失敗しました');
+
+    const sel = document.getElementById('admin-staff');
+    sel.innerHTML = '<option value="">— 時給スタッフを選択 —</option>';
+    (res.staff || []).forEach(s => {
+      const o = document.createElement('option');
+      o.value = s.userId;
+      o.textContent = s.name;
+      sel.appendChild(o);
+    });
+
+    // 販売員一覧（別ドロップダウン・報告ログ由来）
+    const ssel = document.getElementById('admin-sales-staff');
+    ssel.innerHTML = '<option value="">— 販売員を選択 —</option>';
+    try {
+      const salesRes = await apiPost({ action: 'getSalesPayStaffList', pw: pw });
+      if (salesRes && salesRes.ok) {
+        (salesRes.staff || []).forEach(s => {
+          const o = document.createElement('option');
+          o.value = s.userId;
+          o.textContent = s.name;
+          ssel.appendChild(o);
+        });
+      }
+    } catch (e2) {
+      console.warn('販売員一覧の取得エラー:', e2.message);
+    }
+
+    document.getElementById('admin-auth').style.display = 'none';
+    document.getElementById('admin-main').style.display = 'block';
+    toast('認証しました');
+  } catch (e) {
+    toast('認証失敗: ' + e.message, 3500);
+    btn.disabled = false;
+    btn.textContent = '認証する';
+  }
+}
+
+// 時給スタッフを選ぶ → そのスタッフの月一覧を取得してプルダウンへ
+async function adminOnStaffChange(userId) {
+  const detail = document.getElementById('admin-detail');
+  const monthSel = document.getElementById('admin-month');
+  psTarget = 'admin-detail';
+  state.adminMode = 'hourly';
+
+  // 販売員ドロップダウンをリセット（排他選択）
+  const ss = document.getElementById('admin-sales-staff');
+  if (ss) ss.value = '';
+
+  if (!userId) {
+    monthSel.innerHTML = '';
+    detail.innerHTML = '<div class="ps-empty">スタッフ（または販売員）と月を選択してください</div>';
+    return;
+  }
+  state.userId = userId;   // 以降の getPayslip / PDF はこのスタッフとして呼ぶ
+  detail.innerHTML = '<div class="ps-empty">月一覧を取得中...</div>';
+  try {
+    const res = await apiPost({ action: 'getPayslipMonths', userId: userId });
+    if (!res.ok) throw new Error(res.message || '月一覧の取得に失敗しました');
+
+    monthSel.innerHTML = '';
+    let defYm = '';
+    (res.months || []).forEach(m => {
+      const o = document.createElement('option');
+      o.value = m.ym;
+      o.textContent = m.label + (m.current ? '（今月）' : '') + (m.hasData ? '' : '（記録なし）');
+      monthSel.appendChild(o);
+      if (!defYm && m.hasData) defYm = m.ym;
+    });
+    if (!defYm && res.months && res.months.length) defYm = res.months[0].ym;
+
+    if (defYm) {
+      monthSel.value = defYm;
+      adminOnMonthChange(defYm);
+    } else {
+      detail.innerHTML = '<div class="ps-empty">表示できる月がありません。</div>';
+    }
+  } catch (e) {
+    detail.innerHTML = '<div class="ps-empty">取得エラー：' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+// 販売員を選ぶ → そのギャラ月一覧を取得してプルダウンへ
+async function adminOnSalesStaffChange(userId) {
+  const detail = document.getElementById('admin-detail');
+  const monthSel = document.getElementById('admin-month');
+  psTarget = 'admin-detail';
+  state.adminMode = 'sales';
+
+  // 時給スタッフドロップダウンをリセット（排他選択）
+  const hs = document.getElementById('admin-staff');
+  if (hs) hs.value = '';
+
+  if (!userId) {
+    monthSel.innerHTML = '';
+    detail.innerHTML = '<div class="ps-empty">スタッフ（または販売員）と月を選択してください</div>';
+    return;
+  }
+  state.userId = userId;   // 以降の getSalesPay / PDF はこの販売員として呼ぶ
+  detail.innerHTML = '<div class="ps-empty">月一覧を取得中...</div>';
+  try {
+    const res = await apiPost({ action: 'getSalesPayMonths', userId: userId });
+    if (!res.ok) throw new Error(res.message || '月一覧の取得に失敗しました');
+
+    monthSel.innerHTML = '';
+    let defYm = '';
+    (res.months || []).forEach(m => {
+      const o = document.createElement('option');
+      o.value = m.ym;
+      o.textContent = m.label + (m.current ? '（今月）' : '') + (m.hasData ? '' : '（記録なし）');
+      monthSel.appendChild(o);
+      if (!defYm && m.hasData) defYm = m.ym;
+    });
+    if (!defYm && res.months && res.months.length) defYm = res.months[0].ym;
+
+    if (defYm) {
+      monthSel.value = defYm;
+      adminOnMonthChange(defYm);
+    } else {
+      detail.innerHTML = '<div class="ps-empty">表示できる月がありません。</div>';
+    }
+  } catch (e) {
+    detail.innerHTML = '<div class="ps-empty">取得エラー：' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+// 対象月プルダウン → 現在の管理者モードで時給/ギャラを描画
+function adminOnMonthChange(ym) {
+  psTarget = 'admin-detail';
+  if (state.adminMode === 'sales') { loadSalesPay(ym); }
+  else { loadPayslip(ym); }
 }
 
 // ═══════════════════════════════════════════════════════════════
