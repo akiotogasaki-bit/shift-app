@@ -335,6 +335,19 @@ body {
   padding-bottom: 1px;
 }
 .delivery-row:last-child { border-bottom: none; }
+  /* ── 単価マスタ未登録 赤字ブロック（2026-07-03） ── */
+.delivery-unmapped {
+  margin-top: 3px;
+  padding: 3px 5px;
+  border: 1px solid #d32f2f;
+  background: #fff3f3;
+  color: #d32f2f;
+  font-weight: bold;
+  font-size: 7.5pt;
+  line-height: 1.4;
+}
+.delivery-unmapped .du-head { font-size: 7pt; margin-bottom: 1px; }
+.delivery-unmapped .du-item { color: #d32f2f; }
 .delivery-row .lbl {
   flex-shrink: 0;
   width: 38px;
@@ -3390,6 +3403,7 @@ function renderSheet2(data) {
             ${d.contact ? `<div class="delivery-row"><span class="lbl">担当</span><span class="val">${escHtml(d.contact)}</span></div>` : ''}
             ${d.note ? `<div class="delivery-row"><span class="lbl">備考</span><span class="val">${escHtml(d.note)}</span></div>` : ''}
             ${d.hasReturn ? `<div class="delivery-row"><span class="lbl">回収</span><span class="val">${returnBadge}</span></div>` : ''}
+            ${(d.unmapped && d.unmapped.length) ? `<div class="delivery-unmapped"><div class="du-head">⚠️ 単価マスタ未登録</div>${d.unmapped.map(u => `<div class="du-item">${escHtml(u.label)}${(u.qty != null) ? ' ×' + u.qty : ''}</div>`).join('')}</div>` : ''}
           </div>
           <div class="delivery-move">
             <button class="move-bin-btn move-to-pm" data-order="${escHtml(d.orderNum)}" data-bin="2">▶ 午後便へ移動</button>
@@ -3532,6 +3546,7 @@ function renderSheet3(data) {
           ${d.contact ? `<div class="delivery-row"><span class="lbl">担当</span><span class="val">${escHtml(d.contact)}</span></div>` : ''}
           ${d.note ? `<div class="delivery-row"><span class="lbl">備考</span><span class="val">${escHtml(d.note)}</span></div>` : ''}
           ${d.hasReturn ? `<div class="delivery-row"><span class="lbl">回収</span><span class="val">${returnBadge}</span></div>` : ''}
+          ${(d.unmapped && d.unmapped.length) ? `<div class="delivery-unmapped"><div class="du-head">⚠️ 単価マスタ未登録</div>${d.unmapped.map(u => `<div class="du-item">${escHtml(u.label)}${(u.qty != null) ? ' ×' + u.qty : ''}</div>`).join('')}</div>` : ''}
         </div>
         <div class="delivery-move">
           <button class="move-bin-btn move-to-am" data-order="${escHtml(d.orderNum)}" data-bin="1">◀ 午前便へ移動</button>
