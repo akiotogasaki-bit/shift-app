@@ -335,7 +335,7 @@ body {
   padding-bottom: 1px;
 }
 .delivery-row:last-child { border-bottom: none; }
-  /* ── 単価マスタ未登録 赤字ブロック（2026-07-03） ── */
+/* ── 単価マスタ未登録 赤字ブロック（2026-07-03） ── */
 .delivery-unmapped {
   margin-top: 3px;
   padding: 3px 5px;
@@ -3385,6 +3385,18 @@ function renderSheet2(data) {
         ? `<span class="return-badge">🔄 回収 ${d.returnTime || ''}</span>`
         : '';
 
+      // ★ 未登録商品ブロック（文字列連結・バッククォート不使用）2026-07-03
+      var unmappedHTML = '';
+      if (d.unmapped && d.unmapped.length) {
+        unmappedHTML = '<div class="delivery-unmapped"><div class="du-head">⚠️ 単価マスタ未登録</div>';
+        for (var ui = 0; ui < d.unmapped.length; ui++) {
+          var u = d.unmapped[ui];
+          unmappedHTML += '<div class="du-item">' + escHtml(u.label)
+            + (u.qty != null ? ' ×' + u.qty : '') + '</div>';
+        }
+        unmappedHTML += '</div>';
+      }
+
       cardsHTML += `
         <div class="delivery-card">
           <div class="delivery-header ${gc}">
@@ -3403,7 +3415,7 @@ function renderSheet2(data) {
             ${d.contact ? `<div class="delivery-row"><span class="lbl">担当</span><span class="val">${escHtml(d.contact)}</span></div>` : ''}
             ${d.note ? `<div class="delivery-row"><span class="lbl">備考</span><span class="val">${escHtml(d.note)}</span></div>` : ''}
             ${d.hasReturn ? `<div class="delivery-row"><span class="lbl">回収</span><span class="val">${returnBadge}</span></div>` : ''}
-            ${(d.unmapped && d.unmapped.length) ? `<div class="delivery-unmapped"><div class="du-head">⚠️ 単価マスタ未登録</div>${d.unmapped.map(u => `<div class="du-item">${escHtml(u.label)}${(u.qty != null) ? ' ×' + u.qty : ''}</div>`).join('')}</div>` : ''}
+            ${unmappedHTML}
           </div>
           <div class="delivery-move">
             <button class="move-bin-btn move-to-pm" data-order="${escHtml(d.orderNum)}" data-bin="2">▶ 午後便へ移動</button>
@@ -3528,6 +3540,18 @@ function renderSheet3(data) {
       ? `<span class="return-badge">🔄 回収 ${d.returnTime || ''}</span>`
       : '';
 
+    // ★ 未登録商品ブロック（文字列連結・バッククォート不使用）2026-07-03
+    var unmappedHTML = '';
+    if (d.unmapped && d.unmapped.length) {
+      unmappedHTML = '<div class="delivery-unmapped"><div class="du-head">⚠️ 単価マスタ未登録</div>';
+      for (var ui = 0; ui < d.unmapped.length; ui++) {
+        var u = d.unmapped[ui];
+        unmappedHTML += '<div class="du-item">' + escHtml(u.label)
+          + (u.qty != null ? ' ×' + u.qty : '') + '</div>';
+      }
+      unmappedHTML += '</div>';
+    }
+
     cardsHTML += `
       <div class="delivery-card">
         <div class="delivery-header ${gc}">
@@ -3546,7 +3570,7 @@ function renderSheet3(data) {
           ${d.contact ? `<div class="delivery-row"><span class="lbl">担当</span><span class="val">${escHtml(d.contact)}</span></div>` : ''}
           ${d.note ? `<div class="delivery-row"><span class="lbl">備考</span><span class="val">${escHtml(d.note)}</span></div>` : ''}
           ${d.hasReturn ? `<div class="delivery-row"><span class="lbl">回収</span><span class="val">${returnBadge}</span></div>` : ''}
-          ${(d.unmapped && d.unmapped.length) ? `<div class="delivery-unmapped"><div class="du-head">⚠️ 単価マスタ未登録</div>${d.unmapped.map(u => `<div class="du-item">${escHtml(u.label)}${(u.qty != null) ? ' ×' + u.qty : ''}</div>`).join('')}</div>` : ''}
+          ${unmappedHTML}
         </div>
         <div class="delivery-move">
           <button class="move-bin-btn move-to-am" data-order="${escHtml(d.orderNum)}" data-bin="1">◀ 午前便へ移動</button>
