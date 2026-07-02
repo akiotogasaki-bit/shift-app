@@ -1,12 +1,12 @@
 <!DOCTYPE html>
-
+ 
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>お江戸弁当 社員ダッシュボード</title>
-<!-- dashboard v6 (2026-06-18): リアルタイムの「販売数」をお茶抜きに統一（拠点一覧/拠点モーダル/上部KPI総販売数）。完売率と数値基準を一致。GAS変更なし。 -->
-
+<!-- dashboard v5 (2026-06-06): リアルタイムタブに「サマリー/エリア別マトリクス」サブ切替を追加。GAS変更なし。 -->
+ 
 <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
 :root {
@@ -27,16 +27,16 @@
   --blue: #2980B9;
   --blue-light: #D6EAF8;
 }
-
+ 
 * { margin: 0; padding: 0; box-sizing: border-box; }
-
+ 
 body {
 font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', sans-serif;
 background: var(--cream);
 color: var(--ink);
 min-height: 100vh;
 }
-
+ 
 /* ── HEADER ── */
 .header {
 background: var(--red);
@@ -65,7 +65,7 @@ cursor: pointer;
 font-family: inherit;
 }
 .refresh-btn:hover { background: rgba(255,255,255,.3); }
-
+ 
 /* ── NAV TABS ── */
 .nav-tabs {
 background: var(--white);
@@ -106,14 +106,14 @@ margin-left: 6px;
 vertical-align: middle;
 }
 .tab-btn.active .badge { background: var(--gold); }
-
+ 
 /* ── CONTENT ── */
 .content { padding: 16px; max-width: 900px; margin: 0 auto; }
-
+ 
 /* ── TAB PANELS ── */
 .tab-panel { display: none; }
 .tab-panel.active { display: block; }
-
+ 
 /* ── KPI ROW ── */
 .kpi-grid {
 display: grid;
@@ -144,7 +144,7 @@ height: 3px;
 .kpi-value { font-size: 24px; font-weight: 700; color: var(--ink); line-height: 1; }
 .kpi-value span { font-size: 13px; font-weight: 400; color: var(--ink-mute); }
 .kpi-sub { font-size: 11px; color: var(--ink-mute); margin-top: 4px; }
-
+ 
 /* ── SECTION TITLE ── */
 .section-title {
 font-size: 12px;
@@ -162,7 +162,7 @@ flex: 1;
 height: 1px;
 background: var(--border);
 }
-
+ 
 /* ── RANKING CARDS ── */
 .rank-grid {
 display: grid;
@@ -171,7 +171,7 @@ gap: 12px;
 margin-bottom: 20px;
 }
 @media(max-width: 480px) { .rank-grid { grid-template-columns: 1fr; } }
-
+ 
 .rank-card {
 background: var(--white);
 border: 1px solid var(--border);
@@ -226,7 +226,7 @@ text-align: right;
 .rate-bar { height: 100%; border-radius: 2px; }
 .rate-bar.high { background: var(--green); }
 .rate-bar.low { background: var(--red); }
-
+ 
 /* ── FULL LIST ── */
 .list-controls {
 display: flex;
@@ -246,7 +246,7 @@ font-family: inherit;
 color: var(--ink-soft);
 }
 .sort-btn.active { background: var(--red); color: #FFF; border-color: var(--red); }
-
+ 
 .location-table {
 width: 100%;
 border-collapse: collapse;
@@ -275,7 +275,7 @@ cursor: pointer;
 .location-table .rate-cell.high { color: var(--green); }
 .location-table .rate-cell.low { color: var(--red); }
 .location-table .not-reported { color: var(--ink-mute); font-style: italic; }
-
+ 
 /* ── INACTIVE LOCATION (休止拠点) ── */
 .location-table tr.inactive td {
 background: #F5F2EC;
@@ -287,7 +287,7 @@ text-decoration-color: var(--ink-mute);
 }
 .status-badge.inactive { background: #E8E3D8; color: #6B6258; }
 .rank-item.inactive { opacity: .45; }
-
+ 
 /* ── DETAIL MODAL ── */
 .modal-bg {
 position: fixed;
@@ -335,7 +335,7 @@ cursor: pointer;
 display: flex; align-items: center; justify-content: center;
 }
 .modal-body { padding: 16px; }
-
+ 
 .product-row {
 display: flex;
 align-items: center;
@@ -349,7 +349,7 @@ gap: 10px;
 .product-row-rate { font-size: 14px; font-weight: 700; min-width: 45px; text-align: right; }
 .product-rate-bar { flex: 1; max-width: 100px; height: 6px; background: #EEE; border-radius: 3px; }
 .product-rate-fill { height: 100%; border-radius: 3px; background: var(--green); }
-
+ 
 /* ── DAILY SUMMARY (16時以降) ── */
 .daily-summary {
 background: var(--ink);
@@ -386,7 +386,7 @@ text-align: center;
 .daily-kpi-value.green { color: #58D68D; }
 .daily-kpi-value.red { color: #EC7063; }
 .daily-kpi-value.blue { color: #85C1E9; }
-
+ 
 /* ── WEATHER ── */
 .weather-bar {
 background: var(--blue-light);
@@ -401,7 +401,7 @@ font-size: 13px;
 color: var(--blue);
 }
 .weather-item { display: flex; align-items: center; gap: 4px; }
-
+ 
 /* ── REPORT STATUS ── */
 .status-badge {
 display: inline-block;
@@ -413,7 +413,7 @@ border-radius: 10px;
 .status-badge.done { background: var(--green-light); color: #1A7A42; }
 .status-badge.pending { background: #FEF9E7; color: #7D6608; }
 .status-badge.none { background: #F5F5F5; color: var(--ink-mute); }
-
+ 
 /* ── LOADING ── */
 .loading-wrap {
 text-align: center;
@@ -429,7 +429,7 @@ animation: spin .8s linear infinite;
 margin: 0 auto 16px;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
-
+ 
 /* ── WEEKLY/MONTHLY ── */
 .period-selector {
 display: flex;
@@ -448,7 +448,7 @@ font-family: inherit;
 color: var(--ink-soft);
 }
 .period-btn.active { background: var(--red); color: #FFF; border-color: var(--red); }
-
+ 
 .stats-table {
 width: 100%;
 border-collapse: collapse;
@@ -474,7 +474,7 @@ border-bottom: 1px solid #F0EDE5;
 .stats-table tr:last-child td { border-bottom: none; }
 .stats-table tr:nth-child(even) td { background: #FAFAF8; }
 .stats-table td:first-child { font-weight: 700; color: var(--ink); }
-
+ 
 /* ── CASH TABLE ── */
 .cash-table {
 width: 100%;
@@ -505,7 +505,7 @@ background: var(--cream-dark);
 font-weight: 700;
 border-top: 2px solid var(--border);
 }
-
+ 
 /* ===== Task-3 現金有高 ===== */
 .cash-summary {
   display: grid;
@@ -536,7 +536,7 @@ border-top: 2px solid var(--border);
 .cash-summary-card.diff-ok    .value { color: var(--ink-mute); }
 .cash-summary-card.diff-plus  .value { color: var(--blue); }
 .cash-summary-card.diff-minus .value { color: var(--red); }
-
+ 
 .cash-actual-input {
   width: 100px;
   padding: 5px 8px;
@@ -556,7 +556,7 @@ border-top: 2px solid var(--border);
 .cash-diff-cell.ok    { color: var(--ink-mute); }
 .cash-diff-cell.plus  { color: var(--blue); }
 .cash-diff-cell.minus { color: var(--red); }
-
+ 
 /* ===== ヒートマップ＋粗利ランキング ===== */
 .dashboard-section {
 background: #fff;
@@ -636,7 +636,7 @@ background: #f8f9fa; border-radius: 6px;
 .dashboard-loading {
 padding: 40px; text-align: center; color: #999;
 }
-
+ 
 /* ===== 商品管理タブ ===== */
 .pm-notice {
 background: var(--gold-light);
@@ -745,7 +745,7 @@ box-shadow: 0 1px 3px rgba(0,0,0,.2);
 }
 .pm-toggle.off::after { transform: translateX(22px); }
 .pm-toggle:disabled { opacity: .5; cursor: wait; }
-
+ 
 /* 確認モーダル（中央表示） */
 .pm-confirm-bg {
 position: fixed;
@@ -845,7 +845,7 @@ background: var(--green);
 color: #FFF;
 }
 .pm-confirm-btn:disabled { opacity: .5; cursor: wait; }
-
+ 
 /* トースト通知 */
 .pm-toast {
 position: fixed;
@@ -869,7 +869,7 @@ transform: translateX(-50%) translateY(0);
 }
 .pm-toast.error { background: var(--red); }
 .pm-toast.success { background: var(--green); }
-
+ 
 /* ===== 商品管理タブ 一括選択対応（v2026-05-11 NEW） ===== */
 .pm-batch-bar {
 background: var(--white);
@@ -948,7 +948,7 @@ box-shadow: inset 3px 0 0 var(--red);
 .pm-row.selected.stopped {
 background: #FDF0EE;
 }
-
+ 
 /* ===== 申し送り確認タブ（基本） ===== */
 .memo-board {
 display: flex;
@@ -1087,7 +1087,7 @@ flex: 0 0 auto;
 padding: 9px 14px;
 }
 .memo-action-btn:disabled { opacity: .5; cursor: wait; }
-
+ 
 .memo-empty {
 background: var(--white);
 border: 1px dashed var(--border);
@@ -1097,9 +1097,9 @@ text-align: center;
 color: var(--ink-mute);
 font-size: 13px;
 }
-
+ 
 /* ===== 申し送りタブ v2（一括完了対応） ===== */
-
+ 
 .memo-batch-bar {
 background: var(--white);
 border: 1px solid var(--border);
@@ -1154,7 +1154,7 @@ opacity: .85;
 opacity: .4;
 cursor: not-allowed;
 }
-
+ 
 .memo-card-checkbox-wrap {
 position: absolute;
 top: 10px;
@@ -1176,7 +1176,7 @@ accent-color: var(--green);
 margin: 0;
 display: block;
 }
-
+ 
 .memo-card-item.has-replies {
 background: #F5F5F0;
 }
@@ -1188,12 +1188,12 @@ background: #EFEFE8;
 border-left-color: #999;
 color: var(--ink-mute);
 }
-
+ 
 .memo-card-item.selected {
 border-color: var(--green);
 box-shadow: 0 0 0 2px rgba(39, 174, 96, .15);
 }
-
+ 
 /* ===== 申し送りタブ v3（履歴表示対応） ===== */
 .memo-card-item.is-history {
 opacity: 0.65;
@@ -1257,7 +1257,7 @@ flex: 1;
 height: 1px;
 background: var(--border);
 }
-
+ 
 /* ===== 拒否画面 ===== */
 .access-denied {
 display: none;
@@ -1524,7 +1524,7 @@ font-family: inherit;
   font-family: inherit; transition: .15s;
 }
 .rt-subtab.active { background: var(--white); color: var(--red); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
-
+ 
 .area-block {
   background: var(--white); border: 1px solid var(--border);
   border-radius: 12px; padding: 14px; margin-bottom: 18px;
@@ -1546,7 +1546,7 @@ font-family: inherit;
 }
 .area-refresh-btn:hover { background: var(--gold-light); border-color: var(--gold); }
 .area-refresh-btn:disabled { opacity: .5; cursor: default; }
-
+ 
 .matrix-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 8px; }
 .matrix-table { border-collapse: separate; border-spacing: 0; font-size: 12px; min-width: 100%; }
 .matrix-table th, .matrix-table td {
@@ -1579,19 +1579,19 @@ font-family: inherit;
 .matrix-cell.zero { color: var(--ink-mute); }
 .matrix-empty { padding: 20px; text-align: center; color: var(--ink-mute); font-size: 13px; }
 </style>
-
+ 
 </head>
 <body>
-
+ 
 <!-- ─── 起動時LIFFローディング ─── -->
-
+ 
 <div id="liff-loading" class="loading-wrap" style="min-height:100vh;">
   <div class="loader"></div>
   <p>認証中...</p>
 </div>
-
+ 
 <!-- ─── アクセス拒否画面（社員以外） ─── -->
-
+ 
 <div id="access-denied" class="access-denied">
   <div class="access-denied-icon">🚫</div>
   <div class="access-denied-title">このページは社員専用です</div>
@@ -1601,13 +1601,13 @@ font-family: inherit;
   </div>
   <button class="access-denied-btn" onclick="closeApp()">LINEに戻る</button>
 </div>
-
+ 
 <!-- ─── メインアプリ（社員のみ表示） ─── -->
-
+ 
 <div id="app-main" style="display:none;">
-
+ 
   <!-- HEADER -->
-
+ 
   <div class="header">
     <div class="header-left">
       <h1>🍱 お江戸弁当</h1>
@@ -1618,9 +1618,9 @@ font-family: inherit;
       <button class="refresh-btn" onclick="loadAll()">🔄 更新</button>
     </div>
   </div>
-
+ 
   <!-- NAV TABS -->
-
+ 
   <div class="nav-tabs">
     <button class="tab-btn active" onclick="switchTab('realtime')">リアルタイム</button>
     <button class="tab-btn" onclick="switchTab('weekly')">週報</button>
@@ -1632,11 +1632,11 @@ font-family: inherit;
     <button class="tab-btn" onclick="switchTab('products')">商品管理</button>
     <button class="tab-btn" onclick="switchTab('memos')">申し送り<span class="badge" id="memo-badge" style="display:none;">0</span></button>
   </div>
-
+ 
   <!-- CONTENT -->
-
+ 
   <div class="content">
-
+ 
 <!-- REALTIME TAB -->
 <div id="tab-realtime" class="tab-panel active">
   <div class="loading-wrap" id="rt-loading">
@@ -1644,16 +1644,16 @@ font-family: inherit;
     <p>データを読み込み中...</p>
   </div>
   <div id="rt-content" style="display:none;">
-
+ 
     <!-- ───────── リアルタイム サブ切替（v5 新規） ───────── -->
     <div class="rt-subtabs">
       <button class="rt-subtab active" id="rtsub-summary" onclick="switchRtView('summary')">サマリー</button>
       <button class="rt-subtab" id="rtsub-area" onclick="switchRtView('area')">エリア別マトリクス</button>
     </div>
-
+ 
     <!-- ───────── サマリービュー（既存一式） ───────── -->
     <div id="rt-view-summary">
-
+ 
     <!-- 天気 -->
     <div class="weather-bar" id="weather-bar">
       <span>🌤</span>
@@ -1661,19 +1661,19 @@ font-family: inherit;
       <span class="weather-item">🌡 <span id="w-temp">--</span>℃</span>
       <span class="weather-item">💨 <span id="w-wind">--</span>m/s</span>
     </div>
-
+ 
     <!-- KPI -->
     <div class="kpi-grid" id="kpi-grid"></div>
-
+ 
     <!-- 16時以降のまとめ -->
     <div id="daily-summary-wrap" style="display:none;">
       <div class="daily-summary" id="daily-summary"></div>
     </div>
-
+ 
     <!-- ベスト・ワースト -->
     <div class="section-title">完売率ランキング</div>
     <div class="rank-grid" id="rank-grid"></div>
-
+ 
     <!-- 全拠点一覧 -->
     <div class="section-title">全拠点一覧</div>
     <div class="list-controls">
@@ -1698,15 +1698,15 @@ font-family: inherit;
       <tbody id="location-tbody"></tbody>
     </table>
     </div><!-- /#rt-view-summary -->
-
+ 
     <!-- ───────── エリア別ビュー（v5 新規） ───────── -->
     <div id="rt-view-area" style="display:none;">
       <div id="area-matrix-wrap"></div>
     </div>
-
+ 
   </div>
 </div>
-
+ 
 <!-- WEEKLY TAB -->
 <div id="tab-weekly" class="tab-panel">
   <div class="loading-wrap" id="wk-loading" style="display:none;">
@@ -1718,7 +1718,7 @@ font-family: inherit;
     <div id="weekly-data"></div>
   </div>
 </div>
-
+ 
 <!-- MONTHLY TAB -->
 <div id="tab-monthly" class="tab-panel">
   <div class="loading-wrap" id="mo-loading" style="display:none;">
@@ -1730,7 +1730,7 @@ font-family: inherit;
     <div id="monthly-data"></div>
   </div>
 </div>
-
+ 
 <!-- DELIVERY TAB -->
 <div id="tab-delivery" class="tab-panel">
   <div class="loading-wrap" id="dv-loading" style="display:none;">
@@ -1739,16 +1739,16 @@ font-family: inherit;
   </div>
   <div id="dv-content"></div>
 </div>
-
+ 
 <!-- CASH TAB -->
 <div id="tab-cash" class="tab-panel">
   <p style="font-size:12px;color:var(--ink-mute);margin-bottom:12px;">
     想定額 ＝ レジ最終金額 − 本日合計ギャラ。実額入力で誤差を自動計算（±¥100以内は通知なし／超過時は販売員と管理者にLINE通知）
   </p>
-
+ 
   <!-- サマリー：想定／実際／誤差 -->
   <div class="cash-summary" id="cash-summary"></div>
-
+ 
   <table class="cash-table">
     <thead>
       <tr>
@@ -1766,7 +1766,7 @@ font-family: inherit;
     </tbody>
   </table>
 </div>
-
+ 
 <!-- HEATMAP TAB -->
 <div id="tab-heatmap" class="tab-panel">
   <section id="heatmap-section" class="dashboard-section">
@@ -1779,7 +1779,7 @@ font-family: inherit;
         <button class="period-btn" data-period="month">月</button>
       </div>
     </div>
-
+ 
     <div class="legend">
       <span class="legend-item"><span class="legend-color" style="background:#E74C3C"></span>早すぎ (〜12:00)</span>
       <span class="legend-item"><span class="legend-color" style="background:#F39C12"></span>早い (12:00〜12:10)</span>
@@ -1787,18 +1787,18 @@ font-family: inherit;
       <span class="legend-item"><span class="legend-color" style="background:#27AE60"></span>理想 (終業-20分〜終業)</span>
       <span class="legend-item"><span class="legend-color" style="background:#BDC3C7"></span>完売せず</span>
     </div>
-
+ 
     <div id="heatmap-container" class="heatmap-container">
       <div class="dashboard-loading">読み込み中...</div>
     </div>
-
+ 
     <h3 class="ranking-title">粗利ランキング（全拠点）</h3>
     <div id="ranking-container" class="ranking-container">
       <div class="dashboard-loading">読み込み中...</div>
     </div>
   </section>
 </div>
-
+ 
 <!-- PRODUCTS MANAGEMENT TAB -->
     <!-- PROFIT TAB -->
 <div id="tab-profit" class="tab-panel">
@@ -1849,7 +1849,7 @@ font-family: inherit;
     </div>
   </div>
 </div>
-
+ 
 <!-- MEMOS TAB -->
 <div id="tab-memos" class="tab-panel">
   <div class="pm-notice">
@@ -1863,11 +1863,11 @@ font-family: inherit;
   </div>
 </div>
   </div>
-
+ 
 </div>
-
+ 
 <!-- DETAIL MODAL -->
-
+ 
 <div class="modal-bg" id="detail-modal">
   <div class="modal-sheet">
     <div class="modal-header" style="position:relative;">
@@ -1878,9 +1878,9 @@ font-family: inherit;
     <div class="modal-body" id="modal-body"></div>
   </div>
 </div>
-
+ 
 <!-- 商品管理 確認モーダル -->
-
+ 
 <div class="pm-confirm-bg" id="pm-confirm-modal">
   <div class="pm-confirm-card">
     <div class="pm-confirm-header" id="pm-confirm-header">商品の停止</div>
@@ -1891,9 +1891,9 @@ font-family: inherit;
     </div>
   </div>
 </div>
-
+ 
 <!-- 申し送り対応完了 確認モーダル -->
-
+ 
 <div class="pm-confirm-bg" id="memo-complete-modal">
   <div class="pm-confirm-card">
     <div class="pm-confirm-header resume">対応完了</div>
@@ -1904,21 +1904,21 @@ font-family: inherit;
     </div>
   </div>
 </div>
-
+ 
 <!-- トースト通知 -->
-
+ 
 <div class="pm-toast" id="pm-toast"></div>
-
+ 
 <script>
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5AawPDc7aluPokONkYz6f2ikwl0S487JvhKdKh6QSp1xhEhA/exec';
 const LIFF_ID_DASHBOARD = '2009637457-gAFKfT6y';
-
+ 
 let allData     = [];
 let masterData  = { locations: [], products: [] };
 let currentSort = 'rate_desc';
 let inactiveLocationIds = new Set();  // 本日の休止拠点ID（driver.htmlで「営業しない」設定）
 let isFirstLoad = true;  // 案B Phase-2：初回起動判定（キャッシュ先描画用）
-
+ 
 // ═══════════════════════════════════════════════════════════════
 // 案B Phase-2：ダッシュボード localStorage キャッシュ（v2026-05-18）
 //   - マスタ系：24h TTL（拠点・商品・スタッフ・インセンティブ等）
@@ -1929,7 +1929,7 @@ const DASH_MASTER_CACHE_KEY    = 'oedo_dashboard_master_cache_v1';
 const DASH_REALTIME_CACHE_KEY  = 'oedo_dashboard_realtime_cache_v1';
 const DASH_MASTER_TTL_MS       = 24 * 60 * 60 * 1000;  // 24時間
 const DASH_REALTIME_TTL_MS     = 5 * 60 * 1000;        // 5分
-
+ 
 function loadDashMasterCache() {
   try {
     const raw = localStorage.getItem(DASH_MASTER_CACHE_KEY);
@@ -1946,7 +1946,7 @@ function loadDashMasterCache() {
     return null;
   }
 }
-
+ 
 function saveDashMasterCache(data) {
   try {
     localStorage.setItem(DASH_MASTER_CACHE_KEY, JSON.stringify({
@@ -1955,7 +1955,7 @@ function saveDashMasterCache(data) {
     }));
   } catch(e) { console.warn('saveDashMasterCache error:', e); }
 }
-
+ 
 function loadDashRealtimeCache() {
   try {
     const raw = localStorage.getItem(DASH_REALTIME_CACHE_KEY);
@@ -1972,7 +1972,7 @@ function loadDashRealtimeCache() {
     return null;
   }
 }
-
+ 
 function saveDashRealtimeCache(data) {
   try {
     localStorage.setItem(DASH_REALTIME_CACHE_KEY, JSON.stringify({
@@ -1981,31 +1981,31 @@ function saveDashRealtimeCache(data) {
     }));
   } catch(e) { console.warn('saveDashRealtimeCache error:', e); }
 }
-
+ 
 // ─────────────────────────────────────
 // LIFF初期化＋権限チェック
 // ─────────────────────────────────────
 let userProfile = null;  // {userId, displayName, role}
-
+ 
 window.addEventListener('load', async function() {
   try {
     await liff.init({ liffId: LIFF_ID_DASHBOARD });
-
+ 
     if (!liff.isLoggedIn()) {
       liff.login({ redirectUri: window.location.href });
       return;
     }
-
+ 
     const profile = await liff.getProfile();
     const roleRes = await fetchJSON(GAS_URL + '?action=getRole&userId=' + encodeURIComponent(profile.userId));
     const role = (roleRes && roleRes.role) || '';
-
+ 
     userProfile = {
       userId:      profile.userId,
       displayName: profile.displayName,
       role:        role,
     };
-
+ 
     if (role !== '社員') {
       // アクセス拒否画面
       document.getElementById('liff-loading').style.display = 'none';
@@ -2013,30 +2013,30 @@ window.addEventListener('load', async function() {
       document.getElementById('access-denied').classList.add('show');
       return;
     }
-
+ 
     // 社員：メインアプリ表示
     document.getElementById('liff-loading').style.display = 'none';
     document.getElementById('app-main').style.display = 'block';
-
+ 
     // URLハッシュからタブ初期値を判定
     const hash = window.location.hash;
     if (hash === '#tab=memos') {
       switchTab('memos');
     }
-
+ 
     loadAll();
     loadMemoBadge();  // 申し送り未対応件数を取得（バッジ表示用）
-
+ 
     // 5分ごとに更新
     setInterval(loadAll, 5 * 60 * 1000);
     setInterval(loadMemoBadge, 5 * 60 * 1000);
-
+ 
   } catch(e) {
     document.getElementById('liff-loading').innerHTML =
       '<p style="color:var(--red);">起動エラー：' + e.message + '</p>';
   }
 });
-
+ 
 function closeApp() {
   if (liff.isInClient && liff.isInClient()) {
     liff.closeWindow();
@@ -2044,7 +2044,7 @@ function closeApp() {
     window.location.href = 'https://line.me/';
   }
 }
-
+ 
 // ─────────────────────────────────────
 // DELIVERY
 // ─────────────────────────────────────
@@ -2089,7 +2089,7 @@ async function initDelivery() {
   }
   loadingEl.style.display = 'none';
 }
-
+ 
 function renderDeliveryDateSelector() {
   const sel = document.getElementById('delivery-date-selector');
   if (!sel) return;
@@ -2101,17 +2101,17 @@ function renderDeliveryDateSelector() {
   }).join('');
   if (selectedDelivery) sel.value = selectedDelivery;
 }
-
+ 
 async function selectDeliveryDate(date) {
   selectedDelivery = date;
   const sel = document.getElementById('delivery-date-selector');
   if (sel) sel.value = date;
-
+ 
   if (deliveryCache[date]) {
     renderDeliveryOrders(deliveryCache[date], date);
     return;
   }
-
+ 
   document.getElementById('dv-loading').style.display = 'block';
   try {
     const res    = await fetchJSON(`${GAS_URL}?action=getDeliveryOrders&date=${encodeURIComponent(date)}`);
@@ -2123,30 +2123,30 @@ async function selectDeliveryDate(date) {
   }
   document.getElementById('dv-loading').style.display = 'none';
 }
-
+ 
 function renderDeliveryOrders(orders, date) {
   const dt = new Date(date.replace(/\//g, '-'));
   const dayNames = ['日','月','火','水','木','金','土'];
-
+ 
   let html = '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">'
     + '<select id="delivery-date-selector" onchange="selectDeliveryDate(this.value)" style="flex:1;padding:10px 12px;border:1.5px solid #D5D8DC;border-radius:10px;font-size:14px;font-family:inherit;background:white;color:#1C1C1C;"></select>'
     + '<span style="font-size:13px;color:#9A9A9A;white-space:nowrap;">' + orders.length + '件</span>'
     + '</div>';
-
+ 
   setTimeout(() => renderDeliveryDateSelector(), 0);
-
+ 
   if (orders.length === 0) {
     html += '<p style="color:#9A9A9A;font-size:13px;text-align:center;padding:30px 0;">この日の配達はありません</p>';
     document.getElementById('dv-content').innerHTML = html;
     return;
   }
-
+ 
   orders.sort((a, b) => (a.time || '').localeCompare(b.time || ''));
-
+ 
   orders.forEach(function(o) {
     var card = document.createElement('div');
     card.style.cssText = 'background:white;border:1px solid #D5D8DC;border-radius:12px;overflow:hidden;margin-bottom:12px;';
-
+ 
     var hdr = document.createElement('div');
     hdr.style.cssText = 'background:#1A3C5E;color:white;padding:10px 14px;';
     var hasAddr = o.address && String(o.address).trim() !== '';
@@ -2163,14 +2163,14 @@ function renderDeliveryOrders(orders, date) {
       + '<div style="font-size:12px;opacity:0.85;display:flex;align-items:center;gap:8px;"><span style="flex:1;min-width:0;">' + (o.address || '住所未定') + '</span>' + mapBtn + '</div>'
       + '<div style="font-size:10px;opacity:0.6;margin-top:2px;">' + (o.orderNo || '') + '</div>';
     card.appendChild(hdr);
-
+ 
     if (o.detail) {
       var det = document.createElement('div');
       det.style.cssText = 'padding:8px 14px;background:#F8F4EE;font-size:12px;color:#4A4A4A;';
       det.textContent = '📍 ' + o.detail;
       card.appendChild(det);
     }
-
+ 
     var body = document.createElement('div');
     body.style.cssText = 'padding:6px 14px;';
     var rows = [
@@ -2200,35 +2200,51 @@ function renderDeliveryOrders(orders, date) {
       row.appendChild(val);
       body.appendChild(row);
     });
-
+ 
     if (o.note) {
       var noteDiv = document.createElement('div');
       noteDiv.style.cssText = 'margin-top:6px;background:#FFF8DC;border-left:3px solid #B8860B;padding:8px 10px;border-radius:0 6px 6px 0;font-size:12px;color:#666;';
       noteDiv.innerHTML = '<span style="font-size:10px;font-weight:bold;color:#B8860B;display:block;margin-bottom:2px;">備考</span>' + o.note;
       body.appendChild(noteDiv);
     }
-
+ 
     if (o.collectYN || o.collect) {
       var colDiv = document.createElement('div');
       colDiv.style.cssText = 'margin-top:6px;background:#F0FAF4;border-left:3px solid #27AE60;padding:8px 10px;border-radius:0 6px 6px 0;font-size:12px;color:#1A7A42;';
       colDiv.innerHTML = '<span style="font-size:10px;font-weight:bold;display:block;margin-bottom:2px;">回収</span>' + (o.collectYN || '') + (o.collect ? '　' + o.collect : '');
       body.appendChild(colDiv);
     }
-
+ 
+    // ★ 単価マスタ未登録 赤字ブロック（2026-07-03）
+    if (o.unmapped && o.unmapped.length) {
+      var umDiv = document.createElement('div');
+      umDiv.style.cssText = 'margin-top:6px;background:#FFF3F3;border-left:3px solid #C0392B;padding:8px 10px;border-radius:0 6px 6px 0;font-size:12px;color:#C0392B;font-weight:bold;';
+      var umHead = document.createElement('span');
+      umHead.style.cssText = 'font-size:10px;font-weight:bold;display:block;margin-bottom:2px;';
+      umHead.textContent = '⚠️ 単価マスタ未登録';
+      umDiv.appendChild(umHead);
+      o.unmapped.forEach(function(u) {
+        var umLine = document.createElement('div');
+        umLine.textContent = u.label + (u.qty != null ? ' ×' + u.qty : '');
+        umDiv.appendChild(umLine);
+      });
+      body.appendChild(umDiv);
+    }
+ 
     body.style.paddingBottom = '8px';
     card.appendChild(body);
     html += card.outerHTML;
   });
-
+ 
   document.getElementById('dv-content').innerHTML = html;
 }
-
+ 
 // ─────────────────────────────────────
 // INIT
 // ─────────────────────────────────────
 async function loadAll() {
   updateTime();
-
+ 
   // ─────────────────────────────────────────────────────────
   // Phase A：初回のみ localStorage キャッシュから先描画（v2026-05-18 案B Phase-2）
   //   2回目以降（5分間隔の自動更新）はキャッシュ無視で素通り
@@ -2238,7 +2254,7 @@ async function loadAll() {
     const cachedMaster   = loadDashMasterCache();
     const cachedRealtime = loadDashRealtimeCache();
     let renderedFromCache = false;
-
+ 
     if (cachedMaster) {
       masterData = cachedMaster;
     }
@@ -2255,7 +2271,7 @@ async function loadAll() {
         } catch(e) { console.warn('cache render error:', e); }
       }
     }
-
+ 
     if (renderedFromCache) {
       prevSnapshot = {
         masterJson:   JSON.stringify(masterData || {}),
@@ -2264,7 +2280,7 @@ async function loadAll() {
       };
     }
   }
-
+ 
   try {
     const [master, reports, intermediate, driverState] = await Promise.all([
       fetchJSON(`${GAS_URL}?action=getMaster`),
@@ -2284,7 +2300,7 @@ async function loadAll() {
       if (!finalMap[r.locationId]) merged.push(r);
     });
     allData = merged;
-
+ 
     // ─────────────────────────────────────────────────────────
     // キャッシュ保存（マスタ・リアルタイム両方）
     // ─────────────────────────────────────────────────────────
@@ -2293,7 +2309,7 @@ async function loadAll() {
       allData: merged,
       inactiveIds: Array.from(inactiveLocationIds),
     });
-
+ 
     // ─────────────────────────────────────────────────────────
     // Phase C：差分検出して silent 再描画（先描画していた場合のみ）
     //   先描画していない場合は通常通り renderRealtime を呼ぶ
@@ -2322,7 +2338,7 @@ async function loadAll() {
         renderCashTable();
       }
     }
-
+ 
     isFirstLoad = false;
   } catch (e) {
     // キャッシュから既に描画済みなら、エラー画面に塗りつぶさず警告のみ
@@ -2334,44 +2350,44 @@ async function loadAll() {
       `<p style="color:var(--red);">データ取得エラー：${e.message}</p>`;
   }
 }
-
+ 
 async function fetchJSON(url) {
   const res  = await fetch(url, { redirect: 'follow' });
   const text = await res.text();
   return JSON.parse(text);
 }
-
+ 
 function updateTime() {
   const now = new Date();
   document.getElementById('update-time').textContent =
     `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')} 更新`;
 }
-
+ 
 // ─────────────────────────────────────
 // REALTIME
 // ─────────────────────────────────────
 function renderRealtime() {
   document.getElementById('rt-loading').style.display = 'none';
   document.getElementById('rt-content').style.display = 'block';
-
+ 
   const now = new Date();
   const isAfter16 = now.getHours() >= 16;
-
+ 
   const latestWithWeather = allData.find(r => r.weather);
   if (latestWithWeather) {
     document.getElementById('w-condition').textContent = latestWithWeather.weather;
     document.getElementById('w-temp').textContent      = latestWithWeather.temperature;
     document.getElementById('w-wind').textContent      = latestWithWeather.windspeed;
   }
-
+ 
   const reported   = allData.filter(r => r.reported);
   const totalLocs  = masterData.locations.length;
-  const totalSold  = reported.reduce((s, r) => s + _rowNonTeaSold_(r), 0);  // v6: お茶抜き
+  const totalSold  = reported.reduce((s, r) => s + (r.soldCount || 0), 0);
   const totalSales = reported.reduce((s, r) => s + (r.totalSales || 0), 0);
   const avgRate    = reported.length > 0
     ? Math.round(reported.reduce((s, r) => s + (r.sellRate || 0), 0) / reported.length * 10) / 10
     : 0;
-
+ 
   document.getElementById('kpi-grid').innerHTML = `
     <div class="kpi-card red">
       <div class="kpi-label">報告完了</div>
@@ -2391,11 +2407,11 @@ function renderRealtime() {
       <div class="kpi-value" style="font-size:18px;">¥${totalSales.toLocaleString()}</div>
     </div>
   `;
-
+ 
   if (isAfter16 && reported.length > 0) {
     renderDailySummary(reported);
   }
-
+ 
   // ─────────────────────────────────────────────────────────
   // ランキング対象（v2026-05-18 修正）
   //   最終報告 + 中間販売中で完売率が数値のものを含める
@@ -2412,22 +2428,22 @@ function renderRealtime() {
   });
   renderRanking(rankingTargets);
   renderLocationTable();
-
+ 
   document.getElementById('reported-count').textContent = `${reported.length}/${totalLocs}拠点 報告済み`;
-
+ 
   // v5: エリア別マトリクスも同時更新（5分自動更新・グローバル更新ボタンと連動）
   renderAreaMatrix();
 }
-
+ 
 function renderDailySummary(reported) {
   const wrap = document.getElementById('daily-summary-wrap');
   wrap.style.display = 'block';
-
+ 
   const cashTotal   = reported.reduce((s, r) => s + (r.cashSales || 0), 0);
   const paypayTotal = reported.reduce((s, r) => s + (r.paypayAmount || 0), 0);
   const couponTotal = reported.reduce((s, r) => s + (r.couponCount || 0), 0);
   const laborTotal  = reported.reduce((s, r) => s + (r.totalSalary || 0), 0);
-
+ 
   document.getElementById('daily-summary').innerHTML = `
     <div class="daily-summary-title">本日の最終集計</div>
     <div class="daily-kpi-grid">
@@ -2450,28 +2466,28 @@ function renderDailySummary(reported) {
     </div>
   `;
 }
-
+ 
 function renderRanking(reported) {
   // 休止拠点は完売率ランキングから除外
   const activeReported = reported.filter(r =>
     !inactiveLocationIds.has(String(r.locationId || '').trim())
   );
-
+ 
   if (activeReported.length === 0) {
     document.getElementById('rank-grid').innerHTML =
       '<p style="color:var(--ink-mute);font-size:13px;grid-column:1/-1;">まだ報告がありません</p>';
     return;
   }
-
+ 
   // 文字列で来る可能性に備えて Number 化（NaN対策）
   const sorted = [...activeReported].sort(
     (a, b) => (Number(b.sellRate) || 0) - (Number(a.sellRate) || 0)
   );
   const best3  = sorted.slice(0, 3);
   const worst3 = [...sorted].reverse().slice(0, 3);
-
+ 
   const rankNumClass = (i) => i === 0 ? 'gold' : i === 1 ? 'silver' : 'bronze';
-
+ 
   const renderItems = (items, isBest) => items.map((r, i) => {
     const rate = Number(r.sellRate) || 0;
     return `
@@ -2488,7 +2504,7 @@ function renderRanking(reported) {
       </div>
     `;
   }).join('');
-
+ 
   document.getElementById('rank-grid').innerHTML = `
     <div class="rank-card">
       <div class="rank-card-header best">🏆 完売率ベスト3</div>
@@ -2500,12 +2516,12 @@ function renderRanking(reported) {
     </div>
   `;
 }
-
+ 
 function renderLocationTable() {
   const locations = masterData.locations || [];
   const dataMap   = {};
   allData.forEach(r => { if (r.locationId) dataMap[r.locationId] = r; });
-
+ 
   // 各行に sellRate(数値化済)と休止フラグを付与してから並び替え
   let rows = locations.map(loc => {
     const r = dataMap[loc.id];
@@ -2513,7 +2529,7 @@ function renderLocationTable() {
     const rateNum = r ? (Number(r.sellRate) || 0) : null;  // null=未報告
     return { loc, r, isInactive, rateNum };
   });
-
+ 
   // 並び替え（未報告は常に末尾、休止拠点はその更に下）
   if (currentSort === 'rate_desc') {
     rows.sort((a, b) => {
@@ -2537,7 +2553,7 @@ function renderLocationTable() {
       String(a.loc.id).localeCompare(String(b.loc.id), 'ja', { numeric: true })
     );
   }
-
+ 
   document.getElementById('location-tbody').innerHTML = rows.map(({ loc, r, isInactive }) => {
     // 休止拠点（営業しない設定あり）
     if (isInactive) {
@@ -2590,14 +2606,14 @@ function renderLocationTable() {
       <tr onclick="openModal('${loc.id}')">
         <td>${loc.name}</td>
         <td>${r.userName || '—'}</td>
-        <td>${_rowNonTeaSold_(r)}個</td>
+        <td>${r.soldCount || 0}個</td>
         <td class="rate-cell ${typeof sellRate === 'number' ? rateClass : ''}">${rateStr}</td>
         <td>¥${totalSales.toLocaleString()}</td>
         <td>${badge}</td>
       </tr>`;
   }).join('');
 }
-
+ 
 // ═══════════════════════════════════════════════════════════════
 // エリア別マトリクス（v2026-06-06 v5）
 //   - リアルタイムタブ内サブビュー。masterData + allData から描画
@@ -2606,7 +2622,7 @@ function renderLocationTable() {
 //   - GAS 変更なし（getMaster の area, deliveryCountJson, productSalesJson を使用）
 // ═══════════════════════════════════════════════════════════════
 let rtCurrentView = 'summary';
-
+ 
 function switchRtView(view) {
   rtCurrentView = view;
   document.getElementById('rt-view-summary').style.display = (view === 'summary') ? 'block' : 'none';
@@ -2615,26 +2631,12 @@ function switchRtView(view) {
   document.getElementById('rtsub-area').classList.toggle('active', view === 'area');
   if (view === 'area') renderAreaMatrix();
 }
-
+ 
 // お茶商品ID一覧
 function _teaIds_() {
   return (masterData.products || []).filter(p => p.name.includes('お茶')).map(p => p.id);
 }
-
-// 1拠点の お茶抜き販売数（リアルタイム/締め後 共通・v6）
-//   soldCount からお茶分（productSalesJson のお茶ID合計）を差し引く。
-//   productSalesJson が無い/壊れている場合は soldCount をそのまま返す（安全側）。
-function _rowNonTeaSold_(r) {
-  if (!r) return 0;
-  const teaIds = _teaIds_();
-  let teaSold = 0;
-  try {
-    const ps = JSON.parse(r.productSalesJson || '{}');
-    teaIds.forEach(id => { teaSold += Number(ps[id] || 0); });
-  } catch (e) {}
-  return Math.max(0, (r.soldCount || 0) - teaSold);
-}
-
+ 
 // 1拠点の 完売率(お茶抜き)。既存リアルタイム一覧と同一基準
 function _locSelloutRate_(r) {
   const teaIds = _teaIds_();
@@ -2655,32 +2657,32 @@ function _locSelloutRate_(r) {
   const sold = Math.max(0, (r.soldCount || 0) - teaSold);
   return delivery > 0 ? Math.round(sold / delivery * 1000) / 10 : null;
 }
-
+ 
 function _rateClass_(rate) {
   if (rate === null) return 'none';
   if (rate >= 80) return 'high';
   if (rate >= 50) return 'mid';
   return 'low';
 }
-
+ 
 // エリア名 → DOM ID 用キー（日本語/記号を安全化）
 function _areaKey_(area) {
   return 'a' + Array.from(String(area)).map(c => c.charCodeAt(0).toString(16)).join('');
 }
-
+ 
 // メイン描画
 function renderAreaMatrix() {
   const wrap = document.getElementById('area-matrix-wrap');
   if (!wrap) return;
-
+ 
   const locations = masterData.locations || [];
   const products  = masterData.products  || [];
   const teaIds    = _teaIds_();
-
+ 
   // 拠点ID → 本日データ
   const dataById = {};
   allData.forEach(r => { if (r.locationId) dataById[r.locationId] = r; });
-
+ 
   // エリア → 拠点[]（表示順）。エリア未設定は除外
   const areaMap = {};
   locations.forEach(loc => {
@@ -2690,26 +2692,26 @@ function renderAreaMatrix() {
     areaMap[area].locs.push(loc);
     areaMap[area].minOrder = Math.min(areaMap[area].minOrder, (loc.order != null ? loc.order : 9999));
   });
-
+ 
   // エリア順: 内拠点の最小表示順 → 同値はエリア名
   const areaNames = Object.keys(areaMap).sort((a, b) => {
     if (areaMap[a].minOrder !== areaMap[b].minOrder) return areaMap[a].minOrder - areaMap[b].minOrder;
     return a.localeCompare(b, 'ja');
   });
-
+ 
   if (areaNames.length === 0) {
     wrap.innerHTML = '<div class="matrix-empty">エリアが設定された拠点がありません（拠点マスタ C列「エリア」をご確認ください）</div>';
     return;
   }
-
+ 
   const areaNameByKey = {};
   let html = '';
-
+ 
   areaNames.forEach(area => {
     const key  = _areaKey_(area);
     areaNameByKey[key] = area;
     const locs = areaMap[area].locs; // 表示順済み
-
+ 
     // 各拠点の納品/販売を解析
     const perLoc = locs.map(loc => {
       const r = dataById[loc.id];
@@ -2723,13 +2725,13 @@ function renderAreaMatrix() {
       const status = inactive ? 'inactive' : (!r ? 'none' : (r.isIntermediate ? 'selling' : 'done'));
       return { loc, delivery, sales, rate, status };
     });
-
+ 
     // 行に出す商品 = このエリアで納品>0（お茶除外）。商品マスタ順を保持
     const rowProducts = products.filter(p => {
       if (teaIds.includes(p.id)) return false;
       return perLoc.some(pl => Number(pl.delivery[p.id] || 0) > 0);
     });
-
+ 
     // ヘッダー
     let head = '<th>商品 \\ 拠点</th>';
     perLoc.forEach(pl => {
@@ -2740,7 +2742,7 @@ function renderAreaMatrix() {
       const nm = pl.loc.displayName ? pl.loc.displayName : pl.loc.name;
       head += `<th><div class="matrix-loc-name">${escapeHtml(nm)}</div><div class="matrix-loc-rate ${rc}">${rateStr}</div></th>`;
     });
-
+ 
     // ボディ
     let body = '';
     if (rowProducts.length === 0) {
@@ -2761,7 +2763,7 @@ function renderAreaMatrix() {
         body += `<tr>${tr}</tr>`;
       });
     }
-
+ 
     html += `
       <div class="area-block" id="area-block-${key}">
         <div class="area-block-head">
@@ -2778,11 +2780,11 @@ function renderAreaMatrix() {
         </div>
       </div>`;
   });
-
+ 
   window._areaNameByKey = areaNameByKey;
   wrap.innerHTML = html;
 }
-
+ 
 // 単一エリアの更新ボタン:
 //   本日データを全取得 → 全マトリクス再描画 → 押下エリアのみ「✓ HH:MM 更新」表示
 async function refreshArea(key) {
@@ -2803,11 +2805,11 @@ async function refreshArea(key) {
     (intermediate.data || []).forEach(r => { if (!finalMap[r.locationId]) merged.push(r); });
     allData = merged;
     saveDashRealtimeCache({ allData: merged, inactiveIds: Array.from(inactiveLocationIds) });
-
+ 
     // 全マトリクス再描画（データは全エリア最新化）＋ サマリー側も整合
     renderAreaMatrix();
     try { renderLocationTable(); } catch (e) {}
-
+ 
     // 押したエリアだけ「✓ HH:MM 更新」を表示
     const now  = new Date();
     const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
@@ -2822,7 +2824,7 @@ async function refreshArea(key) {
     if (btn2) { btn2.disabled = false; btn2.textContent = '🔄 更新'; }
   }
 }
-
+ 
 function sortLocations(type) {
   currentSort = type;
   ['best','worst','id'].forEach(k => {
@@ -2834,24 +2836,24 @@ function sortLocations(type) {
   });
   renderLocationTable();
 }
-
+ 
 // ─────────────────────────────────────
 // CASH TABLE
 // ─────────────────────────────────────
 function renderCashTable() {
   const reported = allData.filter(r => r.reported);
-
+ 
   if (reported.length === 0) {
     document.getElementById('cash-summary').innerHTML = '';
     document.getElementById('cash-tbody').innerHTML =
       '<tr><td colspan="7" style="text-align:center;color:var(--ink-mute);padding:24px;">まだ報告がありません</td></tr>';
     return;
   }
-
+ 
   const sorted = [...reported].sort((a, b) =>
     a.locationName.localeCompare(b.locationName, 'ja')
   );
-
+ 
   // 集計
   let totalEnd      = 0;
   let totalGig      = 0;
@@ -2859,7 +2861,7 @@ function renderCashTable() {
   let totalActual   = 0;
   let totalDiff     = 0;
   let hasAnyActual  = false;
-
+ 
   sorted.forEach(r => {
     const expected = (r.registerEnd || 0) - (r.totalSalary || 0);
     totalEnd      += (r.registerEnd  || 0);
@@ -2872,7 +2874,7 @@ function renderCashTable() {
       hasAnyActual = true;
     }
   });
-
+ 
   // ── サマリーカード ──
   const summaryDiffClass = !hasAnyActual ? 'diff-ok'
     : (Math.abs(totalDiff) <= 100 ? 'diff-ok'
@@ -2891,7 +2893,7 @@ function renderCashTable() {
       <div class="value">${hasAnyActual ? formatDiff(totalDiff) : '—'}</div>
     </div>
   `;
-
+ 
   // ── テーブル ──
   const rowsHtml = sorted.map(r => {
     const expected  = (r.registerEnd || 0) - (r.totalSalary || 0);
@@ -2914,7 +2916,7 @@ function renderCashTable() {
         <td class="cash-diff-cell ${diffClass}">${diffText}</td>
       </tr>`;
   }).join('');
-
+ 
   const totalDiffClass = !hasAnyActual ? '' : diffClassFor(totalDiff);
   const totalDiffText  = !hasAnyActual ? '—' : formatDiff(totalDiff);
   document.getElementById('cash-tbody').innerHTML = rowsHtml + `
@@ -2927,7 +2929,7 @@ function renderCashTable() {
       <td class="cash-diff-cell ${totalDiffClass}">${totalDiffText}</td>
     </tr>`;
 }
-
+ 
 // ── ヘルパー（現金有高） ──
 function hasActualValue(v) {
   return v !== null && v !== undefined && v !== '' && !isNaN(Number(v));
@@ -2941,7 +2943,7 @@ function formatDiff(diff) {
   if (diff > 0)   return '+¥' + diff.toLocaleString();
   return '−¥' + Math.abs(diff).toLocaleString();
 }
-
+ 
 // onblurハンドラ：入力値を検証してGAS送信
 function saveActualCash(locationId, value) {
   const trimmed = String(value).trim();
@@ -2960,7 +2962,7 @@ function saveActualCash(locationId, value) {
   }
   sendActualCash(locationId, num);
 }
-
+ 
 // GASに保存（誤差計算と通知はGAS側）
 async function sendActualCash(locationId, actualCash) {
   try {
@@ -2987,7 +2989,7 @@ async function sendActualCash(locationId, actualCash) {
     console.warn('saveActualCash error:', e);
   }
 }
-
+ 
 // ─────────────────────────────────────
 // DETAIL MODAL
 // ─────────────────────────────────────
@@ -2995,25 +2997,25 @@ function openModal(locationId) {
   const loc = (masterData.locations || []).find(l => l.id === locationId);
   const r   = allData.find(d => d.locationId === locationId);
   if (!loc || !r) return;
-
+ 
   document.getElementById('modal-location-name').textContent = loc.name;
   document.getElementById('modal-location-sub').textContent  = `担当：${r.userName || '—'}`;
-
+ 
   const products = masterData.products || [];
   const delivery = JSON.parse(r.deliveryCountJson || '{}');
   const sales    = JSON.parse(r.productSalesJson  || '{}');
   const soldOutTimes = JSON.parse(r.soldOutTimesJson || '{}');
-
+ 
   let bodyHtml = `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
-      <div class="kpi-card green"><div class="kpi-label">販売数</div><div class="kpi-value">${_rowNonTeaSold_(r)}<span> 個</span></div></div>
+      <div class="kpi-card green"><div class="kpi-label">販売数</div><div class="kpi-value">${r.soldCount || 0}<span> 個</span></div></div>
       <div class="kpi-card gold"><div class="kpi-label">完売率</div><div class="kpi-value">${r.sellRate || 0}<span> %</span></div></div>
       <div class="kpi-card red"><div class="kpi-label">売上合計</div><div class="kpi-value" style="font-size:16px;">¥${(r.totalSales||0).toLocaleString()}</div></div>
       <div class="kpi-card blue"><div class="kpi-label">本日ギャラ</div><div class="kpi-value" style="font-size:16px;">¥${(r.totalSalary||0).toLocaleString()}</div></div>
     </div>
     <div style="font-size:12px;font-weight:700;color:var(--ink-mute);letter-spacing:.1em;margin-bottom:10px;">商品別完売率</div>
   `;
-
+ 
   const modalTeaIds = (masterData.products || []).filter(p => p.name.includes('お茶')).map(p => p.id);
   products.filter(p => !modalTeaIds.includes(p.id)).forEach(p => {
     const d    = Number(delivery[p.id] || 0);
@@ -3033,7 +3035,7 @@ function openModal(locationId) {
         <div class="product-row-rate" style="color:${barW >= 80 ? 'var(--green)' : barW > 0 ? 'var(--gold)' : 'var(--ink-mute)'}">${rateStr}</div>
       </div>`;
   });
-
+ 
   if (r.memo) {
     bodyHtml += `
       <div style="margin-top:16px;background:var(--gold-light);border-left:3px solid var(--gold);padding:10px 14px;border-radius:0 8px 8px 0;font-size:13px;color:var(--ink-soft);">
@@ -3041,18 +3043,18 @@ function openModal(locationId) {
         ${escapeHtml(r.memo)}
       </div>`;
   }
-
+ 
   document.getElementById('modal-body').innerHTML = bodyHtml;
   document.getElementById('detail-modal').classList.add('show');
 }
-
+ 
 function closeModal() {
   document.getElementById('detail-modal').classList.remove('show');
 }
 document.getElementById('detail-modal').addEventListener('click', function(e) {
   if (e.target === this) closeModal();
 });
-
+ 
 // ─────────────────────────────────────
 // WEEKLY
 // ─────────────────────────────────────
@@ -3067,20 +3069,20 @@ async function loadWeekly(weekStart) {
   }
   document.getElementById('wk-loading').style.display = 'none';
 }
-
+ 
 function renderWeeklyData(data) {
   if (!data.length) {
     document.getElementById('weekly-data').innerHTML = '<p style="color:var(--ink-mute);font-size:13px;">この週のデータがありません</p>';
     return;
   }
-
+ 
   const products = masterData.products || [];
   const teaIds   = products.filter(p => p.name.includes('お茶')).map(p => p.id);
-
+ 
   const productDelivery = {};
   const productSales    = {};
   products.forEach(p => { productDelivery[p.id] = 0; productSales[p.id] = 0; });
-
+ 
   const byLocation = {};
   data.forEach(r => {
     if (!byLocation[r.locationName]) {
@@ -3090,7 +3092,7 @@ function renderWeeklyData(data) {
     byLocation[r.locationName].sales += r.totalSales || 0;
     byLocation[r.locationName].count++;
     if (r.sellRate) byLocation[r.locationName].rates.push(r.sellRate);
-
+ 
     const delivery = JSON.parse(r.deliveryCountJson || '{}');
     const sales    = JSON.parse(r.productSalesJson  || '{}');
     let teaSold = 0;
@@ -3101,7 +3103,7 @@ function renderWeeklyData(data) {
     });
     byLocation[r.locationName].soldNoTea += (r.soldCount || 0) - teaSold;
   });
-
+ 
   const rows = Object.entries(byLocation)
     .map(([name, d]) => ({
       name,
@@ -3113,11 +3115,11 @@ function renderWeeklyData(data) {
       avgPerDay: d.count > 0 ? Math.round(d.soldNoTea / d.count) : 0,
     }))
     .sort((a, b) => b.sales - a.sales);
-
+ 
   const totalSales = rows.reduce((s, r) => s + r.sales, 0);
   const totalSold  = rows.reduce((s, r) => s + r.sold, 0);
   const operDays   = new Set(data.map(r => r.date)).size;
-
+ 
   const productRows = products
     .filter(p => !teaIds.includes(p.id))
     .map(p => {
@@ -3126,14 +3128,14 @@ function renderWeeklyData(data) {
       const rate = d > 0 ? Math.round(s / d * 100) : null;
       return { name: p.name, d, s, rate };
     }).filter(p => p.d > 0);
-
+ 
   document.getElementById('weekly-data').innerHTML = `
     <div class="kpi-grid" style="margin-bottom:16px;">
       <div class="kpi-card red"><div class="kpi-label">週間売上</div><div class="kpi-value" style="font-size:18px;">¥${totalSales.toLocaleString()}</div></div>
       <div class="kpi-card gold"><div class="kpi-label">週間販売数</div><div class="kpi-value">${totalSold}<span> 個</span></div></div>
       <div class="kpi-card green"><div class="kpi-label">営業日数</div><div class="kpi-value">${operDays}<span> 日</span></div></div>
     </div>
-
+ 
     <div class="section-title">商品別完売率(週間合計)</div>
     <table class="stats-table" style="margin-bottom:16px;">
       <thead><tr><th>商品名</th><th>納品数</th><th>販売数</th><th>完売率</th></tr></thead>
@@ -3149,7 +3151,7 @@ function renderWeeklyData(data) {
       }).join('')}
       </tbody>
     </table>
-
+ 
     <div class="section-title">拠点別集計</div>
     <table class="stats-table">
       <thead><tr><th>拠点名</th><th>営業日数</th><th>1日平均販売数<br><small style="font-weight:400;opacity:.7;">お茶除く</small></th><th>平均完売率</th><th>売上合計</th></tr></thead>
@@ -3165,7 +3167,7 @@ function renderWeeklyData(data) {
     </table>
   `;
 }
-
+ 
 // ─────────────────────────────────────
 // MONTHLY
 // ─────────────────────────────────────
@@ -3180,13 +3182,13 @@ async function loadMonthly(yearMonth) {
   }
   document.getElementById('mo-loading').style.display = 'none';
 }
-
+ 
 function renderMonthlyData(data, yearMonth) {
   if (!data.length) {
     document.getElementById('monthly-data').innerHTML = '<p style="color:var(--ink-mute);font-size:13px;">この月のデータがありません</p>';
     return;
   }
-
+ 
   const byDay = { '月':{sold:0,count:0}, '火':{sold:0,count:0}, '水':{sold:0,count:0}, '木':{sold:0,count:0}, '金':{sold:0,count:0} };
   data.forEach(r => {
     if (byDay[r.dayOfWeek]) {
@@ -3194,7 +3196,7 @@ function renderMonthlyData(data, yearMonth) {
       byDay[r.dayOfWeek].count++;
     }
   });
-
+ 
   const byWeather = {};
   data.forEach(r => {
     if (!r.weather) return;
@@ -3202,18 +3204,18 @@ function renderMonthlyData(data, yearMonth) {
     byWeather[r.weather].sold  += r.soldCount || 0;
     byWeather[r.weather].count++;
   });
-
+ 
   const totalSales = data.reduce((s, r) => s + (r.totalSales||0), 0);
   const totalSold  = data.reduce((s, r) => s + (r.soldCount||0), 0);
   const avgRate    = data.length > 0 ? Math.round(data.reduce((s,r)=>s+(r.sellRate||0),0)/data.length*10)/10 : 0;
-
+ 
   document.getElementById('monthly-data').innerHTML = `
     <div class="kpi-grid" style="margin-bottom:16px;">
       <div class="kpi-card red"><div class="kpi-label">月間売上</div><div class="kpi-value" style="font-size:18px;">¥${totalSales.toLocaleString()}</div></div>
       <div class="kpi-card gold"><div class="kpi-label">月間販売数</div><div class="kpi-value">${totalSold}<span> 個</span></div></div>
       <div class="kpi-card green"><div class="kpi-label">平均完売率</div><div class="kpi-value">${avgRate}<span> %</span></div></div>
     </div>
-
+ 
     <div class="section-title">曜日別平均販売数</div>
     <table class="stats-table" style="margin-bottom:16px;">
       <thead><tr><th>曜日</th><th>営業日数</th><th>平均販売数</th></tr></thead>
@@ -3225,7 +3227,7 @@ function renderMonthlyData(data, yearMonth) {
         </tr>`).join('')}
       </tbody>
     </table>
-
+ 
     <div class="section-title">天気別平均販売数</div>
     <table class="stats-table">
       <thead><tr><th>天気</th><th>日数</th><th>平均販売数</th></tr></thead>
@@ -3239,7 +3241,7 @@ function renderMonthlyData(data, yearMonth) {
     </table>
   `;
 }
-
+ 
 // ─────────────────────────────────────
 // TABS
 // ─────────────────────────────────────
@@ -3260,7 +3262,7 @@ function switchTab(tab) {
   if (tab === 'products') loadProductMgmt();
   if (tab === 'memos')    loadMemos();
 }
-
+ 
 function initWeekSelector() {
   const selector = document.getElementById('week-selector');
   if (selector.innerHTML) return;
@@ -3278,13 +3280,13 @@ function initWeekSelector() {
   `).join('');
   loadWeekly(weeks[0].val);
 }
-
+ 
 function selectWeek(val, btn) {
   document.querySelectorAll('#week-selector .period-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   loadWeekly(val);
 }
-
+ 
 function initMonthSelector() {
   const selector = document.getElementById('month-selector');
   if (selector.innerHTML) return;
@@ -3301,13 +3303,13 @@ function initMonthSelector() {
   `).join('');
   loadMonthly(months[0].val);
 }
-
+ 
 function selectMonth(val, btn) {
   document.querySelectorAll('#month-selector .period-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   loadMonthly(val);
 }
-
+ 
 // ===== ヒートマップ＋粗利ランキング =====
 const HEATMAP_GAS_URL = GAS_URL;
 const HEATMAP_BUCKET_LABELS = {
@@ -3318,11 +3320,11 @@ const HEATMAP_BUCKET_COLORS = {
   ideal: '#27AE60', not_sold: '#BDC3C7'
 };
 let heatmapCurrentPeriod = '1w';
-
+ 
 document.addEventListener('DOMContentLoaded', () => {
   const heatmapSection = document.getElementById('heatmap-section');
   if (!heatmapSection) return;
-
+ 
   heatmapSection.querySelectorAll('.period-switch .period-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       heatmapSection.querySelectorAll('.period-switch .period-btn').forEach(b => b.classList.remove('active'));
@@ -3332,14 +3334,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 });
-
+ 
 async function loadHeatmapData() {
   const heatmapEl = document.getElementById('heatmap-container');
   const rankingEl = document.getElementById('ranking-container');
   if (!heatmapEl || !rankingEl) return;
   heatmapEl.innerHTML = '<div class="dashboard-loading">読み込み中...</div>';
   rankingEl.innerHTML = '<div class="dashboard-loading">読み込み中...</div>';
-
+ 
   try {
     const url = `${HEATMAP_GAS_URL}?action=getDashboardData&period=${heatmapCurrentPeriod}`;
     const res = await fetch(url);
@@ -3356,7 +3358,7 @@ async function loadHeatmapData() {
     rankingEl.innerHTML = '';
   }
 }
-
+ 
 function renderHeatmap(heatmap) {
   const container = document.getElementById('heatmap-container');
   if (!heatmap.locations || heatmap.locations.length === 0) {
@@ -3369,7 +3371,7 @@ function renderHeatmap(heatmap) {
     html += `<th>${dateLabel}<br><span style="font-weight:normal;color:#999">${d.dayOfWeek}</span></th>`;
   });
   html += '</tr></thead><tbody>';
-
+ 
   heatmap.locations.forEach(loc => {
     html += `<tr><td class="location-cell"><div>${escapeHtml(loc.name)}</div><div class="location-meta">終業 ${loc.endTime} / 平均 ${loc.avgDelivery}個</div></td>`;
     loc.cells.forEach(cell => {
@@ -3387,7 +3389,7 @@ function renderHeatmap(heatmap) {
   html += '</tbody></table>';
   container.innerHTML = html;
 }
-
+ 
 function renderHeatmapRanking(ranking) {
   const container = document.getElementById('ranking-container');
   if (ranking.placeholder) {
@@ -3406,14 +3408,14 @@ function renderHeatmapRanking(ranking) {
   html += '</tbody></table>';
   container.innerHTML = html;
 }
-
+ 
 // 共通HTMLエスケープ
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c =>
     ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])
   );
 }
-
+ 
 // ═══════════════════════════════════════════════════════════════
 // ★ 商品管理タブ（v2026-05-11 一括選択対応）
 // ═══════════════════════════════════════════════════════════════
@@ -3423,7 +3425,7 @@ let _pmPending = null;          // 単発操作用 {id, name, willStop}
 let _pmBatchPending = null;     // 一括操作用 {action: 'stop'|'resume', items: [...]}
 let _pmSelected = new Set();    // チェック済み商品ID
 let _pmLoaded = false;
-
+ 
 async function loadProductMgmt() {
   const wrap = document.getElementById('pm-list-wrap');
   if (!_pmLoaded) {
@@ -3442,7 +3444,7 @@ async function loadProductMgmt() {
     wrap.innerHTML = `<p style="color:var(--red);font-size:13px;padding:20px;text-align:center;">取得エラー：${e.message}</p>`;
   }
 }
-
+ 
 function renderProductMgmt() {
   // サマリー
   const total = _pmProducts.length;
@@ -3462,19 +3464,19 @@ function renderProductMgmt() {
       <div class="pm-summary-value red">${stopped}<span>件</span></div>
     </div>
   `;
-
+ 
   const wrap = document.getElementById('pm-list-wrap');
   if (_pmProducts.length === 0) {
     wrap.innerHTML = '<p style="color:var(--ink-mute);font-size:13px;padding:20px;text-align:center;">商品データがありません</p>';
     return;
   }
-
+ 
   // 既に消えた商品IDを選択リストから除外
   const validIds = new Set(_pmProducts.map(p => p.id));
   Array.from(_pmSelected).forEach(id => {
     if (!validIds.has(id)) _pmSelected.delete(id);
   });
-
+ 
   // 選択中の集計
   const selectedActive = [];
   const selectedStopped = [];
@@ -3485,7 +3487,7 @@ function renderProductMgmt() {
   const selectedCount = _pmSelected.size;
   const allSelected = total > 0 && selectedCount === total;
   const someSelected = selectedCount > 0 && !allSelected;
-
+ 
   // 一括操作バー
   const stopBtn = selectedActive.length > 0
     ? `<button class="pm-batch-btn stop" onclick="confirmBatchProductMgmt('stop')">稼働中${selectedActive.length}件を停止</button>`
@@ -3493,7 +3495,7 @@ function renderProductMgmt() {
   const resumeBtn = selectedStopped.length > 0
     ? `<button class="pm-batch-btn resume" onclick="confirmBatchProductMgmt('resume')">停止中${selectedStopped.length}件を再開</button>`
     : '';
-
+ 
   const batchBarHtml = `
     <div class="pm-batch-bar">
       <label class="pm-batch-checkbox-wrap">
@@ -3508,7 +3510,7 @@ function renderProductMgmt() {
       <div class="pm-batch-actions">${stopBtn}${resumeBtn}</div>
     </div>
   `;
-
+ 
   // 商品リスト
   const listHtml = '<div class="pm-list">' + _pmProducts.map(p => {
     const isStopped = _pmStoppedIds.has(p.id);
@@ -3528,42 +3530,42 @@ function renderProductMgmt() {
         <button class="pm-toggle ${isStopped ? 'off' : ''}" onclick="onProductToggle('${p.id}')" aria-label="トグル"></button>
       </div>`;
   }).join('') + '</div>';
-
+ 
   wrap.innerHTML = batchBarHtml + listHtml;
-
+ 
   // インデターミネート状態を反映
   const selectAllEl = document.getElementById('pm-select-all');
   if (selectAllEl) {
     selectAllEl.indeterminate = someSelected;
   }
 }
-
+ 
 function toggleProductSelect(productId, checked) {
   if (checked) _pmSelected.add(productId);
   else _pmSelected.delete(productId);
   renderProductMgmt();
 }
-
+ 
 function toggleSelectAllProducts(checked) {
   if (checked) _pmProducts.forEach(p => _pmSelected.add(p.id));
   else _pmSelected.clear();
   renderProductMgmt();
 }
-
+ 
 // 単発操作
 function onProductToggle(productId) {
   const product = _pmProducts.find(p => p.id === productId);
   if (!product) return;
   const isStopped = _pmStoppedIds.has(productId);
   const willStop = !isStopped;
-
+ 
   _pmPending = { id: productId, name: product.name, willStop };
   _pmBatchPending = null;  // 単発モードに切替
-
+ 
   const header = document.getElementById('pm-confirm-header');
   const body = document.getElementById('pm-confirm-body');
   const action = document.getElementById('pm-confirm-action');
-
+ 
   if (willStop) {
     header.textContent = '商品の停止';
     header.className = 'pm-confirm-header stop';
@@ -3586,10 +3588,10 @@ function onProductToggle(productId) {
     action.textContent = '再開する';
     action.className = 'pm-confirm-btn confirm-resume';
   }
-
+ 
   document.getElementById('pm-confirm-modal').classList.add('show');
 }
-
+ 
 // 一括操作の確認
 function confirmBatchProductMgmt(action) {
   // action: 'stop' or 'resume'
@@ -3598,20 +3600,20 @@ function confirmBatchProductMgmt(action) {
     action === 'stop' ? !_pmStoppedIds.has(id) : _pmStoppedIds.has(id)
   );
   if (targetIds.length === 0) return;
-
+ 
   const targetProducts = targetIds.map(id => _pmProducts.find(p => p.id === id)).filter(Boolean);
   _pmBatchPending = { action, items: targetProducts };
   _pmPending = null;  // 一括モードに切替
-
+ 
   const header = document.getElementById('pm-confirm-header');
   const body = document.getElementById('pm-confirm-body');
   const actionBtn = document.getElementById('pm-confirm-action');
-
+ 
   const isStop = action === 'stop';
   const productListHtml = '<div class="pm-confirm-product-list">' +
     targetProducts.map(p => `<div class="pm-confirm-product-list-item">${escapeHtml(p.name)}</div>`).join('') +
     '</div>';
-
+ 
   if (isStop) {
     header.textContent = `${targetProducts.length}件の商品を停止`;
     header.className = 'pm-confirm-header stop';
@@ -3634,10 +3636,10 @@ function confirmBatchProductMgmt(action) {
     actionBtn.textContent = `${targetProducts.length}件を再開する`;
     actionBtn.className = 'pm-confirm-btn confirm-resume';
   }
-
+ 
   document.getElementById('pm-confirm-modal').classList.add('show');
 }
-
+ 
 // 確認ボタン共通ディスパッチャー（HTMLのonclickから呼ばれる）
 async function executePmConfirm() {
   if (_pmBatchPending) {
@@ -3646,47 +3648,47 @@ async function executePmConfirm() {
     await confirmProductMgmt();
   }
 }
-
+ 
 function cancelProductMgmt() {
   _pmPending = null;
   _pmBatchPending = null;
   document.getElementById('pm-confirm-modal').classList.remove('show');
 }
-
+ 
 // 単発実行（既存）
 async function confirmProductMgmt() {
   if (!_pmPending) return;
   const { id, name, willStop } = _pmPending;
   const status = willStop ? '停止' : '稼働';
-
+ 
   const actionBtn = document.getElementById('pm-confirm-action');
   const cancelBtn = document.querySelector('#pm-confirm-modal .pm-confirm-btn.cancel');
   actionBtn.disabled = true;
   cancelBtn.disabled = true;
   actionBtn.textContent = '処理中...';
-
+ 
   try {
     const params = new URLSearchParams();
     params.append('action', 'setProductSwitch');
     params.append('productId', id);
     params.append('status', status);
-
+ 
     const res = await fetch(GAS_URL, {
       method: 'POST',
       body: params,
       redirect: 'follow'
     });
-
+ 
     if (!res.ok) {
       throw new Error('サーバーエラー: ' + res.status);
     }
-
+ 
     if (willStop) {
       _pmStoppedIds.add(id);
     } else {
       _pmStoppedIds.delete(id);
     }
-
+ 
     document.getElementById('pm-confirm-modal').classList.remove('show');
     _pmPending = null;
     renderProductMgmt();
@@ -3698,29 +3700,29 @@ async function confirmProductMgmt() {
     cancelBtn.disabled = false;
   }
 }
-
+ 
 // 一括実行
 async function executeBatchProductMgmt() {
   if (!_pmBatchPending) return;
   const { action, items } = _pmBatchPending;
   const isStop = action === 'stop';
   const status = isStop ? '停止' : '稼働';
-
+ 
   const actionBtn = document.getElementById('pm-confirm-action');
   const cancelBtn = document.querySelector('#pm-confirm-modal .pm-confirm-btn.cancel');
   const originalText = actionBtn.textContent;
   actionBtn.disabled = true;
   cancelBtn.disabled = true;
-
+ 
   let completed = 0;
   let succeeded = 0;
   const failed = [];
-
+ 
   const updateProgress = () => {
     actionBtn.textContent = `処理中... (${completed}/${items.length})`;
   };
   updateProgress();
-
+ 
   // 1件ずつ送信する関数
   const sendOne = async (product) => {
     try {
@@ -3745,20 +3747,20 @@ async function executeBatchProductMgmt() {
       updateProgress();
     }
   };
-
+ 
   // 並列実行（5件ずつバッチ）
   const BATCH_SIZE = 5;
   for (let i = 0; i < items.length; i += BATCH_SIZE) {
     const batch = items.slice(i, i + BATCH_SIZE);
     await Promise.all(batch.map(sendOne));
   }
-
+ 
   // 結果反映
   document.getElementById('pm-confirm-modal').classList.remove('show');
   _pmBatchPending = null;
   _pmSelected.clear();
   renderProductMgmt();
-
+ 
   if (failed.length === 0) {
     showPmToast(`${succeeded}件を${isStop ? '停止' : '再開'}しました`, 'success');
   } else if (succeeded > 0) {
@@ -3766,16 +3768,16 @@ async function executeBatchProductMgmt() {
   } else {
     showPmToast(`全件失敗：${failed[0]?.error || '不明なエラー'}`, 'error');
   }
-
+ 
   actionBtn.disabled = false;
   cancelBtn.disabled = false;
   actionBtn.textContent = originalText;
 }
-
+ 
 document.getElementById('pm-confirm-modal').addEventListener('click', function(e) {
   if (e.target === this) cancelProductMgmt();
 });
-
+ 
 function showPmToast(message, type) {
   const toast = document.getElementById('pm-toast');
   toast.textContent = message;
@@ -3784,7 +3786,7 @@ function showPmToast(message, type) {
     toast.className = 'pm-toast';
   }, 2800);
 }
-
+ 
 // ═══════════════════════════════════════════════════════════════
 // 申し送りタブ
 // ═══════════════════════════════════════════════════════════════
@@ -3792,7 +3794,7 @@ let _memoData = { pending: [], history: [] };
 let _memoExpanded = new Set();
 let _memoSelected = new Set();
 let _memoCompletePending = null;  // {ids: [...]}
-
+ 
 async function loadMemoBadge() {
   // getMemoReports を流用して未対応件数を派生計算
   try {
@@ -3810,14 +3812,14 @@ async function loadMemoBadge() {
     console.warn('memo badge fetch failed', e);
   }
 }
-
+ 
 async function loadMemos() {
   const wrap = document.getElementById('memo-list-wrap');
   wrap.innerHTML = '<div class="loading-wrap"><div class="loader"></div><p>申し送りを読み込み中...</p></div>';
   try {
     const res = await fetchJSON(`${GAS_URL}?action=getMemoReports`);
     const memos = (res && res.memos) || [];
-
+ 
     // isCompleted で pending / history に仕分け
     // GAS の completedInfo { date, time, completerName } を
     // フロント表示用 completedBy / completedAt にマッピング
@@ -3833,7 +3835,7 @@ async function loadMemos() {
       if (m.isCompleted) history.push(mapped);
       else pending.push(mapped);
     });
-
+ 
     _memoData = { pending, history };
     renderMemos();
     // バッジも同時に更新（追加リクエストを節約）
@@ -3850,35 +3852,35 @@ async function loadMemos() {
     wrap.innerHTML = `<p style="color:var(--red);font-size:13px;padding:20px;text-align:center;">取得エラー：${e.message}</p>`;
   }
 }
-
+ 
 function makeMemoKey(memo) {
   return `${memo.locationId}_${memo.date}_${memo.timestamp || ''}`;
 }
-
+ 
 function renderMemos() {
   const wrap = document.getElementById('memo-list-wrap');
   const pending = _memoData.pending || [];
   const history = _memoData.history || [];
-
+ 
   if (pending.length === 0 && history.length === 0) {
     wrap.innerHTML = '<div class="memo-empty">📝 直近7日間に申し送りはありません</div>';
     return;
   }
-
+ 
   // 既に消えた申し送りを選択リストから除外
   const validKeys = new Set(pending.map(m => makeMemoKey(m)));
   Array.from(_memoSelected).forEach(k => {
     if (!validKeys.has(k)) _memoSelected.delete(k);
   });
-
+ 
   let html = '';
-
+ 
   // ── 未対応セクション ──
   if (pending.length > 0) {
     const selectedCount = _memoSelected.size;
     const allSelected = selectedCount === pending.length;
     const someSelected = selectedCount > 0 && !allSelected;
-
+ 
     html += `
       <div class="memo-section-divider">未対応 (${pending.length}件)</div>
       <div class="memo-batch-bar">
@@ -3900,7 +3902,7 @@ function renderMemos() {
       </div>
     `;
   }
-
+ 
   // ── 履歴セクション ──
   if (history.length > 0) {
     html += `
@@ -3910,9 +3912,9 @@ function renderMemos() {
       </div>
     `;
   }
-
+ 
   wrap.innerHTML = html;
-
+ 
   const selectAllEl = document.getElementById('memo-select-all');
   if (selectAllEl) {
     const pCount = pending.length;
@@ -3920,16 +3922,16 @@ function renderMemos() {
     selectAllEl.indeterminate = sCount > 0 && sCount < pCount;
   }
 }
-
+ 
 function renderMemoCard(memo, isHistory) {
   const key = makeMemoKey(memo);
   const replies = memo.replies || [];
   const replyCount = replies.length;
   const isExpanded = _memoExpanded.has(key);
   const isSelected = _memoSelected.has(key);
-
+ 
   const bodyHtml = escapeHtml(memo.memo || '').replace(/\n/g, '<br>');
-
+ 
   const repliesHtml = replies.map(r => `
     <div class="memo-reply-row">
       <div class="memo-reply-row-header">
@@ -3939,12 +3941,12 @@ function renderMemoCard(memo, isHistory) {
       <div class="memo-reply-row-content">${escapeHtml(r.content || '').replace(/\n/g, '<br>')}</div>
     </div>
   `).join('');
-
+ 
   const cardClasses = ['memo-card-item'];
   if (replyCount > 0) cardClasses.push('has-replies');
   if (isHistory) cardClasses.push('is-history');
   if (isSelected) cardClasses.push('selected');
-
+ 
   const checkboxHtml = isHistory ? '' : `
     <div class="memo-card-checkbox-wrap" onclick="event.stopPropagation();">
       <input type="checkbox"
@@ -3953,14 +3955,14 @@ function renderMemoCard(memo, isHistory) {
              onchange="toggleMemoSelect('${key}', this.checked)">
     </div>
   `;
-
+ 
   const historyBadge = isHistory ? '<div class="memo-history-badge">✓ 完了</div>' : '';
-
+ 
   const replyCountClass = replyCount > 0 ? '' : 'zero';
   const replyCountHtml = replyCount > 0
     ? `<span class="memo-card-reply-count" onclick="event.stopPropagation(); toggleMemoReplies('${key}')">💬 ${replyCount}</span>`
     : `<span class="memo-card-reply-count zero">💬 0</span>`;
-
+ 
   // 履歴の場合のフッター
   const historyFooter = isHistory && memo.completedBy ? `
     <div class="memo-history-footer">
@@ -3968,7 +3970,7 @@ function renderMemoCard(memo, isHistory) {
       ${escapeHtml(memo.completedBy)}が${escapeHtml(memo.completedAt || '')}に完了
     </div>
   ` : '';
-
+ 
   // アクションボタン（履歴では非表示）
   const actionsHtml = isHistory ? '' : `
     <div class="memo-card-actions">
@@ -3976,7 +3978,7 @@ function renderMemoCard(memo, isHistory) {
       <button class="memo-action-btn reply" onclick="openMemoReply('${memo.locationId}', '${memo.date}')">返信する</button>
     </div>
   `;
-
+ 
   return `
     <div class="${cardClasses.join(' ')}" data-key="${key}">
       ${historyBadge}
@@ -3996,26 +3998,26 @@ function renderMemoCard(memo, isHistory) {
     </div>
   `;
 }
-
+ 
 function toggleMemoReplies(key) {
   if (_memoExpanded.has(key)) _memoExpanded.delete(key);
   else _memoExpanded.add(key);
   renderMemos();
 }
-
+ 
 function toggleMemoSelect(key, checked) {
   if (checked) _memoSelected.add(key);
   else _memoSelected.delete(key);
   renderMemos();
 }
-
+ 
 function toggleSelectAllMemos(checked) {
   const pending = _memoData.pending || [];
   if (checked) pending.forEach(m => _memoSelected.add(makeMemoKey(m)));
   else _memoSelected.clear();
   renderMemos();
 }
-
+ 
 function openMemoReply(locationId, date) {
   // memo-reply.htmlへ遷移（クエリパラメータ付き）
   // memo-reply.html は locId / date / uid を必須、locName / uname / memo を任意で受け取る
@@ -4033,23 +4035,23 @@ function openMemoReply(locationId, date) {
     + `&memo=${encodeURIComponent(memo.memo || '')}`;
   window.location.href = url;
 }
-
+ 
 function confirmBatchComplete() {
   const selectedKeys = Array.from(_memoSelected);
   if (selectedKeys.length === 0) return;
-
+ 
   const targets = (_memoData.pending || []).filter(m => selectedKeys.includes(makeMemoKey(m)));
   if (targets.length === 0) return;
-
+ 
   _memoCompletePending = { items: targets };
-
+ 
   const body = document.getElementById('memo-complete-body');
   const actionBtn = document.getElementById('memo-complete-action');
-
+ 
   const listHtml = '<div class="pm-confirm-product-list">' +
     targets.map(m => `<div class="pm-confirm-product-list-item">${escapeHtml(m.locationName)} (${escapeHtml(m.date)})</div>`).join('') +
     '</div>';
-
+ 
   body.innerHTML = `
     以下の${targets.length}件の申し送りを「対応完了」にしますか？
     ${listHtml}
@@ -4058,34 +4060,34 @@ function confirmBatchComplete() {
   actionBtn.textContent = `${targets.length}件を完了にする`;
   document.getElementById('memo-complete-modal').classList.add('show');
 }
-
+ 
 function cancelMemoComplete() {
   _memoCompletePending = null;
   document.getElementById('memo-complete-modal').classList.remove('show');
 }
-
+ 
 async function executeMemoComplete() {
   if (!_memoCompletePending) return;
   const { items } = _memoCompletePending;
-
+ 
   const actionBtn = document.getElementById('memo-complete-action');
   const cancelBtn = document.querySelector('#memo-complete-modal .pm-confirm-btn.cancel');
   const originalText = actionBtn.textContent;
   actionBtn.disabled = true;
   cancelBtn.disabled = true;
-
+ 
   let completed = 0;
   let succeeded = 0;
   const failed = [];
-
+ 
   const updateProgress = () => {
     actionBtn.textContent = `処理中... (${completed}/${items.length})`;
   };
   updateProgress();
-
+ 
   const userId = userProfile?.userId || '';
   const userName = userProfile?.displayName || '社員';
-
+ 
   const sendOne = async (memo) => {
     try {
       // GAS側 markMemoComplete のpayload構造に合わせる
@@ -4112,19 +4114,19 @@ async function executeMemoComplete() {
       updateProgress();
     }
   };
-
+ 
   // 並列実行（5件ずつバッチ）
   const BATCH_SIZE = 5;
   for (let i = 0; i < items.length; i += BATCH_SIZE) {
     const batch = items.slice(i, i + BATCH_SIZE);
     await Promise.all(batch.map(sendOne));
   }
-
+ 
   // 結果反映
   document.getElementById('memo-complete-modal').classList.remove('show');
   _memoCompletePending = null;
   _memoSelected.clear();
-
+ 
   if (failed.length === 0) {
     showPmToast(`${succeeded}件を完了にしました`, 'success');
   } else if (succeeded > 0) {
@@ -4132,15 +4134,15 @@ async function executeMemoComplete() {
   } else {
     showPmToast(`全件失敗：${failed[0]?.error || '不明なエラー'}`, 'error');
   }
-
+ 
   actionBtn.disabled = false;
   cancelBtn.disabled = false;
   actionBtn.textContent = originalText;
-
+ 
   // 再読込
   await loadMemos();
 }
-
+ 
 document.getElementById('memo-complete-modal').addEventListener('click', function(e) {
   if (e.target === this) cancelMemoComplete();
 });
@@ -4260,9 +4262,9 @@ function renderProfit() {
     contentEl.innerHTML = '';
     return;
   }
-
+ 
   const data = _profitData;
-
+ 
   // 原価未入力の場合はプレースホルダー
   if (!data.hasCostData) {
     contentEl.innerHTML = `
@@ -4272,18 +4274,18 @@ function renderProfit() {
     `;
     return;
   }
-
+ 
   const t = data.totals || {};
   const totalProfitMinus = (t.profit || 0) < 0;
   const totalRateMinus   = (t.profitRate || 0) < 0;
-
+ 
   // 月別経費単価が未設定の場合の注意バナー
   const expenseNoticeHtml = !data.hasExpenseRates ? `
     <div class="profit-placeholder" style="margin-bottom:12px;">
       「月別経費単価」シートが未設定です。GAS エディタで <code>ensureExpenseRateSheet</code> を一度実行し、シートに当月の「その他人件費単価」「固定費単価」を入力してください(1個あたりの金額)。未設定中は その他経費 ¥0 で計算されます。
     </div>
   ` : '';
-
+ 
   const summaryHtml = `
     <div class="profit-summary">
       <div class="profit-summary-title">${
@@ -4331,7 +4333,7 @@ function renderProfit() {
       </div>
     </div>
   `;
-
+ 
   // ソート
   const rows = (data.rows || []).slice();
   if (_profitCurrentSort === 'profit') {
@@ -4341,7 +4343,7 @@ function renderProfit() {
       String(a.locationId).localeCompare(String(b.locationId), 'ja', { numeric: true })
     );
   }
-
+ 
   const reportedCount = rows.filter(r => r.hasReport).length;
   const sortBarHtml = `
     <div class="profit-sort-bar">
@@ -4352,7 +4354,7 @@ function renderProfit() {
       <span class="profit-meta">${reportedCount}/${rows.length} 拠点 報告済</span>
     </div>
   `;
-
+ 
   const tableRowsHtml = rows.map(r => {
     if (!r.hasReport) {
       return `
@@ -4387,7 +4389,7 @@ function renderProfit() {
         <td class="num rate-cell">${(r.sellRate || 0).toFixed(1)}%</td>
       </tr>`;
   }).join('');
-
+ 
   const tableHtml = `
     <table class="profit-table">
       <thead>
@@ -4408,7 +4410,7 @@ function renderProfit() {
       <tbody>${tableRowsHtml}</tbody>
     </table>
   `;
-
+ 
   contentEl.innerHTML = expenseNoticeHtml + summaryHtml + sortBarHtml + tableHtml;
 }
  
@@ -4417,8 +4419,8 @@ function formatProfit(v) {
   if (v > 0)   return '¥' + v.toLocaleString();
   return '−¥' + Math.abs(v).toLocaleString();
 }
-
+ 
 </script>
-
+ 
 </body>
 </html>
