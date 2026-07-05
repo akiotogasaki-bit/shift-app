@@ -774,7 +774,7 @@ body.with-tabbar .btn-area { bottom: calc(56px + var(--safe-bottom)); }
         <select class="form-input" id="admin-staff" onchange="adminOnStaffChange(this.value)"></select>
       </div>
       <div class="ps-month-bar">
-        <label class="form-label">販売員（ギャラ明細）</label>
+        <label class="form-label">販売員（給与明細）</label>
         <select class="form-input" id="admin-sales-staff" onchange="adminOnSalesStaffChange(this.value)"></select>
       </div>
       <div class="ps-month-bar">
@@ -814,12 +814,14 @@ body.with-tabbar .btn-area { bottom: calc(56px + var(--safe-bottom)); }
 
 // ═══════════════════════════════════════════════════════════════
 // お江戸弁当 シフト提出 LIFF（提出側）
-//   v2026-07-03 salespay v3
-//   変更：給与明細タブを role で「時給明細／ギャラ明細」に出し分け。
-//         ・販売員(role==='販売員')：報告ログ由来のギャラ明細（日単位合算）。
+//   v2026-07-04 salespay v4
+//   変更：給与明細タブを role で時給/販売員に出し分け（表示題名は両方「給与明細」）。
+//         ・販売員(role==='販売員')：報告ログ由来の明細（日単位合算）。
+//           表示は「基本報酬／インセンティブ／総支給額」。「ギャラ」表記は不使用。
 //           氏名は編集可能な入力欄（初期値＝報告ログの販売員名）→PDF/印刷に反映。
 //         ・時給スタッフ：従来の勤怠ベース給与明細（変更なし）。
 //         ・管理者プレビュー(?admin=1)に「販売員」ドロップダウンを追加。
+//   v4：販売員側の表示から「ギャラ」語を全廃（基本報酬・総支給額へ）。
 //   基盤：v2026-07-03 payslip v2（給与明細タブ＋管理者プレビュー）。
 //         既存のシフト提出／キッチン提出フローは一切変更なし。
 // ═══════════════════════════════════════════════════════════════
@@ -1636,7 +1638,7 @@ async function openPayslip() {
   showScreen('payslip');
   const title = document.getElementById('ps-title');
   if (isSalesRole()) {
-    if (title) title.textContent = '💰 ギャラ明細';
+    if (title) title.textContent = '💰 給与明細';
     if (!state.spLoaded) { await loadSalesPayMonths(); }
   } else {
     if (title) title.textContent = '💰 給与明細';
@@ -1885,18 +1887,18 @@ function renderSalesPay(d) {
     '</div>' +
     '<div id="ps-print-area">' +
       '<div class="ps-sheet-head">' +
-        '<div class="ps-sheet-title">ギャラ明細</div>' +
+        '<div class="ps-sheet-title">給与明細</div>' +
         '<div class="ps-sheet-sub">' + d.year + '年' + d.month + '月分 ・ <span id="sp-name-echo">' + escapeHtml(d.name || '') + '</span> 様</div>' +
       '</div>' +
       '<table class="ps-table">' +
-        '<thead><tr><th>日付</th><th>拠点</th><th>基本</th><th>インセ</th><th>合計</th></tr></thead>' +
+        '<thead><tr><th>日付</th><th>拠点</th><th>基本報酬</th><th>インセ</th><th>合計</th></tr></thead>' +
         '<tbody>' + rows + '</tbody>' +
       '</table>' +
       '<div class="ps-sum">' +
         '<div class="ps-sum-row"><span>出勤日数</span><span>' + t.days + ' 日</span></div>' +
-        '<div class="ps-sum-row"><span>基本ギャラ計</span><span>¥' + comma(t.base) + '</span></div>' +
+        '<div class="ps-sum-row"><span>基本報酬計</span><span>¥' + comma(t.base) + '</span></div>' +
         '<div class="ps-sum-row"><span>インセンティブ計</span><span>¥' + comma(t.inc) + '</span></div>' +
-        '<div class="ps-sum-row gross"><span>合計ギャラ</span><span>¥' + comma(t.gross) + '</span></div>' +
+        '<div class="ps-sum-row gross"><span>総支給額</span><span>¥' + comma(t.gross) + '</span></div>' +
       '</div>' +
       partial +
     '</div>' +
@@ -1937,7 +1939,7 @@ async function downloadSalesPayPdf() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = res.filename || ('ギャラ明細_' + state.psYm + '.pdf');
+    a.download = res.filename || ('給与明細_' + state.psYm + '.pdf');
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
