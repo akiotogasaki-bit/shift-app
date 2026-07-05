@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>お江戸弁当 ドライバー報告</title>
 <!-- driver.html v1.6 (2026-06-27) — タブ並び替え（回収/残数/移動/ルート/取置）・ラベル短縮・はみ出し対策／拠点移動タブ（±移動・商品別・LINE確認ボタン・残数反映）／取り置き / 商品名B列表示 -->
+<!-- driver.html v1.7 (2026-07-06) — 回収チェックのテンキー現金有高入力（報告済拠点タップ→現金有高必須入力→saveActualCash(notifyDiff:false)＋setCollected） -->
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
 :root {
@@ -737,6 +738,27 @@ body {
 .mv-save-btn{width:100%;padding:14px;border:none;border-radius:12px;background:var(--blue);color:#FFF;font-size:16px;font-weight:700;font-family:inherit;cursor:pointer;}
 .mv-save-btn:disabled{opacity:.5;}
 .mv-arrive-from{font-size:13px;color:var(--ink-mute);margin:2px 0 10px;}
+
+/* ── 現金有高テンキーモーダル（v1.7 NEW）── */
+.cash-modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:flex-end;justify-content:center;z-index:1000;}
+.cash-modal-bg.show{display:flex;}
+.cash-modal-card{background:#FFF;width:100%;max-width:480px;border-radius:20px 20px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom));animation:cashUp .18s ease;}
+@keyframes cashUp{from{transform:translateY(100%);}to{transform:translateY(0);}}
+.cash-modal-title{font-size:17px;font-weight:700;color:var(--ink);text-align:center;margin-bottom:2px;}
+.cash-modal-expected{font-size:12px;color:var(--ink-mute);text-align:center;margin-bottom:12px;}
+.cash-modal-display{font-size:34px;font-weight:800;color:var(--ink);text-align:right;padding:10px 16px;background:#F4F5F7;border-radius:12px;margin-bottom:6px;min-height:56px;letter-spacing:1px;}
+.cash-modal-diff{font-size:13px;font-weight:700;text-align:right;min-height:18px;margin-bottom:12px;padding-right:4px;}
+.cash-modal-diff.plus{color:var(--blue);}
+.cash-modal-diff.minus{color:var(--red);}
+.cash-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+.cash-key{padding:16px 0;border:none;border-radius:12px;background:#EEF0F3;color:var(--ink);font-size:22px;font-weight:700;font-family:inherit;cursor:pointer;}
+.cash-key:active{opacity:.7;}
+.cash-key.util{background:#E2E6EB;font-size:18px;}
+.cash-modal-btns{display:flex;gap:8px;margin-top:12px;}
+.cash-modal-btn{flex:1;padding:15px;border:none;border-radius:12px;font-size:16px;font-weight:700;font-family:inherit;cursor:pointer;}
+.cash-modal-btn.cancel{background:#EAEAEA;color:var(--ink);}
+.cash-modal-btn.ok{background:var(--green);color:#FFF;}
+.cash-modal-btn.ok:disabled{opacity:.45;}
 </style>
 </head>
 <body>
@@ -1382,12 +1404,14 @@ function renderLocationItem(loc, isCollected) {
     hint = 'タップで解除';
     if (r && r.reported) {
       const net = (r.registerEnd || 0) - (r.totalSalary || 0);
-      amountHtml = `<span class="location-amount">¥${net.toLocaleString()}</span>`;
+      // v1.7: 実額が入っていれば実額、無ければ想定額を表示
+      const shown = (r.actualCash !== null && r.actualCash !== undefined) ? r.actualCash : net;
+      amountHtml = `<span class="location-amount">¥${Number(shown).toLocaleString()}</span>`;
     }
   } else if (r && r.status === 'final') {
     status = 'reported';
-    onclickAction = `toggleCollection('${loc.id}')`;
-    hint = 'タップで回収済みに';
+    onclickAction = `openCashModal('${loc.id}')`;   // v1.7: タップで現金有高入力モーダル
+    hint = 'タップで現金入力→回収';
     const net = (r.registerEnd || 0) - (r.totalSalary || 0);
     amountHtml = `<span class="location-amount">¥${net.toLocaleString()}</span>`;
   } else if (r && r.status === 'intermediate') {
@@ -1486,6 +1510,123 @@ async function toggleCollection(id) {
     persistDrvDriverStateFromState();  // ロールバック後もキャッシュ整合
     showToast('回収状態の更新に失敗しました', 'error');
     console.warn('toggleCollection error:', e);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// A1b：現金有高テンキーモーダル（v1.7 NEW）
+//   報告済み拠点タップ → 現金有高を入力（必須）→ saveActualCash + setCollected
+// ═══════════════════════════════════════════════════════════════
+let cashModalLocId = null;
+let cashInput = '';
+function openCashModal(id) {
+  const loc = state.locations.find(l => l.id === id);
+  if (!loc) return;
+  if (state.inactiveIds.has(id)) return;
+  const r = state.reportsByLoc[id];
+  if (!r || r.status !== 'final') { showToast('報告が未提出です', 'error'); return; }
+  cashModalLocId = id;
+  const net = (r.registerEnd || 0) - (r.totalSalary || 0);
+  // 既に実額があればプリフィル、無ければ空
+  cashInput = (r.actualCash !== null && r.actualCash !== undefined) ? String(r.actualCash) : '';
+  document.getElementById('cash-modal-title').textContent = loc.name;
+  document.getElementById('cash-modal-expected').textContent =
+    '想定額 ¥' + net.toLocaleString() + '（レジ最終 − 合計ギャラ）';
+  renderCashModal_(net);
+  document.getElementById('cash-modal-bg').classList.add('show');
+}
+function closeCashModal() {
+  document.getElementById('cash-modal-bg').classList.remove('show');
+  cashModalLocId = null;
+  cashInput = '';
+}
+function cashKey(d) {
+  // 先頭0の連続を防止（"0"+"5"→"5"）
+  if (cashInput === '0') cashInput = '';
+  cashInput += d;
+  if (cashInput.length > 9) cashInput = cashInput.slice(0, 9);
+  refreshCashModal_();
+}
+function cashBackspace() {
+  cashInput = cashInput.slice(0, -1);
+  refreshCashModal_();
+}
+function refreshCashModal_() {
+  const r = cashModalLocId ? state.reportsByLoc[cashModalLocId] : null;
+  const net = r ? ((r.registerEnd || 0) - (r.totalSalary || 0)) : 0;
+  renderCashModal_(net);
+}
+function renderCashModal_(net) {
+  const val = cashInput === '' ? 0 : parseInt(cashInput, 10);
+  document.getElementById('cash-modal-display').textContent = '¥' + val.toLocaleString();
+  const diffEl = document.getElementById('cash-modal-diff');
+  if (cashInput === '') {
+    diffEl.textContent = '';
+    diffEl.className = 'cash-modal-diff';
+  } else {
+    const diff = val - net;
+    const sign = diff >= 0 ? '+' : '−';
+    diffEl.textContent = '誤差 ' + sign + '¥' + Math.abs(diff).toLocaleString();
+    diffEl.className = 'cash-modal-diff ' + (diff >= 0 ? 'plus' : 'minus');
+  }
+  // 入力必須：空のあいだは確定不可
+  document.getElementById('cash-modal-ok').disabled = (cashInput === '');
+}
+async function confirmCash() {
+  if (!cashModalLocId || cashInput === '') { showToast('金額を入力してください', 'error'); return; }
+  const id  = cashModalLocId;
+  const loc = state.locations.find(l => l.id === id);
+  const amount = parseInt(cashInput, 10);
+  if (isNaN(amount)) { showToast('金額を入力してください', 'error'); return; }
+  const okBtn = document.getElementById('cash-modal-ok');
+  okBtn.disabled = true;
+  okBtn.textContent = '保存中…';
+  try {
+    // ① 現金有高を保存（ドライバー入力：誤差通知なし）
+    const res1 = await fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        action:       'saveActualCash',
+        locationId:   id,
+        locationName: loc ? loc.name : '',
+        actualCash:   amount,
+        operatorId:   state.userId,
+        operatorName: state.userName,
+        notifyDiff:   false,              // ★ ドライバー入力は誤差通知しない
+        timestamp:    new Date().toISOString(),
+      }),
+      redirect: 'follow',
+    });
+    const j1 = await res1.json();
+    if (!j1 || j1.success === false) throw new Error((j1 && j1.error) || '現金有高の保存に失敗');
+    // ② 回収済みにする
+    const res2 = await fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        action:       'setCollected',
+        locationId:   id,
+        locationName: loc ? loc.name : '',
+        userId:       state.userId,
+        userName:     state.userName,
+      }),
+      redirect: 'follow',
+    });
+    const j2 = await res2.json();
+    if (!j2 || j2.success === false) throw new Error((j2 && j2.error) || '回収状態の更新に失敗');
+    // ローカル状態を更新
+    if (state.reportsByLoc[id]) state.reportsByLoc[id].actualCash = amount;
+    state.collectedIds.add(id);
+    state.lastUserActionAt = Date.now();
+    persistDrvDriverStateFromState();
+    saveDrvReportsCache(state.reportsByLoc);
+    renderCollectionList();
+    closeCashModal();
+    showToast('現金有高を記録し回収済みにしました', 'success');
+  } catch (e) {
+    console.warn('confirmCash error:', e);
+    showToast((e && e.message) || '保存に失敗しました', 'error');
+    okBtn.disabled = false;
+    okBtn.textContent = '回収済みにする';
   }
 }
 
@@ -2760,6 +2901,34 @@ async function cancelMove_(moveId) {
     <div class="mv-section-title">到着個数（出発分を初期表示・差は移動中ロス）</div>
     <div id="mv-arrive-products"></div>
     <button class="mv-save-btn" style="margin-top:16px;" onclick="submitArrive_()">到着を登録</button>
+  </div>
+</div>
+
+<!-- 現金有高テンキーモーダル（v1.7 NEW） -->
+<div class="cash-modal-bg" id="cash-modal-bg" onclick="if(event.target===this)closeCashModal()">
+  <div class="cash-modal-card">
+    <div class="cash-modal-title" id="cash-modal-title">拠点</div>
+    <div class="cash-modal-expected" id="cash-modal-expected">想定額 —</div>
+    <div class="cash-modal-display" id="cash-modal-display">¥0</div>
+    <div class="cash-modal-diff" id="cash-modal-diff"></div>
+    <div class="cash-pad">
+      <button class="cash-key" onclick="cashKey('7')">7</button>
+      <button class="cash-key" onclick="cashKey('8')">8</button>
+      <button class="cash-key" onclick="cashKey('9')">9</button>
+      <button class="cash-key" onclick="cashKey('4')">4</button>
+      <button class="cash-key" onclick="cashKey('5')">5</button>
+      <button class="cash-key" onclick="cashKey('6')">6</button>
+      <button class="cash-key" onclick="cashKey('1')">1</button>
+      <button class="cash-key" onclick="cashKey('2')">2</button>
+      <button class="cash-key" onclick="cashKey('3')">3</button>
+      <button class="cash-key util" onclick="cashKey('00')">00</button>
+      <button class="cash-key" onclick="cashKey('0')">0</button>
+      <button class="cash-key util" onclick="cashBackspace()">⌫</button>
+    </div>
+    <div class="cash-modal-btns">
+      <button class="cash-modal-btn cancel" onclick="closeCashModal()">キャンセル</button>
+      <button class="cash-modal-btn ok" id="cash-modal-ok" onclick="confirmCash()" disabled>回収済みにする</button>
+    </div>
   </div>
 </div>
 
