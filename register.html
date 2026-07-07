@@ -2965,6 +2965,7 @@ function submitFinal() {
     makanai: state['makanaiあり'] ? '有り' : '無し',
     lateMinutes: parseInt(document.getElementById('late-minutes')?.value) || 0,
     latePenalty: calcLatePenalty(parseInt(document.getElementById('late-minutes')?.value) || 0),
+    couponTotal: (state.history || []).filter(h => h.status === 'active').reduce((s, h) => s + (Number(h.couponAmount) || 0), 0),  // 2026-07-08 Phase3 D1: クーポン値引累計→GAS col34
   };
   fetch(state.GAS_URL, { method: 'POST', body: JSON.stringify(payload) }).catch(e => console.error(e));
   showScreen('complete');
