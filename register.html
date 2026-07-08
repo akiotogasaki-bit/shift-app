@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>お江戸弁当 レジ</title>
+<!-- register v3.1 (2026-07-08) 送信確実化＋在庫打ち直し導線修正（開始ログ欠落対策） -->
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
 :root {
@@ -1112,6 +1113,12 @@ html, body { overscroll-behavior-y: contain; }
     </div>
   </div>
 
+  <!-- ★v3.1 送信エラーバナー（開始報告／在庫更新の未送信を通知・手動再送） -->
+  <div id="send-error-banner" style="display:none;background:#C0392B;color:#FFF;padding:10px 14px;font-size:13px;font-weight:700;align-items:center;justify-content:space-between;gap:10px;">
+    <span id="send-error-text">⚠️ サーバーへの送信に失敗しました</span>
+    <button onclick="retryFailedSends()" style="background:#FFF;color:#C0392B;border:none;border-radius:6px;padding:6px 14px;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;">再送</button>
+  </div>
+
   <!-- カテゴリータブ -->
   <div class="cat-tab-bar" id="cat-tab-bar"></div>
 
@@ -1490,6 +1497,7 @@ const state = {
   products: [],
   deliveryCount: {},
   registerStart: 0,
+  startReported: false,   // ★v3.1 開始報告(submitStart)がGASに届いたか
   cart: [],
   cashSales: 0,
   paypayCount: 0,
@@ -1877,6 +1885,7 @@ async function selectLocation(id) {
         // 引き継ぎ：納品数を読み込んで直接レジ画面へ
         state.deliveryCount = data.deliveryCount;
         state.registerStart = data.registerStart || 0;
+        state.startReported = true;   // ★v3.1 引き継ぎ元の開始ログ行が既に存在
         state.takeoverFromUserId   = data.userId;
         state.takeoverFromUserName = data.userName;
         document.getElementById('reg-sales-count').textContent = '0個';
@@ -1945,7 +1954,8 @@ function showConfirm() {
 
 function goToRegisterFromConfirm() {
   try {
-    // ★ ここで開始報告をGASに送信（納品数を1度だけ送る）
+    // ★v3.1 開始報告を送信（await せず画面遷移。失敗時はバナー＋自動リトライで確実化）
+    state.startReported = false;
     sendStartReport();
     renderCategoryTabs();
     renderProducts();
@@ -1956,7 +1966,74 @@ function goToRegisterFromConfirm() {
   }
 }
 
-function sendStartReport() {
+// ═══════════════════════════════════════════════════════════════
+// ★v3.1 送信の確実化（await＋成功確認＋自動リトライ2回＋失敗通知/手動再送）
+// ═══════════════════════════════════════════════════════════════
+let failedSends = [];   // 未送信ペイロードのキュー（バナーの「再送」で再試行）
+
+// GASへPOSTし、成功(JSONのsuccess!==false)まで最大(1+retries)回試行
+async function postJson(payload, retries = 2) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(state.GAS_URL, { method: 'POST', body: JSON.stringify(payload), redirect: 'follow' });
+      let data = null;
+      try { data = await res.json(); } catch(_) { data = null; }
+      // success:false のときだけ失敗扱い（JSONが無い/successキー無しは成功とみなす）
+      if (!data || data.success !== false) return { ok: true, data };
+    } catch(e) {
+      console.warn('postJson attempt', attempt, 'failed:', e);
+    }
+    if (attempt < retries) await new Promise(r => setTimeout(r, 800 * (attempt + 1)));
+  }
+  return { ok: false, data: null };
+}
+
+function showSendError(msg) {
+  const b = document.getElementById('send-error-banner');
+  const t = document.getElementById('send-error-text');
+  if (t) t.textContent = msg || '⚠️ サーバーへの送信に失敗しました。再送してください';
+  if (b) b.style.display = 'flex';
+}
+function hideSendErrorIfEmpty() {
+  if (failedSends.length === 0) {
+    const b = document.getElementById('send-error-banner');
+    if (b) b.style.display = 'none';
+  }
+}
+// 同種（action＋productId）の古い失敗は上書きし、重複再送を防ぐ
+function enqueueFailed(payload, label) {
+  failedSends = failedSends.filter(f =>
+    !(f.payload.action === payload.action &&
+      (f.payload.productId || '') === (payload.productId || '')));
+  failedSends.push({ payload, label });
+  showSendError('⚠️ 未送信 ' + failedSends.length + '件：' + label + '（再送を押してください）');
+}
+
+// バナーの「再送」ボタン
+async function retryFailedSends() {
+  if (failedSends.length === 0) { hideSendErrorIfEmpty(); return; }
+  const queue = failedSends.slice();
+  failedSends = [];
+  let anyFail = false;
+  for (const item of queue) {
+    // 在庫更新は開始ログ行が前提。未報告なら先に開始報告を通す
+    if (item.payload.action === 'updateDeliveryCount' && !state.startReported) {
+      const okStart = await sendStartReport();
+      if (!okStart) { anyFail = true; enqueueFailed(item.payload, item.label); continue; }
+    }
+    const r = await postJson(item.payload);
+    if (r.ok) {
+      if (item.payload.action === 'submitStart') { state.startReported = true; saveState(); }
+    } else {
+      anyFail = true;
+      enqueueFailed(item.payload, item.label);
+    }
+  }
+  if (!anyFail) { showToast('未送信データを送信しました'); hideSendErrorIfEmpty(); }
+}
+
+// 開始報告（submitStart）。成功で startReported=true。失敗はキューへ。戻り値: 成功bool
+async function sendStartReport() {
   const payload = {
     action:        'submitStart',
     userId:        state.userId,
@@ -1967,8 +2044,22 @@ function sendStartReport() {
     deliveryCount: state.deliveryCount,
     timestamp:     new Date().toISOString(),
   };
-  fetch(state.GAS_URL, { method: 'POST', body: JSON.stringify(payload) })
-    .catch(e => console.warn('start report error:', e));
+  const r = await postJson(payload);
+  if (r.ok) {
+    state.startReported = true;
+    saveState();
+    failedSends = failedSends.filter(f => f.payload.action !== 'submitStart');
+    hideSendErrorIfEmpty();
+    return true;
+  }
+  enqueueFailed(payload, '開始報告（レジ開始）');
+  return false;
+}
+
+// 在庫更新の前に開始ログ行が確実に存在するよう保証
+async function ensureStartReported() {
+  if (state.startReported) return true;
+  return await sendStartReport();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2319,6 +2410,13 @@ let stockEditMode = false;
 function openStockModal() {
   stockEditMode = false;
   resetStockEditBtn();
+  // ★v3.1 在庫0スタート（全商品未入力）なら自動で編集モードON（打ち直し導線を確保）
+  const totalDelivered = Object.values(state.deliveryCount || {}).reduce((sum, v) => sum + (Number(v) || 0), 0);
+  if (totalDelivered === 0) {
+    stockEditMode = true;
+    const eb = document.getElementById('stock-edit-btn');
+    if (eb) { eb.textContent = '✓ 完了'; eb.style.background = '#F4C430'; eb.style.color = '#000'; }
+  }
   renderStockList();
   renderCashboxSummary();  // Task-10: 金庫有高サマリー更新
   document.getElementById('stock-modal').classList.add('show');
@@ -2390,8 +2488,8 @@ function setDelivery(productId, value) {
   renderProducts();
 }
 
-// GASに納品数更新を即時送信
-function sendDeliveryUpdate(productId, newCount) {
+// GASに納品数更新を即時送信（★v3.1 開始ログ行を保証→await＋自動リトライ＋失敗通知）
+async function sendDeliveryUpdate(productId, newCount) {
   const payload = {
     action:       'updateDeliveryCount',
     userId:       state.userId,
@@ -2402,10 +2500,12 @@ function sendDeliveryUpdate(productId, newCount) {
     newCount:     newCount,
     timestamp:    new Date().toISOString(),
   };
-  fetch(state.GAS_URL, {
-    method: 'POST',
-    body:   JSON.stringify(payload),
-  }).catch(e => console.warn('updateDeliveryCount error:', e));
+  // 在庫の打ち直しは開始ログ行が前提。未報告なら先に開始報告を通す
+  const okStart = await ensureStartReported();
+  if (!okStart) { enqueueFailed(payload, '在庫の打ち直し'); return; }
+  const r = await postJson(payload);
+  if (!r.ok) { enqueueFailed(payload, '在庫の打ち直し'); return; }
+  hideSendErrorIfEmpty();
 }
 
 // Task-10 v2026-05-11：在庫モーダル内 金庫有高サマリー
@@ -2704,6 +2804,7 @@ function saveState() {
       soldOutMap:    state.soldOutMap || {},
       history:       state.history || [],
       activeCategory: state.activeCategory,
+      startReported: state.startReported === true,   // ★v3.1
       // Task-9 追加：締め画面の入力値
       finalRegisterEnd: finalRegisterEnd,
       finalLateMinutes: finalLateMinutes,
@@ -2738,6 +2839,7 @@ function restoreState() {
     state.soldOutMap     = save.soldOutMap    || {};
     state.history        = save.history       || [];
     state.activeCategory = save.activeCategory || null;
+    state.startReported  = save.startReported === true;   // ★v3.1
     // Task-9：締め画面の入力値も復元（DOM反映はenterFinalScreen側で行う）
     state._finalRegisterEnd = save.finalRegisterEnd || '';
     state._finalLateMinutes = save.finalLateMinutes || '';
@@ -2965,7 +3067,6 @@ function submitFinal() {
     makanai: state['makanaiあり'] ? '有り' : '無し',
     lateMinutes: parseInt(document.getElementById('late-minutes')?.value) || 0,
     latePenalty: calcLatePenalty(parseInt(document.getElementById('late-minutes')?.value) || 0),
-    couponTotal: (state.history || []).filter(h => h.status === 'active').reduce((s, h) => s + (Number(h.couponAmount) || 0), 0),  // 2026-07-08 Phase3 D1: クーポン値引累計→GAS col34
   };
   fetch(state.GAS_URL, { method: 'POST', body: JSON.stringify(payload) }).catch(e => console.error(e));
   showScreen('complete');
