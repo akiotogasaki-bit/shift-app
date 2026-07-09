@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>お江戸弁当 レジ</title>
 <!-- register v3.1 (2026-07-08) 送信確実化＋在庫打ち直し導線修正（開始ログ欠落対策） -->
+<!-- register v3.2 (2026-07-10) 拠点間移動±を在庫表示に反映（残＝納品＋移動±−販売／完売率も移動±込み）。サーバー単一ソース getMoveAdjByLoc を在庫モーダル表示時に取得。 -->
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
 :root {
@@ -1496,6 +1497,7 @@ const state = {
   location: null,
   products: [],
   deliveryCount: {},
+  moveAdj: {},            // ★v3.2 当拠点の拠点間移動±（商品ID:純増減）サーバー単一ソース
   registerStart: 0,
   startReported: false,   // ★v3.1 開始報告(submitStart)がGASに届いたか
   cart: [],
@@ -2407,7 +2409,22 @@ function addToHistory(entry) {
 
 let stockEditMode = false;
 
-function openStockModal() {
+// ★v3.2 拠点間移動±を当拠点分だけサーバー単一ソースから取得（在庫を開くたびに最新化＝その場反映）
+async function refreshMoveAdj_() {
+  try {
+    const locId = state.location && state.location.id;
+    if (!locId) { state.moveAdj = {}; return; }
+    const res  = await fetch(`${state.GAS_URL}?action=getMoveAdjByLoc`, { method: 'GET', redirect: 'follow' });
+    const json = await res.json();
+    const adj  = (json && json.adj) ? json.adj : {};
+    state.moveAdj = adj[locId] || {};
+  } catch (e) {
+    console.error('refreshMoveAdj_', e);
+    // 取得失敗時は前回値を保持（0扱いにして残数を誤らせない）
+  }
+}
+
+async function openStockModal() {
   stockEditMode = false;
   resetStockEditBtn();
   // ★v3.1 在庫0スタート（全商品未入力）なら自動で編集モードON（打ち直し導線を確保）
@@ -2417,9 +2434,11 @@ function openStockModal() {
     const eb = document.getElementById('stock-edit-btn');
     if (eb) { eb.textContent = '✓ 完了'; eb.style.background = '#F4C430'; eb.style.color = '#000'; }
   }
-  renderStockList();
-  renderCashboxSummary();  // Task-10: 金庫有高サマリー更新
+  renderStockList();                 // 先に前回値で即描画
+  renderCashboxSummary();            // Task-10: 金庫有高サマリー更新
   document.getElementById('stock-modal').classList.add('show');
+  await refreshMoveAdj_();           // ★v3.2 最新の移動±を取得してから
+  renderStockList();                 // 再描画で反映
 }
 function closeStockModal() {
   stockEditMode = false;
@@ -2524,18 +2543,22 @@ function renderCashboxSummary() {
 function renderStockList() {
   const list = document.getElementById('stock-list');
   const teaIds = state.products.filter(p => p.name.includes('お茶')).map(p => p.id);
-  // 完売率計算（お茶除く）
-  const totalDelivery = Object.entries(state.deliveryCount)
-    .filter(([id]) => !teaIds.includes(id))
-    .reduce((sum, [, v]) => sum + v, 0);
+  // ★v3.2 実効納品数 = 納品数 + 拠点間移動±（サーバー単一ソース）
+  const moveAdj = state.moveAdj || {};
+  const effDelivery = (pid) => (state.deliveryCount[pid] || 0) + (Number(moveAdj[pid]) || 0);
+  // 完売率計算（お茶除く・移動±込み）
+  const totalDelivery = state.products
+    .filter(p => !teaIds.includes(p.id))
+    .reduce((sum, p) => sum + effDelivery(p.id), 0);
   const nonTeaSold = state.soldCount - (state.teaSoldCount || 0);
   const sellRate = totalDelivery > 0 ? Math.round(nonTeaSold / totalDelivery * 1000) / 10 : 0;
   document.getElementById('stock-summary').textContent = `(${nonTeaSold}/${totalDelivery}個 ${sellRate}%)`;
 
   // 編集モードでは納品済みじゃない商品も全て表示（追加できるように）
+  // ★v3.2 通常表示は「納品>0 または 移動±あり」を対象（他拠点から移動して来た商品も表示）
   const products = stockEditMode
     ? state.products
-    : state.products.filter(p => (state.deliveryCount[p.id] || 0) > 0);
+    : state.products.filter(p => (state.deliveryCount[p.id] || 0) > 0 || (Number(moveAdj[p.id]) || 0) !== 0);
 
   if (products.length === 0) {
     list.innerHTML = '<div class="history-empty">納品データがありません</div>';
@@ -2544,11 +2567,15 @@ function renderStockList() {
 
   list.innerHTML = products.map(p => {
     const delivery  = state.deliveryCount[p.id] || 0;
+    const mv        = Number(moveAdj[p.id]) || 0;   // ★v3.2 拠点間移動±
     const sold      = state.productSales[p.id] || 0;
-    const remaining = delivery - sold;
+    const remaining = (delivery + mv) - sold;        // ★v3.2 残＝納品＋移動±−販売
     const isSoldOut = !!state.soldOutMap[p.id];
     const isTea     = teaIds.includes(p.id);
     const remColor  = remaining <= 0 ? '#EF5350' : (remaining <= 2 ? '#F4C430' : '#FFF');
+    const mvChip    = mv !== 0
+      ? `<span style="background:${mv > 0 ? '#1B5E20' : '#5D4037'};color:#FFF;font-size:10px;padding:1px 5px;border-radius:4px;margin-left:4px;">移動 ${mv > 0 ? '+' : ''}${mv}</span>`
+      : '';
 
     if (stockEditMode) {
       return `
@@ -2570,7 +2597,7 @@ function renderStockList() {
     return `
       <div style="background:#1A1A1A;border:1px solid #333;border-radius:10px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;gap:8px;">
         <div style="flex:1;min-width:0;">
-          <div style="color:#FFF;font-size:13px;font-weight:600;">${p.name}${isTea ? ' <small style="color:#888;">(お茶)</small>' : ''}${isSoldOut ? ' <span style="background:var(--red);color:#FFF;font-size:10px;padding:1px 5px;border-radius:4px;margin-left:4px;">完売</span>' : ''}</div>
+          <div style="color:#FFF;font-size:13px;font-weight:600;">${p.name}${isTea ? ' <small style="color:#888;">(お茶)</small>' : ''}${isSoldOut ? ' <span style="background:var(--red);color:#FFF;font-size:10px;padding:1px 5px;border-radius:4px;margin-left:4px;">完売</span>' : ''}${mvChip}</div>
         </div>
         <div style="display:flex;gap:10px;font-size:12px;flex-shrink:0;">
           <div style="text-align:center;"><div style="color:#888;font-size:10px;">納品</div><div style="color:#CCC;font-weight:700;">${delivery}</div></div>
