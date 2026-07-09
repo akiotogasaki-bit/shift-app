@@ -7,6 +7,7 @@
 <title>お江戸弁当 社員ダッシュボード</title>
 <!-- dashboard v5 (2026-06-06): リアルタイムタブに「サマリー/エリア別マトリクス」サブ切替を追加。GAS変更なし。 -->
 <!-- dashboard v6 (2026-07-09): エリア別マトリクス最下部に拠点別「合計」行を追加（販売合計/納品合計・お茶除外）。GAS変更なし。 -->
+<!-- dashboard v7 (2026-07-10): 拠点間移動±を完売率の全ビュー（一覧・マトリクス・ランキング・モーダル）に反映（乙案）。getMoveAdjByLoc を取得し実効納品＝納品＋移動±で完売率を再計算。確定完売率も実効値で動く（社長了承済）。GAS変更なし。 -->
 
 <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
@@ -1927,6 +1928,7 @@ let allData     = [];
 let masterData  = { locations: [], products: [] };
 let currentSort = 'rate_desc';
 let inactiveLocationIds = new Set();  // 本日の休止拠点ID（driver.htmlで「営業しない」設定）
+let moveAdjMap  = {};  // v7: 拠点間移動の純増減 { 拠点ID: { 商品ID: 純増減 } }（getMoveAdjByLoc）
 let isFirstLoad = true;  // 案B Phase-2：初回起動判定（キャッシュ先描画用）
 
 // ═══════════════════════════════════════════════════════════════
@@ -2276,13 +2278,15 @@ async function loadAll() {
   }
 
   try {
-    const [master, reports, intermediate, driverState] = await Promise.all([
+    const [master, reports, intermediate, driverState, moveAdj] = await Promise.all([
       fetchJSON(`${GAS_URL}?action=getMaster`),
       fetchJSON(`${GAS_URL}?action=getTodayReports`),
       fetchJSON(`${GAS_URL}?action=getTodayIntermediate`),
       fetchJSON(`${GAS_URL}?action=getDriverState`).catch(() => ({ inactive: [] })),
+      fetchJSON(`${GAS_URL}?action=getMoveAdjByLoc`).catch(() => ({ adj: {} })),  // v7
     ]);
     masterData = master;
+    moveAdjMap = (moveAdj && moveAdj.adj) ? moveAdj.adj : {};  // v7
     // 本日の休止拠点IDをSetで保持
     inactiveLocationIds = new Set(
       (driverState.inactive || []).map(x => String(x.locationId || '').trim())
@@ -2379,7 +2383,7 @@ function renderRealtime() {
   const totalSold  = reported.reduce((s, r) => s + (r.soldCount || 0), 0);
   const totalSales = reported.reduce((s, r) => s + (r.totalSales || 0), 0);
   const avgRate    = reported.length > 0
-    ? Math.round(reported.reduce((s, r) => s + (r.sellRate || 0), 0) / reported.length * 10) / 10
+    ? Math.round(reported.reduce((s, r) => s + (_effSellRate_(r) || 0), 0) / reported.length * 10) / 10
     : 0;
 
   document.getElementById('kpi-grid').innerHTML = `
@@ -2473,9 +2477,9 @@ function renderRanking(reported) {
     return;
   }
 
-  // 文字列で来る可能性に備えて Number 化（NaN対策）
+  // v7: 実効完売率（移動±込）で並べ替え
   const sorted = [...activeReported].sort(
-    (a, b) => (Number(b.sellRate) || 0) - (Number(a.sellRate) || 0)
+    (a, b) => (Number(_effSellRate_(b)) || 0) - (Number(_effSellRate_(a)) || 0)
   );
   const best3  = sorted.slice(0, 3);
   const worst3 = [...sorted].reverse().slice(0, 3);
@@ -2483,7 +2487,7 @@ function renderRanking(reported) {
   const rankNumClass = (i) => i === 0 ? 'gold' : i === 1 ? 'silver' : 'bronze';
 
   const renderItems = (items, isBest) => items.map((r, i) => {
-    const rate = Number(r.sellRate) || 0;
+    const rate = Number(_effSellRate_(r)) || 0;  // v7: 実効完売率
     return `
       <div class="rank-item" onclick="openModal('${r.locationId}')">
         <div class="rank-num ${isBest ? rankNumClass(i) : 'bad'}">${i + 1}</div>
@@ -2520,7 +2524,7 @@ function renderLocationTable() {
   let rows = locations.map(loc => {
     const r = dataMap[loc.id];
     const isInactive = inactiveLocationIds.has(String(loc.id || '').trim());
-    const rateNum = r ? (Number(r.sellRate) || 0) : null;  // null=未報告
+    const rateNum = r ? _effSellRate_(r) : null;  // v7: 実効完売率（移動±込）。null=未報告/分母0
     return { loc, r, isInactive, rateNum };
   });
 
@@ -2572,27 +2576,14 @@ function renderLocationTable() {
           <td><span class="status-badge none">未報告</span></td>
         </tr>`;
     }
-    const rateNum   = Number(r.sellRate) || 0;
-    const rateClass = rateNum >= 80 ? 'high' : rateNum >= 50 ? '' : 'low';
     const totalSales = r.isIntermediate
       ? (r.cashSales || 0) + (r.paypayAmount || 0)
       : (r.totalSales || 0);
-    const teaIds = (masterData.products || []).filter(p => p.name.includes('お茶')).map(p => p.id);
-    const delivery = r.deliveryCount ? Object.entries(r.deliveryCount).filter(([id]) => !teaIds.includes(id)).reduce((s,[,v])=>s+Number(v),0) : 0;
-    // リアルタイム時は productSalesJson からお茶分を引いて分子に
-    let nonTeaSoldRT = r.soldCount || 0;
-    if (r.isIntermediate && r.productSalesJson) {
-      try {
-        const psObj = JSON.parse(r.productSalesJson || '{}');
-        let teaSoldRT = 0;
-        teaIds.forEach(id => { teaSoldRT += Number(psObj[id] || 0); });
-        nonTeaSoldRT = Math.max(0, (r.soldCount || 0) - teaSoldRT);
-      } catch(e) {}
-    }
-    const sellRate = r.isIntermediate
-      ? (delivery > 0 ? Math.round(nonTeaSoldRT / delivery * 1000) / 10 : '—')
-      : rateNum;
-    const rateStr  = r.isIntermediate ? (sellRate === '—' ? '—' : sellRate + '%') : rateNum + '%';
+    // v7: 実効完売率（移動±込・お茶抜き）で確定/中間とも統一
+    const effRate   = _effSellRate_(r);                 // number | null
+    const sellRate  = (effRate === null) ? '—' : effRate;
+    const rateClass = (effRate === null) ? '' : (effRate >= 80 ? 'high' : effRate >= 50 ? '' : 'low');
+    const rateStr   = (effRate === null) ? '—' : effRate + '%';
     const badge    = r.isIntermediate
       ? '<span class="status-badge pending">販売中</span>'
       : '<span class="status-badge done">報告済</span>';
@@ -2632,25 +2623,54 @@ function _teaIds_() {
   return (masterData.products || []).filter(p => p.name.includes('お茶')).map(p => p.id);
 }
 
-// 1拠点の 完売率(お茶抜き)。既存リアルタイム一覧と同一基準
-function _locSelloutRate_(r) {
-  const teaIds = _teaIds_();
-  if (!r.isIntermediate) {
-    const n = Number(r.sellRate);
-    return isNaN(n) ? null : n;
+// ── v7: 拠点間移動±の共通ヘルパー（全ビュー同一基準） ──────────────
+// 実効納品オブジェクト（商品ID→数）= 生納品 ＋ moveAdjMap[locId]（商品別）。
+//   deliveryCount（object）/ deliveryCountJson（string）両対応。純増減で0未満は0に丸め。
+function _effDeliveryObj_(r) {
+  if (!r) return {};
+  let base = {};
+  if (r.deliveryCount && typeof r.deliveryCount === 'object') {
+    base = r.deliveryCount;
+  } else {
+    try { base = JSON.parse(r.deliveryCountJson || '{}'); } catch (e) { base = {}; }
   }
-  let delivery = 0;
-  try {
-    const dObj = JSON.parse(r.deliveryCountJson || '{}');
-    Object.entries(dObj).forEach(([id, v]) => { if (!teaIds.includes(id)) delivery += Number(v) || 0; });
-  } catch (e) {}
+  const out = {};
+  Object.entries(base).forEach(([id, v]) => { out[id] = Number(v) || 0; });
+  const adj = moveAdjMap[r.locationId] || moveAdjMap[String(r.locationId)] || {};
+  Object.entries(adj).forEach(([id, v]) => {
+    out[id] = Math.max(0, (Number(out[id]) || 0) + (Number(v) || 0));
+  });
+  return out;
+}
+
+// 実効納品の非お茶合計
+function _effDeliveryTotal_(r) {
+  const teaIds = _teaIds_();
+  let sum = 0;
+  Object.entries(_effDeliveryObj_(r)).forEach(([id, v]) => {
+    if (!teaIds.includes(id)) sum += Number(v) || 0;
+  });
+  return sum;
+}
+
+// 実効完売率（お茶抜き・%）。確定/中間とも実効納品を分母に統一。分母0は null。
+//   分子 sold = soldCount − お茶販売（productSalesJson基準）。分母だけに moveAdj を反映。
+function _effSellRate_(r) {
+  if (!r) return null;
+  const teaIds = _teaIds_();
+  const delivery = _effDeliveryTotal_(r);
   let teaSold = 0;
   try {
     const sObj = JSON.parse(r.productSalesJson || '{}');
     teaIds.forEach(id => { teaSold += Number(sObj[id] || 0); });
   } catch (e) {}
-  const sold = Math.max(0, (r.soldCount || 0) - teaSold);
+  const sold = Math.max(0, (Number(r.soldCount) || 0) - teaSold);
   return delivery > 0 ? Math.round(sold / delivery * 1000) / 10 : null;
+}
+
+// 1拠点の 完売率(お茶抜き)。v7: 確定/中間とも実効納品(移動±込)基準に統一
+function _locSelloutRate_(r) {
+  return _effSellRate_(r);
 }
 
 function _rateClass_(rate) {
@@ -2713,8 +2733,8 @@ function renderAreaMatrix() {
       const inactive = inactiveLocationIds.has(String(loc.id).trim());
       let delivery = {}, sales = {};
       if (r) {
-        try { delivery = JSON.parse(r.deliveryCountJson || '{}'); } catch (e) {}
-        try { sales    = JSON.parse(r.productSalesJson  || '{}'); } catch (e) {}
+        delivery = _effDeliveryObj_(r);  // v7: 生納品＋移動±（商品別）
+        try { sales = JSON.parse(r.productSalesJson || '{}'); } catch (e) {}
       }
       const rate   = r ? _locSelloutRate_(r) : null;
       const status = inactive ? 'inactive' : (!r ? 'none' : (r.isIntermediate ? 'selling' : 'done'));
@@ -2800,11 +2820,13 @@ async function refreshArea(key) {
   const btn = document.getElementById('area-btn-' + key);
   if (btn) { btn.disabled = true; btn.textContent = '更新中…'; }
   try {
-    const [reports, intermediate, driverState] = await Promise.all([
+    const [reports, intermediate, driverState, moveAdj] = await Promise.all([
       fetchJSON(`${GAS_URL}?action=getTodayReports`),
       fetchJSON(`${GAS_URL}?action=getTodayIntermediate`),
       fetchJSON(`${GAS_URL}?action=getDriverState`).catch(() => ({ inactive: [] })),
+      fetchJSON(`${GAS_URL}?action=getMoveAdjByLoc`).catch(() => ({ adj: {} })),  // v7
     ]);
+    moveAdjMap = (moveAdj && moveAdj.adj) ? moveAdj.adj : {};  // v7
     inactiveLocationIds = new Set(
       (driverState.inactive || []).map(x => String(x.locationId || '').trim())
     );
@@ -3011,14 +3033,15 @@ function openModal(locationId) {
   document.getElementById('modal-location-sub').textContent  = `担当：${r.userName || '—'}`;
 
   const products = masterData.products || [];
-  const delivery = JSON.parse(r.deliveryCountJson || '{}');
+  const delivery = _effDeliveryObj_(r);  // v7: 生納品＋移動±（商品別）
   const sales    = JSON.parse(r.productSalesJson  || '{}');
   const soldOutTimes = JSON.parse(r.soldOutTimesJson || '{}');
+  const effRate  = _effSellRate_(r);     // v7: 実効完売率
 
   let bodyHtml = `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
       <div class="kpi-card green"><div class="kpi-label">販売数</div><div class="kpi-value">${r.soldCount || 0}<span> 個</span></div></div>
-      <div class="kpi-card gold"><div class="kpi-label">完売率</div><div class="kpi-value">${r.sellRate || 0}<span> %</span></div></div>
+      <div class="kpi-card gold"><div class="kpi-label">完売率</div><div class="kpi-value">${effRate === null ? 0 : effRate}<span> %</span></div></div>
       <div class="kpi-card red"><div class="kpi-label">売上合計</div><div class="kpi-value" style="font-size:16px;">¥${(r.totalSales||0).toLocaleString()}</div></div>
       <div class="kpi-card blue"><div class="kpi-label">本日ギャラ</div><div class="kpi-value" style="font-size:16px;">¥${(r.totalSalary||0).toLocaleString()}</div></div>
     </div>
