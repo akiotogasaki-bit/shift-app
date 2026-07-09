@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>🍱 納品管理</title>
+<!-- kanri.html v3.42 (2026-07-10) 【献立表タブ新設・Phase1】新タブ「📋 献立表」を追加。①海苔弁系/満腹系の当日バリアントを複数選択（チェック）②全六ベース型（あり/なし…拡張可）×主菜1/2を選択。日付ごとに保存/読込（GAS: getMenuMeta/getMenuSelections/saveMenuSelections、メインSS「献立表」シート・JSON保存）。全六選択は既存「日替わり選択」へミラー保存し仕込み表は無改修で連動。mn*接頭辞で既存と無衝突。※配分調整の0連動・仕込み表の全六選択UI移設はPhase2予定（本版では未実施）。要メインGASパッチ（getMenuMeta/getMenuSelections/saveMenuSelections＋doGet2件/doPost1件のルーティング）。 -->
 <!-- kanri.html v3.41 (2026-06-28) 配分調整：日付切替の高速化。日付ごとにサーバーデータ/ドライバー色をキャッシュ（bmDataCache/bmColorCache）し、ある日を開いたら表示中の週の残り営業日をバックグラウンドで並列プリフェッチ（bmPrefetchWeek・表示中の週のみ）。プリフェッチ済みの日はキャッシュから即時表示（通信ゼロ）。保存/確定/🔄再取得は従来どおり bmLoadDate で最新を取り直し→該当日キャッシュを上書き（編集系は無改修）。bmLoadDate のデータ反映部を bmApplyData に切り出し、fetch経路とキャッシュ経路で共通化。GAS・他タブ・デプロイは無変更。 -->
 <!-- kanri.html v3.40 (2026-06-27) シート1（拠点配分表）：当日「合計0」の拠点列を自動非表示（手動運用を自動化）。判定＝非お茶(白米+玄米)の拠点合計=0で非表示（弁当0・お茶のみ拠点も対象）。配分表・カテゴリ別・拠点合計・右の拠点名パネルすべて可視拠点で再描画。中計＝先頭12拠点グループ固定（繰り上げなし）・値は不変・列位置のみ左詰め。区切り線＝拠点の本来位置ベースで判定し隠れた境界は左の可視拠点に集約（左詰め）・末尾の可視拠点には線なし。renderSheet1内でライブ計算＝開くたび即反映・GAS変更/デプロイ不要・スナップショット不使用。他タブ(シート2/3/4・配分調整・発注・設定・シフト閲覧・勤怠承認)とGASは無変更。 -->
 <!-- kanri.html v3.39 (2026-06-18) 「🕐 勤怠承認」タブ新設（管理者・パスワード1115ゲート＋承認者[社長/井上]選択）。attendanceからの勤怠修正/後日入力/取消の申請を一覧→承認/却下（GAS listAttendanceRequests/approveAttendanceRequest/rejectAttendanceRequest・JSON POST・pw=1115）。承認で勤怠記録へ反映＋本人へLINE通知。kanri本体ロジック・既存タブ・既存GASは無変更（kt*接頭辞で無衝突）。要GAS:勤怠承認.gs v1.1デプロイ＋doPostに4分岐。 / v3.38 (2026-06-15) シフト閲覧タブのキッチン表示を「時間(縦)×曜日(横)」グリッドに刷新（kitchen-admin準拠・読取専用）。出勤者がいる時間行のみ＋仕込み行のコンパクト表示。セル＝スタッフ名＋終了時刻。終了は「キッチン希望」シート(getKitchenRequests)を並列取得して補完（確定がレンジならそれを優先）。チップは単色。販売員タブ・GASは変更なし。希望取得が失敗しても確定グリッドは表示（終了が出ないだけ）。 / v3.37 (2026-06-12) ②「📅 シフト閲覧」タブ新設（読取専用）：販売員=getShiftMatrixを拠点×日付/キッチン=getKitchenShiftをスタッフ×月〜金で表示。今週/来週トグル。初期表示種別はlocalStorage(kanri_sv_kind)に記憶。バックエンド追加なし（既存GETを流用）。関数は全てsv*接頭辞で既存と無衝突。 -->
@@ -1945,6 +1946,7 @@ body {
   <button class="tab-btn" data-tab="sheet2">📦 午前盛り出し</button>
   <button class="tab-btn" data-tab="sheet3">🚚 午後便盛り出し</button>
   <button class="tab-btn" data-tab="sheet4">🍳 仕込み</button>
+  <button class="tab-btn" data-tab="menu">📋 献立表</button>
   <button class="tab-btn" data-tab="order">📋 発注</button>
   <button class="tab-btn" data-tab="master">📐 配分調整</button>
   <button class="tab-btn" data-tab="settings">⚙️ 設定</button>
@@ -2073,6 +2075,51 @@ body {
       <button class="bm-modal-close" onclick="bmCloseModal()">✕</button>
     </div>
     <div class="bm-modal-body" id="bm-modal-body"></div>
+  </div>
+</div>
+
+<!-- ═══════ 献立表タブ v3.42（mn* 接頭辞・Phase1） ═══════ -->
+<style>
+  #tab-menu .mn-ctrl{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 0; }
+  #tab-menu .mn-status{ font-size:12px; color:#555; }
+  #tab-menu .mn-status.err{ color:#c62828; font-weight:bold; }
+  #tab-menu .mn-badge{ display:none; align-items:center; gap:4px; background:#e8f5e9; color:#2e7d32; border:1px solid #a5d6a7; border-radius:12px; padding:2px 10px; font-size:12px; font-weight:bold; }
+  #tab-menu .mn-note{ font-size:12px; color:#666; background:#fffde7; border-left:4px solid #fbc02d; padding:8px 10px; margin:4px 0 12px; border-radius:4px; }
+  #tab-menu .mn-sec{ background:#fff; border:1px solid #e0e0e0; border-radius:8px; margin:0 0 16px; overflow:hidden; }
+  #tab-menu .mn-sec-head{ background:#1a3c5e; color:#fff; font-weight:bold; padding:8px 14px; font-size:14px; display:flex; align-items:center; gap:8px; }
+  #tab-menu .mn-sec-body{ padding:12px 14px; }
+  #tab-menu .mn-cat{ margin:0 0 14px; }
+  #tab-menu .mn-cat:last-child{ margin-bottom:0; }
+  #tab-menu .mn-cat-title{ font-weight:bold; font-size:13px; color:#37474f; border-bottom:2px solid #eceff1; padding-bottom:4px; margin-bottom:8px; }
+  #tab-menu .mn-chips{ display:flex; flex-wrap:wrap; gap:8px; }
+  #tab-menu .mn-chip{ display:inline-flex; align-items:center; gap:6px; border:1px solid #cfd8dc; border-radius:18px; padding:6px 12px; cursor:pointer; font-size:13px; background:#fafafa; user-select:none; transition:.12s; }
+  #tab-menu .mn-chip:hover{ border-color:#90a4ae; }
+  #tab-menu .mn-chip input{ display:none; }
+  #tab-menu .mn-chip.on{ background:#1976d2; color:#fff; border-color:#1976d2; font-weight:bold; }
+  #tab-menu .mn-chip.on::before{ content:'✓ '; }
+  #tab-menu .mn-empty{ font-size:12px; color:#999; padding:4px 0; }
+  #tab-menu .mn-zen-row{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:6px 0; border-bottom:1px dashed #eceff1; }
+  #tab-menu .mn-zen-row:last-child{ border-bottom:none; }
+  #tab-menu .mn-zen-base{ min-width:90px; font-weight:bold; font-size:13px; color:#37474f; }
+  #tab-menu .mn-zen-item{ display:flex; align-items:center; gap:4px; font-size:12px; color:#555; }
+  #tab-menu .mn-zen-item select{ padding:5px 8px; border:1px solid #bbb; border-radius:4px; font-family:inherit; font-size:13px; }
+  #tab-menu .mn-loading{ padding:24px; text-align:center; color:#888; }
+</style>
+<div class="tab-pane" id="tab-menu">
+  <div class="mn-ctrl">
+    <label>日付：</label>
+    <input type="date" id="mn-date-input">
+    <button class="btn btn-primary" id="mn-btn-fetch">取得</button>
+    <button class="btn btn-primary" id="mn-btn-save" style="background:#2e7d32;border-color:#2e7d32;">💾 保存</button>
+    <span id="mn-badge" class="mn-badge"></span>
+    <span class="mn-status" id="mn-status"></span>
+  </div>
+  <div class="mn-note">
+    献立表は「その日に出す弁当」を一括入力する場所です。海苔弁系・満腹系は当日出すバリアントをすべてON（複数可）。全六は主菜1/2を選択。
+    ※配分調整への0連動・仕込み表の全六選択移設はPhase2で対応予定です（本版は保存/読込のみ）。
+  </div>
+  <div id="mn-body">
+    <div class="mn-loading">日付を選択して「取得」を押してください</div>
   </div>
 </div>
 
@@ -2695,6 +2742,10 @@ document.querySelectorAll('.tab-btn:not(:disabled)').forEach(btn => {
     // シフト閲覧タブを開いたら初期化（初回のみロード）
     if (btn.dataset.tab === 'shiftview' && typeof svInit === 'function') {
       svInit();
+    }
+    // 献立表タブを開いたら初期化（初回のみ日付セット＆取得）
+    if (btn.dataset.tab === 'menu' && typeof mnOnOpen === 'function') {
+      mnOnOpen();
     }
   });
 });
@@ -6509,7 +6560,8 @@ async function printAllForDay() {
   if (hasAfternoon) {
     _printAllQueue.push('sheet3');
   }
-    _printAllIdx = 0;
+  _printAllQueue.push('sheet4');
+  _printAllIdx = 0;
 
   // ⑧ afterprint ハンドラを登録 (初回のみ)
   if (!_printAllBound) {
@@ -6719,6 +6771,189 @@ async function ktReject(reqId) {
 document.querySelectorAll('.tab-btn').forEach(function (btn) {
   if (btn.dataset.tab === 'kintai') { btn.addEventListener('click', ktOnOpen); }
 });
+
+
+// ═══════════════════════════════════════════════════════════
+// 献立表タブ v3.42（mn* 接頭辞・Phase1：保存/読込のみ）
+//   海苔弁系/満腹系の当日バリアント（複数選択）＋全六ベース型×主菜1/2
+//   GAS: getMenuMeta / getMenuSelections / saveMenuSelections
+//   保存先: メインSS「献立表」シート（JSON）／全六は「日替わり選択」へミラー
+// ═══════════════════════════════════════════════════════════
+var mnState = { meta: null, loadedDate: null, initialized: false };
+
+function mnEsc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
+  });
+}
+function mnSetStatus(msg, isErr) {
+  var el = document.getElementById('mn-status');
+  if (!el) return;
+  el.textContent = msg || '';
+  el.className = 'mn-status' + (isErr ? ' err' : '');
+}
+function mnShowBadge(date) {
+  var b = document.getElementById('mn-badge');
+  if (!b) return;
+  var p = String(date).split('-');
+  b.textContent = '✓ ' + Number(p[1]) + '/' + Number(p[2]) + ' 保存済み';
+  b.style.display = 'inline-flex';
+  setTimeout(function () { b.style.display = 'none'; }, 4000);
+}
+function mnTodayStr() {
+  var now = new Date();
+  var jst = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+  var y = jst.getFullYear();
+  var m = String(jst.getMonth() + 1).padStart(2, '0');
+  var d = String(jst.getDate()).padStart(2, '0');
+  return y + '-' + m + '-' + d;
+}
+function mnBuildSelect(id, cands, selected) {
+  var h = '<select id="' + id + '"><option value="">-- 未選択 --</option>';
+  (cands || []).forEach(function (c) {
+    var cid = String((c && c.id) || '');
+    var cn  = String((c && c.name) || '');
+    if (!cid) return;
+    h += '<option value="' + mnEsc(cid) + '"' + (cid === selected ? ' selected' : '') + '>' + mnEsc(cn) + '</option>';
+  });
+  h += '</select>';
+  return h;
+}
+
+function mnOnOpen() {
+  var dateEl = document.getElementById('mn-date-input');
+  if (dateEl && !dateEl.value) dateEl.value = mnTodayStr();
+  if (!mnState.initialized) {
+    mnState.initialized = true;
+    mnFetch();
+  }
+}
+
+async function mnFetch() {
+  var dateEl = document.getElementById('mn-date-input');
+  var date = (dateEl && dateEl.value) || mnTodayStr();
+  if (dateEl && !dateEl.value) dateEl.value = date;
+  mnSetStatus('読み込み中…');
+  var badge = document.getElementById('mn-badge');
+  if (badge) badge.style.display = 'none';
+  try {
+    var metaTask = mnState.meta
+      ? Promise.resolve(mnState.meta)
+      : fetch(GAS_URL + '?action=getMenuMeta').then(function (r) { return r.json(); });
+    var selTask = fetch(GAS_URL + '?action=getMenuSelections&date=' + encodeURIComponent(date))
+      .then(function (r) { return r.json(); });
+    var arr = await Promise.all([metaTask, selTask]);
+    var meta = arr[0], sel = arr[1];
+    if (!meta || !meta.ok) { mnSetStatus((meta && meta.error) || 'メタ取得に失敗しました', true); return; }
+    mnState.meta = meta;
+    if (!sel || !sel.ok) { mnSetStatus((sel && sel.error) || '献立の取得に失敗しました', true); return; }
+    mnState.loadedDate = date;
+    mnRender(meta, sel);
+    mnSetStatus('');
+  } catch (e) {
+    mnSetStatus('通信エラー: ' + e.message, true);
+  }
+}
+
+function mnRender(meta, sel) {
+  var body = document.getElementById('mn-body');
+  if (!body) return;
+  var activeSet = {};
+  (sel.active || []).forEach(function (p) { activeSet[String(p)] = true; });
+
+  var html = '';
+
+  // ── 日替わり弁当（海苔弁系/満腹系・複数選択）──
+  html += '<div class="mn-sec"><div class="mn-sec-head">🍱 日替わり弁当（当日出すものをすべてON）</div><div class="mn-sec-body">';
+  var cats = meta.dailyCategories || [];
+  cats.forEach(function (cat) {
+    var list = (meta.dailyProducts && meta.dailyProducts[cat]) || [];
+    html += '<div class="mn-cat"><div class="mn-cat-title">' + mnEsc(cat) + '</div>';
+    if (!list.length) {
+      html += '<div class="mn-empty">商品が登録されていません</div>';
+    } else {
+      html += '<div class="mn-chips">';
+      list.forEach(function (p) {
+        var on = !!activeSet[String(p.id)];
+        html += '<span class="mn-chip' + (on ? ' on' : '') + '" data-pid="' + mnEsc(p.id) + '" title="' + mnEsc(p.rawName || p.name) + '">' + mnEsc(p.name) + '</span>';
+      });
+      html += '</div>';
+    }
+    html += '</div>';
+  });
+  html += '</div></div>';
+
+  // ── 全六（主菜1/2）──
+  html += '<div class="mn-sec"><div class="mn-sec-head">🍙 全六（主菜1/2）</div><div class="mn-sec-body">';
+  var bases = meta.zenrokuBases || [];
+  if (!bases.length) {
+    html += '<div class="mn-empty">全六商品が登録されていません</div>';
+  } else {
+    bases.forEach(function (b, idx) {
+      var cands = (meta.zenrokuCandidates && meta.zenrokuCandidates[b.name]) || [];
+      var z = (sel.zenroku && sel.zenroku[b.name]) || {};
+      html += '<div class="mn-zen-row" data-base="' + mnEsc(b.name) + '">';
+      html += '<span class="mn-zen-base">' + mnEsc(b.displayName || b.name) + '</span>';
+      html += '<span class="mn-zen-item"><span>主菜1</span>' + mnBuildSelect('mn-zen-' + idx + '-1', cands, z.shu1 || '') + '</span>';
+      html += '<span class="mn-zen-item"><span>主菜2</span>' + mnBuildSelect('mn-zen-' + idx + '-2', cands, z.shu2 || '') + '</span>';
+      html += '</div>';
+    });
+  }
+  html += '</div></div>';
+
+  body.innerHTML = html;
+}
+
+function mnCollect() {
+  var active = [];
+  document.querySelectorAll('#mn-body .mn-chip.on').forEach(function (el) {
+    var pid = el.getAttribute('data-pid');
+    if (pid) active.push(pid);
+  });
+  var zenroku = {};
+  var bases = (mnState.meta && mnState.meta.zenrokuBases) || [];
+  bases.forEach(function (b, idx) {
+    var s1 = document.getElementById('mn-zen-' + idx + '-1');
+    var s2 = document.getElementById('mn-zen-' + idx + '-2');
+    zenroku[b.name] = { shu1: s1 ? s1.value : '', shu2: s2 ? s2.value : '' };
+  });
+  return { active: active, zenroku: zenroku };
+}
+
+async function mnSave() {
+  var dateEl = document.getElementById('mn-date-input');
+  var date = (dateEl && dateEl.value) || '';
+  if (!date) { mnSetStatus('日付を選択してください', true); return; }
+  if (!mnState.meta) { mnSetStatus('先に「取得」を押してください', true); return; }
+  var payload = mnCollect();
+  payload.date = date;
+  payload.action = 'saveMenuSelections';
+  mnSetStatus('保存中…');
+  try {
+    var res = await fetch(GAS_URL, { method: 'POST', redirect: 'follow', body: JSON.stringify(payload) });
+    var r = await res.json();
+    if (!r || !r.ok) { mnSetStatus((r && r.error) || '保存に失敗しました', true); return; }
+    mnSetStatus('');
+    mnShowBadge(date);
+  } catch (e) {
+    mnSetStatus('通信エラー: ' + e.message, true);
+  }
+}
+
+// 献立表：イベント登録（チップのトグルは #mn-body へ委譲）
+(function mnBindEvents() {
+  var fBtn = document.getElementById('mn-btn-fetch');
+  var sBtn = document.getElementById('mn-btn-save');
+  var bodyEl = document.getElementById('mn-body');
+  if (fBtn) fBtn.addEventListener('click', mnFetch);
+  if (sBtn) sBtn.addEventListener('click', mnSave);
+  if (bodyEl) {
+    bodyEl.addEventListener('click', function (ev) {
+      var chip = ev.target.closest ? ev.target.closest('.mn-chip') : null;
+      if (chip) chip.classList.toggle('on');
+    });
+  }
+})();
 </script>
 </body>
 </html>
