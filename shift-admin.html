@@ -1,4 +1,13 @@
 <!DOCTYPE html>
+<!--
+  お江戸弁当 shift-admin.html
+  v2026-07-12  「✅ 確認状況」タブを新設
+    - GAS action=getShiftConfirmStatus（通知履歴 × シフト確認ログ の突合）を叩く
+    - サマリ「確認 n/N」＋ 一覧（未確認=赤バッジ / 確認済=緑✓）。未確認が上にソート済で返る
+    - 週切替（前週/今週）に追従。タブに未確認件数バッジ
+    - 依存: メインGAS v2026-07-12（Flex送信＋confirmShift＋getShiftConfirmStatus）
+  v2026-05-18  localStorageキャッシュ（案B Phase-2）
+-->
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
@@ -728,9 +737,90 @@ input { font-family: inherit; }
   vertical-align: middle;
 }
 .tab-btn .badge-tab[hidden] { display: none; }
+.tab-btn .badge-tab.red { background: var(--red); }
 
 .tab-panel { display: none; }
 .tab-panel.active { display: block; }
+
+/* ═══ 確認状況タブ（v2026-07-12） ═══ */
+.cf-section { margin: 12px 16px; }
+.cf-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
+.cf-ring {
+  width: 56px; height: 56px;
+  flex: 0 0 56px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700; color: var(--navy);
+  background: conic-gradient(var(--green) calc(var(--pct, 0) * 1%), var(--border-light) 0);
+  position: relative;
+}
+.cf-ring::before {
+  content: '';
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+  background: var(--white);
+}
+.cf-ring span { position: relative; z-index: 1; }
+.cf-sum-txt { flex: 1; min-width: 0; }
+.cf-sum-main { font-size: 15px; font-weight: 700; color: var(--ink); }
+.cf-sum-main .num { color: var(--green); font-size: 20px; }
+.cf-sum-main .den { color: var(--ink-mute); }
+.cf-sum-sub { font-size: 11px; color: var(--ink-mute); margin-top: 2px; }
+.cf-sum-sub.warn { color: var(--red); font-weight: 700; }
+
+.cf-list { display: flex; flex-direction: column; gap: 6px; }
+.cf-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--white);
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.cf-row.ng { background: var(--pink-bg); border-color: #F5B7B1; }
+.cf-name { flex: 1; min-width: 0; font-size: 13px; font-weight: 700; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf-badge {
+  flex: 0 0 auto;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #FFF;
+}
+.cf-badge.ok { background: var(--green); }
+.cf-badge.ng { background: var(--red); }
+.cf-at { flex: 0 0 auto; font-size: 11px; color: var(--ink-mute); min-width: 74px; text-align: right; }
+.cf-empty {
+  background: var(--white);
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--ink-mute);
+  font-size: 13px;
+}
+.cf-empty .em-ico { font-size: 28px; margin-bottom: 6px; }
+.cf-note {
+  font-size: 11px;
+  color: var(--ink-mute);
+  line-height: 1.6;
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: var(--warn-bg);
+  border-radius: 8px;
+}
 
 /* ═══ スタッフ管理タブ ═══ */
 .staff-section { margin: 0 16px 12px; }
@@ -1233,8 +1323,9 @@ input { font-family: inherit; }
   </header>
 
   <div class="tab-bar">
-    <button class="tab-btn active" id="tab-shift" onclick="switchTab('shift')">📋 シフト管理</button>
-    <button class="tab-btn" id="tab-staff" onclick="switchTab('staff')">👥 スタッフ管理<span class="badge-tab" id="orphanBadge" hidden>0</span></button>
+    <button class="tab-btn active" id="tab-shift" onclick="switchTab('shift')">📋 シフト</button>
+    <button class="tab-btn" id="tab-confirm" onclick="switchTab('confirm')">✅ 確認状況<span class="badge-tab red" id="unconfirmedBadge" hidden>0</span></button>
+    <button class="tab-btn" id="tab-staff" onclick="switchTab('staff')">👥 スタッフ<span class="badge-tab" id="orphanBadge" hidden>0</span></button>
     <button class="tab-btn" id="tab-kitchen" onclick="window.open('https://akiotogasaki-bit.github.io/shift-app/kitchen-admin.html','_blank')">🍳 キッチン ↗</button>
   </div>
 
@@ -1324,6 +1415,40 @@ input { font-family: inherit; }
   </div>
 
   </div><!-- /panel-shift -->
+
+  <!-- ═══ 確認状況タブ（v2026-07-12 新設） ═══ -->
+  <div class="tab-panel" id="panel-confirm">
+
+    <div class="cf-section">
+      <div class="cf-summary" id="cfSummary" style="display:none">
+        <div class="cf-ring" id="cfRing" style="--pct:0"><span id="cfRingTxt">0%</span></div>
+        <div class="cf-sum-txt">
+          <div class="cf-sum-main">
+            確認 <span class="num" id="cfConfirmed">0</span><span class="den"> / <span id="cfTotal">0</span> 名</span>
+          </div>
+          <div class="cf-sum-sub" id="cfSub">読み込み中...</div>
+        </div>
+      </div>
+
+      <div class="sec-title">🧾 販売員の確認状況</div>
+      <div class="cf-list" id="cfList">
+        <div class="cf-empty">
+          <div class="em-ico">⏳</div>
+          <div>読み込み中...</div>
+        </div>
+      </div>
+
+      <div class="cf-note">
+        ※ 対象者＝その週にシフト通知（一括送信・差分送信）を受け取った販売員。<br>
+        ※ 販売員がLINEの「✅ 確認しました」ボタンを押すとここに反映されます（週まとめて1回）。
+      </div>
+    </div>
+
+    <div class="reload-wrap">
+      <button class="reload-btn" onclick="loadConfirmTab(true)">🔄 再読み込み</button>
+    </div>
+
+  </div><!-- /panel-confirm -->
 
   <div class="tab-panel" id="panel-staff">
 
@@ -1568,6 +1693,9 @@ const state = {
   staffTabLoaded: false,
   editingIndex: -1,
   editMode: null,
+  // ★v2026-07-12 確認状況タブ
+  confirmData: null,        // getShiftConfirmStatus のレスポンス
+  confirmLoadedWeek: null,  // 読み込み済みの weekTarget（週切替で再取得）
 };
 
 function login() {
@@ -1738,6 +1866,14 @@ async function loadAll() {
       renderAfterLoad();
       updateDiffBadge();
       setStatus('ok', `読込完了：${state.bases.length}拠点 × ${state.dates.length}日`);
+    }
+
+    // ★v2026-07-12 確認状況：weekTarget 確定後に読み込む
+    //   （タブを開いていなくてもバッジ用に取得。失敗しても本体には影響させない）
+    if (state.confirmLoadedWeek !== state.weekTarget) {
+      loadConfirmTab().catch(function(err) {
+        console.warn('確認状況の読み込みに失敗:', err);
+      });
     }
   } catch (e) {
     setStatus('err', `エラー: ${e.message}`);
@@ -2273,11 +2409,36 @@ async function confirmBatch() {
     toast(txt, 'ok');
     setStatus('ok', `一括送信完了（${txt}）`);
     loadDiffs();
+    invalidateConfirm();   // ★v2026-07-12 送信対象者が増えたので確認状況を取り直す
   } catch (e) {
     toast(`送信失敗: ${e.message}`, 'err');
     setStatus('err', `一括送信失敗: ${e.message}`);
   } finally {
     hideLoading();
+  }
+}
+
+// ★v2026-07-12 確認状況キャッシュを無効化（送信直後に呼ぶ）
+//   確認状況タブを開いている時はその場で再取得、閉じている時は次に開いた時に取得
+function invalidateConfirm() {
+  state.confirmData       = null;
+  state.confirmLoadedWeek = null;
+  if (state.activeTab === 'confirm') {
+    loadConfirmTab(true);
+  } else {
+    // バッジだけは静かに更新
+    (async function() {
+      try {
+        const params = {};
+        if (state.weekTarget) params.weekTarget = state.weekTarget;
+        const resp = await apiGet('getShiftConfirmStatus', params);
+        if (resp && resp.success) {
+          state.confirmData       = resp;
+          state.confirmLoadedWeek = resp.weekTarget;
+          updateUnconfirmedBadge();
+        }
+      } catch (e) { console.warn('invalidateConfirm badge refresh failed:', e); }
+    })();
   }
 }
 
@@ -2369,6 +2530,7 @@ async function confirmDiffSend() {
     toast(txt, 'ok');
     setStatus('ok', `差分送信完了（${txt}）`);
     await loadAll();  // loadAll 内で loadDiffs も再実行され state.diffs 更新
+    invalidateConfirm();   // ★v2026-07-12 確認状況を取り直す
   } catch (e) {
     toast(`失敗: ${e.message}`, 'err');
     setStatus('err', `差分送信失敗: ${e.message}`);
@@ -2669,6 +2831,10 @@ function executeBulkAssign(staffName, baseName) {
 function switchWeek(type) {
   if (state.viewWeek === type) return;
   state.viewWeek = type;
+  // ★v2026-07-12 週が変わるので確認状況は破棄（loadAll 完了後に再取得される）
+  state.confirmData       = null;
+  state.confirmLoadedWeek = null;
+  document.getElementById('unconfirmedBadge').hidden = true;
   loadAll();
 }
 
@@ -2841,11 +3007,117 @@ function switchTab(tab) {
   state.activeTab = tab;
   document.getElementById('tab-shift').classList.toggle('active', tab === 'shift');
   document.getElementById('tab-staff').classList.toggle('active', tab === 'staff');
+  document.getElementById('tab-confirm').classList.toggle('active', tab === 'confirm');
   document.getElementById('panel-shift').classList.toggle('active', tab === 'shift');
   document.getElementById('panel-staff').classList.toggle('active', tab === 'staff');
+  document.getElementById('panel-confirm').classList.toggle('active', tab === 'confirm');
 
   if (tab === 'staff' && !state.staffTabLoaded) {
     loadStaffTab();
+  }
+  // ★v2026-07-12 確認状況：未読込 or 週が変わっていたら取得
+  if (tab === 'confirm' && state.confirmLoadedWeek !== state.weekTarget) {
+    loadConfirmTab();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 確認状況タブ（v2026-07-12）
+//   GAS: action=getShiftConfirmStatus&weekTarget=YYYY-Www
+//   → { success, weekTarget, total, confirmed, unconfirmed,
+//       list:[{name, userId, confirmed, confirmedAt}] }  ※未確認が先頭
+// ═══════════════════════════════════════════════════════════════
+async function loadConfirmTab(force) {
+  const listEl  = document.getElementById('cfList');
+  const isShown = (state.activeTab === 'confirm');   // 表示中のみステータスバーを触る
+
+  if (force || !state.confirmData) {
+    listEl.innerHTML = '<div class="cf-empty"><div class="em-ico">⏳</div><div>読み込み中...</div></div>';
+  }
+  if (isShown) setStatus('busy', '確認状況を読み込み中...');
+
+  try {
+    const params = {};
+    if (state.weekTarget) params.weekTarget = state.weekTarget;
+
+    const resp = await apiGet('getShiftConfirmStatus', params);
+    if (!resp.success) throw new Error(resp.error || '確認状況の取得に失敗しました');
+
+    state.confirmData       = resp;
+    state.confirmLoadedWeek = resp.weekTarget;
+    renderConfirm();
+    updateUnconfirmedBadge();
+    if (isShown) setStatus('ok', `確認状況：${resp.confirmed} / ${resp.total} 名が確認済み`);
+  } catch (e) {
+    console.error('loadConfirmTab error:', e);
+    listEl.innerHTML =
+      '<div class="cf-empty"><div class="em-ico">⚠️</div><div>読み込みに失敗しました<br>' +
+      escapeHtml(e.message) + '</div></div>';
+    document.getElementById('cfSummary').style.display = 'none';
+    if (isShown) setStatus('err', '確認状況の読み込みに失敗しました');
+  }
+}
+
+function renderConfirm() {
+  const d = state.confirmData;
+  const listEl = document.getElementById('cfList');
+  const sumEl  = document.getElementById('cfSummary');
+  if (!d) return;
+
+  const total     = d.total || 0;
+  const confirmed = d.confirmed || 0;
+  const pct       = total > 0 ? Math.round((confirmed / total) * 100) : 0;
+
+  // サマリ
+  sumEl.style.display = 'flex';
+  document.getElementById('cfRing').style.setProperty('--pct', pct);
+  document.getElementById('cfRingTxt').textContent = pct + '%';
+  document.getElementById('cfConfirmed').textContent = confirmed;
+  document.getElementById('cfTotal').textContent     = total;
+
+  const subEl = document.getElementById('cfSub');
+  const unconf = total - confirmed;
+  if (total === 0) {
+    subEl.className = 'cf-sum-sub';
+    subEl.textContent = 'この週はまだシフトを送信していません';
+  } else if (unconf === 0) {
+    subEl.className = 'cf-sum-sub';
+    subEl.textContent = '✅ 全員が確認済みです（' + (d.weekTarget || '') + '）';
+  } else {
+    subEl.className = 'cf-sum-sub warn';
+    subEl.textContent = '未確認 ' + unconf + ' 名（' + (d.weekTarget || '') + '）';
+  }
+
+  // 一覧
+  const list = d.list || [];
+  if (list.length === 0) {
+    listEl.innerHTML =
+      '<div class="cf-empty"><div class="em-ico">📭</div>' +
+      '<div>この週の送信対象者がいません<br>（一括送信を実行すると表示されます）</div></div>';
+    return;
+  }
+
+  listEl.innerHTML = list.map(function(s) {
+    const ok = !!s.confirmed;
+    return '<div class="cf-row' + (ok ? '' : ' ng') + '">' +
+             '<span class="cf-name">' + escapeHtml(s.name || '(不明)') + '</span>' +
+             '<span class="cf-badge ' + (ok ? 'ok' : 'ng') + '">' +
+               (ok ? '✓ 確認済' : '未確認') +
+             '</span>' +
+             '<span class="cf-at">' + escapeHtml(s.confirmedAt || '—') + '</span>' +
+           '</div>';
+  }).join('');
+}
+
+function updateUnconfirmedBadge() {
+  const badge = document.getElementById('unconfirmedBadge');
+  const d = state.confirmData;
+  const n = (d && d.success) ? (d.total - d.confirmed) : 0;
+  if (n > 0) {
+    badge.textContent = n;
+    badge.hidden = false;
+  } else {
+    badge.hidden = true;
   }
 }
 
