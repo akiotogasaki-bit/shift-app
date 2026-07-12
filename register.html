@@ -6,6 +6,7 @@
 <title>お江戸弁当 レジ</title>
 <!-- register v3.1 (2026-07-08) 送信確実化＋在庫打ち直し導線修正（開始ログ欠落対策） -->
 <!-- register v3.2 (2026-07-10) 拠点間移動±を在庫表示に反映（残＝納品＋移動±−販売／完売率も移動±込み）。サーバー単一ソース getMoveAdjByLoc を在庫モーダル表示時に取得。 -->
+<!-- register v3.3 (2026-07-12) 【Phase3 D1】締め報告(submitFinal)のpayloadに couponTotal を追加送信。会計履歴 state.history のうち status==='active' のみ couponAmount を合算（取消分は二重計上しない）。GAS側 submitReport が受けて報告ログ col34「クーポン値引累計」に記録→日報の売上合計に反映される。UI・既存ロジック変更なし。要: メインGAS D2（col34）＝反映済。 -->
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
 :root {
@@ -3094,6 +3095,7 @@ function submitFinal() {
     makanai: state['makanaiあり'] ? '有り' : '無し',
     lateMinutes: parseInt(document.getElementById('late-minutes')?.value) || 0,
     latePenalty: calcLatePenalty(parseInt(document.getElementById('late-minutes')?.value) || 0),
+    couponTotal: (state.history || []).filter(h => h.status === 'active').reduce((s, h) => s + (Number(h.couponAmount) || 0), 0),  // 2026-07-08 Phase3 D1: クーポン値引累計→GAS col34（取消分は除外）
   };
   fetch(state.GAS_URL, { method: 'POST', body: JSON.stringify(payload) }).catch(e => console.error(e));
   showScreen('complete');
