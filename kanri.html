@@ -6616,7 +6616,7 @@ async function printAllForDay() {
   // ② 事前確認
   const okConfirm = confirm(
     dateVal + ' の一括印刷を開始します。\n\n' +
-    '印刷ダイアログが順番に 4〜5 回開きます。\n' +
+    '印刷ダイアログが順番に 3〜4 回開きます。\n' +
     '各ダイアログで「印刷」を押してください。\n' +
     '(キャンセルしても次のダイアログが開きます)\n\n' +
     '開始しますか?'
@@ -6688,7 +6688,6 @@ async function printAllForDay() {
   if (hasAfternoon) {
     _printAllQueue.push('sheet3');
   }
-  _printAllQueue.push('sheet4');
   _printAllIdx = 0;
 
   // ⑧ afterprint ハンドラを登録 (初回のみ)
