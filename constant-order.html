@@ -11,6 +11,7 @@
     --green: #0E7C66; --green-l: #e6f3ef;
     --orange: #E07E1E; --orange-l: #fbeede;
     --blue: #2D6CB5; --blue-l: #e6eef7;
+    --purple: #6A4C93; --purple-l: #efeaf6;
     --bg: #f4f6f9; --line: #e2e7ec; --off: #b6bcc4; --amber: #b9770e;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -29,6 +30,7 @@
   .tab.active.t-order  { border-bottom-color: var(--green);  background: rgba(14,124,102,0.18); }
   .tab.active.t-shop   { border-bottom-color: var(--orange); background: rgba(224,126,30,0.18); }
   .tab.active.t-report { border-bottom-color: var(--blue);   background: rgba(45,108,181,0.18); }
+  .tab.active.t-purchase { border-bottom-color: var(--purple); background: rgba(106,76,147,0.20); }
 
   .panel { display: none; }
   .panel.show { display: block; }
@@ -36,12 +38,12 @@
   .datebar { background: #fff; border-bottom: 1px solid var(--line); padding: 12px 14px; }
   .datebar label { display:block; font-size: 12px; font-weight: 700; color: var(--navy); margin-bottom: 6px; }
   .date-row { display: flex; gap: 8px; align-items: center; }
-  select#dateSel { flex: 1; font-size: 16px; font-weight: 700; color: #1c2733; padding: 11px 12px; border: 1.5px solid var(--line); border-radius: 10px; background: #fff; -webkit-appearance: none; appearance: none; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2 4l4 4 4-4' stroke='%231A3C5E' stroke-width='1.6' fill='none' stroke-linecap='round'/></svg>"); background-repeat: no-repeat; background-position: right 12px center; }
+  select#dateSel, select#pDateSel { flex: 1; font-size: 16px; font-weight: 700; color: #1c2733; padding: 11px 12px; border: 1.5px solid var(--line); border-radius: 10px; background: #fff; -webkit-appearance: none; appearance: none; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2 4l4 4 4-4' stroke='%231A3C5E' stroke-width='1.6' fill='none' stroke-linecap='round'/></svg>"); background-repeat: no-repeat; background-position: right 12px center; }
   .reload { border: 1.5px solid var(--line); background: #fff; color: var(--navy); font-size: 18px; padding: 9px 12px; border-radius: 10px; cursor: pointer; }
   .reload:active { background: #eef2f6; }
 
   .hint { padding: 10px 14px 2px; font-size: 12.5px; color: #5a6a7a; }
-  .c-order { color: var(--green); } .c-shop { color: var(--orange); } .c-report { color: var(--blue); }
+  .c-order { color: var(--green); } .c-shop { color: var(--orange); } .c-report { color: var(--blue); } .c-purchase { color: var(--purple); }
   .status { padding: 6px 14px; font-size: 12px; color: #7a8694; min-height: 16px; }
   .status.err { color: #c0392b; }
 
@@ -91,7 +93,32 @@
   .act-btn { margin-top: 10px; width: 100%; border: none; border-radius: 12px; padding: 14px; color: #fff; font-size: 16px; font-weight: 800; cursor: pointer; }
   .act-btn.shop { background: var(--orange); } .act-btn.shop:active { background: #c96d12; }
   .act-btn.report { background: var(--blue); } .act-btn.report:active { background: #245a99; }
+  .act-btn.purchase { background: var(--purple); } .act-btn.purchase:active { background: #563d77; }
   .act-btn:disabled { background: #cbd2da; }
+
+  /* ── 仕入記録タブ（2026-07-12 追加）── */
+  .p-form { background: #fff; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.05); margin: 8px 12px; padding: 13px; }
+  .p-field { margin-bottom: 10px; }
+  .p-field label { display: block; font-size: 12.5px; font-weight: 700; color: #5a6a7a; margin-bottom: 5px; }
+  select#pVendor { width: 100%; font-size: 16px; font-weight: 700; color: #1c2733; padding: 11px 12px; border: 1.5px solid var(--line); border-radius: 10px; background: #fff; -webkit-appearance: none; appearance: none; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2 4l4 4 4-4' stroke='%236A4C93' stroke-width='1.6' fill='none' stroke-linecap='round'/></svg>"); background-repeat: no-repeat; background-position: right 12px center; }
+  select#pVendor:focus { outline: none; border-color: var(--purple); }
+  input#pAmount { width: 100%; font-size: 20px; font-weight: 800; text-align: right; padding: 10px 12px; border: 1.5px solid var(--line); border-radius: 10px; background: #fff; color: #1c2733; -moz-appearance: textfield; }
+  input#pAmount::-webkit-outer-spin-button, input#pAmount::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  input#pAmount:focus { outline: none; border-color: var(--purple); box-shadow: 0 0 0 3px rgba(106,76,147,0.10); }
+  .p-msg { font-size: 12.5px; font-weight: 700; min-height: 16px; margin-top: 8px; text-align: center; }
+  .p-msg.ok { color: var(--green); } .p-msg.err { color: #c0392b; }
+
+  .p-total { display: flex; align-items: baseline; justify-content: space-between; margin: 4px 12px 0; background: var(--purple-l); border-radius: 12px; padding: 12px 16px; }
+  .p-total .lbl { font-size: 13px; font-weight: 800; color: var(--purple); }
+  .p-total .amt { font-size: 24px; font-weight: 900; color: var(--purple); line-height: 1; }
+
+  .p-entry { display: flex; align-items: center; gap: 10px; background: #fff; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.05); margin: 8px 0; padding: 11px 13px; }
+  .p-entry .info { flex: 1; min-width: 0; }
+  .p-entry .v { font-size: 15px; font-weight: 700; }
+  .p-entry .meta { font-size: 11px; color: #8a96a3; margin-top: 2px; }
+  .p-entry .amt { font-size: 17px; font-weight: 800; color: var(--purple); white-space: nowrap; }
+  .p-del { border: 1.5px solid #e4b6b1; color: #c0392b; background: #fff; font-size: 12px; font-weight: 800; padding: 7px 11px; border-radius: 9px; cursor: pointer; white-space: nowrap; }
+  .p-del:active { background: #fdecea; }
 
   .copied-toast { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); background: var(--navy); color: #fff; font-size: 14px; font-weight: 700; padding: 10px 18px; border-radius: 999px; z-index: 30; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: 86%; text-align: center; }
   .copied-toast.show { opacity: 1; }
@@ -117,7 +144,7 @@
   </header>
   <div class="tabbar" id="tabbar"></div>
   <div id="panels"></div>
-  <div class="foot">発注=自動保存／買い物=コピー／報告=社長に通知</div>
+  <div class="foot">発注=自動保存／買い物=コピー／報告=社長に通知／仕入記録=日報の原価に反映</div>
 </div>
 
 <div class="copied-toast" id="toast"></div>
@@ -127,8 +154,11 @@
 
 <script>
 // ════════════════════════════════════════════
-//  発注・買い物・報告アプリ  v3 (2026-06-12)
+//  発注・買い物・報告アプリ  v4 (2026-07-12)
 //  発注型=自動保存→kanri / 買い物型=コピー / 報告型=社長へLINE通知
+//  ★v4: 「仕入記録」タブを追加（type='purchase'）。旧・単体アプリ「キッチンポータル」を統合。
+//       納品の都度、業者＋金額を入力 → メインSS「仕入記録」に保存 → 日報の食材原価に自動反映。
+//       既存3タイプ（order/shop/report）のロジックには一切手を入れていない。
 // ════════════════════════════════════════════
 
 const LIFF_ID = '2009637457-TkY5aePd';
@@ -136,12 +166,14 @@ const GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5A
 
 // ★ name はマスタの業者名と完全一致させること（ズレるとタブが空になります）
 // type: 'order'（発注・自動保存）/ 'shop'（買い物・コピー）/ 'report'（報告・社長通知）
+//     / 'purchase'（仕入記録・日報の食材原価／※name はマスタ照合に使わない）
 const TABS = [
   { key: 'getsource', name: 'ゲットソース', type: 'order'  },
   { key: 'shopping',  name: '買い物',       type: 'shop'   },
   { key: 'noshi',     name: 'のし発注',     type: 'report' },
   { key: 'takagi',    name: 'タカギ産業',   type: 'report' },
-  { key: 'other',     name: 'その他',       type: 'report', freeInput: true }
+  { key: 'other',     name: 'その他',       type: 'report', freeInput: true },
+  { key: 'purchase',  name: '仕入記録',     type: 'purchase' }
 ];
 
 const DOW = ['日','月','火','水','木','金','土'];
@@ -163,6 +195,28 @@ function panelInner(t) {
       <div class="hint">在庫を数えて <b class="c-order">在庫</b> 欄に入力 → <b class="c-order">発注数（目標−在庫）</b> が自動計算・自動保存されます。</div>
       <div class="status" id="${sId}"></div>
       <div class="listwrap" id="${iId}"></div>`;
+  }
+  if (t.type === 'purchase') {
+    return `
+      <div class="datebar"><label>対象日（この日の納品分）</label>
+        <div class="date-row"><select id="pDateSel"></select><button class="reload" id="pReloadBtn" title="再読込">🔄</button></div>
+      </div>
+      <div class="hint">納品されたら <b class="c-purchase">業者</b> を選んで <b class="c-purchase">金額</b> を入力 → 保存。日報の食材原価に自動反映されます。</div>
+      <div class="status" id="${sId}"></div>
+      <div class="p-form">
+        <div class="p-field">
+          <label for="pVendor">業者</label>
+          <select id="pVendor"><option value="">選択してください</option></select>
+        </div>
+        <div class="p-field">
+          <label for="pAmount">金額（円）</label>
+          <input id="pAmount" type="number" inputmode="numeric" min="0" step="1" placeholder="例: 12500">
+        </div>
+        <button class="act-btn purchase" id="pSaveBtn">保存する</button>
+        <div class="p-msg" id="pMsg"></div>
+      </div>
+      <div class="p-total"><span class="lbl" id="pTotalLabel">本日の仕入合計</span><span class="amt" id="pTotal">¥0</span></div>
+      <div class="listwrap" id="pList"></div>`;
   }
   if (t.type === 'shop') {
     return `
@@ -197,7 +251,9 @@ function panelInner(t) {
 function buildShell() {
   let tabs = '', panels = '';
   TABS.forEach((t, i) => {
-    const cls = t.type === 'order' ? 't-order' : (t.type === 'shop' ? 't-shop' : 't-report');
+    const cls = t.type === 'order' ? 't-order'
+              : t.type === 'shop'  ? 't-shop'
+              : t.type === 'purchase' ? 't-purchase' : 't-report';
     tabs += `<div class="tab ${cls}${i===0?' active':''}" data-key="${t.key}" onclick="switchTab('${t.key}')">${escHtml(t.name)}</div>`;
     panels += `<div class="panel${i===0?' show':''}" id="panel-${t.key}">${panelInner(t)}</div>`;
   });
@@ -248,6 +304,7 @@ async function loadData(initial) {
     }
     if (oStatus) oStatus.textContent = '';
     TABS.forEach(t => {
+      if (t.type === 'purchase') return;        // 仕入記録タブは別API（loadPurchase）
       const vendor = findVendor(data, t.name);
       if (t.type === 'order') renderOrder(t, vendor);
       else if (initial || !_subRendered) renderQty(t, vendor);
@@ -438,6 +495,170 @@ async function sendReport(key) {
   } catch (e) { showToast('通信エラー: ' + e.message); btn.textContent = orig; btn.disabled = false; }
 }
 
+// ════════════════════════════════════════════
+//  仕入記録タブ（2026-07-12 追加）
+//  メインSS「仕入記録」に 日付/業者名/金額/入力日時/入力者 を1行追記する。
+//  ここに入った金額が、その日の日報の「納品金額(食材原価)」になる。
+// ════════════════════════════════════════════
+let PURCHASE = { date: '', vendors: [], entries: [], total: 0, loaded: false };
+
+function fmtYen(n) { return '¥' + (Number(n) || 0).toLocaleString('ja-JP'); }
+function jstTodayStr() { const j = new Date(Date.now() + 9*3600*1000); return j.toISOString().slice(0,10); }
+function fmtTs(ts) {
+  if (!ts) return '';
+  const j = new Date(Number(ts) + 9*3600*1000);
+  return String(j.getUTCHours()).padStart(2,'0') + ':' + String(j.getUTCMinutes()).padStart(2,'0');
+}
+
+// 対象日の選択肢＝過去14日〜今日（既定=今日・未来日は選べない）
+function buildPurchaseDates() {
+  const sel = document.getElementById('pDateSel');
+  if (!sel) return;
+  const todayStr = jstTodayStr();
+  const [ty, tm, td] = todayStr.split('-').map(Number);
+  sel.innerHTML = '';
+  for (let i = 0; i <= 14; i++) {
+    const d = new Date(Date.UTC(ty, tm - 1, td - i));
+    const ds = d.toISOString().slice(0, 10);
+    const opt = document.createElement('option');
+    opt.value = ds;
+    opt.textContent = (d.getUTCMonth()+1) + '/' + d.getUTCDate() + '（' + DOW[d.getUTCDay()] + '）'
+                    + (i === 0 ? ' 今日' : '');
+    sel.appendChild(opt);
+  }
+  sel.value = todayStr;
+}
+
+async function loadPurchase() {
+  const sEl = document.getElementById('status-purchase');
+  const sel = document.getElementById('pDateSel');
+  const date = sel ? sel.value : jstTodayStr();
+  if (sEl) { sEl.textContent = '読み込み中…'; sEl.className = 'status'; }
+  try {
+    const res = await fetch(GAS_URL + '?action=getPurchaseData&date=' + encodeURIComponent(date), { redirect: 'follow' });
+    const data = await res.json();
+    if (!data || !data.ok) {
+      if (sEl) { sEl.textContent = '取得エラー: ' + ((data && data.error) || '不明'); sEl.className = 'status err'; }
+      return;
+    }
+    if (sEl) sEl.textContent = '';
+    PURCHASE.date    = data.date || date;
+    PURCHASE.vendors = data.vendors || [];
+    PURCHASE.entries = data.entries || [];
+    PURCHASE.total   = data.total || 0;
+    PURCHASE.loaded  = true;
+    renderPurchaseVendors();
+    renderPurchaseList();
+  } catch (e) {
+    if (sEl) { sEl.textContent = '通信エラー: ' + e.message; sEl.className = 'status err'; }
+  }
+}
+
+function renderPurchaseVendors() {
+  const sel = document.getElementById('pVendor');
+  if (!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">選択してください</option>'
+    + PURCHASE.vendors.map(v => `<option value="${escHtml(v)}">${escHtml(v)}</option>`).join('');
+  if (cur && PURCHASE.vendors.indexOf(cur) !== -1) sel.value = cur;   // 連続入力: 業者選択を保持
+}
+
+function renderPurchaseList() {
+  const isToday = PURCHASE.date === jstTodayStr();
+  const tl = document.getElementById('pTotalLabel');
+  if (tl) tl.textContent = isToday ? '本日の仕入合計' : (PURCHASE.date + ' の仕入合計');
+  const tot = document.getElementById('pTotal');
+  if (tot) tot.textContent = fmtYen(PURCHASE.total);
+
+  const el = document.getElementById('pList');
+  if (!el) return;
+  if (!PURCHASE.entries.length) {
+    el.innerHTML = '<div class="empty">まだ入力がありません</div>';
+    return;
+  }
+  el.innerHTML = PURCHASE.entries.map(e => `
+    <div class="p-entry">
+      <div class="info">
+        <div class="v">${escHtml(e.vendor)}</div>
+        <div class="meta">${fmtTs(e.timestamp)}${e.user ? ' · ' + escHtml(e.user) : ''}</div>
+      </div>
+      <div class="amt">${fmtYen(e.amount)}</div>
+      <button class="p-del" onclick="deletePurchaseEntry(${Number(e.timestamp)})">削除</button>
+    </div>`).join('');
+}
+
+function purchaseMsg(type, text) {
+  const el = document.getElementById('pMsg');
+  if (!el) return;
+  el.className = 'p-msg ' + type;
+  el.textContent = text;
+  setTimeout(() => { if (el.textContent === text) { el.textContent = ''; el.className = 'p-msg'; } }, 3000);
+}
+
+async function savePurchaseEntry() {
+  const sel    = document.getElementById('pDateSel');
+  const vSel   = document.getElementById('pVendor');
+  const aEl    = document.getElementById('pAmount');
+  const btn    = document.getElementById('pSaveBtn');
+  const date   = sel ? sel.value : jstTodayStr();
+  const vendor = vSel ? vSel.value : '';
+  const amount = aEl ? parseInt(aEl.value, 10) : 0;
+
+  if (!vendor) return purchaseMsg('err', '業者を選択してください');
+  if (!amount || amount <= 0) return purchaseMsg('err', '金額を入力してください');
+
+  btn.disabled = true; const orig = btn.textContent; btn.textContent = '保存中…';
+  try {
+    const params = new URLSearchParams();
+    params.append('action', 'savePurchase');
+    params.append('date', date);
+    params.append('vendor', vendor);
+    params.append('amount', String(amount));
+    params.append('userId', USER_ID);
+    params.append('userName', DISPLAY_NAME);
+    const res  = await fetch(GAS_URL, { method: 'POST', body: params });
+    const json = await res.json();
+    if (json && json.success) {
+      PURCHASE.date    = json.date || date;
+      PURCHASE.entries = json.entries || [];
+      PURCHASE.total   = json.total || 0;
+      renderPurchaseList();
+      // 連続入力モード: 業者は保持、金額だけクリアして次の業者へ
+      aEl.value = '';
+      aEl.focus();
+      purchaseMsg('ok', vendor + ' ' + fmtYen(amount) + ' を保存しました');
+    } else {
+      purchaseMsg('err', '保存失敗: ' + ((json && json.error) || '不明'));
+    }
+  } catch (e) {
+    purchaseMsg('err', '通信エラー: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = orig;
+  }
+}
+
+async function deletePurchaseEntry(timestamp) {
+  if (!confirm('この入力を削除しますか？')) return;
+  try {
+    const params = new URLSearchParams();
+    params.append('action', 'deletePurchase');
+    params.append('timestamp', String(timestamp));
+    params.append('date', PURCHASE.date);
+    const res  = await fetch(GAS_URL, { method: 'POST', body: params });
+    const json = await res.json();
+    if (json && json.success) {
+      PURCHASE.entries = json.entries || [];
+      PURCHASE.total   = json.total || 0;
+      renderPurchaseList();
+      showToast('削除しました');
+    } else {
+      purchaseMsg('err', '削除失敗: ' + ((json && json.error) || '不明'));
+    }
+  } catch (e) {
+    purchaseMsg('err', '通信エラー: ' + e.message);
+  }
+}
+
 let _toastTimer = null;
 function showToast(msg) { const el = document.getElementById('toast'); el.textContent = msg; el.classList.add('show'); clearTimeout(_toastTimer); _toastTimer = setTimeout(() => el.classList.remove('show'), 1900); }
 
@@ -457,8 +678,19 @@ window.addEventListener('load', async function() {
       sel.addEventListener('change', () => loadData(false));
       const rb = document.getElementById('reloadBtn'); if (rb) rb.addEventListener('click', () => loadData(false));
     }
+
+    // ── 仕入記録タブ（2026-07-12 追加）──
+    buildPurchaseDates();
+    const pSel = document.getElementById('pDateSel');
+    if (pSel) pSel.addEventListener('change', loadPurchase);
+    const pRb = document.getElementById('pReloadBtn'); if (pRb) pRb.addEventListener('click', loadPurchase);
+    const pBtn = document.getElementById('pSaveBtn'); if (pBtn) pBtn.addEventListener('click', savePurchaseEntry);
+    const pAmt = document.getElementById('pAmount');
+    if (pAmt) pAmt.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') savePurchaseEntry(); });
+
     document.getElementById('loading').classList.add('hide');
     loadData(true);
+    loadPurchase();
   } catch (e) {
     document.getElementById('loading').classList.add('hide');
     document.getElementById('liffError').classList.remove('hide');
