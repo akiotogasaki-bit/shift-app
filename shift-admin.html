@@ -1,6 +1,11 @@
 <!DOCTYPE html>
 <!--
   お江戸弁当 shift-admin.html
+  v2026-07-16  拠点割当シートの「⚠️この日の未割当」を成績順に並び替え
+    - GAS action=getSellerPerformance（報告ログ 直近8週：週平均出勤数＋平均完売率）を非同期取得
+    - 出勤数・完売率を正規化した合算スコア（重み state.perfWeight で調整可）の高い順にソート
+    - 各行に成績ラベル（例: 週3.2 / 完売82%）を表示。データ無しは末尾＝名前順
+    - 依存: メインGAS 2026-07-16（getSellerPerformance）。失敗しても本体描画に影響なし
   v2026-07-12  「✅ 確認状況」タブを新設
     - GAS action=getShiftConfirmStatus（通知履歴 × シフト確認ログ の突合）を叩く
     - サマリ「確認 n/N」＋ 一覧（未確認=赤バッジ / 確認済=緑✓）。未確認が上にソート済で返る
@@ -543,6 +548,12 @@ input { font-family: inherit; }
   border-radius: 4px;
   background: var(--green);
   color: #FFF;
+}
+.seller-item .perf-tag {
+  font-size: 10px;
+  color: var(--ink-mute, #888);
+  margin-left: 6px;
+  white-space: nowrap;
 }
 .seller-item .check { color: var(--green); font-weight: 700; font-size: 16px; }
 .sheet-foot {
@@ -1696,6 +1707,11 @@ const state = {
   // ★v2026-07-12 確認状況タブ
   confirmData: null,        // getShiftConfirmStatus のレスポンス
   confirmLoadedWeek: null,  // 読み込み済みの weekTarget（週切替で再取得）
+  // ★2026-07-16 販売員成績（未割当ソート用）
+  perf: {},                 // name -> {attend(週平均出勤), sell(平均完売率%), days}
+  perfMax: { attend: 1, sell: 1 },   // 正規化用の最大値
+  perfWeight: { attend: 0.5, sell: 0.5 }, // 合算スコアの重み（調整可）
+  perfLoaded: false,
 };
 
 function login() {
@@ -1875,6 +1891,13 @@ async function loadAll() {
         console.warn('確認状況の読み込みに失敗:', err);
       });
     }
+
+    // ★2026-07-16 販売員成績（未割当ソート用）：非同期・失敗しても本体に影響させない
+    if (!state.perfLoaded) {
+      loadSellerPerf().catch(function(err) {
+        console.warn('販売員成績の読み込みに失敗:', err);
+      });
+    }
   } catch (e) {
     setStatus('err', `エラー: ${e.message}`);
     toast(`読込失敗: ${e.message}`, 'err');
@@ -1893,6 +1916,42 @@ async function loadDiffs() {
   } catch (e) {
     console.warn('diff load failed:', e);
   }
+}
+
+// ★2026-07-16 販売員成績（直近8週）を取得 → 未割当ソート用に state.perf へ格納
+async function loadSellerPerf() {
+  const data = await apiGet('getSellerPerformance', { weeks: 8 });
+  if (!data || !data.success) return;
+  const perf = {};
+  let maxAtt = 0, maxSell = 0;
+  (data.sellers || []).forEach(function(s) {
+    const att = Number(s.weekAvgAttend) || 0;
+    const sel = Number(s.avgSellRate) || 0;
+    perf[s.name] = { attend: att, sell: sel, days: Number(s.days) || 0 };
+    if (att > maxAtt)  maxAtt = att;
+    if (sel > maxSell) maxSell = sel;
+  });
+  state.perf = perf;
+  state.perfMax = { attend: maxAtt || 1, sell: maxSell || 1 };
+  state.perfLoaded = true;
+  // 未割当シートが開いていれば即再描画（成績順に並び替え）
+  if (state.selected) renderSellers();
+}
+
+// 合算スコア（出勤数・完売率を正規化して加重平均）。データ無し=-1（末尾へ）
+function sellerScore(name) {
+  const p = state.perf && state.perf[name];
+  if (!p) return -1;
+  const w = state.perfWeight || { attend: 0.5, sell: 0.5 };
+  const an = p.attend / (state.perfMax.attend || 1);
+  const sn = p.sell   / (state.perfMax.sell   || 1);
+  return w.attend * an + w.sell * sn;
+}
+// 成績ラベル（例: 週3.2 / 完売82%）。データ無しは空文字
+function perfLabel(name) {
+  const p = state.perf && state.perf[name];
+  if (!p) return '';
+  return '週' + p.attend.toFixed(1) + ' / 完売' + Math.round(p.sell) + '%';
 }
 
 function updateWeekInfo() {
@@ -2181,16 +2240,23 @@ function renderSellers() {
   // ① ⚠️ この日の未割当
   if (poolNormal.length > 0) {
     html += `<div class="tier-head pool">⚠️ この日の未割当（${poolNormal.length}名）</div>`;
-    poolNormal.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+    // ★2026-07-16 成績（直近8週の出勤数・完売率の合算スコア）が高い順。同点/データ無しは名前順
+    poolNormal.sort((a, b) => {
+      const d = sellerScore(b.name) - sellerScore(a.name);
+      return d !== 0 ? d : a.name.localeCompare(b.name, 'ja');
+    });
     poolNormal.forEach(s => {
       const isCur = s.name === current;
       const prefTag = s.pref1 === base ? '<span class="pref-tag">1</span>'
                     : s.pref2 === base ? '<span class="pref-tag t2">2</span>'
                     : s.pref3 === base ? '<span class="pref-tag t3">3</span>'
                     : '';
+      const pl = perfLabel(s.name);
+      const perfHtml = pl ? `<span class="perf-tag">${pl}</span>` : '';
       html += `<div class="seller-item ${isCur ? 'current' : ''}"
         onclick="selectSeller('${escapeAttr(s.name)}')">
         <span class="name">${escapeHtml(s.name)}</span>
+        ${perfHtml}
         <span class="pool-tag">未割当</span>
         ${prefTag}
         ${isCur ? '<span class="check">✓</span>' : ''}
