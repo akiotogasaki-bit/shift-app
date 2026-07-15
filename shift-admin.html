@@ -1926,10 +1926,11 @@ async function loadSellerPerf() {
   let maxAtt = 0, maxSell = 0;
   (data.sellers || []).forEach(function(s) {
     const att = Number(s.weekAvgAttend) || 0;
-    const sel = Number(s.avgSellRate) || 0;
+    const sel = Number(s.avgSellRate) || 0;   // 表示は実値（118%等もそのまま）
     perf[s.name] = { attend: att, sell: sel, days: Number(s.days) || 0 };
     if (att > maxAtt)  maxAtt = att;
-    if (sel > maxSell) maxSell = sel;
+    const selClip = Math.min(sel, 100);        // スコア正規化は100%上限
+    if (selClip > maxSell) maxSell = selClip;
   });
   state.perf = perf;
   state.perfMax = { attend: maxAtt || 1, sell: maxSell || 1 };
@@ -1944,7 +1945,7 @@ function sellerScore(name) {
   if (!p) return -1;
   const w = state.perfWeight || { attend: 0.5, sell: 0.5 };
   const an = p.attend / (state.perfMax.attend || 1);
-  const sn = p.sell   / (state.perfMax.sell   || 1);
+  const sn = Math.min(p.sell, 100) / (state.perfMax.sell || 1);  // 完売率は100%上限で正規化
   return w.attend * an + w.sell * sn;
 }
 // 成績ラベル（例: 週3.2 / 完売82%）。データ無しは空文字
