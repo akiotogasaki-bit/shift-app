@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>お江戸弁当 配達注文</title>
+<style>
+  :root{
+    --washi:#fbfaf7; --card:#ffffff; --ink:#20201d; --sub:#6b675f;
+    --shu:#c5482e; --shu-d:#a83a22; --line:#e7e3da; --ok:#2f7d5b; --warn:#b26b00;
+    --umeb:#8a9a5b; --take:#5b8a9a; --matsu:#b08a3e;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:#efece5;font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;color:var(--ink)}
+  .phone{max-width:430px;margin:0 auto;min-height:100vh;background:var(--washi);position:relative;box-shadow:0 0 30px rgba(0,0,0,.12);padding-bottom:88px}
+  header{background:var(--washi);border-bottom:1px solid var(--line);padding:14px 16px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:5}
+  header .logo{width:34px;height:34px;border-radius:8px;background:var(--shu);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px}
+  header .ttl{font-weight:700;font-size:16px}
+  header .ttl small{display:block;font-weight:400;color:var(--sub);font-size:11px}
+  .back{margin-left:auto;background:none;border:1px solid var(--line);border-radius:20px;padding:6px 12px;font-size:12px;color:var(--sub);cursor:pointer}
+  .screen{display:none;padding:16px}
+  .screen.active{display:block;animation:fade .2s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  h2{font-size:17px;margin:2px 0 12px}
+  h2 .shu{color:var(--shu)}
+  p.lead{color:var(--sub);font-size:13px;margin:0 0 16px;line-height:1.7}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
+  label.f{display:block;font-size:12px;color:var(--sub);margin:12px 0 5px;font-weight:600}
+  label.f:first-child{margin-top:0}
+  input,select,textarea{width:100%;padding:12px;border:1px solid var(--line);border-radius:10px;font-size:15px;background:#fff;font-family:inherit;color:var(--ink)}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--shu)}
+  .btn{display:block;width:100%;padding:14px;border:none;border-radius:12px;background:var(--shu);color:#fff;font-size:15px;font-weight:700;margin-top:16px;cursor:pointer;letter-spacing:.03em}
+  .btn:active{background:var(--shu-d)}
+  .btn:disabled{opacity:.5}
+  .btn.ghost{background:#fff;color:var(--ink);border:1px solid var(--line);font-weight:600}
+  .btn.sm{padding:10px;font-size:13px;margin-top:0;width:auto}
+  .link{text-align:center;color:var(--shu);font-size:13px;margin-top:14px;cursor:pointer;text-decoration:underline}
+  .note{font-size:11px;color:var(--sub);margin-top:6px;line-height:1.6}
+  .err{background:#fdf1ec;border:1px solid #f2c9bd;color:var(--shu-d);font-size:12px;border-radius:10px;padding:10px;margin-top:10px;line-height:1.6;display:none}
+  .err.show{display:block}
+  .grade{display:flex;align-items:center;gap:14px;padding:16px;border:1px solid var(--line);border-radius:14px;background:#fff;margin-bottom:12px;cursor:pointer;transition:.15s}
+  .grade:active{transform:scale(.99)}
+  .grade .badge{width:52px;height:52px;border-radius:12px;color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;flex:0 0 auto}
+  .grade .g-body{flex:1}
+  .grade .g-name{font-weight:700;font-size:16px}
+  .grade .g-sub{font-size:12px;color:var(--sub);margin-top:2px}
+  .grade .g-desc-line{font-size:12px;color:var(--ink);margin-top:4px;line-height:1.55}
+  .grade .g-price{font-weight:700;color:var(--shu);font-size:14px}
+  .grade .arw{color:var(--sub);font-size:18px}
+  .item{border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px;background:#fff}
+  .item .i-photo{width:100%;height:160px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:48px;color:#fff;position:relative;box-shadow:inset 0 0 0 1px rgba(0,0,0,.06);margin-bottom:10px;background-size:cover;background-position:center}
+  .item .i-photo span{position:absolute;bottom:6px;right:8px;font-size:10px;background:rgba(0,0,0,.35);color:#fff;padding:1px 7px;border-radius:6px}
+  .item .i-name{font-weight:700;font-size:15px}
+  .item .i-optlabel{font-size:12px;color:var(--sub);margin:12px 0 6px;font-weight:600}
+  .rices{display:flex;gap:8px}
+  .sizes{display:flex;gap:8px;margin:0 0 4px}
+  .sizes .sz,.rices .sz{flex:1;text-align:center;padding:9px;border:1px solid var(--line);border-radius:9px;font-size:13px;cursor:pointer;background:#fff}
+  .sizes .sz.on,.rices .sz.on{border-color:var(--shu);background:#fdf1ec;color:var(--shu);font-weight:700}
+  .sizes .sz.dis{opacity:.35;pointer-events:none}
+  .sizes .sz .szp{display:block;font-size:11px;color:var(--sub);margin-top:2px}
+  .sizes .sz.on .szp{color:var(--shu)}
+  .qtyrow{display:flex;align-items:center;justify-content:space-between}
+  .stepper{display:flex;align-items:center;gap:14px}
+  .stepper button{width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:#fff;font-size:18px;font-weight:700;color:var(--ink)}
+  .stepper .qnum{width:60px;height:36px;text-align:center;font-weight:700;font-size:16px;border:1px solid var(--line);border-radius:9px;padding:0;-moz-appearance:textfield}
+  .stepper .qnum::-webkit-outer-spin-button,.stepper .qnum::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+  .addbtn{background:var(--ink);color:#fff;border:none;border-radius:9px;padding:9px 16px;font-size:13px;font-weight:700}
+  .cline{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px dashed var(--line);font-size:14px}
+  .cline:last-child{border-bottom:none}
+  .cline .cq{color:var(--sub);font-size:12px}
+  .cline .cx{color:var(--sub);font-size:12px;cursor:pointer;text-decoration:underline}
+  .total{display:flex;justify-content:space-between;font-size:16px;font-weight:700;margin-top:8px;padding-top:12px;border-top:1px solid var(--line)}
+  .total .amt{color:var(--shu)}
+  .minbar{background:#fdf1ec;border:1px solid #f2c9bd;color:var(--shu-d);font-size:12px;border-radius:10px;padding:10px;margin-top:10px;line-height:1.6}
+  .minbar.ok{background:#eef7f1;border-color:#c3e2d1;color:var(--ok)}
+  .chips{display:flex;gap:10px}
+  .chips .chip{flex:1;text-align:center;padding:12px;border:1px solid var(--line);border-radius:10px;font-size:14px;cursor:pointer;background:#fff}
+  .chips .chip.on{border-color:var(--shu);background:#fdf1ec;color:var(--shu);font-weight:700}
+  .win{background:#f6f3ec;border-radius:10px;padding:10px 12px;font-size:13px;color:var(--ink);margin-top:6px}
+  .win b{color:var(--shu)}
+  .done{text-align:center;padding:26px 8px}
+  .done .chk{width:66px;height:66px;border-radius:50%;background:var(--ok);color:#fff;font-size:34px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px}
+  .ordno{font-size:24px;font-weight:800;letter-spacing:.03em;margin:8px 0;color:var(--ink);word-break:break-all}
+  .summary{text-align:left;background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;margin-top:16px;font-size:13px;line-height:1.9}
+  .summary .k{color:var(--sub);display:inline-block;width:76px;vertical-align:top}
+  .ord{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+  .ord .o-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+  .st{font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap}
+  .st.受付{background:#f1efe7;color:var(--sub)}
+  .st.確定{background:#eef7f1;color:var(--ok)}
+  .st.配達済{background:#eef1f7;color:#4a6}
+  .st.キャンセル{background:#f7eeee;color:#a55}
+  .o-meta{font-size:12px;color:var(--sub);line-height:1.7}
+  .o-act{display:flex;gap:8px;margin-top:10px}
+  .tabbar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;background:#fff;border-top:1px solid var(--line);display:flex;padding:8px 0 12px;z-index:6}
+  .tabbar button{flex:1;background:none;border:none;font-size:11px;color:var(--sub);display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer}
+  .tabbar button.on{color:var(--shu)}
+  .tabbar .ic{font-size:19px}
+  .hidden{display:none!important}
+  .prefill{font-size:10px;background:#eef1f7;color:#4a6;padding:1px 6px;border-radius:6px;margin-left:6px;font-weight:700}
+  #overlay{position:fixed;inset:0;background:rgba(255,255,255,.6);display:none;align-items:center;justify-content:center;z-index:50}
+  #overlay.show{display:flex}
+  .spin{width:38px;height:38px;border:3px solid var(--line);border-top-color:var(--shu);border-radius:50%;animation:sp .8s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  #toast{position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:#20201d;color:#fff;font-size:13px;padding:10px 18px;border-radius:22px;z-index:60;opacity:0;transition:.25s;pointer-events:none;max-width:88%;text-align:center}
+  #toast.show{opacity:1}
+</style>
+</head>
+<body>
+<div class="phone">
+
+  <!-- ===== LOGIN ===== -->
+  <section id="scr-login" class="screen active">
+    <div style="text-align:center;padding:30px 0 10px">
+      <div style="width:64px;height:64px;border-radius:16px;background:var(--shu);color:#fff;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:700;margin:0 auto 14px">江</div>
+      <h2 style="margin:0">お江戸弁当 <span class="shu">配達注文</span></h2>
+      <p class="lead" style="margin-top:8px">電話番号とパスコードでログイン。<br>次回から会社名・お届け先が自動で入ります。</p>
+    </div>
+    <div class="card">
+      <label class="f">電話番号</label>
+      <input id="lg-phone" type="tel" inputmode="numeric" placeholder="09012345678">
+      <label class="f">パスコード</label>
+      <input id="lg-pass" type="password" placeholder="ご自身で設定したパスコード">
+      <div id="lg-err" class="err"></div>
+      <button class="btn" onclick="doLogin()">ログイン</button>
+      <div class="link" onclick="go('scr-signup')">はじめての方はこちら（新規登録）</div>
+      <div class="note">※SMS認証はありません。パスコードをお忘れの場合は店舗（03-6801-6512）へお電話ください。</div>
+    </div>
+  </section>
+
+  <!-- ===== SIGNUP ===== -->
+  <section id="scr-signup" class="screen">
+    <div class="hdr-slot"></div>
+    <h2>新規登録</h2>
+    <p class="lead">最初に一度だけご登録ください。次回以降は自動入力されます。</p>
+    <div class="card">
+      <label class="f">電話番号（ログインID）</label>
+      <input id="su-phone" type="tel" inputmode="numeric" placeholder="09012345678">
+      <label class="f">パスコード（ご自身で設定・4桁以上）</label>
+      <input id="su-pass" type="password" placeholder="4〜8桁など">
+      <label class="f">区分</label>
+      <select id="su-kind"><option>法人</option><option>個人</option></select>
+      <label class="f">会社名</label>
+      <input id="su-company" placeholder="株式会社◯◯">
+      <label class="f">ご担当者・お名前</label>
+      <input id="su-name" placeholder="山田 太郎">
+      <label class="f">メールアドレス（確認メールをお送りします）</label>
+      <input id="su-email" type="email" placeholder="you@example.com">
+      <label class="f">請求書の送付先住所（会社住所）</label>
+      <textarea id="su-billing" rows="2" placeholder="東京都◯◯区…（請求書の送付先）"></textarea>
+      <div id="su-err" class="err"></div>
+      <button class="btn" onclick="doSignup()">登録してはじめる</button>
+      <div class="link" onclick="go('scr-login')">← ログインに戻る</div>
+    </div>
+  </section>
+
+  <!-- ===== HOME ===== -->
+  <section id="scr-home" class="screen">
+    <div class="hdr-slot"></div>
+    <h2>ようこそ、<span class="shu" id="home-name">お客</span>様</h2>
+    <div class="card" style="display:flex;align-items:center;gap:14px">
+      <div style="font-size:30px">🍱</div>
+      <div style="flex:1">
+        <div style="font-weight:700">配達のご注文</div>
+        <div class="note" style="margin-top:2px">梅・竹・松からお選びいただけます</div>
+      </div>
+    </div>
+    <button class="btn" onclick="startOrder()">＋ 新しく注文する</button>
+    <h2 style="margin-top:26px;font-size:15px">最近のご注文</h2>
+    <div id="home-recent"><div class="note">読み込み中…</div></div>
+  </section>
+
+  <!-- ===== MENU: grade ===== -->
+  <section id="scr-grade" class="screen">
+    <div class="hdr-slot"></div>
+    <h2>① グレードを選ぶ</h2>
+    <p class="lead">梅・竹・松の3グレード。グレードごとにお値段が決まっています。選ぶと中の詳細メニューをお選びいただけます。</p>
+    <div id="grade-list"><div class="note">メニューを読み込み中…</div></div>
+  </section>
+
+  <!-- ===== MENU: detail ===== -->
+  <section id="scr-detail" class="screen">
+    <div class="hdr-slot"></div>
+    <h2>② <span id="d-grade" class="shu"></span> の詳細を選ぶ</h2>
+    <p class="lead">ごはん（白米・玄米）とサイズ（通常・大盛）、個数を選んで「追加」してください。複数の種類を組み合わせてご注文いただけます。</p>
+    <div id="detail-list"></div>
+    <button class="btn" onclick="go('scr-cart')">カートを見る（<span id="d-count">0</span>点）→</button>
+    <div class="link" onclick="go('scr-grade')">← グレード選択に戻る</div>
+  </section>
+
+  <!-- ===== CART / ORDER INPUT ===== -->
+  <section id="scr-cart" class="screen">
+    <div class="hdr-slot"></div>
+    <h2>③ ご注文内容とお届け</h2>
+    <div class="card">
+      <div style="font-weight:700;margin-bottom:6px">ご注文</div>
+      <div id="cart-lines"></div>
+      <div class="total"><span>合計</span><span class="amt" id="cart-total">¥0</span></div>
+      <div id="minbar" class="minbar">最低ご注文金額は <b>¥15,000</b> です。</div>
+      <div class="note" style="margin-top:8px">※合計は商品小計（税込）です。23区内は配送料無料。23区外は距離により別途、店舗よりご連絡します。</div>
+      <div class="link" onclick="go('scr-grade')" style="margin-top:12px">＋ メニューを追加する</div>
+    </div>
+
+    <div class="card">
+      <label class="f">お届け日</label>
+      <input id="dv-date" type="date">
+      <div class="note">※ご注文は<b>2営業日前まで</b>。最短のお届け日を初期表示しています。</div>
+
+      <label class="f">お届け時間（開始時刻を選択）</label>
+      <select id="dv-time" onchange="updWindow()"></select>
+      <div class="win">お届け時間帯：<b id="win-label">—</b>（1時間幅）</div>
+
+      <label class="f">お届け先エリア</label>
+      <select id="dv-area" onchange="updArea()">
+        <option value="in" selected>東京23区内</option>
+        <option value="out">23区外</option>
+      </select>
+      <div id="area-note" class="note">23区内は配送料はかかりません（商品価格のみ）。</div>
+
+      <label class="f">お届け先住所</label>
+      <select id="dv-addr-pick" onchange="pickAddr()"></select>
+      <textarea id="dv-addr" rows="2" style="margin-top:8px" placeholder="お届け先の住所"></textarea>
+      <div class="note">過去のお届け先から選択、または新しい住所を入力できます。</div>
+
+      <label class="f">当日のご連絡先</label>
+      <input id="dv-tel-name" placeholder="ご担当者名（当日対応の方）" style="margin-bottom:8px">
+      <input id="dv-tel" type="tel" inputmode="numeric" placeholder="当日つながる番号（携帯など）">
+
+      <label class="f">帳票の宛名<span class="prefill">会社名を初期表示</span></label>
+      <input id="dv-atena" placeholder="領収書・請求書の宛名">
+
+      <label class="f">お支払い方法</label>
+      <div class="chips">
+        <div class="chip on" data-pay="現金" onclick="pickPay(this)">現金（お届け時）</div>
+        <div class="chip" data-pay="請求書" onclick="pickPay(this)">請求書（掛け）</div>
+      </div>
+
+      <div id="invoice-method" class="hidden">
+        <label class="f">請求書の受け取り方法</label>
+        <div class="chips">
+          <div class="chip on" data-inv="当日お渡し" onclick="pickInv(this)">当日お渡し</div>
+          <div class="chip" data-inv="郵送" onclick="pickInv(this)">郵送</div>
+          <div class="chip" data-inv="メール" onclick="pickInv(this)">メール</div>
+        </div>
+        <div class="note" id="inv-note">お届け時に請求書をお渡しします。</div>
+      </div>
+
+      <label class="f">アレルギー・搬入方法など（任意）</label>
+      <textarea id="dv-memo" rows="2" placeholder="アレルギー対応・ビル搬入方法・受け渡し場所 など"></textarea>
+    </div>
+    <div id="cart-err" class="err"></div>
+    <button class="btn" id="toConfirm" onclick="toConfirm()">確認へ進む</button>
+  </section>
+
+  <!-- ===== CONFIRM ===== -->
+  <section id="scr-confirm" class="screen">
+    <div class="hdr-slot"></div>
+    <h2>④ ご注文の確認</h2>
+    <div class="card" id="confirm-body"></div>
+    <div id="confirm-err" class="err"></div>
+    <button class="btn" id="placeBtn" onclick="placeOrder()">この内容で注文を確定する</button>
+    <div class="link" onclick="go('scr-cart')">← 内容を修正する</div>
+    <div class="note" style="text-align:center;margin-top:8px">ご注文後、店舗に通知が届きます。<br>内容を確認のうえ、お届けの準備を進めます。</div>
+  </section>
+
+  <!-- ===== DONE ===== -->
+  <section id="scr-done" class="screen">
+    <div class="done">
+      <div class="chk">✓</div>
+      <div style="font-weight:700;font-size:17px">ご注文を承りました</div>
+      <div class="note" style="margin-top:4px">ご注文番号</div>
+      <div class="ordno" id="done-no">—</div>
+      <div class="summary" id="done-sum"></div>
+      <div class="minbar ok" style="margin-top:14px">確認メールを <b>ご登録のメールアドレス</b> へお送りしました ✉️</div>
+      <div class="note" style="margin-top:10px">ご変更・キャンセルは「マイ注文」から締切（お届け日の2営業日前）まで可能です。店舗にも通知が届き、確認後にお届けの準備を進めます。</div>
+      <button class="btn" onclick="go('scr-orders')">マイ注文を見る</button>
+      <button class="btn ghost" onclick="go('scr-home')" style="margin-top:10px">ホームへ</button>
+    </div>
+  </section>
+
+  <!-- ===== MY ORDERS ===== -->
+  <section id="scr-orders" class="screen">
+    <div class="hdr-slot"></div>
+    <h2>マイ注文</h2>
+    <div id="orders-list"><div class="note">読み込み中…</div></div>
+  </section>
+
+  <!-- ===== EDIT ORDER ===== -->
+  <section id="scr-edit" class="screen">
+    <div class="hdr-slot"></div>
+    <h2>ご注文の変更</h2>
+    <p class="lead" id="edit-target"></p>
+    <div class="card">
+      <label class="f">お届け日</label>
+      <input id="ed-date" type="date">
+      <label class="f">お届け時間（開始時刻）</label>
+      <select id="ed-time" onchange="edWindow()"></select>
+      <div class="win">お届け時間帯：<b id="ed-win">—</b>（1時間幅）</div>
+      <label class="f">お届け先住所</label>
+      <textarea id="ed-addr" rows="2"></textarea>
+      <label class="f">当日のご連絡先</label>
+      <input id="ed-tel-name" placeholder="ご担当者名" style="margin-bottom:8px">
+      <input id="ed-tel" type="tel" inputmode="numeric" placeholder="当日つながる番号">
+      <label class="f">帳票の宛名</label>
+      <input id="ed-atena">
+      <label class="f">アレルギー・搬入方法など</label>
+      <textarea id="ed-memo" rows="2"></textarea>
+      <div id="edit-err" class="err"></div>
+      <button class="btn" onclick="saveEdit()">この内容に変更する</button>
+      <div class="link" onclick="go('scr-orders')">← 戻る</div>
+    </div>
+  </section>
+
+  <!-- ===== PROFILE ===== -->
+  <section id="scr-profile" class="screen">
+    <div class="hdr-slot"></div>
+    <h2>アカウント</h2>
+    <div class="card">
+      <div class="note" style="margin-bottom:10px">電話番号：<b id="pf-phone">—</b></div>
+      <label class="f">区分</label>
+      <select id="pf-kind"><option>法人</option><option>個人</option></select>
+      <label class="f">会社名</label>
+      <input id="pf-company">
+      <label class="f">ご担当者・お名前</label>
+      <input id="pf-name">
+      <label class="f">メールアドレス</label>
+      <input id="pf-email" type="email">
+      <label class="f">請求書の送付先住所（会社住所）</label>
+      <textarea id="pf-billing" rows="2"></textarea>
+      <div id="pf-err" class="err"></div>
+      <button class="btn" onclick="saveProfile()">保存する</button>
+      <button class="btn ghost" onclick="logout()" style="margin-top:10px">ログアウト</button>
+    </div>
+  </section>
+
+  <!-- ===== TABBAR ===== -->
+  <nav class="tabbar" id="tabbar">
+    <button data-tab="scr-home" class="on" onclick="go('scr-home')"><span class="ic">🏠</span>ホーム</button>
+    <button data-tab="scr-grade" onclick="startOrder()"><span class="ic">🍱</span>注文する</button>
+    <button data-tab="scr-orders" onclick="go('scr-orders')"><span class="ic">📋</span>マイ注文</button>
+    <button data-tab="scr-profile" onclick="openProfile()"><span class="ic">👤</span>アカウント</button>
+  </nav>
+</div>
+
+<div id="overlay"><div class="spin"></div></div>
+<div id="toast"></div>
+
+<script>
+// ======================================================================
+// お江戸弁当 配達オーダー受付サイト order.html（Phase1・2026-07-20）
+//   設計書: 40_ドキュメント/配達オーダー受付サイト_設計書_2026-07-19.md（v2.1）
+//   バックエンド: メインGAS（getDeliveryMenu / registerCustomer / loginCustomer /
+//     saveDeliveryOrder / getMyDeliveryOrders / getMyDeliveryAddresses / update・cancel）
+// ======================================================================
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5AawPDc7aluPokONkYz6f2ikwl0S487JvhKdKh6QSp1xhEhA/exec';
+const TOKEN_KEY = 'oedo_deliv_token';
+
+const state = {
+  token: null,
+  profile: null,
+  menu: null,           // {grades, slots, minAmount, earliestDate, riceOptions}
+  gradesByKey: {},      // internal grade -> grade obj
+  curGrade: null,
+  cart: [],             // {productId, deliveryName, name, grade, gname, gkey, rice, size, price, qty}
+  pay: '現金',
+  invMethod: '当日お渡し',
+  addresses: [],
+  editOrderId: null
+};
+const GRADE_COLOR = { ume:'var(--umeb)', take:'var(--take)', matsu:'var(--matsu)' };
+const yen = n => '¥' + (Number(n)||0).toLocaleString();
+const esc = s => String(s==null?'':s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+
+// ---------- API ----------
+function showLoad(b){ document.getElementById('overlay').classList.toggle('show', b); }
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2200); }
+async function apiGet(action, params){
+  const q = new URLSearchParams(Object.assign({action:action}, params||{})).toString();
+  const res = await fetch(GAS_URL + '?' + q, { method:'GET', redirect:'follow' });
+  return await res.json();
+}
+async function apiPost(payload){
+  const res = await fetch(GAS_URL, { method:'POST', body: JSON.stringify(payload), redirect:'follow' });
+  return await res.json();
+}
+function showErr(id, msg){ const e=document.getElementById(id); e.textContent=msg; e.classList.add('show'); }
+function clearErr(id){ const e=document.getElementById(id); if(e){ e.textContent=''; e.classList.remove('show'); } }
+
+// ---------- router ----------
+function go(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  const el = document.getElementById(id);
+  el.classList.add('active');
+  window.scrollTo(0,0);
+  const hideTab = ['scr-login','scr-signup','scr-done','scr-confirm','scr-edit'];
+  document.getElementById('tabbar').classList.toggle('hidden', hideTab.includes(id));
+  document.querySelectorAll('#tabbar button').forEach(b=>b.classList.toggle('on', b.dataset.tab===id));
+  if(id==='scr-cart') renderCart();
+  if(id==='scr-orders') loadOrders();
+  if(id==='scr-home') loadRecent();
+}
+function injectHeaders(){
+  document.querySelectorAll('.hdr-slot').forEach(slot=>{
+    slot.outerHTML = '<header><div class="logo">江</div><div class="ttl">お江戸弁当<small>配達注文</small></div><button class="back" onclick="go(\'scr-home\')">✕ 閉じる</button></header>';
+  });
+}
+
+// ---------- auth ----------
+async function doLogin(){
+  clearErr('lg-err');
+  const phone = document.getElementById('lg-phone').value.trim();
+  const pass  = document.getElementById('lg-pass').value;
+  if(!phone || !pass){ showErr('lg-err','電話番号とパスコードを入力してください。'); return; }
+  showLoad(true);
+  try{
+    const r = await apiPost({ action:'loginCustomer', phone, passcode:pass });
+    if(!r.ok){ showErr('lg-err', r.error || 'ログインできませんでした。'); return; }
+    onAuthed(r);
+  }catch(e){ showErr('lg-err','通信エラーが発生しました。'); }
+  finally{ showLoad(false); }
+}
+async function doSignup(){
+  clearErr('su-err');
+  const phone = document.getElementById('su-phone').value.trim();
+  const pass  = document.getElementById('su-pass').value;
+  if(!phone || pass.length<4){ showErr('su-err','電話番号と4桁以上のパスコードを入力してください。'); return; }
+  const profile = {
+    kind: document.getElementById('su-kind').value,
+    company: document.getElementById('su-company').value.trim(),
+    name: document.getElementById('su-name').value.trim(),
+    email: document.getElementById('su-email').value.trim(),
+    billingAddr: document.getElementById('su-billing').value.trim(),
+    contactPhone: phone
+  };
+  showLoad(true);
+  try{
+    const r = await apiPost({ action:'registerCustomer', phone, passcode:pass, profile });
+    if(!r.ok){ showErr('su-err', r.error || '登録できませんでした。'); return; }
+    onAuthed(r);
+  }catch(e){ showErr('su-err','通信エラーが発生しました。'); }
+  finally{ showLoad(false); }
+}
+function onAuthed(r){
+  state.token = r.token; state.profile = r.profile || null;
+  try{ localStorage.setItem(TOKEN_KEY, r.token); }catch(e){}
+  applyProfile();
+  go('scr-home');
+  ensureMenu();
+}
+function applyProfile(){
+  const p = state.profile || {};
+  document.getElementById('home-name').textContent = p.name || p.company || 'お客';
+}
+function logout(){
+  try{ localStorage.removeItem(TOKEN_KEY); }catch(e){}
+  state.token=null; state.profile=null; state.cart=[];
+  document.getElementById('lg-phone').value=''; document.getElementById('lg-pass').value='';
+  go('scr-login');
+}
+
+// ---------- menu ----------
+async function ensureMenu(){
+  if(state.menu) return state.menu;
+  const r = await apiGet('getDeliveryMenu');
+  if(r && r.ok){
+    state.menu = r;
+    state.gradesByKey = {};
+    r.grades.forEach(g=>{ state.gradesByKey[g.grade]=g; });
+    buildTimeOptions('dv-time', r.slots);
+    buildTimeOptions('ed-time', r.slots);
+  }
+  return state.menu;
+}
+function buildTimeOptions(selId, slots){
+  const sel = document.getElementById(selId);
+  if(!sel || !slots) return;
+  const def = slots.indexOf('11:00')>=0 ? '11:00' : slots[0];
+  sel.innerHTML = slots.map(s=>`<option value="${s}"${s===def?' selected':''}>${s}</option>`).join('');
+}
+async function startOrder(){
+  showLoad(true);
+  try{
+    await ensureMenu();
+    if(!state.menu || !state.menu.grades.length){ toast('メニューを読み込めませんでした。'); return; }
+    renderGrades(); go('scr-grade');
+  }finally{ showLoad(false); }
+}
+function renderGrades(){
+  document.getElementById('grade-list').innerHTML = state.menu.grades.map(g=>{
+    const prices = collectGradePrices(g);
+    return `<div class="grade" onclick="openGrade('${g.grade}')">
+      <div class="badge" style="background:${GRADE_COLOR[g.grade]||'#999'}">${esc(g.key)}</div>
+      <div class="g-body">
+        <div class="g-name">${esc(g.name)}</div>
+        <div class="g-desc-line">${esc(g.desc||'')}</div>
+        <div class="g-sub">${g.items.length}種類のお弁当</div>
+        <div class="g-price">${prices}</div>
+      </div>
+      <div class="arw">›</div>
+    </div>`;
+  }).join('');
+}
+function collectGradePrices(g){
+  let normal=null, large=null;
+  g.items.forEach(it=>{
+    if(it.sizes['通常'] && normal==null) normal=it.sizes['通常'].price;
+    if(it.sizes['大盛'] && large==null) large=it.sizes['大盛'].price;
+  });
+  const parts=[];
+  if(normal!=null) parts.push('通常 '+yen(normal));
+  if(large!=null)  parts.push('大盛 '+yen(large));
+  return parts.join('／');
+}
+function openGrade(gkey){
+  const g = state.gradesByKey[gkey];
+  state.curGrade = g;
+  document.getElementById('d-grade').textContent = g.name;
+  document.getElementById('detail-list').innerHTML = g.items.map((it,idx)=>{
+    const hasN = !!it.sizes['通常'], hasL = !!it.sizes['大盛'];
+    const nP = hasN ? it.sizes['通常'].price : null;
+    const lP = hasL ? it.sizes['大盛'].price : null;
+    const photo = it.photoUrl
+      ? `<div class="i-photo" style="background-image:url('${esc(it.photoUrl)}');background-color:${GRADE_COLOR[g.grade]}"></div>`
+      : `<div class="i-photo" style="background:${GRADE_COLOR[g.grade]}">🍱<span>写真準備中</span></div>`;
+    return `<div class="item" id="it-${idx}">
+      ${photo}
+      <div class="i-name">${esc(it.name)}${it.variant?'（'+esc(it.variant)+'）':''}</div>
+      <div class="i-optlabel">ごはん</div>
+      <div class="rices">
+        <div class="sz on" data-rice="白米" onclick="pickChip(this)">白米</div>
+        <div class="sz" data-rice="玄米" onclick="pickChip(this)">玄米</div>
+      </div>
+      <div class="i-optlabel">サイズ</div>
+      <div class="sizes">
+        <div class="sz ${hasN?'on':'dis'}" data-sz="通常" onclick="pickChip(this)">通常${nP!=null?'<span class="szp">'+yen(nP)+'</span>':''}</div>
+        <div class="sz ${hasL?(hasN?'':'on'):'dis'}" data-sz="大盛" onclick="pickChip(this)">大盛${lP!=null?'<span class="szp">'+yen(lP)+'</span>':''}</div>
+      </div>
+      <div class="qtyrow">
+        <div class="stepper">
+          <button onclick="stepQty(${idx},-1)">−</button>
+          <input class="qnum" id="q-${idx}" type="number" inputmode="numeric" value="1" min="1" oninput="clampQty(${idx})">
+          <button onclick="stepQty(${idx},1)">＋</button>
+        </div>
+        <button class="addbtn" onclick="addItem(${idx})">追加</button>
+      </div>
+    </div>`;
+  }).join('');
+  go('scr-detail');
+}
+function pickChip(el){
+  el.parentElement.querySelectorAll('.sz').forEach(s=>s.classList.remove('on'));
+  el.classList.add('on');
+}
+function stepQty(idx,d){ const n=document.getElementById('q-'+idx); n.value=Math.max(1,(parseInt(n.value)||1)+d); }
+function clampQty(idx){ const n=document.getElementById('q-'+idx); if(n.value===''){return;} let v=parseInt(n.value); if(isNaN(v)||v<1) n.value=1; }
+function addItem(idx){
+  const g = state.curGrade, it = g.items[idx];
+  const box = document.getElementById('it-'+idx);
+  const rice = box.querySelector('.rices .sz.on').dataset.rice;
+  const szEl = box.querySelector('.sizes .sz.on');
+  if(!szEl){ toast('サイズを選んでください。'); return; }
+  const size = szEl.dataset.sz;
+  const sz = it.sizes[size];
+  if(!sz){ toast('このサイズは選べません。'); return; }
+  const qty = Math.max(1, parseInt(document.getElementById('q-'+idx).value)||1);
+  state.cart.push({
+    productId: sz.productId, deliveryName: sz.deliveryName,
+    name: it.name + (it.variant?'（'+it.variant+'）':''), grade: g.grade, gname: g.name, gkey: g.key,
+    rice, size, price: sz.price, qty
+  });
+  document.getElementById('d-count').textContent = state.cart.reduce((a,c)=>a+c.qty,0);
+  const b=box.querySelector('.addbtn'); const t=b.textContent; b.textContent='✓ 追加済'; b.style.background='var(--ok)';
+  setTimeout(()=>{ b.textContent=t; b.style.background=''; },900);
+}
+function total(){ return state.cart.reduce((a,c)=>a+c.price*c.qty,0); }
+
+// ---------- cart ----------
+async function renderCart(){
+  const box=document.getElementById('cart-lines');
+  if(!state.cart.length){ box.innerHTML='<div class="note">まだ商品が選ばれていません。</div>'; }
+  else box.innerHTML=state.cart.map((c,i)=>`
+    <div class="cline">
+      <div><div>${esc(c.gname)}／${esc(c.name)}</div><div class="cq">${esc(c.size)}・${esc(c.rice)} × ${c.qty}　${yen(c.price)}</div></div>
+      <div style="text-align:right"><div>${yen(c.price*c.qty)}</div><div class="cx" onclick="delLine(${i})">削除</div></div>
+    </div>`).join('');
+  const t=total(), MIN=state.menu?state.menu.minAmount:15000;
+  document.getElementById('cart-total').textContent=yen(t);
+  const mb=document.getElementById('minbar');
+  if(t>=MIN){ mb.className='minbar ok'; mb.innerHTML='最低ご注文金額（'+yen(MIN)+'）を満たしています ✓'; }
+  else { mb.className='minbar'; mb.innerHTML='最低ご注文金額は <b>'+yen(MIN)+'</b> です（あと <b>'+yen(MIN-t)+'</b>）。'; }
+  document.getElementById('toConfirm').disabled = t<MIN;
+  // 初期化（初回のみ）
+  const dateEl=document.getElementById('dv-date');
+  if(state.menu && !dateEl.value){ dateEl.min=state.menu.earliestDate; dateEl.value=state.menu.earliestDate; }
+  updWindow();
+  const at=document.getElementById('dv-atena');
+  if(!at.value && state.profile && state.profile.company) at.value = state.profile.company + ' 御中';
+  const tn=document.getElementById('dv-tel-name');
+  if(!tn.value && state.profile && state.profile.name) tn.value = state.profile.name;
+  if(!state.addresses.length) await loadAddresses();
+}
+function delLine(i){ state.cart.splice(i,1); document.getElementById('d-count').textContent=state.cart.reduce((a,c)=>a+c.qty,0); renderCart(); }
+async function loadAddresses(){
+  try{
+    const r = await apiGet('getMyDeliveryAddresses', { token: state.token });
+    state.addresses = (r && r.ok) ? (r.addresses||[]) : [];
+  }catch(e){ state.addresses=[]; }
+  const sel=document.getElementById('dv-addr-pick');
+  const opts = state.addresses.map(a=>`<option value="${esc(a)}">履歴：${esc(a)}</option>`).join('');
+  sel.innerHTML = opts + '<option value="__new__">＋ 新しい住所を入力</option>';
+  if(state.addresses.length){ document.getElementById('dv-addr').value = state.addresses[0]; }
+}
+function pickAddr(){
+  const v=document.getElementById('dv-addr-pick').value;
+  const ta=document.getElementById('dv-addr');
+  if(v==='__new__'){ ta.value=''; ta.focus(); } else { ta.value=v; }
+}
+function pickPay(el){
+  el.parentElement.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));
+  el.classList.add('on'); state.pay=el.dataset.pay;
+  document.getElementById('invoice-method').classList.toggle('hidden', state.pay!=='請求書');
+}
+function pickInv(el){
+  el.parentElement.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));
+  el.classList.add('on'); state.invMethod=el.dataset.inv;
+  const n=document.getElementById('inv-note');
+  if(state.invMethod==='郵送') n.textContent='ご登録の請求書送付先（会社住所）へ郵送します。';
+  else if(state.invMethod==='メール') n.textContent='ご登録のメールアドレスへ請求書をお送りします。';
+  else n.textContent='お届け時に請求書をお渡しします。';
+}
+function winFromStart(t){
+  const a=String(t).split(':'); const h=+a[0], m=+a[1];
+  const pad=x=>('0'+x).slice(-2);
+  return t+'〜'+pad(h+1)+':'+pad(m);
+}
+function updWindow(){ const t=document.getElementById('dv-time').value; if(t) document.getElementById('win-label').textContent=winFromStart(t); }
+function updArea(){
+  const out=document.getElementById('dv-area').value==='out';
+  const n=document.getElementById('area-note');
+  n.innerHTML = out
+    ? '<b style="color:var(--warn)">23区外</b>：配送料が距離により異なるため、ご注文後に<b>店舗より別途ご連絡</b>します。'
+    : '23区内は配送料はかかりません（商品価格のみ）。';
+}
+function toConfirm(){
+  clearErr('cart-err');
+  const MIN=state.menu?state.menu.minAmount:15000;
+  if(total()<MIN){ showErr('cart-err','最低ご注文金額に達していません。'); return; }
+  const addr=document.getElementById('dv-addr').value.trim();
+  if(!document.getElementById('dv-date').value){ showErr('cart-err','お届け日を選択してください。'); return; }
+  if(!addr){ showErr('cart-err','お届け先住所を入力してください。'); return; }
+  const win=document.getElementById('win-label').textContent;
+  const date=document.getElementById('dv-date').value;
+  const telName=document.getElementById('dv-tel-name').value.trim();
+  const tel=document.getElementById('dv-tel').value.trim()||'—';
+  const telFull=(telName?telName+'／':'')+tel;
+  const atena=document.getElementById('dv-atena').value.trim()||'—';
+  const out=document.getElementById('dv-area').value==='out';
+  const memo=document.getElementById('dv-memo').value.trim()||'—';
+  const areaTxt = out ? '23区外（配送料は店舗より別途連絡）' : '23区内（配送料無料）';
+  document.getElementById('confirm-body').innerHTML=`
+    <div style="font-weight:700;margin-bottom:8px">ご注文</div>
+    ${state.cart.map(c=>`<div class="cline"><div>${esc(c.gname)}／${esc(c.name)}<div class="cq">${esc(c.size)}・${esc(c.rice)} × ${c.qty}</div></div><div>${yen(c.price*c.qty)}</div></div>`).join('')}
+    <div class="total"><span>商品小計</span><span class="amt">${yen(total())}</span></div>
+    ${out?'<div class="note" style="margin-top:6px;color:var(--warn)">＋ 配送料は後日ご連絡（23区外）</div>':''}
+    <div class="summary" style="margin-top:14px">
+      <div><span class="k">お届け日</span>${esc(date)}</div>
+      <div><span class="k">時間帯</span>${esc(win)}</div>
+      <div><span class="k">エリア</span>${esc(areaTxt)}</div>
+      <div><span class="k">お届け先</span>${esc(addr)}</div>
+      <div><span class="k">当日連絡</span>${esc(telFull)}</div>
+      <div><span class="k">帳票宛名</span>${esc(atena)}</div>
+      <div><span class="k">支払方法</span>${esc(state.pay)}${state.pay==='請求書'?'（'+esc(state.invMethod)+'）':''}</div>
+      <div><span class="k">アレルギー等</span>${esc(memo)}</div>
+    </div>`;
+  clearErr('confirm-err');
+  go('scr-confirm');
+}
+async function placeOrder(){
+  clearErr('confirm-err');
+  const btn=document.getElementById('placeBtn'); btn.disabled=true; showLoad(true);
+  try{
+    const payload = {
+      action:'saveDeliveryOrder', token: state.token,
+      company: state.profile? state.profile.company : '',
+      atena: document.getElementById('dv-atena').value.trim(),
+      deliveryDate: document.getElementById('dv-date').value,
+      startTime: document.getElementById('dv-time').value,
+      area: document.getElementById('dv-area').value,
+      address: document.getElementById('dv-addr').value.trim(),
+      contactName: document.getElementById('dv-tel-name').value.trim(),
+      contactPhone: document.getElementById('dv-tel').value.trim(),
+      pay: state.pay,
+      invoiceMethod: state.pay==='請求書'? state.invMethod : '',
+      memo: document.getElementById('dv-memo').value.trim(),
+      source: '顧客セルフ',
+      items: state.cart.map(c=>({ productId:c.productId, deliveryName:c.deliveryName, name:c.name, grade:c.grade, rice:c.rice, size:c.size, qty:c.qty, unitPrice:c.price }))
+    };
+    const r = await apiPost(payload);
+    if(!r.ok){ showErr('confirm-err', r.error || '注文を確定できませんでした。'); btn.disabled=false; return; }
+    document.getElementById('done-no').textContent = r.orderId;
+    const win=document.getElementById('win-label').textContent;
+    const date=document.getElementById('dv-date').value;
+    document.getElementById('done-sum').innerHTML=`
+      <div><span class="k">お届け日</span>${esc(date)} ${esc(win)}</div>
+      <div><span class="k">合計</span>${yen(r.subtotal)}（${esc(state.pay)}）</div>
+      <div><span class="k">お届け先</span>${esc(document.getElementById('dv-addr').value.trim())}</div>`;
+    state.cart=[]; document.getElementById('d-count').textContent=0;
+    // 入力欄リセット（次回用）
+    ['dv-atena','dv-tel-name','dv-tel','dv-memo','dv-date'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
+    state.addresses=[];
+    go('scr-done');
+  }catch(e){ showErr('confirm-err','通信エラーが発生しました。'); btn.disabled=false; }
+  finally{ showLoad(false); btn.disabled=false; }
+}
+
+// ---------- orders ----------
+async function loadRecent(){
+  const box=document.getElementById('home-recent');
+  try{
+    const r = await apiGet('getMyDeliveryOrders', { token: state.token });
+    const list=(r&&r.ok)?r.orders:[];
+    if(!list.length){ box.innerHTML='<div class="note">まだご注文はありません。</div>'; return; }
+    box.innerHTML=list.slice(0,2).map(o=>orderCard(o,false)).join('');
+  }catch(e){ box.innerHTML='<div class="note">読み込みに失敗しました。</div>'; }
+}
+let _ordersCache=[];
+async function loadOrders(){
+  const box=document.getElementById('orders-list');
+  box.innerHTML='<div class="note">読み込み中…</div>';
+  try{
+    const r = await apiGet('getMyDeliveryOrders', { token: state.token });
+    _ordersCache=(r&&r.ok)?r.orders:[];
+    if(!_ordersCache.length){ box.innerHTML='<div class="note">まだご注文はありません。</div>'; return; }
+    box.innerHTML=_ordersCache.map(o=>orderCard(o,true)).join('');
+  }catch(e){ box.innerHTML='<div class="note">読み込みに失敗しました。</div>'; }
+}
+function itemsShort(items){
+  return (items||[]).map(it=>{ const g=({ume:'梅',take:'竹',matsu:'松'})[it.grade]||''; return g+'×'+(it.qty||1); }).join('・');
+}
+function orderCard(o, withAct){
+  const acts = (withAct && o.editable)
+    ? `<div class="o-act"><button class="btn ghost sm" onclick="openEdit('${esc(o.orderId)}')">変更</button><button class="btn ghost sm" onclick="doCancel('${esc(o.orderId)}')">キャンセル</button></div>`
+    : '';
+  return `<div class="ord">
+    <div class="o-top"><b style="font-size:12px">${esc(o.orderId)}</b><span class="st ${esc(o.status)}">${esc(o.status)}</span></div>
+    <div class="o-meta">${esc(o.deliveryDate)} ${esc(o.window)}／${esc(itemsShort(o.items))}<br>お届け：${esc(o.address)}／${esc(o.pay)}　小計 ${yen(o.subtotal)}</div>
+    ${acts}</div>`;
+}
+function openEdit(orderId){
+  const o=_findOrder(orderId); if(!o) return;
+  state.editOrderId=orderId;
+  document.getElementById('edit-target').textContent = orderId+'（'+o.deliveryDate+' '+o.window+'）';
+  const d=document.getElementById('ed-date'); d.min=state.menu?state.menu.earliestDate:''; d.value=o.deliveryDate;
+  const st=(o.window||'').split('〜')[0]; const sel=document.getElementById('ed-time');
+  if([...sel.options].some(op=>op.value===st)) sel.value=st;
+  edWindow();
+  document.getElementById('ed-addr').value=o.address||'';
+  const cp=(o.contact||'').split('／'); // may be name/number
+  document.getElementById('ed-tel-name').value = cp.length>1?cp[0]:'';
+  document.getElementById('ed-tel').value = cp.length>1?cp.slice(1).join('／'):(o.contact||'');
+  document.getElementById('ed-atena').value=o.atena||'';
+  document.getElementById('ed-memo').value=o.memo||'';
+  clearErr('edit-err');
+  go('scr-edit');
+}
+function _findOrder(id){ return (_ordersCache||[]).find(o=>o.orderId===id); }
+function edWindow(){ const t=document.getElementById('ed-time').value; if(t) document.getElementById('ed-win').textContent=winFromStart(t); }
+async function saveEdit(){
+  clearErr('edit-err'); showLoad(true);
+  try{
+    const payload={ action:'updateDeliveryOrder', token:state.token, orderId:state.editOrderId,
+      deliveryDate:document.getElementById('ed-date').value,
+      startTime:document.getElementById('ed-time').value,
+      address:document.getElementById('ed-addr').value.trim(),
+      contactName:document.getElementById('ed-tel-name').value.trim(),
+      contactPhone:document.getElementById('ed-tel').value.trim(),
+      atena:document.getElementById('ed-atena').value.trim(),
+      memo:document.getElementById('ed-memo').value.trim() };
+    const r=await apiPost(payload);
+    if(!r.ok){ showErr('edit-err', r.error||'変更できませんでした。'); return; }
+    toast('ご注文を変更しました。'); go('scr-orders');
+  }catch(e){ showErr('edit-err','通信エラーが発生しました。'); }
+  finally{ showLoad(false); }
+}
+async function doCancel(orderId){
+  if(!confirm('この注文をキャンセルしますか？')) return;
+  showLoad(true);
+  try{
+    const r=await apiPost({ action:'cancelDeliveryOrder', token:state.token, orderId });
+    if(!r.ok){ toast(r.error||'キャンセルできませんでした。'); return; }
+    toast('ご注文をキャンセルしました。'); loadOrders();
+  }catch(e){ toast('通信エラーが発生しました。'); }
+  finally{ showLoad(false); }
+}
+// ---------- profile ----------
+function openProfile(){
+  const p=state.profile||{};
+  document.getElementById('pf-phone').textContent=p.phone||'—';
+  document.getElementById('pf-kind').value=p.kind||'法人';
+  document.getElementById('pf-company').value=p.company||'';
+  document.getElementById('pf-name').value=p.name||'';
+  document.getElementById('pf-email').value=p.email||'';
+  document.getElementById('pf-billing').value=p.billingAddr||'';
+  clearErr('pf-err');
+  go('scr-profile');
+}
+async function saveProfile(){
+  clearErr('pf-err'); showLoad(true);
+  try{
+    const profile={ kind:document.getElementById('pf-kind').value, company:document.getElementById('pf-company').value.trim(),
+      name:document.getElementById('pf-name').value.trim(), email:document.getElementById('pf-email').value.trim(),
+      billingAddr:document.getElementById('pf-billing').value.trim() };
+    const r=await apiPost({ action:'updateMyProfile', token:state.token, profile });
+    if(!r.ok){ showErr('pf-err', r.error||'保存できませんでした。'); return; }
+    state.profile=r.profile; applyProfile(); toast('保存しました。');
+  }catch(e){ showErr('pf-err','通信エラーが発生しました。'); }
+  finally{ showLoad(false); }
+}
+
+// ---------- init ----------
+(async function init(){
+  injectHeaders();
+  let tok=null; try{ tok=localStorage.getItem(TOKEN_KEY); }catch(e){}
+  if(tok){
+    showLoad(true);
+    try{
+      const r=await apiGet('getMyProfile', { token: tok });
+      if(r && r.ok){ state.token=tok; state.profile=r.profile; applyProfile(); go('scr-home'); ensureMenu(); }
+      else { logout(); }
+    }catch(e){ /* オフライン等：ログイン画面のまま */ }
+    finally{ showLoad(false); }
+  }
+})();
+</script>
+</body>
+</html>
