@@ -195,9 +195,10 @@
     <div class="card">
       <div style="font-weight:700;margin-bottom:6px">ご注文</div>
       <div id="cart-lines"></div>
-      <div class="total"><span>合計</span><span class="amt" id="cart-total">¥0</span></div>
+      <div class="total"><span>商品小計</span><span class="amt" id="cart-total">¥0</span></div>
       <div id="minbar" class="minbar">最低ご注文金額は <b>¥15,000</b> です。</div>
-      <div class="note" style="margin-top:8px">※合計は商品小計（税込）です。23区内は配送料無料。23区外は距離により別途、店舗よりご連絡します。</div>
+      <div id="pay-preview" class="win hidden" style="margin-top:8px"></div>
+      <div class="note" style="margin-top:8px">※商品小計は税込です。23区内は配送料無料。23区外は距離により別途、店舗よりご連絡します。回収をご利用の場合は回収料が加算されます。</div>
       <div class="link" onclick="go('scr-grade')" style="margin-top:12px">＋ メニューを追加する</div>
     </div>
 
@@ -243,6 +244,22 @@
           <div class="chip" data-inv="メール" onclick="pickInv(this)">メール</div>
         </div>
         <div class="note" id="inv-note">お届け時に請求書をお渡しします。</div>
+      </div>
+
+      <label class="f">回収（お弁当容器などの引き取り）</label>
+      <div class="chips">
+        <div class="chip on" data-collect="なし" onclick="pickCollect(this)">なし</div>
+        <div class="chip" data-collect="あり" onclick="pickCollect(this)">あり</div>
+      </div>
+      <div id="collect-detail" class="hidden">
+        <label class="f">回収日</label>
+        <div class="chips">
+          <div class="chip on" data-cday="当日" onclick="pickCDay(this)">当日</div>
+          <div class="chip" data-cday="翌日" onclick="pickCDay(this)">翌日</div>
+        </div>
+        <label class="f">回収時間（開始時刻）</label>
+        <select id="dv-ctime"></select>
+        <div class="note" id="collect-fee-note"></div>
       </div>
 
       <label class="f">アレルギー・搬入方法など（任意）</label>
@@ -303,6 +320,21 @@
       <input id="ed-tel" type="tel" inputmode="numeric" placeholder="当日つながる番号">
       <label class="f">帳票の宛名</label>
       <input id="ed-atena">
+      <label class="f">回収</label>
+      <div class="chips">
+        <div class="chip on" data-ecollect="なし" onclick="pickECollect(this)">なし</div>
+        <div class="chip" data-ecollect="あり" onclick="pickECollect(this)">あり</div>
+      </div>
+      <div id="ed-collect-detail" class="hidden">
+        <label class="f">回収日</label>
+        <div class="chips">
+          <div class="chip on" data-ecday="当日" onclick="pickECDay(this)">当日</div>
+          <div class="chip" data-ecday="翌日" onclick="pickECDay(this)">翌日</div>
+        </div>
+        <label class="f">回収時間（開始時刻）</label>
+        <select id="ed-ctime"></select>
+        <div class="note" id="ed-collect-note"></div>
+      </div>
       <label class="f">アレルギー・搬入方法など</label>
       <textarea id="ed-memo" rows="2"></textarea>
       <div id="edit-err" class="err"></div>
@@ -364,6 +396,8 @@ const state = {
   cart: [],             // {productId, deliveryName, name, grade, gname, gkey, rice, size, price, qty}
   pay: '現金',
   invMethod: '当日お渡し',
+  collect: 'なし',
+  collectDay: '当日',
   addresses: [],
   editOrderId: null
 };
@@ -468,6 +502,8 @@ async function ensureMenu(){
     r.grades.forEach(g=>{ state.gradesByKey[g.grade]=g; });
     buildTimeOptions('dv-time', r.slots);
     buildTimeOptions('ed-time', r.slots);
+    buildTimeOptions('dv-ctime', r.slots);
+    buildTimeOptions('ed-ctime', r.slots);
   }
   return state.menu;
 }
@@ -589,6 +625,15 @@ async function renderCart(){
   if(t>=MIN){ mb.className='minbar ok'; mb.innerHTML='最低ご注文金額（'+yen(MIN)+'）を満たしています ✓'; }
   else { mb.className='minbar'; mb.innerHTML='最低ご注文金額は <b>'+yen(MIN)+'</b> です（あと <b>'+yen(MIN-t)+'</b>）。'; }
   document.getElementById('toConfirm').disabled = t<MIN;
+  // 回収料・お支払い予定額プレビュー
+  const pp=document.getElementById('pay-preview');
+  if(state.collect==='あり'){
+    const fee=collectFeeFor(curArea());
+    const out=curArea()==='out';
+    pp.classList.remove('hidden');
+    pp.innerHTML='商品小計 '+yen(t)+' ＋ 回収料 <b>'+yen(fee)+'</b>'+(out?' ＋ 配送料（別途連絡）':'')+' ＝ お支払い予定額 <b>'+yen(t+fee)+'</b>'+(out?'（＋配送料）':'');
+  } else { pp.classList.add('hidden'); pp.innerHTML=''; }
+  updCollectNote();
   // 初期化（初回のみ）
   const dateEl=document.getElementById('dv-date');
   if(state.menu && !dateEl.value){ dateEl.min=state.menu.earliestDate; dateEl.value=state.menu.earliestDate; }
@@ -628,6 +673,28 @@ function pickInv(el){
   else if(state.invMethod==='メール') n.textContent='ご登録のメールアドレスへ請求書をお送りします。';
   else n.textContent='お届け時に請求書をお渡しします。';
 }
+function collectFeeFor(area){
+  const fees = state.menu ? state.menu.collectFees : {'23区内':5500,'23区外':8800};
+  const key = area==='out' ? '23区外' : '23区内';
+  return fees[key]||0;
+}
+function curArea(){ return document.getElementById('dv-area').value; }
+function pickCollect(el){
+  el.parentElement.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));
+  el.classList.add('on'); state.collect=el.dataset.collect;
+  document.getElementById('collect-detail').classList.toggle('hidden', state.collect!=='あり');
+  updCollectNote(); renderCart();
+}
+function pickCDay(el){
+  el.parentElement.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));
+  el.classList.add('on'); state.collectDay=el.dataset.cday;
+}
+function updCollectNote(){
+  const n=document.getElementById('collect-fee-note'); if(!n) return;
+  if(state.collect!=='あり'){ n.textContent=''; return; }
+  const fee=collectFeeFor(curArea());
+  n.innerHTML='回収料：<b>'+yen(fee)+'</b>（'+(curArea()==='out'?'23区外':'23区内')+'）。商品小計とは別に加算されます（最低ご注文金額の判定には含みません）。';
+}
 function winFromStart(t){
   const a=String(t).split(':'); const h=+a[0], m=+a[1];
   const pad=x=>('0'+x).slice(-2);
@@ -640,6 +707,7 @@ function updArea(){
   n.innerHTML = out
     ? '<b style="color:var(--warn)">23区外</b>：配送料が距離により異なるため、ご注文後に<b>店舗より別途ご連絡</b>します。'
     : '23区内は配送料はかかりません（商品価格のみ）。';
+  updCollectNote(); renderCart();
 }
 function toConfirm(){
   clearErr('cart-err');
@@ -648,6 +716,11 @@ function toConfirm(){
   const addr=document.getElementById('dv-addr').value.trim();
   if(!document.getElementById('dv-date').value){ showErr('cart-err','お届け日を選択してください。'); return; }
   if(!addr){ showErr('cart-err','お届け先住所を入力してください。'); return; }
+  const collectOn = state.collect==='あり';
+  const ctime = document.getElementById('dv-ctime').value;
+  if(collectOn && !ctime){ showErr('cart-err','回収時間を選択してください。'); return; }
+  const cfee = collectOn ? collectFeeFor(curArea()) : 0;
+  const collectTxt = collectOn ? ('あり（'+state.collectDay+' '+ctime+'）／回収料 '+yen(cfee)) : 'なし';
   const win=document.getElementById('win-label').textContent;
   const date=document.getElementById('dv-date').value;
   const telName=document.getElementById('dv-tel-name').value.trim();
@@ -661,6 +734,7 @@ function toConfirm(){
     <div style="font-weight:700;margin-bottom:8px">ご注文</div>
     ${state.cart.map(c=>`<div class="cline"><div>${esc(c.gname)}／${esc(c.name)}<div class="cq">${esc(c.size)}・${esc(c.rice)} × ${c.qty}</div></div><div>${yen(c.price*c.qty)}</div></div>`).join('')}
     <div class="total"><span>商品小計</span><span class="amt">${yen(total())}</span></div>
+    ${collectOn?`<div class="cline"><div>回収料（${out?'23区外':'23区内'}）</div><div>${yen(cfee)}</div></div><div class="total"><span>お支払い予定額</span><span class="amt">${yen(total()+cfee)}${out?'（＋配送料）':''}</span></div>`:''}
     ${out?'<div class="note" style="margin-top:6px;color:var(--warn)">＋ 配送料は後日ご連絡（23区外）</div>':''}
     <div class="summary" style="margin-top:14px">
       <div><span class="k">お届け日</span>${esc(date)}</div>
@@ -669,6 +743,7 @@ function toConfirm(){
       <div><span class="k">お届け先</span>${esc(addr)}</div>
       <div><span class="k">当日連絡</span>${esc(telFull)}</div>
       <div><span class="k">帳票宛名</span>${esc(atena)}</div>
+      <div><span class="k">回収</span>${esc(collectTxt)}</div>
       <div><span class="k">支払方法</span>${esc(state.pay)}${state.pay==='請求書'?'（'+esc(state.invMethod)+'）':''}</div>
       <div><span class="k">アレルギー等</span>${esc(memo)}</div>
     </div>`;
@@ -691,6 +766,9 @@ async function placeOrder(){
       contactPhone: document.getElementById('dv-tel').value.trim(),
       pay: state.pay,
       invoiceMethod: state.pay==='請求書'? state.invMethod : '',
+      collect: state.collect,
+      collectDay: state.collectDay,
+      collectTime: state.collect==='あり' ? document.getElementById('dv-ctime').value : '',
       memo: document.getElementById('dv-memo').value.trim(),
       source: '顧客セルフ',
       items: state.cart.map(c=>({ productId:c.productId, deliveryName:c.deliveryName, name:c.name, grade:c.grade, rice:c.rice, size:c.size, qty:c.qty, unitPrice:c.price }))
@@ -702,11 +780,17 @@ async function placeOrder(){
     const date=document.getElementById('dv-date').value;
     document.getElementById('done-sum').innerHTML=`
       <div><span class="k">お届け日</span>${esc(date)} ${esc(win)}</div>
-      <div><span class="k">合計</span>${yen(r.subtotal)}（${esc(state.pay)}）</div>
+      <div><span class="k">商品小計</span>${yen(r.subtotal)}</div>
+      ${r.collectFee?`<div><span class="k">回収料</span>${yen(r.collectFee)}</div>`:''}
+      <div><span class="k">お支払い</span>${yen(r.total!=null?r.total:r.subtotal)}${r.area==='23区外'?'（＋配送料）':''}（${esc(state.pay)}）</div>
       <div><span class="k">お届け先</span>${esc(document.getElementById('dv-addr').value.trim())}</div>`;
     state.cart=[]; document.getElementById('d-count').textContent=0;
     // 入力欄リセット（次回用）
     ['dv-atena','dv-tel-name','dv-tel','dv-memo','dv-date'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
+    state.collect='なし'; state.collectDay='当日';
+    document.querySelectorAll('#scr-cart [data-collect]').forEach(c=>c.classList.toggle('on', c.dataset.collect==='なし'));
+    document.querySelectorAll('#scr-cart [data-cday]').forEach(c=>c.classList.toggle('on', c.dataset.cday==='当日'));
+    document.getElementById('collect-detail').classList.add('hidden');
     state.addresses=[];
     go('scr-done');
   }catch(e){ showErr('confirm-err','通信エラーが発生しました。'); btn.disabled=false; }
@@ -760,11 +844,33 @@ function openEdit(orderId){
   document.getElementById('ed-tel').value = cp.length>1?cp.slice(1).join('／'):(o.contact||'');
   document.getElementById('ed-atena').value=o.atena||'';
   document.getElementById('ed-memo').value=o.memo||'';
+  // 回収
+  document.querySelectorAll('#scr-edit [data-ecollect]').forEach(c=>c.classList.toggle('on', c.dataset.ecollect===(o.collect?'あり':'なし')));
+  document.getElementById('ed-collect-detail').classList.toggle('hidden', !o.collect);
+  document.querySelectorAll('#scr-edit [data-ecday]').forEach(c=>c.classList.toggle('on', c.dataset.ecday===(o.collectDay||'当日')));
+  const cs=document.getElementById('ed-ctime'); const ct=o.collectTime||'';
+  if([...cs.options].some(op=>op.value===ct)) cs.value=ct;
+  edCollectNote();
   clearErr('edit-err');
   go('scr-edit');
 }
 function _findOrder(id){ return (_ordersCache||[]).find(o=>o.orderId===id); }
 function edWindow(){ const t=document.getElementById('ed-time').value; if(t) document.getElementById('ed-win').textContent=winFromStart(t); }
+function pickECollect(el){
+  el.parentElement.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));
+  el.classList.add('on');
+  document.getElementById('ed-collect-detail').classList.toggle('hidden', el.dataset.ecollect!=='あり');
+  edCollectNote();
+}
+function pickECDay(el){ el.parentElement.querySelectorAll('.chip').forEach(c=>c.classList.remove('on')); el.classList.add('on'); }
+function edCollectVal(){ const on=document.querySelector('#scr-edit [data-ecollect].on'); return on?on.dataset.ecollect:'なし'; }
+function edCDayVal(){ const on=document.querySelector('#scr-edit [data-ecday].on'); return on?on.dataset.ecday:'当日'; }
+function edCollectNote(){
+  const n=document.getElementById('ed-collect-note'); if(!n) return;
+  const o=_findOrder(state.editOrderId); const area = (o && o.area==='23区外') ? 'out' : 'in';
+  if(edCollectVal()!=='あり'){ n.textContent=''; return; }
+  n.innerHTML='回収料：<b>'+yen(collectFeeFor(area))+'</b>（'+(area==='out'?'23区外':'23区内')+'）';
+}
 async function saveEdit(){
   clearErr('edit-err'); showLoad(true);
   try{
@@ -775,7 +881,11 @@ async function saveEdit(){
       contactName:document.getElementById('ed-tel-name').value.trim(),
       contactPhone:document.getElementById('ed-tel').value.trim(),
       atena:document.getElementById('ed-atena').value.trim(),
+      collect:edCollectVal(),
+      collectDay:edCDayVal(),
+      collectTime: edCollectVal()==='あり' ? document.getElementById('ed-ctime').value : '',
       memo:document.getElementById('ed-memo').value.trim() };
+    if(payload.collect==='あり' && !payload.collectTime){ showErr('edit-err','回収時間を選択してください。'); showLoad(false); return; }
     const r=await apiPost(payload);
     if(!r.ok){ showErr('edit-err', r.error||'変更できませんでした。'); return; }
     toast('ご注文を変更しました。'); go('scr-orders');
