@@ -6,6 +6,7 @@
 <title>お江戸弁当 ドライバー報告</title>
 <!-- driver.html v1.6 (2026-06-27) — タブ並び替え（回収/残数/移動/ルート/取置）・ラベル短縮・はみ出し対策／拠点移動タブ（±移動・商品別・LINE確認ボタン・残数反映）／取り置き / 商品名B列表示 -->
 <!-- driver.html v1.7 (2026-07-06) — 回収チェックのテンキー現金有高入力（報告済拠点タップ→現金有高必須入力→saveActualCash(notifyDiff:false)＋setCollected） -->
+<!-- driver.html v1.8 (2026-07-24) — 残数タブ：ドライバー行タップで回収弁当の商品別内訳を展開（getResidualSummary の drivers[].products を使用・開閉状態は30秒自動更新をまたいで保持） -->
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
 :root {
@@ -1898,6 +1899,28 @@ function updateCalculatedResidualTotal() {
 // ═══════════════════════════════════════════════════════════════
 let residualSummaryTimer = null;
 
+// v1.8: ドライバー行の開閉状態（userId → true）。自動更新で閉じないよう保持
+window._openDriverRows = window._openDriverRows || {};
+
+// v1.8: HTML/属性エスケープ（商品名・ドライバー名を innerHTML に埋めるため）
+function esc_(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// v1.8: ドライバー別 商品内訳の開閉
+function toggleDriverDetail(idx, uid) {
+  const box = document.getElementById('driver-detail-' + idx);
+  const arw = document.getElementById('driver-arrow-' + idx);
+  if (!box) return;
+  const isOpen = box.style.display !== 'none';
+  box.style.display = isOpen ? 'none' : 'block';
+  if (arw) arw.textContent = isOpen ? '▶' : '▼';
+  if (isOpen) delete window._openDriverRows[uid];
+  else        window._openDriverRows[uid] = true;
+}
+
 async function loadResidualSummary() {
   try {
     const res  = await fetch(GAS_URL + '?action=getResidualSummary', { redirect: 'follow' });
@@ -1911,12 +1934,28 @@ async function loadResidualSummary() {
     }
     const driverList = document.getElementById('driver-list');
     if (data.drivers && data.drivers.length > 0) {
-      driverList.innerHTML = data.drivers.map(d => {
-        const logs = d.logs.map(l => l.time + ' +' + l.count).join(' / ');
-        return '<div style="display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,.08);border-radius:8px;padding:7px 10px;margin-bottom:4px;">'
-          + '<div><div style="color:#FFF;font-size:13px;font-weight:600;">' + d.name + '</div>'
-          + '<div style="color:rgba(255,255,255,.5);font-size:10px;margin-top:1px;">' + logs + '</div></div>'
-          + '<div style="color:#FFD700;font-size:16px;font-weight:700;">' + d.total + '個</div></div>';
+      // v1.8: 行タップで商品別内訳を展開（開閉状態は自動更新をまたいで保持）
+      driverList.innerHTML = data.drivers.map((d, i) => {
+        const logs   = d.logs.map(l => l.time + ' +' + l.count).join(' / ');
+        const uid    = d.userId || ('idx' + i);
+        const isOpen = !!window._openDriverRows[uid];
+        const prods  = d.products || [];
+        const detail = prods.length > 0
+          ? prods.map(p =>
+              '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:12px;">'
+              + '<span style="color:rgba(255,255,255,.85);">' + esc_(p.productName) + '</span>'
+              + '<span style="color:#FFD700;font-weight:700;">' + p.qty + '個</span></div>'
+            ).join('')
+          : '<div style="color:rgba(255,255,255,.4);font-size:11px;padding:4px 0;">商品内訳がありません</div>';
+        return '<div style="background:rgba(255,255,255,.08);border-radius:8px;margin-bottom:4px;overflow:hidden;">'
+          + '<div onclick="toggleDriverDetail(' + i + ',\'' + esc_(uid) + '\')" style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;cursor:pointer;">'
+          + '<div style="display:flex;align-items:center;gap:6px;">'
+          + '<span id="driver-arrow-' + i + '" style="color:rgba(255,255,255,.5);font-size:10px;">' + (isOpen ? '▼' : '▶') + '</span>'
+          + '<div><div style="color:#FFF;font-size:13px;font-weight:600;">' + esc_(d.name) + '</div>'
+          + '<div style="color:rgba(255,255,255,.5);font-size:10px;margin-top:1px;">' + logs + '</div></div></div>'
+          + '<div style="color:#FFD700;font-size:16px;font-weight:700;">' + d.total + '個</div></div>'
+          + '<div id="driver-detail-' + i + '" style="display:' + (isOpen ? 'block' : 'none') + ';padding:2px 10px 8px 26px;border-top:1px solid rgba(255,255,255,.12);">'
+          + detail + '</div></div>';
       }).join('');
     } else {
       driverList.innerHTML = '<div style="color:rgba(255,255,255,.4);font-size:12px;text-align:center;padding:8px 0;">まだ報告がありません</div>';
