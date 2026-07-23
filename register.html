@@ -7,6 +7,7 @@
 <!-- register v3.1 (2026-07-08) 送信確実化＋在庫打ち直し導線修正（開始ログ欠落対策） -->
 <!-- register v3.2 (2026-07-10) 拠点間移動±を在庫表示に反映（残＝納品＋移動±−販売／完売率も移動±込み）。サーバー単一ソース getMoveAdjByLoc を在庫モーダル表示時に取得。 -->
 <!-- register v3.3 (2026-07-12) 【Phase3 D1】締め報告(submitFinal)のpayloadに couponTotal を追加送信。会計履歴 state.history のうち status==='active' のみ couponAmount を合算（取消分は二重計上しない）。GAS側 submitReport が受けて報告ログ col34「クーポン値引累計」に記録→日報の売上合計に反映される。UI・既存ロジック変更なし。要: メインGAS D2（col34）＝反映済。 -->
+<!-- register v3.4 (2026-07-24) 【現金誤差-300の修正】締め画面で確定した本日ギャラ（賄いなし補填+300／遅刻控除／固定給／社員・ドライバー0円を反映済）を totalSalary / incentive / makanaiBonus として送信。従来GAS側は 基本ギャラ+インセンティブ のみを報告ログ col20 に保存していたため、賄いなしの日は「想定額=レジ最終金額−col20」が300円過大となり現金誤差が必ず -300 になっていた。要: メインGAS submitReport / editReport / 報告ログ col37-38（賄い・遅刻控除）＝同時反映。 -->
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
 :root {
@@ -2990,6 +2991,13 @@ function calcFinal() {
     totalSalary = state.baseGigSalary + incentive + makanaiBonus - latePenalty;
   }
 
+  // ★2026-07-24 賄い/遅刻/固定給を報告ログにそのまま保存するため、画面の確定値を state に保持
+  //   （GAS側で再計算せず、この値を「本日合計ギャラ」列に採用する＝表示と帳簿の完全一致）
+  state.calcTotalSalary  = totalSalary;
+  state.calcIncentive    = incentive;
+  state.calcMakanaiBonus = makanaiBonus;
+  state.calcLatePenalty  = latePenalty;
+
   document.getElementById('res-cash').textContent     = `¥${state.cashSales.toLocaleString()}`;
   document.getElementById('res-paypay').textContent   = `¥${state.paypayAmount.toLocaleString()}`;
   document.getElementById('res-delivery').textContent = `${totalDelivery}個`;
@@ -3095,6 +3103,10 @@ function submitFinal() {
     makanai: state['makanaiあり'] ? '有り' : '無し',
     lateMinutes: parseInt(document.getElementById('late-minutes')?.value) || 0,
     latePenalty: calcLatePenalty(parseInt(document.getElementById('late-minutes')?.value) || 0),
+    // ★2026-07-24 画面で確定したギャラをそのまま送る（賄いなし補填+300／遅刻控除／固定給／社員・ドライバー0円を反映済）
+    totalSalary:  state.calcTotalSalary,
+    incentive:    state.calcIncentive,
+    makanaiBonus: state.calcMakanaiBonus,
     couponTotal: (state.history || []).filter(h => h.status === 'active').reduce((s, h) => s + (Number(h.couponAmount) || 0), 0),  // 2026-07-08 Phase3 D1: クーポン値引累計→GAS col34（取消分は除外）
   };
   fetch(state.GAS_URL, { method: 'POST', body: JSON.stringify(payload) }).catch(e => console.error(e));
