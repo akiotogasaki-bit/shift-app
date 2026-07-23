@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>お江戸弁当 レジ（スポット）</title>
+<!-- spot v1.1 (2026-07-24) 【現金誤差-300の修正】賄いトグルが計算にも送信にも一切反映されていなかったため、「無しの場合+¥300」と表示しながらギャラに+300が乗らず現金誤差が -300 になっていた。calcFinal に makanaiBonus を加算＋「賄いなし補填」行を表示、payload に makanai / makanaiBonus を追加。インセンティブ判定はGAS側の既存ロジックを維持（totalSalaryは送らない）。 -->
 
 <style>
 :root {
@@ -859,6 +860,10 @@ body {
       <div class="result-row"><span class="result-label">完売率</span><span class="result-value gold" id="res-rate">0%</span></div>
       <div class="result-row salary-row"><span class="result-label">インセンティブ</span><span class="result-value gold" id="res-incentive">¥0</span></div>
       <div class="result-row salary-row"><span class="result-label">基本ギャラ</span><span class="result-value" id="res-base">¥0</span></div>
+      <div class="result-row salary-row" id="res-makanai-row" style="display:none;">
+        <span class="result-label" style="color:var(--green);">賄いなし補填</span>
+        <span class="result-value" style="color:var(--green);">+¥300</span>
+      </div>
       <div class="result-row salary-row" style="background:#FFF8DC;">
         <span class="result-label" style="font-weight:700;">本日の合計</span>
         <span class="result-value big" id="res-total">¥0</span>
@@ -1610,7 +1615,12 @@ function calcFinal() {
   const nonTeaSold = state.soldCount - (state.teaSoldCount || 0);
   const sellRate   = totalDelivery > 0 ? Math.round(nonTeaSold / totalDelivery * 1000) / 10 : 0;
   const incentive    = Math.floor(nonTeaSold / state.incentiveUnit) * state.incentiveRate;
-  const totalSalary  = state.baseGigSalary + incentive;
+  // ★2026-07-24 賄いなし補填+300 が計算に入っていなかったため、現金誤差が-300になっていた
+  const makanaiBonus = state['makanaiあり'] ? 0 : 300;
+  const totalSalary  = state.baseGigSalary + incentive + makanaiBonus;
+  state.calcTotalSalary  = totalSalary;
+  state.calcIncentive    = incentive;
+  state.calcMakanaiBonus = makanaiBonus;
 
   document.getElementById('res-cash').textContent    = `¥${state.cashSales.toLocaleString()}`;
   document.getElementById('res-paypay').textContent  = `¥${state.paypayAmount.toLocaleString()}`;
@@ -1620,6 +1630,7 @@ function calcFinal() {
   document.getElementById('res-incentive').textContent = `¥${incentive.toLocaleString()}（${nonTeaSold}個）`;
   document.getElementById('res-base').textContent    = `¥${state.baseGigSalary.toLocaleString()}`;
   document.getElementById('res-total').textContent   = `¥${totalSalary.toLocaleString()}`;
+  document.getElementById('res-makanai-row').style.display = state['makanaiあり'] ? 'none' : '';
 
   const diffEl = document.getElementById('res-diff');
   if (diff === 0) {
@@ -1695,6 +1706,10 @@ function submitFinal() {
     baseGigSalary: state.baseGigSalary,
     diffComment: comment,
     memo: document.getElementById('final-memo').value.trim(),
+    // ★2026-07-24 賄い有無を報告ログ／ギャラに反映（未送信のため現金誤差-300が出ていた）
+    //   ※インセンティブ判定はGAS側の既存ロジックを維持（totalSalaryは送らない）
+    makanai:      state['makanaiあり'] ? '有り' : '無し',
+    makanaiBonus: state.calcMakanaiBonus,
   };
 
   fetch(state.GAS_URL, {
