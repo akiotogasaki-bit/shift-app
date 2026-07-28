@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>お江戸弁当 ドライバー報告</title>
-<!-- driver.html v1.7 (2026-07-29) 残数報告：送信結果を確認するようにした（従来は失敗しても完了画面が出ていた）。当日・同一内容の重複報告はサーバが検知し、確認ダイアログのうえ force で再送。 -->
+<!-- driver.html v1.9 (2026-07-29) 残数報告：送信結果を確認するようにした（従来は失敗しても完了画面が出ていた）。当日・同一内容の重複報告はサーバが検知し、確認ダイアログのうえ force で再送。 -->
 <!-- driver.html v1.6 (2026-06-27) — タブ並び替え（回収/残数/移動/ルート/取置）・ラベル短縮・はみ出し対策／拠点移動タブ（±移動・商品別・LINE確認ボタン・残数反映）／取り置き / 商品名B列表示 -->
 <!-- driver.html v1.7 (2026-07-06) — 回収チェックのテンキー現金有高入力（報告済拠点タップ→現金有高必須入力→saveActualCash(notifyDiff:false)＋setCollected） -->
 <!-- driver.html v1.8 (2026-07-24) — 残数タブ：ドライバー行タップで回収弁当の商品別内訳を展開（getResidualSummary の drivers[].products を使用・開閉状態は30秒自動更新をまたいで保持） -->
@@ -2066,7 +2066,7 @@ async function submitReport() {
     totalResidual:  totalNoTea,
   };
 
-  // ★v1.7（2026-07-29）応答を確認するようにした。
+  // ★v1.9（2026-07-29）応答を確認するようにした。
   //   従来は fetch の結果を見ておらず、失敗しても完了画面が出ていた。
   //   当日・同一内容の重複報告はサーバが duplicate を返すので、確認のうえ force で再送する。
   const send = async (body) => {
