@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>お江戸弁当 レジ（スポット）</title>
 <!-- spot v1.1 (2026-07-24) 【現金誤差-300の修正】賄いトグルが計算にも送信にも一切反映されていなかったため、「無しの場合+¥300」と表示しながらギャラに+300が乗らず現金誤差が -300 になっていた。calcFinal に makanaiBonus を加算＋「賄いなし補填」行を表示、payload に makanai / makanaiBonus を追加。インセンティブ判定はGAS側の既存ロジックを維持（totalSalaryは送らない）。 -->
+<!-- spot v1.2 (2026-07-29) 【現金誤差±300の修正・v1.1の残り穴】「集計する」後も賄いトグルを操作できるのに calcFinal() が再実行されず、送信される makanaiBonus が集計時点の古い値のまま凍結されていた（「無し→有り」に戻して提出＝+300／「有り→無し」で提出＝-300）。①トグル変更時に結果表示中なら即再集計（refreshFinalIfShown） ②submitFinal 冒頭で calcFinal() を再実行。register.html v3.5 と同時修正。 -->
 
 <style>
 :root {
@@ -1666,6 +1667,14 @@ function toggleMakanai() {
   const label  = document.getElementById('makanai-label');
   toggle.style.background = state['makanaiあり'] ? 'var(--green)' : '#888';
   label.textContent = state['makanaiあり'] ? '有り' : '無し';
+  refreshFinalIfShown();   // ★2026-07-29 集計後に切り替えた場合はその場で再集計（凍結値のまま提出＝±300の原因）
+}
+
+// ★2026-07-29 集計結果を表示中に賄いを変更したら、その場で calcFinal を回し直す。
+//   これをしないと state.calcMakanaiBonus が集計時点の値のまま送信され、現金誤差が±300になる。
+function refreshFinalIfShown() {
+  const box = document.getElementById('final-results');
+  if (box && box.style.display !== 'none') calcFinal();
 }
 
 function recalcFinal() {
@@ -1676,6 +1685,8 @@ function recalcFinal() {
 }
 
 function submitFinal() {
+  // ★2026-07-29 送信直前に必ず再集計する（集計後に賄いを触ると makanaiBonus が古いまま送られていた）
+  try { calcFinal(); } catch (e) { console.error('submitFinal recalc error:', e); }
   clearSavedState();
   const diff = document.getElementById('res-diff').textContent;
   const hasDiff = diff.includes('差異');
