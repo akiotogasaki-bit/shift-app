@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>お江戸弁当 ドライバー報告</title>
+<!-- driver.html v1.7 (2026-07-29) 残数報告：送信結果を確認するようにした（従来は失敗しても完了画面が出ていた）。当日・同一内容の重複報告はサーバが検知し、確認ダイアログのうえ force で再送。 -->
 <!-- driver.html v1.6 (2026-06-27) — タブ並び替え（回収/残数/移動/ルート/取置）・ラベル短縮・はみ出し対策／拠点移動タブ（±移動・商品別・LINE確認ボタン・残数反映）／取り置き / 商品名B列表示 -->
 <!-- driver.html v1.7 (2026-07-06) — 回収チェックのテンキー現金有高入力（報告済拠点タップ→現金有高必須入力→saveActualCash(notifyDiff:false)＋setCollected） -->
 <!-- driver.html v1.8 (2026-07-24) — 残数タブ：ドライバー行タップで回収弁当の商品別内訳を展開（getResidualSummary の drivers[].products を使用・開閉状態は30秒自動更新をまたいで保持） -->
@@ -2064,9 +2065,42 @@ async function submitReport() {
     residualCount,
     totalResidual:  totalNoTea,
   };
+
+  // ★v1.7（2026-07-29）応答を確認するようにした。
+  //   従来は fetch の結果を見ておらず、失敗しても完了画面が出ていた。
+  //   当日・同一内容の重複報告はサーバが duplicate を返すので、確認のうえ force で再送する。
+  const send = async (body) => {
+    const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(body), redirect: 'follow' });
+    return await res.json();
+  };
+
   try {
-    await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) });
-  } catch (e) { console.error(e); }
+    let result = await send(payload);
+
+    if (result && result.duplicate) {
+      const ok = confirm(
+        `${result.lastTime} に全く同じ内容で報告済みです。\n\n`
+        + `残数合計：${totalNoTea}個\n\n`
+        + `もう一度送信しますか？\n`
+        + `（別のタイミングで数えた分なら「OK」を押してください）`
+      );
+      if (!ok) {
+        showToast('送信を取り消しました', 'error');
+        return;   // 完了画面へ進まない
+      }
+      result = await send({ ...payload, force: true });
+    }
+
+    if (!result || result.success !== true) {
+      showToast('送信に失敗しました。もう一度お試しください', 'error');
+      console.error('submitResidual failed:', result);
+      return;   // 完了画面へ進まない
+    }
+  } catch (e) {
+    console.error(e);
+    showToast('通信に失敗しました。電波を確認して再送してください', 'error');
+    return;     // 完了画面へ進まない
+  }
 
   document.getElementById('complete-residual-card').innerHTML = `
     <div class="complete-row" style="border-bottom:1px solid rgba(255,255,255,.3);margin-bottom:4px;padding-bottom:8px;">
