@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>🍱 納品管理</title>
+<!-- kanri.html v3.49 (2026-07-30) 【献立表 Phase2 C-1】配分調整と献立表の0連動。その日の献立が**保存済み**の場合だけ、献立に入っていない日替わり商品（海苔弁系/満腹系）のセルを**0＋グレー表示**にする（ロックはせず編集可＝数字を入れれば戻る／編集値は常に優先）。未保存の日は連動しない（社長確定＝自動表示だけの日に効かせると、ローテの順番がズレていた時に間違った商品が0になるため）。これは**表示のみ**で、G列（納品個数）を実際に0にするのは夜間バッチ側（C-2＝applyRecommendToBasicMaster が献立表を見て、その日作る種類にグループ合計を入れ、作らない種類を0にする）。実装: bmMenuCache/bmMenuTargets/bmFetchMenu/bmLoadMenuTargets/bmMenuExcluded を追加、bmGetDisplaySales に0分岐、bmRenderCell に .bm-menu-off クラス＋ツールチップ。取得は bmLoadDate と bmPrefetchWeek の Promise.all に相乗り（getMenuSelections を日別・getMenuMeta は1回だけ）＝**追加の待ち時間なし・取得失敗時は従来表示にフォールバック**。getBasicMasterMatrix は無改修。要メインGAS @322以降。 -->
 <!-- kanri.html v3.48 (2026-07-30) 【献立表 Phase2】献立表タブを「平日のみの月カレンダー」に全面改修（単日入力→月一括）。①月〜金だけのカレンダー。土日と祝日はセルを作らない（祝日＝メニュー無し・ローテのカウントからも除外）。②開いた時点で全平日が自動で埋まる＝海苔弁はローテーション（営業日で連続。週も月もまたいで続き、祝日はスキップ）、満腹は曜日固定（1曜日に複数種可）。③セルは要約表示（品目名＋全六の主菜）。未保存＝薄字＋点線／保存済み＝濃字＋緑帯＋✓確定。保存済みなのに全六が空の日は赤字で警告。④セルをタップで日別パネル（海苔弁/満腹のチップ＝白米・玄米が1つにまとまり同時ON、全六の主菜1/2プルダウン、「↩自動に戻す」）。⑤保存は変更した日だけ（saveMenuSelections を日単位で呼ぶ＝触っていない日は献立表シートに行を作らない）。⑥上部の⚙折りたたみにローテ順（↑↓✕・追加）／基準日／満腹の曜日割りの編集UIを同居（getMenuRules / saveMenuRules）。取得は getMenuMonth 1本でmeta・rulesまで来るので初回1リクエスト。全六の選択キーは商品名（全六あり「白米」）ではなく区分（全六あり/全六なし）に統一。要メインGAS @321以降（getMenuMonth/getMenuRules/saveMenuRules＋getMenuMetaの全六候補バグ修正＋新シート 献立ローテ/献立曜日固定＋設定 menu_rotation_base_date）。※配分調整の0連動・仕込み表の全六選択UI移設は次段階（C/D）。 -->
 <!-- kanri.html v3.44 (2026-07-12) 【一括印刷】「📚 一括印刷」の印刷対象をシート1〜4 → シート1〜3に変更。printAllForDay() の印刷キュー構築から `_printAllQueue.push('sheet4');` を削除（シート4＝仕込みは一括印刷から除外／個別の「🖨 印刷」ボタンでは従来どおり印刷可）。あわせて事前確認ダイアログの回数表示を「4〜5 回」→「3〜4 回」に整合。キュー＝sheet1×2部＋sheet2＋(午後便がある日のみ)sheet3。※sheet4の事前fetch（⑥仕込み取得）は残置。GAS変更なし。 -->
 <!-- kanri.html v3.42 (2026-07-10) 【献立表タブ新設・Phase1】新タブ「📋 献立表」を追加。①海苔弁系/満腹系の当日バリアントを複数選択（チェック）②全六ベース型（あり/なし…拡張可）×主菜1/2を選択。日付ごとに保存/読込（GAS: getMenuMeta/getMenuSelections/saveMenuSelections、メインSS「献立表」シート・JSON保存）。全六選択は既存「日替わり選択」へミラー保存し仕込み表は無改修で連動。mn*接頭辞で既存と無衝突。※配分調整の0連動・仕込み表の全六選択UI移設はPhase2予定（本版では未実施）。要メインGASパッチ（getMenuMeta/getMenuSelections/saveMenuSelections＋doGet2件/doPost1件のルーティング）。 -->
@@ -270,6 +271,13 @@ body {
 /* ── 配分調整：固定納品セル（企業卸の既定値・編集は可） ── */
 .matrix-table td.bm-fixed-cell,
 .bm-matrix    td.bm-fixed-cell { background: #fff8e1 !important; box-shadow: inset 0 0 0 1px #ffcc80; }
+/* ── v3.49 配分調整：献立に無い＝その日作らない種類（グレー・編集は可＝手で戻せる） ── */
+.matrix-table td.bm-menu-off,
+.bm-matrix    td.bm-menu-off { background: #f5f5f5 !important; box-shadow: inset 0 0 0 1px #e0e0e0; }
+.matrix-table td.bm-menu-off .bm-cell-sales,
+.bm-matrix    td.bm-menu-off .bm-cell-sales,
+.matrix-table td.bm-menu-off .bm-cell-proposal,
+.bm-matrix    td.bm-menu-off .bm-cell-proposal { color: #bdbdbd !important; }
 /* ── 配分調整：外部納品（他社弁当・総数管理）行 ── */
 .bm-matrix tr.bm-ext-row td.bm-ext-total {
   background: #ede7f6 !important; text-align: center; font-size: 13px; color: #4527a0;
@@ -4555,6 +4563,14 @@ let bmThisWeekDates = [];     // ['2026-05-19','2026-05-20',...]
 let bmNextWeekDates = [];
 let bmDriverColorMap = {};    // Phase 4: 現在表示中の日付のドライバー色マップ
 let bmLocalConfirmedLocs = new Set();  // v3.19: ローカル確定マーク（保存前）
+// v3.49（献立表 Phase2 C-1）: 献立表と配分調整の0連動
+//   その日の献立が「保存済み」の場合だけ、献立に無い日替わり商品を0＋グレーで表示する。
+//   未保存の日は連動しない（社長確定 2026-07-30）。自動表示だけの日に効かせると、
+//   ローテの順番がズレていた時に間違った商品が0になるため。
+//   ※表示だけ。G列を書き換えるのは夜間バッチ側（C-2）。
+let bmMenuCache   = {};       // { dateStr: { found:bool, pids:{pid:true} } }
+let bmMenuTargets = null;     // 献立表の管理対象（海苔弁系/満腹系）商品IDの集合。null=未取得
+let bmMenuTargetsInflight = false;
 // localStorage 読込
 function bmLoadEdits() {
   try {
@@ -4706,14 +4722,58 @@ function bmIsAllConfirmed() {
   return true;
 }
 
+// ── v3.49: 献立表の0連動（C-1）──────────────────────────
+// 献立表の管理対象商品（海苔弁系/満腹系）を1回だけ取得
+async function bmLoadMenuTargets() {
+  if (bmMenuTargets || bmMenuTargetsInflight) return;
+  bmMenuTargetsInflight = true;
+  try {
+    const r = await fetch(GAS_URL + '?action=getMenuMeta').then(x => x.json());
+    if (!r || !r.ok) return;
+    const set = {};
+    Object.keys(r.dailyProducts || {}).forEach(function(cat) {
+      (r.dailyProducts[cat] || []).forEach(function(p) { set[String(p.id)] = true; });
+    });
+    bmMenuTargets = set;
+  } catch (e) {
+    /* 取れなければ連動しない（従来表示） */
+  } finally {
+    bmMenuTargetsInflight = false;
+  }
+}
+
+// その日の献立（保存済みかどうか＋ON商品）を取得
+async function bmFetchMenu(dateStr) {
+  try {
+    const r = await fetch(GAS_URL + '?action=getMenuSelections&date=' + encodeURIComponent(dateStr)).then(x => x.json());
+    if (!r || !r.ok) return null;
+    const pids = {};
+    (r.active || []).forEach(function(p) { pids[String(p)] = true; });
+    return { found: !!r.found, pids: pids };
+  } catch (e) {
+    return null;
+  }
+}
+
+// この商品は「その日の献立に載っていない日替わり商品」か（＝0で表示すべきか）
+function bmMenuExcluded(pid) {
+  const m = bmMenuCache[bmCurrentDate];
+  if (!m || !m.found) return false;               // 未保存の日は連動しない
+  if (!bmMenuTargets || !bmMenuTargets[String(pid)]) return false;  // 献立表の管理対象外（全六・お茶等）
+  return !m.pids[String(pid)];
+}
+
 // セルの「表示する販売数」を取得（編集値 > サーバーweekSales）
 // v3.21: 表示優先順「編集値 > confirmed（G列）> weekSales（先週実績）」
+// v3.49: 献立表が保存済みの日は「献立に無い日替わり商品」を0で表示（編集値だけは尊重）
 function bmGetDisplaySales(pid, lid) {
   const edit = bmGetEdit(bmCurrentDate, pid, lid);
   if (edit !== null && edit !== undefined && edit !== '') return Number(edit);
   if (!bmServerData) return 0;
   const c = bmServerData.cells[pid + '_' + lid];
   if (!c) return 0;
+  // v3.49: その日作らない種類は0（G列に古い数字が残っていても0で見せる。実際の0化は夜間バッチ側）
+  if (bmMenuExcluded(pid)) return 0;
   // G列確定値（confirmed）があれば優先表示
   if (c.confirmed !== null && c.confirmed !== undefined) return Number(c.confirmed);
   // 確定値なし → 先週実績
@@ -4926,6 +4986,9 @@ function bmRenderCell(pid, lid, idx0) {
   if (isLocC) cls += ' bm-loc-confirmed';
   if (isZero) cls += ' bm-zero-cell';
   if (c.fixedDefault) cls += ' bm-fixed-cell';  // 固定納品の既定値（淡く着色・編集は可）
+  // v3.49: 献立に無い＝その日作らない種類（グレー・編集は可＝手で戻せる）
+  const menuOff = bmMenuExcluded(pid) && !isEdited;
+  if (menuOff) cls += ' bm-menu-off';
   cls += bcls;  // v3.9 NEW: 区切り線クラス追加
 
   let salesCls = 'bm-cell-sales';
@@ -4960,7 +5023,8 @@ function bmRenderCell(pid, lid, idx0) {
     : 'data-pid="' + pid + '" data-lid="' + lid + '"' + rangeAttrs;
   const proClick = isZero ? '' : 'onclick="bmOpenModal(\'' + pid + '\',\'' + lid + '\')"';
 
-  return '<td class="' + cls + '">'
+  return '<td class="' + cls + '"'
+    + (menuOff ? ' title="この日の献立表に入っていない種類です（0で表示・数字を入れれば戻せます）"' : '') + '>'
     + soLine
     + '<div class="bm-cell-2col">' + badge
     + '<div class="' + salesCls + '" ' + editAttrs + '>' + salStr + '</div>'
@@ -5312,12 +5376,13 @@ function bmPrefetchWeek() {
     if (bmPrefetchInflight.has(ds)) return;   // 取得中
     if (ds === bmCurrentDate) return;         // 表示中の日は本取得で対応
     bmPrefetchInflight.add(ds);
-    Promise.all([ bmFetchMatrix(ds), loadDriverColorMap(ds) ])
+    Promise.all([ bmFetchMatrix(ds), loadDriverColorMap(ds), bmFetchMenu(ds) ])   // v3.49: 献立も先読み
       .then(function(arr) {
-        const r = arr[0], colorMap = arr[1];
+        const r = arr[0], colorMap = arr[1], menu = arr[2];
         if (r && r.ok) {
           bmDataCache[ds]  = r;
           bmColorCache[ds] = colorMap || {};
+          if (menu) bmMenuCache[ds] = menu;
         }
       })
       .catch(function() { /* 失敗は無視（次回再取得） */ })
@@ -5330,9 +5395,12 @@ async function bmLoadDate(dateStr) {
   wrap.innerHTML = '<div class="bm-loading">配分調整を読み込み中...</div>';
   document.getElementById('bm-calc-info').innerHTML = '';
   // Phase 4: ドライバー色マップを並列取得
-  const [r, colorMap] = await Promise.all([
+  // v3.49: 献立（0連動用）と献立表の管理対象商品も同時に取得。失敗しても従来表示になるだけ。
+  const [r, colorMap, menu] = await Promise.all([
     bmFetchMatrix(dateStr),
-    loadDriverColorMap(dateStr)
+    loadDriverColorMap(dateStr),
+    bmFetchMenu(dateStr),
+    bmLoadMenuTargets()
   ]);
   if (!r.ok) {
     wrap.innerHTML = '<div class="bm-error">取得エラー: ' + bmEscape(r.error || '不明') + '</div>';
@@ -5341,6 +5409,7 @@ async function bmLoadDate(dateStr) {
   // v3.41: キャッシュへ格納（保存/確定/再取得から呼ばれた場合は最新で上書き＝常に新鮮）
   bmDataCache[dateStr]  = r;
   bmColorCache[dateStr] = colorMap || {};
+  if (menu) bmMenuCache[dateStr] = menu;
   bmApplyData(dateStr, r, colorMap || {});
   bmPrefetchWeek();   // v3.41: 同週の残り日を裏で先読み
 }
