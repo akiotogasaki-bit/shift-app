@@ -1,7 +1,10 @@
 <!DOCTYPE html>
 <!--
   お江戸弁当 shift-admin.html
-  v2026-07-30  差分バッジを「本物の未送信」だけにする＋差分送信の重複マージ
+  v2026-07-30  差分バッジを「本物の未送信」だけにする＋保存後に送信を促す
+    - batchSave：保存後に未送信の変更が残っていれば明細付きで確認し、その場で差分送信
+      → 「保存しただけで数日放置」→スタッフが古い拠点へ、という事故の再発防止
+    - isNotifiableName / getUnsentNotifiable を共通化（GAS sendShiftDiff の除外条件と一致）
     - updateDiffBadge：日付×拠点で名寄せして計数（未保存＋保存済未通知の二重計上を解消）
     - confirmDiffSend：pending と diffs を日付×拠点でマージ（pending優先）
       → 同じ枠が二重に積まれ、その枠を離れた人へ「解除」と「新しく担当」が同時に飛ぶ事故を防止
@@ -1976,6 +1979,19 @@ function isSpotName(name) {
   return /^スポットバイト/.test(String(name || '').trim());
 }
 
+// ★v2026-07-30 LINE通知が実際に飛ぶ相手か（スポット・未割当・空は飛ばない）
+//   GAS側 sendShiftDiff の除外条件と一致させている
+function isNotifiableName(name) {
+  const n = String(name || '').trim();
+  return !!n && n !== '【未割当】' && !isSpotName(n);
+}
+
+// ★v2026-07-30 state.diffs のうち「LINE通知が必要な未送信変更」だけを返す
+function getUnsentNotifiable() {
+  return (state.diffs || []).filter(d =>
+    isNotifiableName(d.notifiedName) || isNotifiableName(d.currentName));
+}
+
 // その日に重複している名前のセットを返す（renderMatrix・renderSellers から利用）
 function getDuplicateNamesByDate() {
   const result = {};
@@ -2570,7 +2586,6 @@ async function confirmDiffSend() {
   const allChanges = Array.from(changeMap.values()).filter(c => c.oldName !== c.newName);
 
   // 対象者集計（スポット・空・未割当 除外）
-  const isNotifiableName = n => !!n && n !== '【未割当】' && !isSpotName(n);
   const targetNames = new Set();
   allChanges.forEach(c => {
     if (isNotifiableName(c.oldName)) targetNames.add(c.oldName);
@@ -2585,7 +2600,7 @@ async function confirmDiffSend() {
         `LINE通知の対象者はいません（スポット／未割当のみの変更です）。\n\n` +
         `未保存の ${pendingEntries.length}件 を保存だけ実行しますか？`
       );
-      if (okSaveOnly) await batchSave();
+      if (okSaveOnly) await batchSave({ promptSend: false });   // ここでは送信を促さない（二重確認の防止）
       return;
     }
     toast('通知対象者がいません（全てスポット または 未割当のみ）', 'warn');
@@ -2834,7 +2849,11 @@ function updateSaveBadge() {
   badge.style.display = count > 0 ? 'block' : 'none';
 }
 
-async function batchSave() {
+// ★v2026-07-30 保存だけで終わらせない
+//   @param {object} [opts] { promptSend:boolean } 既定true。保存後に未送信が残っていれば
+//     その場で差分送信を促す。confirmDiffSend から呼ぶ場合だけ false（二重確認の防止）。
+async function batchSave(opts) {
+  const promptSend = !(opts && opts.promptSend === false);
   const entries = Object.values(state.pending);
   if (entries.length === 0) {
     toast('保存する変更がありません', 'ok');
@@ -2863,7 +2882,28 @@ async function batchSave() {
     updateDiffBadge();
     toast(`${data.saved}件保存しました`, 'ok');
     if (data.errors > 0) toast(`${data.errors}件でエラーが発生しました`, 'err');
-    await loadAll();
+    await loadAll();   // ここで state.diffs（保存済未通知）が最新化される
+
+    // ★v2026-07-30 保存しただけで終わるのを防ぐ：未送信が残っていればその場で促す
+    //   （「保存はしたが差分送信を押していない」状態が数日残り、
+    //     スタッフが古い拠点の通知のまま動いてしまう事故の再発防止）
+    if (promptSend) {
+      hideLoading();
+      const unsent = getUnsentNotifiable();
+      if (unsent.length > 0) {
+        const lines = unsent.slice(0, 10).map(d =>
+          `  ・${d.date} ${d.base}：${d.notifiedName || '【未割当】'} → ${d.currentName || '【未割当】'}`
+        ).join('\n');
+        const more = unsent.length > 10 ? `\n  …ほか ${unsent.length - 10}件` : '';
+        const okSend = confirm(
+          `保存しました。\n\n` +
+          `⚠️ まだLINE通知していない変更が ${unsent.length}件 あります：\n${lines}${more}\n\n` +
+          `差分送信を今すぐ実行しますか？\n` +
+          `（キャンセルすると未送信のまま残ります。スタッフには古い拠点が通知されたままです）`
+        );
+        if (okSend) await confirmDiffSend();
+      }
+    }
   } catch (e) {
     toast(`保存失敗: ${e.message}`, 'err');
   } finally {
