@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>🍱 納品管理</title>
+<!-- kanri.html v3.50 (2026-07-30) 【献立表 Phase2 D ＋ v3.48のバグ修正】①🔴**v3.48のバグ修正**＝献立表の全六の主菜を「名前」で保存していたのを**仕込みID**に戻した。メインGAS `_aggregateOrderItems_` は `shikomiMap[sel]` で**仕込みIDとして**引き、ヒットしない時だけ後方互換で `kawariKey + "_" + sel` という商品名を組み立てる。名前（例 `全六あり_南蛮`）を保存すると `全六あり_全六あり_南蛮` を探しに行って何も見つからず**仕込み表に主菜が反映されない**。Phase1(mnBuildSelect)は元々idだった。あわせてカレンダーのセル表示は仕込みID→主菜名に引き直す（`mnZenNameOf`／候補に無い旧データはそのまま表示）。**⚠ v3.48〜v3.49の間に保存した日は全六が名前で入っているので、献立表タブで選び直して保存し直す必要がある。**②**D＝仕込み表の全六選択UIを献立表へ集約**。仕込みタブの「🔄 当日おかず選択」（プルダウン＋保存ボタン）を削除し、**読み取り専用の確認表示＋「📋 献立表で設定」ボタン**（その日の献立パネルを直接開く `s4OpenMenuForDate`）に置換。未設定の日は赤字で警告（「設定しないと仕込み表に主菜が出ません」）。複数日選択時は先頭日の献立を表示する旨も明記。献立表を保存すると既存「日替わり選択」シートへミラーされるため、仕込み計算の経路（getKawariSelections → getSheet4Data&kawari=…）は**従来と同じ**＝GAS無変更。入力場所が2つあって食い違う問題が解消。削除: `onS4KawariSave`／`getS4KawariSelections`／`buildKawariSelect`／`showS4SavedBadge`。新規: `s4BuildZenrokuReadonly`／`s4ZenrokuName`／`s4OpenMenuForDate`＋`.kawari-ro-*` CSS。 -->
 <!-- kanri.html v3.49 (2026-07-30) 【献立表 Phase2 C-1】配分調整と献立表の0連動。その日の献立が**保存済み**の場合だけ、献立に入っていない日替わり商品（海苔弁系/満腹系）のセルを**0＋グレー表示**にする（ロックはせず編集可＝数字を入れれば戻る／編集値は常に優先）。未保存の日は連動しない（社長確定＝自動表示だけの日に効かせると、ローテの順番がズレていた時に間違った商品が0になるため）。これは**表示のみ**で、G列（納品個数）を実際に0にするのは夜間バッチ側（C-2＝applyRecommendToBasicMaster が献立表を見て、その日作る種類にグループ合計を入れ、作らない種類を0にする）。実装: bmMenuCache/bmMenuTargets/bmFetchMenu/bmLoadMenuTargets/bmMenuExcluded を追加、bmGetDisplaySales に0分岐、bmRenderCell に .bm-menu-off クラス＋ツールチップ。取得は bmLoadDate と bmPrefetchWeek の Promise.all に相乗り（getMenuSelections を日別・getMenuMeta は1回だけ）＝**追加の待ち時間なし・取得失敗時は従来表示にフォールバック**。getBasicMasterMatrix は無改修。要メインGAS @322以降。 -->
 <!-- kanri.html v3.48 (2026-07-30) 【献立表 Phase2】献立表タブを「平日のみの月カレンダー」に全面改修（単日入力→月一括）。①月〜金だけのカレンダー。土日と祝日はセルを作らない（祝日＝メニュー無し・ローテのカウントからも除外）。②開いた時点で全平日が自動で埋まる＝海苔弁はローテーション（営業日で連続。週も月もまたいで続き、祝日はスキップ）、満腹は曜日固定（1曜日に複数種可）。③セルは要約表示（品目名＋全六の主菜）。未保存＝薄字＋点線／保存済み＝濃字＋緑帯＋✓確定。保存済みなのに全六が空の日は赤字で警告。④セルをタップで日別パネル（海苔弁/満腹のチップ＝白米・玄米が1つにまとまり同時ON、全六の主菜1/2プルダウン、「↩自動に戻す」）。⑤保存は変更した日だけ（saveMenuSelections を日単位で呼ぶ＝触っていない日は献立表シートに行を作らない）。⑥上部の⚙折りたたみにローテ順（↑↓✕・追加）／基準日／満腹の曜日割りの編集UIを同居（getMenuRules / saveMenuRules）。取得は getMenuMonth 1本でmeta・rulesまで来るので初回1リクエスト。全六の選択キーは商品名（全六あり「白米」）ではなく区分（全六あり/全六なし）に統一。要メインGAS @321以降（getMenuMonth/getMenuRules/saveMenuRules＋getMenuMetaの全六候補バグ修正＋新シート 献立ローテ/献立曜日固定＋設定 menu_rotation_base_date）。※配分調整の0連動・仕込み表の全六選択UI移設は次段階（C/D）。 -->
 <!-- kanri.html v3.44 (2026-07-12) 【一括印刷】「📚 一括印刷」の印刷対象をシート1〜4 → シート1〜3に変更。printAllForDay() の印刷キュー構築から `_printAllQueue.push('sheet4');` を削除（シート4＝仕込みは一括印刷から除外／個別の「🖨 印刷」ボタンでは従来どおり印刷可）。あわせて事前確認ダイアログの回数表示を「4〜5 回」→「3〜4 回」に整合。キュー＝sheet1×2部＋sheet2＋(午後便がある日のみ)sheet3。※sheet4の事前fetch（⑥仕込み取得）は残置。GAS変更なし。 -->
@@ -492,7 +493,16 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
+/* ── v3.49（Phase2 D）仕込みタブの全六：読み取り専用表示（入力は献立表タブ） ── */
+.kawari-ro-src  { font-size: 10px; font-weight: normal; color: #8d6e63; background: #efebe9; border-radius: 3px; padding: 1px 6px; }
+.kawari-ro-rows { display: flex; flex-wrap: wrap; gap: 8px 22px; }
+.kawari-ro-rows .kawari-item { flex-direction: row; align-items: center; gap: 7px; margin-bottom: 0; font-size: 13px; }
+.kawari-ro-k    { display: inline-block; background: #efebe9; color: #795548; border-radius: 3px; padding: 0 6px; font-size: 11px; font-weight: bold; }
+.kawari-ro-none { color: #bdbdbd; font-size: 12px; }
+.kawari-ro-note { font-size: 11px; color: #78909c; }
+.kawari-ro-warn { font-size: 11.5px; color: #c62828; font-weight: bold; }
 .save-badge {
   font-size: 11px;
   color: #388e3c;
@@ -2698,79 +2708,67 @@ async function fetchSheet4() {
     }
     s4SetStatus('');
     renderSheet4(data);
- 
-    // 保存済みバッジ
-    const hasSelection = Object.values(kawari).some(v => v !== '');
-    if (hasSelection) showS4SavedBadge(dates[0]);
+    // v3.49: 保存済みバッジは廃止。全六の設定状況は読み取り専用ボックス側に出す（未設定なら警告）。
   } catch(e) {
     s4SetStatus('通信エラー: ' + e.message, true);
   }
 }
  
-// 日替わり保存後の再計算
-async function onS4KawariSave() {
-  const dates = Array.from(s4SelectedDates).sort();
-  if (dates.length === 0) {
-    s4SetStatus('日付を1日以上選択してください', true);
-    return;
-  }
-  const targetDate = dates[0];   // 最初の日に保存
-  const selections = getS4KawariSelections();
-  s4SetStatus('保存中…');
-  try {
-    await fetch(GAS_URL, {
-      method: 'POST',
-      body: JSON.stringify({ action: 'saveKawariSelections', date: targetDate, selections })
-    });
-    showS4SavedBadge(targetDate);
- 
-    // 仕込み表を再計算
-    const kawariJson = encodeURIComponent(JSON.stringify(selections));
-    const res  = await fetch(GAS_URL + '?action=getSheet4Data&dates=' + dates.join(',') + '&kawari=' + kawariJson);
-    const data = await res.json();
-    if (!data.ok) {
-      s4SetStatus(data.error || '更新エラー', true);
-      return;
-    }
-    s4SetStatus('');
-    renderSheet4(data);
-    showS4SavedBadge(targetDate);
-  } catch(e) {
-    s4SetStatus('通信エラー: ' + e.message, true);
-  }
+// v3.49（Phase2 D）: 献立表タブへ移動し、その日の献立パネルを開く
+//   献立表で保存すると「日替わり選択」へミラーされるので、戻ってきて「取得」を押せば仕込みに反映される。
+async function s4OpenMenuForDate(ds) {
+  if (!ds) return;
+  const ym = String(ds).slice(0, 7);
+  mnState.initialized = true;                 // タブ切替時の自動ロード（今月）と二重にならないように
+  const btn = document.querySelector('.tab-btn[data-tab="menu"]');
+  if (btn) btn.click();
+  if (mnState.ym !== ym) await mnLoadMonth(ym);
+  if (mnState.byDate && mnState.byDate[ds]) mnOpenDay(ds);   // 土日・祝日は月表示のみ
 }
- 
-function getS4KawariSelections() {
-  return {
-    '全六あり主菜1': document.getElementById('s4-zr-s1') ? document.getElementById('s4-zr-s1').value : '',
-    '全六あり主菜2': document.getElementById('s4-zr-s2') ? document.getElementById('s4-zr-s2').value : '',
-    '全六なし主菜1': document.getElementById('s4-zn-s1') ? document.getElementById('s4-zn-s1').value : '',
-    '全六なし主菜2': document.getElementById('s4-zn-s2') ? document.getElementById('s4-zn-s2').value : ''
-  };
-}
- 
-function showS4SavedBadge(dateVal) {
-  const badge = document.getElementById('s4-save-badge');
-  if (!badge) return;
-  const [y, m, dd] = dateVal.split('-').map(Number);
-  badge.textContent = '✓ ' + m + '/' + dd + ' 保存済み';
-  badge.style.display = 'inline-flex';
-}
- 
-function buildKawariSelect(id, cands, selected) {
-  // v3.13: cands は `[{id, name}, ...]` (新形式・仕込みマスタベース)
-  //        後方互換: 文字列要素の場合は {id: c, name: c} として扱う
-  let html = `<select id="${id}" style="padding:5px 8px;border:1px solid #bbb;border-radius:4px;font-family:inherit;font-size:13px;">`;
-  html += `<option value="">-- 未選択 --</option>`;
-  (cands || []).forEach(c => {
+
+// v3.49（Phase2 D）で削除: onS4KawariSave / getS4KawariSelections / buildKawariSelect / showS4SavedBadge
+//   全六の入力は「📋 献立表」タブに一本化したため、仕込みタブから保存する経路は無くなった。
+
+// v3.49（Phase2 D）: 仕込みタブの全六は読み取り専用。変更は「📋 献立表」タブで行う。
+//   cands は `[{id, name}, ...]`（仕込みマスタベース）。kawari の値は仕込みID。
+function s4ZenrokuName(cands, id) {
+  if (!id) return '';
+  const list = cands || [];
+  for (let i = 0; i < list.length; i++) {
+    const c = list[i];
     const cid   = (typeof c === 'object' && c !== null) ? String(c.id || '')   : String(c || '');
     const cname = (typeof c === 'object' && c !== null) ? String(c.name || '') : String(c || '');
-    if (!cid) return;
-    const isSel = (cid === selected);
-    html += `<option value="${escHtml(cid)}"${isSel ? ' selected' : ''}>${escHtml(cname)}</option>`;
+    if (cid === String(id)) return cname || cid;
+  }
+  return String(id);   // 候補に無い（旧データ等）はそのまま出す
+}
+
+function s4BuildZenrokuReadonly(kawari, candMap, dateStr, dateCount) {
+  const kinds = ['全六あり', '全六なし'];
+  let rows = '', anySet = false;
+  kinds.forEach(k => {
+    const cands = candMap[k] || [];
+    const shu = ['主菜1', '主菜2'].map(slot => {
+      const nm = s4ZenrokuName(cands, kawari[k + slot] || '');
+      return nm.replace(/^全六(あり|なし)_/, '').trim();
+    }).filter(Boolean);
+    if (shu.length) anySet = true;
+    rows += `<div class="kawari-item"><span class="kawari-ro-k">${escHtml(k.replace('全六', ''))}</span>`
+          + (shu.length ? `<b>${escHtml(shu.join('・'))}</b>` : '<span class="kawari-ro-none">未設定</span>')
+          + '</div>';
   });
-  html += '</select>';
-  return html;
+  const openBtn = dateStr
+    ? `<button class="btn btn-primary" id="s4-open-menu" data-date="${escHtml(dateStr)}" style="font-size:12px;padding:4px 14px;">📋 献立表で設定</button>`
+    : '';
+  const note = anySet
+    ? `<span class="kawari-ro-note">献立表の内容です。変更は献立表タブで。${dateCount > 1 ? '（複数日選択時は先頭日の献立を表示）' : ''}</span>`
+    : '<span class="kawari-ro-warn">⚠ この日の全六が献立表で設定されていません。設定しないと仕込み表に主菜が出ません。</span>';
+  return `
+    <div class="kawari-box">
+      <div class="kawari-title">🍙 当日の全六（主菜1/2）　<span class="kawari-ro-src">献立表から</span></div>
+      <div class="kawari-ro-rows">${rows}</div>
+      <div class="kawari-footer">${openBtn}${note}</div>
+    </div>`;
 }
  
 // 描画（v3.29: 合計/午前/午後 盛り出し別トグル対応）
@@ -2807,27 +2805,11 @@ function renderSheet4(data) {
   const zrC = candidates['全六あり'] || [];
   const znC = candidates['全六なし'] || [];
 
-  // 日替わり選択ボックス
-  const kawariHTML = `
-    <div class="kawari-box">
-      <div class="kawari-title">🔄 当日おかず選択（日替わり）</div>
-      <div class="kawari-grid">
-        <div>
-          <div class="kawari-sep">全六あり</div>
-          <div class="kawari-item"><span class="kawari-lbl">主菜1</span>${buildKawariSelect('s4-zr-s1', zrC, kawari['全六あり主菜1'] || '')}</div>
-          <div class="kawari-item"><span class="kawari-lbl">主菜2</span>${buildKawariSelect('s4-zr-s2', zrC, kawari['全六あり主菜2'] || '')}</div>
-        </div>
-        <div>
-          <div class="kawari-sep">全六なし</div>
-          <div class="kawari-item"><span class="kawari-lbl">主菜1</span>${buildKawariSelect('s4-zn-s1', znC, kawari['全六なし主菜1'] || '')}</div>
-          <div class="kawari-item"><span class="kawari-lbl">主菜2</span>${buildKawariSelect('s4-zn-s2', znC, kawari['全六なし主菜2'] || '')}</div>
-        </div>
-      </div>
-      <div class="kawari-footer">
-        <button class="btn btn-primary" id="s4-kawari-save" style="font-size:12px;padding:4px 14px;">保存</button>
-        <span id="s4-save-badge" class="save-badge"></span>
-      </div>
-    </div>`;
+  // v3.49（Phase2 D）: 全六の主菜選択UIは「📋 献立表」タブへ集約したので、ここは読み取り専用の確認表示。
+  //   献立表を保存すると既存「日替わり選択」シートへミラーされるため、仕込み計算の経路は従来と同じ
+  //   （getKawariSelections → getSheet4Data&kawari=...）。入力場所が2つあって食い違う問題が消える。
+  const s4MenuDate = (Array.from(s4SelectedDates).sort()[0]) || '';
+  const kawariHTML = s4BuildZenrokuReadonly(kawari, { '全六あり': zrC, '全六なし': znC }, s4MenuDate, dateCount);
 
   // トグル（合計/午前/午後）— データが無い区分は出さない
   const segs = [{ key: 'total', label: '合計' }];
@@ -2859,7 +2841,11 @@ function renderSheet4(data) {
     <div id="s4-section-wrap">${sectionHTML}</div>
     ${warnHtml}`;
 
-  document.getElementById('s4-kawari-save').addEventListener('click', onS4KawariSave);
+  // v3.49（Phase2 D）: 「📋 献立表で設定」→ 献立表タブへ移動し、その日のパネルを開く
+  const openMenuBtn = document.getElementById('s4-open-menu');
+  if (openMenuBtn) openMenuBtn.addEventListener('click', function () {
+    s4OpenMenuForDate(this.dataset.date);
+  });
 
   // トグル: セクション部分のみ差し替え（日替わり選択の入力状態を保持）
   document.querySelectorAll('.s4-toggle-btn').forEach(btn => {
@@ -7341,14 +7327,15 @@ function mnLabelsOf(active) {
   });
   return out;
 }
-// 全六の主菜をセルに出す。'全六あり_秘伝' → 'あり  秘伝・鮭'
+// 全六の主菜をセルに出す。保存値は仕込みIDなので名前へ引き直し、'全六あり_秘伝' → 'あり  秘伝・鮭'
 function mnZenBoxHtml(day) {
   var kinds = (mnState.meta && mnState.meta.zenrokuKinds) || [];
   var rows = '';
   kinds.forEach(function (k) {
     var z = (day.zenroku && day.zenroku[k]) || {};
     var shu = [z.shu1, z.shu2].map(function (s) {
-      return String(s || '').replace(/^全六(あり|なし)_/, '').trim();
+      if (!s) return '';
+      return mnZenNameOf(k, s).replace(/^全六(あり|なし)_/, '').trim();
     }).filter(Boolean);
     if (!shu.length) return;
     rows += '<span class="zl"><span class="zk">' + mnEsc(k.replace('全六', '')) + '</span>' + mnEsc(shu.join('・')) + '</span>';
@@ -7474,15 +7461,29 @@ function mnRenderPanel() {
   if (b) b.innerHTML = html;
 }
 
-// 全六の主菜は「名前」で保存する（既存「日替わり選択」ミラーと同じ形式）
+// ★全六の主菜は「仕込みID」を値として保存する（表示は名前）。名前を入れてはいけない。
+//   メインGAS `_aggregateOrderItems_` が `shikomiMap[sel]` で仕込みIDとして引き、
+//   ヒットしなかった時だけ後方互換で `kawariKey + '_' + sel` という商品名を組み立てる。
+//   名前（例 '全六あり_南蛮'）を保存すると '全六あり_全六あり_南蛮' を探しに行って
+//   何も見つからず、仕込み表に反映されない。Phase1(mnBuildSelect)も id だった。
 function mnZenSelect(kind, no, cands, selected) {
   var h = '<select data-zen="' + mnEsc(kind) + '" data-no="' + no + '"><option value="">-- 未選択 --</option>';
   (cands || []).forEach(function (c) {
-    var nm = String((c && c.name) || '');
-    if (!nm) return;
-    h += '<option value="' + mnEsc(nm) + '"' + (nm === selected ? ' selected' : '') + '>' + mnEsc(nm) + '</option>';
+    var cid = String((c && c.id) || '');
+    var cn  = String((c && c.name) || '');
+    if (!cid) return;
+    h += '<option value="' + mnEsc(cid) + '"' + (cid === selected ? ' selected' : '') + '>' + mnEsc(cn) + '</option>';
   });
   return h + '</select>';
+}
+
+// 仕込みID → 主菜名（候補に無い値＝旧データ等はそのまま返す）
+function mnZenNameOf(kind, id) {
+  var cands = (mnState.meta && mnState.meta.zenrokuCandidates && mnState.meta.zenrokuCandidates[kind]) || [];
+  for (var i = 0; i < cands.length; i++) {
+    if (String(cands[i].id) === String(id)) return String(cands[i].name || '');
+  }
+  return String(id || '');
 }
 
 function mnResetDayToAuto() {
