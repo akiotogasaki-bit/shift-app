@@ -1,6 +1,12 @@
 <!DOCTYPE html>
 <!--
   お江戸弁当 shift-admin.html
+  v2026-07-30b 自動割振に実行前プレビューを必須化
+    - confirmAssign：先に action=previewAutoAssign を叩き、「変わる枠／消える手動割当／
+      通知済みで動く人／割振対象日に無くなって消える行」を明細付きで提示してから実行
+    - 通知済みの人が動く場合は二段確認。プレビューが取れないときは実行させない
+    - 実行後に未送信が残っていればその場で差分送信を促す
+    - 依存: メインGAS 2026-07-30b（previewAutoAssign / computeAutoAssign_）
   v2026-07-30  差分バッジを「本物の未送信」だけにする＋保存後に送信を促す
     - batchSave：保存後に未送信の変更が残っていれば明細付きで確認し、その場で差分送信
       → 「保存しただけで数日放置」→スタッフが古い拠点へ、という事故の再発防止
@@ -2441,9 +2447,75 @@ async function assignStaffToBase(baseName) {
   }
 }
 
+// ★v2026-07-30 自動割振は「実行前に必ずプレビューを出す」
+//   assignShifts() はシフト表を全消しして希望拠点だけで組み直すため、
+//   手で入れた割当が黙って消える。何が変わるか・誰が動くかを先に見せる。
 async function confirmAssign() {
-  const ok = confirm('自動割振を実行します。\n\n現在のシフト表は上書きされます。\nよろしいですか？');
-  if (!ok) return;
+  showLoading('自動割振の影響を確認中...');
+  setStatus('busy', '自動割振のプレビュー取得中...');
+  let pv;
+  try {
+    pv = await apiGet('previewAutoAssign');
+    if (!pv.success) throw new Error(pv.error || 'プレビュー取得失敗');
+  } catch (e) {
+    hideLoading();
+    setStatus('err', `プレビュー失敗: ${e.message}`);
+    // プレビューが取れないときは実行させない（黙って全消しさせないため）
+    alert(`自動割振の影響を確認できませんでした：\n${e.message}\n\n` +
+          `安全のため実行を中止しました。時間をおいて再試行してください。`);
+    return;
+  }
+  hideLoading();
+  setStatus('ok', 'プレビュー取得完了');
+
+  const s = pv.summary || {};
+  const changes = pv.changes || [];
+  const dropped = pv.dropped || [];
+
+  if (changes.length === 0 && dropped.length === 0) {
+    toast('自動割振しても変わる枠はありません', 'ok');
+    setStatus('ok', '自動割振：変更なし');
+    return;
+  }
+
+  const fmt = c => {
+    const now  = c.now  || '【未割当】';
+    const next = c.next || '【未割当】';
+    return `  ・${c.date} ${c.base}：${now} → ${next}${c.notified ? '  ⚠️通知済' : ''}`;
+  };
+  const head = changes.filter(c => c.now).concat(changes.filter(c => !c.now));  // 人が消える枠を先に
+  const lines = head.slice(0, 15).map(fmt).join('\n');
+  const more  = head.length > 15 ? `\n  …ほか ${head.length - 15}件` : '';
+
+  let msg = `⚠️ 自動割振を実行すると、シフト表は全消しされ、希望拠点だけで組み直されます。\n`
+          + `手で入れた割当は保持されません。\n\n`
+          + `変わる枠：${s.changeCount || 0}件\n`
+          + `消える手動割当：${s.lostManualCount || 0}件\n`;
+  if ((s.notifiedMoving || []).length > 0) {
+    msg += `\n🚨 既にLINE通知済みの ${s.notifiedMoving.length}名 が動きます：\n`
+         + `  ${s.notifiedMoving.join('、')}\n`
+         + `  → 実行後は必ず差分送信してください（しないと古い拠点のまま伝わります）\n`;
+  }
+  if (dropped.length > 0) {
+    msg += `\n消える行（割振対象日に無い日付）：${dropped.length}件\n`
+         + dropped.slice(0, 5).map(d => `  ・${d.date} ${d.base}：${d.now || '【未割当】'}`).join('\n')
+         + (dropped.length > 5 ? `\n  …ほか ${dropped.length - 5}件` : '') + '\n';
+  }
+  msg += `\n【変更内容】\n${lines}${more}\n\n実行してよろしいですか？`;
+
+  if (!confirm(msg)) { setStatus('ok', '自動割振を中止しました'); return; }
+
+  // 通知済みの人が動く場合は二段確認
+  if ((s.notifiedMoving || []).length > 0) {
+    const ok2 = confirm(
+      `最終確認です。\n\n` +
+      `通知済みの ${s.notifiedMoving.length}名 の担当が変わります。\n` +
+      `実行後に差分送信を忘れると、その人たちは古い拠点に向かいます。\n\n` +
+      `本当に実行しますか？`
+    );
+    if (!ok2) { setStatus('ok', '自動割振を中止しました'); return; }
+  }
+
   showLoading('自動割振中（10〜30秒）...');
   setStatus('busy', '自動割振中...');
   try {
@@ -2452,6 +2524,23 @@ async function confirmAssign() {
     toast('自動割振完了', 'ok');
     setStatus('ok', '自動割振完了');
     await loadAll();
+
+    // ★v2026-07-30 割振で通知済みの人が動いた分をそのまま送れるように促す
+    hideLoading();
+    const unsent = getUnsentNotifiable();
+    if (unsent.length > 0) {
+      const lines = unsent.slice(0, 10).map(d =>
+        `  ・${d.date} ${d.base}：${d.notifiedName || '【未割当】'} → ${d.currentName || '【未割当】'}`
+      ).join('\n');
+      const more = unsent.length > 10 ? `\n  …ほか ${unsent.length - 10}件` : '';
+      const okSend = confirm(
+        `自動割振が完了しました。\n\n` +
+        `⚠️ まだLINE通知していない変更が ${unsent.length}件 あります：\n${lines}${more}\n\n` +
+        `差分送信を今すぐ実行しますか？\n` +
+        `（キャンセルすると未送信のまま残ります。スタッフには古い拠点が通知されたままです）`
+      );
+      if (okSend) await confirmDiffSend();
+    }
   } catch (e) {
     toast(`失敗: ${e.message}`, 'err');
     setStatus('err', `自動割振失敗: ${e.message}`);
