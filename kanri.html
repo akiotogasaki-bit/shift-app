@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>🍱 納品管理</title>
+<!-- kanri.html v3.48 (2026-07-30) 【献立表 Phase2】献立表タブを「平日のみの月カレンダー」に全面改修（単日入力→月一括）。①月〜金だけのカレンダー。土日と祝日はセルを作らない（祝日＝メニュー無し・ローテのカウントからも除外）。②開いた時点で全平日が自動で埋まる＝海苔弁はローテーション（営業日で連続。週も月もまたいで続き、祝日はスキップ）、満腹は曜日固定（1曜日に複数種可）。③セルは要約表示（品目名＋全六の主菜）。未保存＝薄字＋点線／保存済み＝濃字＋緑帯＋✓確定。保存済みなのに全六が空の日は赤字で警告。④セルをタップで日別パネル（海苔弁/満腹のチップ＝白米・玄米が1つにまとまり同時ON、全六の主菜1/2プルダウン、「↩自動に戻す」）。⑤保存は変更した日だけ（saveMenuSelections を日単位で呼ぶ＝触っていない日は献立表シートに行を作らない）。⑥上部の⚙折りたたみにローテ順（↑↓✕・追加）／基準日／満腹の曜日割りの編集UIを同居（getMenuRules / saveMenuRules）。取得は getMenuMonth 1本でmeta・rulesまで来るので初回1リクエスト。全六の選択キーは商品名（全六あり「白米」）ではなく区分（全六あり/全六なし）に統一。要メインGAS @321以降（getMenuMonth/getMenuRules/saveMenuRules＋getMenuMetaの全六候補バグ修正＋新シート 献立ローテ/献立曜日固定＋設定 menu_rotation_base_date）。※配分調整の0連動・仕込み表の全六選択UI移設は次段階（C/D）。 -->
 <!-- kanri.html v3.44 (2026-07-12) 【一括印刷】「📚 一括印刷」の印刷対象をシート1〜4 → シート1〜3に変更。printAllForDay() の印刷キュー構築から `_printAllQueue.push('sheet4');` を削除（シート4＝仕込みは一括印刷から除外／個別の「🖨 印刷」ボタンでは従来どおり印刷可）。あわせて事前確認ダイアログの回数表示を「4〜5 回」→「3〜4 回」に整合。キュー＝sheet1×2部＋sheet2＋(午後便がある日のみ)sheet3。※sheet4の事前fetch（⑥仕込み取得）は残置。GAS変更なし。 -->
 <!-- kanri.html v3.42 (2026-07-10) 【献立表タブ新設・Phase1】新タブ「📋 献立表」を追加。①海苔弁系/満腹系の当日バリアントを複数選択（チェック）②全六ベース型（あり/なし…拡張可）×主菜1/2を選択。日付ごとに保存/読込（GAS: getMenuMeta/getMenuSelections/saveMenuSelections、メインSS「献立表」シート・JSON保存）。全六選択は既存「日替わり選択」へミラー保存し仕込み表は無改修で連動。mn*接頭辞で既存と無衝突。※配分調整の0連動・仕込み表の全六選択UI移設はPhase2予定（本版では未実施）。要メインGASパッチ（getMenuMeta/getMenuSelections/saveMenuSelections＋doGet2件/doPost1件のルーティング）。 -->
 <!-- kanri.html v3.41 (2026-06-28) 配分調整：日付切替の高速化。日付ごとにサーバーデータ/ドライバー色をキャッシュ（bmDataCache/bmColorCache）し、ある日を開いたら表示中の週の残り営業日をバックグラウンドで並列プリフェッチ（bmPrefetchWeek・表示中の週のみ）。プリフェッチ済みの日はキャッシュから即時表示（通信ゼロ）。保存/確定/🔄再取得は従来どおり bmLoadDate で最新を取り直し→該当日キャッシュを上書き（編集系は無改修）。bmLoadDate のデータ反映部を bmApplyData に切り出し、fetch経路とキャッシュ経路で共通化。GAS・他タブ・デプロイは無変更。 -->
@@ -2150,48 +2151,186 @@ body {
   </div>
 </div>
 
-<!-- ═══════ 献立表タブ v3.42（mn* 接頭辞・Phase1） ═══════ -->
+<!-- ═══════ 献立表タブ v3.48（mn* 接頭辞・Phase2：平日のみの月カレンダー） ═══════ -->
 <style>
-  #tab-menu .mn-ctrl{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 0; }
   #tab-menu .mn-status{ font-size:12px; color:#555; }
   #tab-menu .mn-status.err{ color:#c62828; font-weight:bold; }
-  #tab-menu .mn-badge{ display:none; align-items:center; gap:4px; background:#e8f5e9; color:#2e7d32; border:1px solid #a5d6a7; border-radius:12px; padding:2px 10px; font-size:12px; font-weight:bold; }
-  #tab-menu .mn-note{ font-size:12px; color:#666; background:#fffde7; border-left:4px solid #fbc02d; padding:8px 10px; margin:4px 0 12px; border-radius:4px; }
-  #tab-menu .mn-sec{ background:#fff; border:1px solid #e0e0e0; border-radius:8px; margin:0 0 16px; overflow:hidden; }
-  #tab-menu .mn-sec-head{ background:#1a3c5e; color:#fff; font-weight:bold; padding:8px 14px; font-size:14px; display:flex; align-items:center; gap:8px; }
-  #tab-menu .mn-sec-body{ padding:12px 14px; }
+  #tab-menu .mn-status.ok{ color:#2e7d32; font-weight:bold; }
+  #tab-menu .mn-sp{ flex:1; }
+  #tab-menu .mn-mini{ border:1px solid #bbb; background:#fff; border-radius:4px; padding:3px 9px; font-size:12px; cursor:pointer; font-family:inherit; }
+  #tab-menu .mn-mini:hover{ background:#eee; }
+  #tab-menu .mn-btn-green{ background:#2e7d32; border-color:#2e7d32; color:#fff; }
+  #tab-menu .mn-hint{ font-size:11px; color:#78909c; margin-top:6px; line-height:1.6; }
+
+  /* ── ⚙ ローテ・曜日固定の設定（折りたたみ） ── */
+  #tab-menu .mn-rules{ background:#fff; border:1px solid #e0e0e0; border-radius:8px; margin:10px 0 14px; overflow:hidden; }
+  #tab-menu .mn-rules-head{ background:#eceff1; padding:10px 14px; cursor:pointer; font-weight:bold; font-size:13px; display:flex; align-items:center; gap:8px; user-select:none; }
+  #tab-menu .mn-rules-head:hover{ background:#e0e5e8; }
+  #tab-menu .mn-arw{ font-size:11px; transition:.15s; }
+  #tab-menu .mn-rules.open .mn-arw{ transform:rotate(90deg); }
+  #tab-menu .mn-rules-hint{ font-weight:normal; font-size:11px; color:#78909c; }
+  #tab-menu .mn-rules-body{ display:none; padding:14px; border-top:1px solid #e0e0e0; }
+  #tab-menu .mn-rules.open .mn-rules-body{ display:block; }
+  #tab-menu .mn-rules-grid{ display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+  @media (max-width:760px){ #tab-menu .mn-rules-grid{ grid-template-columns:1fr; } }
+  #tab-menu .mn-h4{ margin:0 0 8px; font-size:13px; color:#37474f; border-bottom:2px solid #eceff1; padding-bottom:4px; }
+  #tab-menu .mn-rot-list{ list-style:none; margin:0; padding:0; }
+  #tab-menu .mn-rot-list li{ display:flex; align-items:center; gap:8px; padding:6px 8px; border:1px solid #cfd8dc; border-radius:6px; margin-bottom:6px; background:#fafafa; font-size:13px; }
+  #tab-menu .mn-rot-no{ width:22px; height:22px; border-radius:50%; background:#1976d2; color:#fff; font-size:11px; display:flex; align-items:center; justify-content:center; font-weight:bold; flex:0 0 auto; }
+  #tab-menu .mn-rot-add{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:4px; }
+  #tab-menu .mn-rules select{ padding:5px 8px; border:1px solid #bbb; border-radius:4px; font-size:13px; font-family:inherit; max-width:220px; }
+  #tab-menu .mn-basedate{ margin-top:12px; font-size:13px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  #tab-menu .mn-basedate input{ padding:5px 8px; border:1px solid #bbb; border-radius:4px; font-family:inherit; }
+  #tab-menu .mn-wk-row{ display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px dashed #eceff1; font-size:13px; flex-wrap:wrap; }
+  #tab-menu .mn-wk-dow{ width:26px; font-weight:bold; color:#37474f; flex:0 0 auto; }
+  #tab-menu .mn-wk-items{ display:flex; flex-direction:column; gap:4px; flex:1; }
+  #tab-menu .mn-wk-one{ display:flex; align-items:center; gap:6px; }
+  #tab-menu .mn-rules-foot{ margin-top:14px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+
+  /* ── 月ナビ ── */
+  #tab-menu .mn-nav{ display:flex; align-items:center; gap:12px; margin-bottom:10px; flex-wrap:wrap; }
+  #tab-menu .mn-navbtn{ border:1px solid #1a3c5e; background:#fff; color:#1a3c5e; border-radius:6px; padding:6px 14px; font-size:15px; cursor:pointer; font-weight:bold; font-family:inherit; }
+  #tab-menu .mn-navbtn:hover{ background:#1a3c5e; color:#fff; }
+  #tab-menu .mn-ym{ font-size:18px; font-weight:bold; color:#1a3c5e; min-width:140px; text-align:center; }
+  #tab-menu .mn-legend{ display:flex; gap:14px; font-size:11px; color:#607d8b; align-items:center; flex-wrap:wrap; margin-left:auto; }
+  #tab-menu .mn-lg{ display:inline-flex; align-items:center; gap:5px; }
+  #tab-menu .mn-lg-box{ width:22px; height:14px; border-radius:3px; }
+
+  /* ── カレンダー ── */
+  /* スマホでは5列が入りきらないので横スクロール（ヘッダーと本体は同じ親をスクロールさせて必ず揃える） */
+  #tab-menu .mn-cal{ background:#fff; border-radius:8px; border:1px solid #cfd8dc; overflow-x:auto; overflow-y:hidden; -webkit-overflow-scrolling:touch; }
+  #tab-menu .mn-cal-head{ display:grid; grid-template-columns:repeat(5,1fr); background:#1a3c5e; min-width:660px; }
+  #tab-menu .mn-cal-head div{ color:#fff; text-align:center; padding:8px 0; font-size:13px; font-weight:bold; }
+  #tab-menu .mn-cal-body{ display:grid; grid-template-columns:repeat(5,1fr); min-width:660px; }
+  #tab-menu .mn-cell{ border-right:1px solid #eceff1; border-bottom:1px solid #eceff1; min-height:132px; padding:7px 8px; cursor:pointer; position:relative; transition:.12s; }
+  #tab-menu .mn-cell:hover{ background:#f1f8ff; }
+  #tab-menu .mn-cell.empty{ background:#fafafa; cursor:default; }
+  #tab-menu .mn-cell.empty:hover{ background:#fafafa; }
+  #tab-menu .mn-cell-d{ font-size:13px; font-weight:bold; color:#546e7a; margin-bottom:5px; display:flex; align-items:center; gap:5px; }
+  #tab-menu .mn-cell.saved .mn-cell-d{ color:#1a3c5e; }
+  #tab-menu .mn-chk{ color:#2e7d32; font-size:12px; }
+  #tab-menu .mn-items{ font-size:12px; line-height:1.55; }
+  #tab-menu .mn-items .it{ display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  /* 未保存＝ローテの自動値を出しているだけ：薄字＋点線 */
+  #tab-menu .mn-cell:not(.saved) .mn-items{ color:#90a4ae; }
+  #tab-menu .mn-cell:not(.saved) .mn-items .it{ border-bottom:1px dotted #cfd8dc; }
+  #tab-menu .mn-cell.saved .mn-items{ color:#263238; }
+  #tab-menu .mn-cell.saved{ background:#f6fbf6; }
+  #tab-menu .mn-cell.saved::before{ content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:#2e7d32; }
+  /* 全六（主菜1/2） */
+  #tab-menu .mn-zen-box{ margin-top:6px; padding-top:5px; border-top:1px solid #efebe9; font-size:11px; color:#6d4c41; line-height:1.6; }
+  #tab-menu .mn-zen-box .zl{ display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #tab-menu .mn-zen-box .zk{ display:inline-block; background:#efebe9; color:#795548; border-radius:3px; padding:0 5px; margin-right:5px; font-size:10px; font-weight:bold; }
+  #tab-menu .mn-cell:not(.saved) .mn-zen-box{ color:#bcaaa4; border-top-color:#f5f5f5; }
+  #tab-menu .mn-cell:not(.saved) .mn-zen-box .zk{ background:#f5f5f5; color:#bcaaa4; }
+  /* 未保存の日は全六が空で当たり前なので薄く。保存済みなのに空＝入れ忘れなので赤 */
+  #tab-menu .mn-zen-none{ margin-top:6px; padding-top:5px; border-top:1px solid #f5f5f5; font-size:10.5px; color:#cfd8dc; }
+  #tab-menu .mn-cell.saved .mn-zen-none{ color:#c62828; font-weight:bold; }
+  #tab-menu .mn-holi{ font-size:11px; color:#c62828; }
+  #tab-menu .mn-loading{ padding:34px; text-align:center; color:#888; grid-column:1 / -1; }
+  #tab-menu .mn-foot-note{ font-size:12px; color:#78909c; margin-top:10px; line-height:1.7; }
+
+  /* ── 日別パネル ── */
+  #tab-menu .mn-ovl{ display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:900; align-items:center; justify-content:center; padding:16px; }
+  #tab-menu .mn-ovl.on{ display:flex; }
+  #tab-menu .mn-panel{ background:#fff; border-radius:10px; max-width:640px; width:100%; max-height:88vh; overflow:auto; }
+  #tab-menu .mn-panel-h{ background:#1a3c5e; color:#fff; padding:11px 16px; font-weight:bold; display:flex; align-items:center; gap:10px; position:sticky; top:0; z-index:2; }
+  #tab-menu .mn-panel-h button{ background:transparent; border:1px solid rgba(255,255,255,.5); color:#fff; border-radius:4px; padding:3px 10px; cursor:pointer; font-family:inherit; }
+  #tab-menu .mn-panel-b{ padding:14px 16px; }
+  #tab-menu .mn-pill{ display:inline-block; font-size:11px; padding:2px 9px; border-radius:10px; }
+  #tab-menu .mn-pill.auto{ background:#eceff1; color:#546e7a; }
+  #tab-menu .mn-pill.saved{ background:#e8f5e9; color:#2e7d32; font-weight:bold; }
   #tab-menu .mn-cat{ margin:0 0 14px; }
-  #tab-menu .mn-cat:last-child{ margin-bottom:0; }
   #tab-menu .mn-cat-title{ font-weight:bold; font-size:13px; color:#37474f; border-bottom:2px solid #eceff1; padding-bottom:4px; margin-bottom:8px; }
+  #tab-menu .mn-cat-sub{ font-weight:normal; font-size:11px; color:#78909c; margin-left:8px; }
   #tab-menu .mn-chips{ display:flex; flex-wrap:wrap; gap:8px; }
   #tab-menu .mn-chip{ display:inline-flex; align-items:center; gap:6px; border:1px solid #cfd8dc; border-radius:18px; padding:6px 12px; cursor:pointer; font-size:13px; background:#fafafa; user-select:none; transition:.12s; }
   #tab-menu .mn-chip:hover{ border-color:#90a4ae; }
-  #tab-menu .mn-chip input{ display:none; }
   #tab-menu .mn-chip.on{ background:#1976d2; color:#fff; border-color:#1976d2; font-weight:bold; }
   #tab-menu .mn-chip.on::before{ content:'✓ '; }
+  #tab-menu .mn-chip .rice{ font-size:10px; opacity:.7; }
   #tab-menu .mn-empty{ font-size:12px; color:#999; padding:4px 0; }
-  #tab-menu .mn-zen-row{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:6px 0; border-bottom:1px dashed #eceff1; }
+  #tab-menu .mn-zen-row{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:7px 0; border-bottom:1px dashed #eceff1; }
   #tab-menu .mn-zen-row:last-child{ border-bottom:none; }
-  #tab-menu .mn-zen-base{ min-width:90px; font-weight:bold; font-size:13px; color:#37474f; }
+  #tab-menu .mn-zen-base{ min-width:74px; font-weight:bold; font-size:13px; color:#37474f; }
   #tab-menu .mn-zen-item{ display:flex; align-items:center; gap:4px; font-size:12px; color:#555; }
   #tab-menu .mn-zen-item select{ padding:5px 8px; border:1px solid #bbb; border-radius:4px; font-family:inherit; font-size:13px; }
-  #tab-menu .mn-loading{ padding:24px; text-align:center; color:#888; }
+  #tab-menu .mn-autonote{ background:#fffde7; border-left:4px solid #fbc02d; padding:9px 12px; font-size:12px; border-radius:4px; line-height:1.6; }
+  #tab-menu .mn-panel-f{ padding:12px 16px; border-top:1px solid #eceff1; display:flex; gap:10px; align-items:center; position:sticky; bottom:0; background:#fff; flex-wrap:wrap; }
 </style>
 <div class="tab-pane" id="tab-menu">
-  <div class="mn-ctrl">
-    <label>日付：</label>
-    <input type="date" id="mn-date-input">
-    <button class="btn btn-primary" id="mn-btn-fetch">取得</button>
-    <button class="btn btn-primary" id="mn-btn-save" style="background:#2e7d32;border-color:#2e7d32;">💾 保存</button>
-    <span id="mn-badge" class="mn-badge"></span>
+
+  <div class="mn-rules" id="mn-rules">
+    <div class="mn-rules-head" id="mn-rules-head">
+      <span class="mn-arw">▶</span><span>⚙ ローテ・曜日固定の設定</span>
+      <span class="mn-rules-hint">（海苔弁の回す順番／満腹の曜日割り／基準日）</span>
+    </div>
+    <div class="mn-rules-body">
+      <div class="mn-rules-grid">
+        <div>
+          <h4 class="mn-h4">🍱 海苔弁ローテーション（この順で1営業日ずつ回る）</h4>
+          <ul class="mn-rot-list" id="mn-rot-list"></ul>
+          <div class="mn-rot-add">
+            <select id="mn-rot-add-sel"></select>
+            <button class="mn-mini" id="mn-rot-add-btn">＋ 品目を追加</button>
+          </div>
+          <div class="mn-basedate">
+            <span>基準日：</span>
+            <input type="date" id="mn-base-date">
+            <button class="mn-mini" id="mn-base-today">今日をここから開始</button>
+          </div>
+          <div class="mn-hint">基準日がローテの1番目。祝日はカウントされないので、金曜の続きが翌週月曜になります。</div>
+        </div>
+        <div>
+          <h4 class="mn-h4">🍚 満腹 曜日固定</h4>
+          <div id="mn-wk-list"></div>
+          <div class="mn-hint">1曜日に複数種を置けます（＋で追加）。空にすればその曜日は自動表示なしになります。</div>
+        </div>
+      </div>
+      <div class="mn-rules-foot">
+        <button class="btn mn-btn-green" id="mn-btn-save-rules">💾 保存してカレンダーに反映</button>
+        <span class="mn-status" id="mn-rules-status"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="mn-nav">
+    <button class="mn-navbtn" id="mn-prev">◀</button>
+    <div class="mn-ym" id="mn-ym">－</div>
+    <button class="mn-navbtn" id="mn-next">▶</button>
+    <button class="mn-mini" id="mn-reload">🔄 再取得</button>
     <span class="mn-status" id="mn-status"></span>
+    <div class="mn-legend">
+      <span class="mn-lg"><span class="mn-lg-box" style="background:#f6fbf6;border-left:3px solid #2e7d32;"></span>保存済み（確定）</span>
+      <span class="mn-lg"><span class="mn-lg-box" style="background:#fff;border:1px solid #cfd8dc;"></span>自動表示のみ（未保存）</span>
+    </div>
   </div>
-  <div class="mn-note">
-    献立表は「その日に出す弁当」を一括入力する場所です。海苔弁系・満腹系は当日出すバリアントをすべてON（複数可）。全六は主菜1/2を選択。
-    ※配分調整への0連動・仕込み表の全六選択移設はPhase2で対応予定です（本版は保存/読込のみ）。
+
+  <div class="mn-cal">
+    <div class="mn-cal-head"><div>月</div><div>火</div><div>水</div><div>木</div><div>金</div></div>
+    <div class="mn-cal-body" id="mn-cal-body"><div class="mn-loading">読み込み中…</div></div>
   </div>
-  <div id="mn-body">
-    <div class="mn-loading">日付を選択して「取得」を押してください</div>
+
+  <div class="mn-foot-note">
+    ※ 未保存の日は薄字＋点線＝「ローテーション／曜日固定だとこうなる予定」。日をタップして保存すると確定になり、そこで初めて配分調整の0連動が効きます。<br>
+    ※ 土日と祝日はセルを作りません（メニュー無し）。祝日はローテーションのカウントからも外れます。
+  </div>
+
+  <div class="mn-ovl" id="mn-ovl">
+    <div class="mn-panel">
+      <div class="mn-panel-h">
+        <span id="mn-p-title"></span><span id="mn-p-pill"></span>
+        <span class="mn-sp"></span>
+        <button id="mn-p-close">✕ 閉じる</button>
+      </div>
+      <div class="mn-panel-b" id="mn-p-body"></div>
+      <div class="mn-panel-f">
+        <button class="btn mn-btn-green" id="mn-p-save">💾 この日を保存</button>
+        <button class="mn-mini" id="mn-p-reset">↩ 自動に戻す</button>
+        <span class="mn-sp"></span>
+        <span class="mn-status" id="mn-p-status"></span>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -7025,185 +7164,479 @@ document.querySelectorAll('.tab-btn').forEach(function (btn) {
 
 
 // ═══════════════════════════════════════════════════════════
-// 献立表タブ v3.42（mn* 接頭辞・Phase1：保存/読込のみ）
-//   海苔弁系/満腹系の当日バリアント（複数選択）＋全六ベース型×主菜1/2
-//   GAS: getMenuMeta / getMenuSelections / saveMenuSelections
-//   保存先: メインSS「献立表」シート（JSON）／全六は「日替わり選択」へミラー
+// 献立表タブ v3.48（mn* 接頭辞・Phase2：平日のみの月カレンダー）
+//   ・月〜金だけのカレンダー。土日と祝日はセルを作らない（＝メニュー無し）
+//   ・海苔弁＝ローテーション／満腹＝曜日固定 で全平日が最初から埋まっている
+//   ・違う日だけタップして直して保存。保存は「その日だけ」（変更した日以外は行を作らない）
+//   ・未保存＝薄字＋点線（自動値）／保存済み＝濃字＋緑帯＋✓確定
+//   GAS: getMenuMonth / getMenuRules / saveMenuRules / saveMenuSelections
 // ═══════════════════════════════════════════════════════════
-var mnState = { meta: null, loadedDate: null, initialized: false };
+var MN_WEEKDAYS = ['月', '火', '水', '木', '金'];
+var mnState = {
+  ym: '', days: [], byDate: {}, meta: null, rules: null,
+  itemMap: {},      // itemKey → item
+  pidItem: {},      // 商品ID → item
+  openDate: null,
+  draft: null,      // 日別パネルの編集中 { active:{pid:true}, zenroku:{kind:{shu1,shu2}} }
+  rulesDraft: null, // { rotation:[{key,category,label}], weekly:{月:[...]}, baseDate }
+  initialized: false, loading: false
+};
 
 function mnEsc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
     return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
   });
 }
-function mnSetStatus(msg, isErr) {
-  var el = document.getElementById('mn-status');
+function mnSetStatus(id, msg, kind) {
+  var el = document.getElementById(id);
   if (!el) return;
   el.textContent = msg || '';
-  el.className = 'mn-status' + (isErr ? ' err' : '');
-}
-function mnShowBadge(date) {
-  var b = document.getElementById('mn-badge');
-  if (!b) return;
-  var p = String(date).split('-');
-  b.textContent = '✓ ' + Number(p[1]) + '/' + Number(p[2]) + ' 保存済み';
-  b.style.display = 'inline-flex';
-  setTimeout(function () { b.style.display = 'none'; }, 4000);
+  el.className = 'mn-status' + (kind ? ' ' + kind : '');
 }
 function mnTodayStr() {
-  var now = new Date();
-  var jst = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
-  var y = jst.getFullYear();
-  var m = String(jst.getMonth() + 1).padStart(2, '0');
-  var d = String(jst.getDate()).padStart(2, '0');
-  return y + '-' + m + '-' + d;
+  var jst = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+  return jst.getFullYear() + '-' + String(jst.getMonth() + 1).padStart(2, '0') + '-' + String(jst.getDate()).padStart(2, '0');
 }
-function mnBuildSelect(id, cands, selected) {
-  var h = '<select id="' + id + '"><option value="">-- 未選択 --</option>';
-  (cands || []).forEach(function (c) {
-    var cid = String((c && c.id) || '');
-    var cn  = String((c && c.name) || '');
-    if (!cid) return;
-    h += '<option value="' + mnEsc(cid) + '"' + (cid === selected ? ' selected' : '') + '>' + mnEsc(cn) + '</option>';
-  });
-  h += '</select>';
-  return h;
+function mnThisYm() { return mnTodayStr().slice(0, 7); }
+function mnShiftYm(ym, delta) {
+  var p = ym.split('-'), y = Number(p[0]), m = Number(p[1]) + delta;
+  while (m < 1)  { m += 12; y--; }
+  while (m > 12) { m -= 12; y++; }
+  return y + '-' + String(m).padStart(2, '0');
 }
 
 function mnOnOpen() {
-  var dateEl = document.getElementById('mn-date-input');
-  if (dateEl && !dateEl.value) dateEl.value = mnTodayStr();
-  if (!mnState.initialized) {
-    mnState.initialized = true;
-    mnFetch();
-  }
+  if (mnState.initialized) return;
+  mnState.initialized = true;
+  mnLoadMonth(mnThisYm());
 }
 
-async function mnFetch() {
-  var dateEl = document.getElementById('mn-date-input');
-  var date = (dateEl && dateEl.value) || mnTodayStr();
-  if (dateEl && !dateEl.value) dateEl.value = date;
-  mnSetStatus('読み込み中…');
-  var badge = document.getElementById('mn-badge');
-  if (badge) badge.style.display = 'none';
+// ── 月データ取得 ──────────────────────────────────────────
+async function mnLoadMonth(ym) {
+  if (mnState.loading) return;
+  mnState.loading = true;
+  mnSetStatus('mn-status', '読み込み中…');
   try {
-    var metaTask = mnState.meta
-      ? Promise.resolve(mnState.meta)
-      : fetch(GAS_URL + '?action=getMenuMeta').then(function (r) { return r.json(); });
-    var selTask = fetch(GAS_URL + '?action=getMenuSelections&date=' + encodeURIComponent(date))
-      .then(function (r) { return r.json(); });
-    var arr = await Promise.all([metaTask, selTask]);
-    var meta = arr[0], sel = arr[1];
-    if (!meta || !meta.ok) { mnSetStatus((meta && meta.error) || 'メタ取得に失敗しました', true); return; }
-    mnState.meta = meta;
-    if (!sel || !sel.ok) { mnSetStatus((sel && sel.error) || '献立の取得に失敗しました', true); return; }
-    mnState.loadedDate = date;
-    mnRender(meta, sel);
-    mnSetStatus('');
+    var r = await fetch(GAS_URL + '?action=getMenuMonth&ym=' + encodeURIComponent(ym)).then(function (x) { return x.json(); });
+    if (!r || !r.ok) { mnSetStatus('mn-status', (r && r.error) || '取得に失敗しました', 'err'); return; }
+
+    mnState.ym    = r.ym || ym;
+    mnState.days  = r.days || [];
+    mnState.meta  = (r.meta && r.meta.ok) ? r.meta : null;
+    mnState.rules = r.rules || { rotation: [], weekly: {}, baseDate: '' };
+
+    mnState.byDate = {};
+    mnState.days.forEach(function (d) { mnState.byDate[d.date] = d; });
+
+    mnState.itemMap = {}; mnState.pidItem = {};
+    var di = (mnState.meta && mnState.meta.dailyItems) || {};
+    Object.keys(di).forEach(function (cat) {
+      di[cat].forEach(function (it) {
+        mnState.itemMap[it.key] = it;
+        (it.productIds || []).forEach(function (p) { mnState.pidItem[String(p)] = it; });
+      });
+    });
+
+    mnState.rulesDraft = mnNormalizeRules(mnState.rules);
+    mnRenderCal();
+    mnRenderRules();
+    mnSetStatus('mn-status', '');
   } catch (e) {
-    mnSetStatus('通信エラー: ' + e.message, true);
+    mnSetStatus('mn-status', '通信エラー: ' + e.message, 'err');
+  } finally {
+    mnState.loading = false;
   }
 }
 
-function mnRender(meta, sel) {
-  var body = document.getElementById('mn-body');
-  if (!body) return;
-  var activeSet = {};
-  (sel.active || []).forEach(function (p) { activeSet[String(p)] = true; });
+function mnNormalizeRules(rules) {
+  var out = { rotation: [], weekly: {}, baseDate: (rules && rules.baseDate) || '' };
+  ((rules && rules.rotation) || []).forEach(function (r) {
+    out.rotation.push({ key: r.key, category: r.category, label: r.label });
+  });
+  MN_WEEKDAYS.forEach(function (d) {
+    out.weekly[d] = (((rules && rules.weekly) || {})[d] || []).map(function (w) {
+      return { key: w.key, category: w.category, label: w.label };
+    });
+  });
+  return out;
+}
+
+// ── カレンダー描画 ────────────────────────────────────────
+// 商品IDの配列 → 品目ラベルの配列（白米/玄米をまとめる）
+function mnLabelsOf(active) {
+  var seen = {}, out = [];
+  (active || []).forEach(function (pid) {
+    var it = mnState.pidItem[String(pid)];
+    var nm = it ? it.label : String(pid);
+    if (!seen[nm]) { seen[nm] = 1; out.push(nm); }
+  });
+  return out;
+}
+// 全六の主菜をセルに出す。'全六あり_秘伝' → 'あり  秘伝・鮭'
+function mnZenBoxHtml(day) {
+  var kinds = (mnState.meta && mnState.meta.zenrokuKinds) || [];
+  var rows = '';
+  kinds.forEach(function (k) {
+    var z = (day.zenroku && day.zenroku[k]) || {};
+    var shu = [z.shu1, z.shu2].map(function (s) {
+      return String(s || '').replace(/^全六(あり|なし)_/, '').trim();
+    }).filter(Boolean);
+    if (!shu.length) return;
+    rows += '<span class="zl"><span class="zk">' + mnEsc(k.replace('全六', '')) + '</span>' + mnEsc(shu.join('・')) + '</span>';
+  });
+  if (rows) return '<div class="mn-zen-box">' + rows + '</div>';
+  return '<div class="mn-zen-none">全六 未設定</div>';
+}
+
+function mnRenderCal() {
+  var body = document.getElementById('mn-cal-body');
+  if (!body || !mnState.ym) return;
+  var p = mnState.ym.split('-'), y = Number(p[0]), m = Number(p[1]);
+  var ymEl = document.getElementById('mn-ym');
+  if (ymEl) ymEl.textContent = y + '年 ' + m + '月';
 
   var html = '';
+  var firstDow = new Date(y, m - 1, 1).getDay();
+  var pad = (firstDow === 0 || firstDow === 6) ? 0 : firstDow - 1;
+  for (var i = 0; i < pad; i++) html += '<div class="mn-cell empty"></div>';
 
-  // ── 日替わり弁当（海苔弁系/満腹系・複数選択）──
-  html += '<div class="mn-sec"><div class="mn-sec-head">🍱 日替わり弁当（当日出すものをすべてON）</div><div class="mn-sec-body">';
-  var cats = meta.dailyCategories || [];
-  cats.forEach(function (cat) {
-    var list = (meta.dailyProducts && meta.dailyProducts[cat]) || [];
-    html += '<div class="mn-cat"><div class="mn-cat-title">' + mnEsc(cat) + '</div>';
-    if (!list.length) {
+  var last = new Date(y, m, 0).getDate();
+  for (var d = 1; d <= last; d++) {
+    var dow = new Date(y, m - 1, d).getDay();
+    if (dow === 0 || dow === 6) continue;
+    var ds = y + '-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+    var day = mnState.byDate[ds];
+    if (!day) {   // days[] に無い平日＝祝日
+      html += '<div class="mn-cell empty"><div class="mn-cell-d">' + d + '</div><div class="mn-holi">祝日</div></div>';
+      continue;
+    }
+    var labels = mnLabelsOf(day.active);
+    html += '<div class="mn-cell' + (day.saved ? ' saved' : '') + '" data-date="' + ds + '">'
+          + '<div class="mn-cell-d">' + d + (day.saved ? '<span class="mn-chk">✓確定</span>' : '') + '</div>'
+          + '<div class="mn-items">' + labels.map(function (l) { return '<span class="it">' + mnEsc(l) + '</span>'; }).join('') + '</div>'
+          + mnZenBoxHtml(day)
+          + '</div>';
+  }
+  body.innerHTML = html || '<div class="mn-loading">この月に営業日がありません</div>';
+}
+
+// ── 日別パネル ────────────────────────────────────────────
+function mnOpenDay(ds) {
+  var day = mnState.byDate[ds];
+  if (!day || !mnState.meta) return;
+  mnState.openDate = ds;
+
+  var act = {};
+  (day.active || []).forEach(function (pid) { act[String(pid)] = true; });
+  var zen = {};
+  (mnState.meta.zenrokuKinds || []).forEach(function (k) {
+    var z = (day.zenroku && day.zenroku[k]) || {};
+    zen[k] = { shu1: z.shu1 || '', shu2: z.shu2 || '' };
+  });
+  mnState.draft = { active: act, zenroku: zen };
+
+  mnSetStatus('mn-p-status', '');
+  mnRenderPanel();
+  var ovl = document.getElementById('mn-ovl');
+  if (ovl) ovl.classList.add('on');
+}
+function mnClosePanel() {
+  var ovl = document.getElementById('mn-ovl');
+  if (ovl) ovl.classList.remove('on');
+  mnState.openDate = null;
+  mnState.draft = null;
+}
+
+function mnRenderPanel() {
+  var ds = mnState.openDate;
+  var day = mnState.byDate[ds];
+  var meta = mnState.meta;
+  if (!day || !meta) return;
+
+  var t = document.getElementById('mn-p-title');
+  if (t) t.textContent = ds.replace(/-/g, '/') + '（' + day.dow + '）';
+  var pl = document.getElementById('mn-p-pill');
+  if (pl) pl.innerHTML = day.saved
+    ? '<span class="mn-pill saved">保存済み</span>'
+    : '<span class="mn-pill auto">自動表示（未保存）</span>';
+
+  var html = '';
+  (meta.dailyCategories || []).forEach(function (cat) {
+    var items = (meta.dailyItems && meta.dailyItems[cat]) || [];
+    var sub = (cat === '海苔弁系') ? 'ローテーション対象' : (cat === '満腹系' ? '曜日固定' : '');
+    html += '<div class="mn-cat"><div class="mn-cat-title">' + mnEsc(cat)
+          + (sub ? '<span class="mn-cat-sub">' + sub + '</span>' : '') + '</div>';
+    if (!items.length) {
       html += '<div class="mn-empty">商品が登録されていません</div>';
     } else {
       html += '<div class="mn-chips">';
-      list.forEach(function (p) {
-        var on = !!activeSet[String(p.id)];
-        html += '<span class="mn-chip' + (on ? ' on' : '') + '" data-pid="' + mnEsc(p.id) + '" title="' + mnEsc(p.rawName || p.name) + '">' + mnEsc(p.name) + '</span>';
+      items.forEach(function (it) {
+        var on = (it.productIds || []).some(function (pid) { return !!mnState.draft.active[String(pid)]; });
+        html += '<span class="mn-chip' + (on ? ' on' : '') + '" data-key="' + mnEsc(it.key) + '">'
+              + mnEsc(it.label) + '<span class="rice">' + mnEsc((it.riceTypes || []).join('/')) + '</span></span>';
       });
       html += '</div>';
     }
     html += '</div>';
   });
-  html += '</div></div>';
 
-  // ── 全六（主菜1/2）──
-  html += '<div class="mn-sec"><div class="mn-sec-head">🍙 全六（主菜1/2）</div><div class="mn-sec-body">';
-  var bases = meta.zenrokuBases || [];
-  if (!bases.length) {
+  var kinds = meta.zenrokuKinds || [];
+  html += '<div class="mn-cat"><div class="mn-cat-title">全六<span class="mn-cat-sub">主菜1／主菜2を選ぶ</span></div>';
+  if (!kinds.length) {
     html += '<div class="mn-empty">全六商品が登録されていません</div>';
   } else {
-    bases.forEach(function (b, idx) {
-      var cands = (meta.zenrokuCandidates && meta.zenrokuCandidates[b.name]) || [];
-      var z = (sel.zenroku && sel.zenroku[b.name]) || {};
-      html += '<div class="mn-zen-row" data-base="' + mnEsc(b.name) + '">';
-      html += '<span class="mn-zen-base">' + mnEsc(b.displayName || b.name) + '</span>';
-      html += '<span class="mn-zen-item"><span>主菜1</span>' + mnBuildSelect('mn-zen-' + idx + '-1', cands, z.shu1 || '') + '</span>';
-      html += '<span class="mn-zen-item"><span>主菜2</span>' + mnBuildSelect('mn-zen-' + idx + '-2', cands, z.shu2 || '') + '</span>';
-      html += '</div>';
+    kinds.forEach(function (k, idx) {
+      var cands = (meta.zenrokuCandidates && meta.zenrokuCandidates[k]) || [];
+      var z = mnState.draft.zenroku[k] || {};
+      html += '<div class="mn-zen-row"><span class="mn-zen-base">' + mnEsc(k) + '</span>'
+            + '<span class="mn-zen-item"><span>主菜1</span>' + mnZenSelect(k, 1, cands, z.shu1 || '') + '</span>'
+            + '<span class="mn-zen-item"><span>主菜2</span>' + mnZenSelect(k, 2, cands, z.shu2 || '') + '</span>'
+            + '</div>';
     });
   }
-  html += '</div></div>';
+  html += '</div>';
 
-  body.innerHTML = html;
+  if (!day.saved) {
+    html += '<div class="mn-autonote">この日はまだ保存されていません。表示はローテーション／曜日固定からの<b>自動値</b>です'
+          + ((day.autoLabels && day.autoLabels.length) ? '（' + mnEsc(day.autoLabels.join(' / ')) + '）' : '')
+          + '。保存すると確定になり、配分調整の0連動が効きます。</div>';
+  }
+  var b = document.getElementById('mn-p-body');
+  if (b) b.innerHTML = html;
 }
 
-function mnCollect() {
+// 全六の主菜は「名前」で保存する（既存「日替わり選択」ミラーと同じ形式）
+function mnZenSelect(kind, no, cands, selected) {
+  var h = '<select data-zen="' + mnEsc(kind) + '" data-no="' + no + '"><option value="">-- 未選択 --</option>';
+  (cands || []).forEach(function (c) {
+    var nm = String((c && c.name) || '');
+    if (!nm) return;
+    h += '<option value="' + mnEsc(nm) + '"' + (nm === selected ? ' selected' : '') + '>' + mnEsc(nm) + '</option>';
+  });
+  return h + '</select>';
+}
+
+function mnResetDayToAuto() {
+  var day = mnState.byDate[mnState.openDate];
+  if (!day || !mnState.draft) return;
+  mnState.draft.active = {};
+  (day.autoActive || []).forEach(function (pid) { mnState.draft.active[String(pid)] = true; });
+  mnRenderPanel();
+  mnSetStatus('mn-p-status', '海苔弁・満腹を自動値に戻しました（保存するまで確定しません）');
+}
+
+async function mnSaveDay() {
+  var ds = mnState.openDate;
+  if (!ds || !mnState.draft) return;
   var active = [];
-  document.querySelectorAll('#mn-body .mn-chip.on').forEach(function (el) {
-    var pid = el.getAttribute('data-pid');
-    if (pid) active.push(pid);
-  });
-  var zenroku = {};
-  var bases = (mnState.meta && mnState.meta.zenrokuBases) || [];
-  bases.forEach(function (b, idx) {
-    var s1 = document.getElementById('mn-zen-' + idx + '-1');
-    var s2 = document.getElementById('mn-zen-' + idx + '-2');
-    zenroku[b.name] = { shu1: s1 ? s1.value : '', shu2: s2 ? s2.value : '' };
-  });
-  return { active: active, zenroku: zenroku };
-}
+  Object.keys(mnState.draft.active).forEach(function (pid) { if (mnState.draft.active[pid]) active.push(pid); });
 
-async function mnSave() {
-  var dateEl = document.getElementById('mn-date-input');
-  var date = (dateEl && dateEl.value) || '';
-  if (!date) { mnSetStatus('日付を選択してください', true); return; }
-  if (!mnState.meta) { mnSetStatus('先に「取得」を押してください', true); return; }
-  var payload = mnCollect();
-  payload.date = date;
-  payload.action = 'saveMenuSelections';
-  mnSetStatus('保存中…');
+  var payload = { action: 'saveMenuSelections', date: ds, active: active, zenroku: mnState.draft.zenroku };
+  mnSetStatus('mn-p-status', '保存中…');
   try {
     var res = await fetch(GAS_URL, { method: 'POST', redirect: 'follow', body: JSON.stringify(payload) });
     var r = await res.json();
-    if (!r || !r.ok) { mnSetStatus((r && r.error) || '保存に失敗しました', true); return; }
-    mnSetStatus('');
-    mnShowBadge(date);
+    if (!r || !r.ok) { mnSetStatus('mn-p-status', (r && r.error) || '保存に失敗しました', 'err'); return; }
+    var day = mnState.byDate[ds];
+    day.saved   = true;
+    day.active  = active;
+    day.zenroku = JSON.parse(JSON.stringify(mnState.draft.zenroku));
+    mnRenderCal();
+    mnClosePanel();
+    mnSetStatus('mn-status', '✓ ' + ds.replace(/-/g, '/') + ' を保存しました', 'ok');
+    setTimeout(function () { mnSetStatus('mn-status', ''); }, 4000);
   } catch (e) {
-    mnSetStatus('通信エラー: ' + e.message, true);
+    mnSetStatus('mn-p-status', '通信エラー: ' + e.message, 'err');
   }
 }
 
-// 献立表：イベント登録（チップのトグルは #mn-body へ委譲）
+// ── ローテ・曜日固定の設定 ────────────────────────────────
+function mnItemOptions(selectedKey) {
+  var h = '';
+  var di = (mnState.meta && mnState.meta.dailyItems) || {};
+  Object.keys(di).forEach(function (cat) {
+    h += '<optgroup label="' + mnEsc(cat) + '">';
+    di[cat].forEach(function (it) {
+      h += '<option value="' + mnEsc(it.key) + '"' + (it.key === selectedKey ? ' selected' : '') + '>' + mnEsc(it.label) + '</option>';
+    });
+    h += '</optgroup>';
+  });
+  return h;
+}
+function mnItemFromKey(key) {
+  var it = mnState.itemMap[key];
+  return it ? { key: it.key, category: it.category, label: it.label } : null;
+}
+
+function mnRenderRules() {
+  var rd = mnState.rulesDraft;
+  if (!rd) return;
+
+  var rot = document.getElementById('mn-rot-list');
+  if (rot) {
+    rot.innerHTML = rd.rotation.length
+      ? rd.rotation.map(function (r, i) {
+          return '<li><span class="mn-rot-no">' + (i + 1) + '</span><span>' + mnEsc(r.label) + '</span><span class="mn-sp"></span>'
+               + '<button class="mn-mini" data-ract="up" data-i="' + i + '">↑</button>'
+               + '<button class="mn-mini" data-ract="down" data-i="' + i + '">↓</button>'
+               + '<button class="mn-mini" data-ract="del" data-i="' + i + '">✕</button></li>';
+        }).join('')
+      : '<li style="border:none;background:none;color:#999;padding-left:0;">（未設定＝海苔弁は自動表示されません）</li>';
+  }
+  var addSel = document.getElementById('mn-rot-add-sel');
+  if (addSel) addSel.innerHTML = mnItemOptions('');
+  var bd = document.getElementById('mn-base-date');
+  if (bd) bd.value = rd.baseDate || '';
+
+  var wk = document.getElementById('mn-wk-list');
+  if (wk) {
+    wk.innerHTML = MN_WEEKDAYS.map(function (d) {
+      var list = rd.weekly[d] || [];
+      var rows = list.length
+        ? list.map(function (w, i) {
+            return '<div class="mn-wk-one"><select data-wact="chg" data-dow="' + d + '" data-i="' + i + '">'
+                 + mnItemOptions(w.key) + '</select>'
+                 + '<button class="mn-mini" data-wact="del" data-dow="' + d + '" data-i="' + i + '">✕</button></div>';
+          }).join('')
+        : '<div class="mn-wk-one" style="color:#999;font-size:12px;">（なし）</div>';
+      return '<div class="mn-wk-row"><span class="mn-wk-dow">' + d + '</span><div class="mn-wk-items">' + rows
+           + '<div><button class="mn-mini" data-wact="add" data-dow="' + d + '">＋ 追加</button></div></div></div>';
+    }).join('');
+  }
+}
+
+async function mnSaveRules() {
+  var rd = mnState.rulesDraft;
+  if (!rd) return;
+  var bd = document.getElementById('mn-base-date');
+  var payload = {
+    action: 'saveMenuRules',
+    baseDate: (bd && bd.value) || '',
+    rotation: rd.rotation.map(function (r) { return { category: r.category, label: r.label }; }),
+    weekly: {}
+  };
+  MN_WEEKDAYS.forEach(function (d) {
+    payload.weekly[d] = (rd.weekly[d] || []).map(function (w) { return { category: w.category, label: w.label }; });
+  });
+  if (payload.rotation.length && !payload.baseDate) {
+    mnSetStatus('mn-rules-status', 'ローテを使うには基準日が必要です', 'err');
+    return;
+  }
+  mnSetStatus('mn-rules-status', '保存中…');
+  try {
+    var res = await fetch(GAS_URL, { method: 'POST', redirect: 'follow', body: JSON.stringify(payload) });
+    var r = await res.json();
+    if (!r || !r.ok) { mnSetStatus('mn-rules-status', (r && r.error) || '保存に失敗しました', 'err'); return; }
+    mnSetStatus('mn-rules-status', '✓ 保存しました。カレンダーを更新します…', 'ok');
+    await mnLoadMonth(mnState.ym);
+    mnSetStatus('mn-rules-status', '✓ 反映しました', 'ok');
+    setTimeout(function () { mnSetStatus('mn-rules-status', ''); }, 4000);
+  } catch (e) {
+    mnSetStatus('mn-rules-status', '通信エラー: ' + e.message, 'err');
+  }
+}
+
+// ── イベント登録 ──────────────────────────────────────────
 (function mnBindEvents() {
-  var fBtn = document.getElementById('mn-btn-fetch');
-  var sBtn = document.getElementById('mn-btn-save');
-  var bodyEl = document.getElementById('mn-body');
-  if (fBtn) fBtn.addEventListener('click', mnFetch);
-  if (sBtn) sBtn.addEventListener('click', mnSave);
-  if (bodyEl) {
-    bodyEl.addEventListener('click', function (ev) {
+  var $ = function (id) { return document.getElementById(id); };
+
+  var head = $('mn-rules-head');
+  if (head) head.addEventListener('click', function () { $('mn-rules').classList.toggle('open'); });
+
+  if ($('mn-prev'))   $('mn-prev').addEventListener('click',   function () { if (mnState.ym) mnLoadMonth(mnShiftYm(mnState.ym, -1)); });
+  if ($('mn-next'))   $('mn-next').addEventListener('click',   function () { if (mnState.ym) mnLoadMonth(mnShiftYm(mnState.ym,  1)); });
+  if ($('mn-reload')) $('mn-reload').addEventListener('click', function () { if (mnState.ym) mnLoadMonth(mnState.ym); });
+
+  // カレンダーのセル → 日別パネル
+  var cal = $('mn-cal-body');
+  if (cal) cal.addEventListener('click', function (ev) {
+    var cell = ev.target.closest ? ev.target.closest('.mn-cell') : null;
+    if (!cell || cell.classList.contains('empty')) return;
+    var ds = cell.getAttribute('data-date');
+    if (ds) mnOpenDay(ds);
+  });
+
+  // 日別パネル：チップのトグル／全六プルダウン
+  var pb = $('mn-p-body');
+  if (pb) {
+    pb.addEventListener('click', function (ev) {
       var chip = ev.target.closest ? ev.target.closest('.mn-chip') : null;
-      if (chip) chip.classList.toggle('on');
+      if (!chip || !mnState.draft) return;
+      var it = mnState.itemMap[chip.getAttribute('data-key')];
+      if (!it) return;
+      var turnOn = !chip.classList.contains('on');
+      chip.classList.toggle('on', turnOn);
+      (it.productIds || []).forEach(function (pid) { mnState.draft.active[String(pid)] = turnOn; });
+    });
+    pb.addEventListener('change', function (ev) {
+      var sel = ev.target;
+      if (!sel || !sel.getAttribute || !sel.getAttribute('data-zen') || !mnState.draft) return;
+      var k = sel.getAttribute('data-zen'), no = sel.getAttribute('data-no');
+      if (!mnState.draft.zenroku[k]) mnState.draft.zenroku[k] = { shu1: '', shu2: '' };
+      mnState.draft.zenroku[k][no === '2' ? 'shu2' : 'shu1'] = sel.value;
     });
   }
+  if ($('mn-p-close')) $('mn-p-close').addEventListener('click', mnClosePanel);
+  if ($('mn-p-save'))  $('mn-p-save').addEventListener('click',  mnSaveDay);
+  if ($('mn-p-reset')) $('mn-p-reset').addEventListener('click', mnResetDayToAuto);
+  if ($('mn-ovl'))     $('mn-ovl').addEventListener('click', function (ev) { if (ev.target === this) mnClosePanel(); });
+
+  // ローテ順の操作
+  var rot = $('mn-rot-list');
+  if (rot) rot.addEventListener('click', function (ev) {
+    var btn = ev.target.closest ? ev.target.closest('[data-ract]') : null;
+    if (!btn || !mnState.rulesDraft) return;
+    var act = btn.getAttribute('data-ract'), i = Number(btn.getAttribute('data-i'));
+    var list = mnState.rulesDraft.rotation;
+    if (act === 'del') list.splice(i, 1);
+    else if (act === 'up'   && i > 0)               list.splice(i - 1, 0, list.splice(i, 1)[0]);
+    else if (act === 'down' && i < list.length - 1) list.splice(i + 1, 0, list.splice(i, 1)[0]);
+    mnRenderRules();
+  });
+  if ($('mn-rot-add-btn')) $('mn-rot-add-btn').addEventListener('click', function () {
+    var sel = $('mn-rot-add-sel');
+    var it = sel ? mnItemFromKey(sel.value) : null;
+    if (!it || !mnState.rulesDraft) return;
+    mnState.rulesDraft.rotation.push(it);
+    mnRenderRules();
+  });
+  if ($('mn-base-today')) $('mn-base-today').addEventListener('click', function () {
+    var bd = $('mn-base-date');
+    if (bd) bd.value = mnTodayStr();
+    if (mnState.rulesDraft) mnState.rulesDraft.baseDate = mnTodayStr();
+  });
+  if ($('mn-base-date')) $('mn-base-date').addEventListener('change', function () {
+    if (mnState.rulesDraft) mnState.rulesDraft.baseDate = this.value;
+  });
+
+  // 曜日固定の操作
+  var wk = $('mn-wk-list');
+  if (wk) {
+    wk.addEventListener('click', function (ev) {
+      var btn = ev.target.closest ? ev.target.closest('button[data-wact]') : null;
+      if (!btn || !mnState.rulesDraft) return;
+      var act = btn.getAttribute('data-wact'), dow = btn.getAttribute('data-dow');
+      var list = mnState.rulesDraft.weekly[dow] || (mnState.rulesDraft.weekly[dow] = []);
+      if (act === 'del') list.splice(Number(btn.getAttribute('data-i')), 1);
+      else if (act === 'add') {
+        var di = (mnState.meta && mnState.meta.dailyItems) || {};
+        var first = (di['満腹系'] && di['満腹系'][0]) || (di[Object.keys(di)[0]] || [])[0];
+        if (!first) return;
+        list.push({ key: first.key, category: first.category, label: first.label });
+      }
+      mnRenderRules();
+    });
+    wk.addEventListener('change', function (ev) {
+      var sel = ev.target;
+      if (!sel || !sel.getAttribute || sel.getAttribute('data-wact') !== 'chg' || !mnState.rulesDraft) return;
+      var it = mnItemFromKey(sel.value);
+      if (!it) return;
+      var list = mnState.rulesDraft.weekly[sel.getAttribute('data-dow')] || [];
+      var i = Number(sel.getAttribute('data-i'));
+      if (list[i]) list[i] = it;
+    });
+  }
+  if ($('mn-btn-save-rules')) $('mn-btn-save-rules').addEventListener('click', mnSaveRules);
 })();
 </script>
 </body>
