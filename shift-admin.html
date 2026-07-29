@@ -1,6 +1,13 @@
 <!DOCTYPE html>
 <!--
   お江戸弁当 shift-admin.html
+  v2026-07-30  差分バッジを「本物の未送信」だけにする＋差分送信の重複マージ
+    - updateDiffBadge：日付×拠点で名寄せして計数（未保存＋保存済未通知の二重計上を解消）
+    - confirmDiffSend：pending と diffs を日付×拠点でマージ（pending優先）
+      → 同じ枠が二重に積まれ、その枠を離れた人へ「解除」と「新しく担当」が同時に飛ぶ事故を防止
+    - 通知対象者から【未割当】を除外（確認ダイアログの人数・氏名が正しくなる）
+    - 通知対象0名でも未保存変更は保存できるように（旧実装は保存せず抜けて変更が消えていた）
+    - 依存: メインGAS 2026-07-30（getNotifiedDiff のノイズ除去＋解除判定の修正）
   v2026-07-16  拠点割当シートの「⚠️この日の未割当」を成績順に並び替え
     - GAS action=getSellerPerformance（報告ログ 直近8週：週平均出勤数＋平均完売率）を非同期取得
     - 出勤数・完売率を正規化した合算スコア（重み state.perfWeight で調整可）の高い順にソート
@@ -2124,9 +2131,11 @@ function renderPool() {
 }
 
 function updateDiffBadge() {
-  const pendingCount = Object.keys(state.pending || {}).length;
-  const diffCount = (state.diffs || []).length;
-  const total = pendingCount + diffCount;
+  // ★v2026-07-30 修正：日付×拠点で名寄せして数える（旧実装は単純合算で二重計上していた）
+  //   同じ枠が「未保存」と「保存済未通知」の両方に載ると2件と表示されていた。
+  const keys = new Set(Object.keys(state.pending || {}));
+  (state.diffs || []).forEach(d => keys.add(`${d.date}|${d.base}`));
+  const total = keys.size;
 
   // 差分確認ボタンのバッジ（pending + 累積差分の合計）
   const badge = document.getElementById('diffBadge');
@@ -2536,37 +2545,57 @@ async function confirmDiffSend() {
 
   // 全変更を統合（pending + diffs）
   // フォーマット: { date, base, oldName, newName }
-  const allChanges = [];
-  pendingEntries.forEach(p => {
-    allChanges.push({
-      date: p.date, base: p.base,
-      oldName: p.oldName || '', newName: p.newName || ''
-    });
-  });
+  //
+  // ★v2026-07-30 修正：日付×拠点でマージする（旧実装は単純連結だった）
+  //   同じ枠が pending と diffs の両方に載っていると、その枠に一度でも入っていた人へ
+  //   「解除」と「新しく担当」が同時に飛び、行かない拠点の担当通知になっていた。
+  //   pending が最新なので、通知済み(diffs)の oldName を起点に pending の newName へ繋ぐ。
+  const changeMap = new Map();   // 'date|base' → {date, base, oldName, newName}
   diffEntries.forEach(d => {
-    allChanges.push({
+    changeMap.set(`${d.date}|${d.base}`, {
       date: d.date, base: d.base,
       oldName: d.notifiedName || '', newName: d.currentName || ''
     });
   });
+  pendingEntries.forEach(p => {
+    const key  = `${p.date}|${p.base}`;
+    const prev = changeMap.get(key);
+    changeMap.set(key, {
+      date: p.date, base: p.base,
+      oldName: prev ? prev.oldName : (p.oldName || ''),   // 通知済みの名前を起点にする
+      newName: p.newName || ''
+    });
+  });
+  // 結果的に変化なし（通知済み＝最新）になった枠は送らない
+  const allChanges = Array.from(changeMap.values()).filter(c => c.oldName !== c.newName);
 
-  // 対象者集計（スポット・空除外）
+  // 対象者集計（スポット・空・未割当 除外）
+  const isNotifiableName = n => !!n && n !== '【未割当】' && !isSpotName(n);
   const targetNames = new Set();
   allChanges.forEach(c => {
-    if (c.oldName && !isSpotName(c.oldName)) targetNames.add(c.oldName);
-    if (c.newName && !isSpotName(c.newName)) targetNames.add(c.newName);
+    if (isNotifiableName(c.oldName)) targetNames.add(c.oldName);
+    if (isNotifiableName(c.newName)) targetNames.add(c.newName);
   });
 
   if (targetNames.size === 0) {
+    // ★v2026-07-30 修正：通知対象がいなくても未保存の変更は失わせない
+    //   （旧実装はここで抜けるだけで、スポット割当などが保存されないまま消えていた）
+    if (pendingEntries.length > 0) {
+      const okSaveOnly = confirm(
+        `LINE通知の対象者はいません（スポット／未割当のみの変更です）。\n\n` +
+        `未保存の ${pendingEntries.length}件 を保存だけ実行しますか？`
+      );
+      if (okSaveOnly) await batchSave();
+      return;
+    }
     toast('通知対象者がいません（全てスポット または 未割当のみ）', 'warn');
     return;
   }
 
-  const totalCount = allChanges.length;
   const ok = confirm(
     `変更を保存し、対象者にLINE通知します。\n\n` +
     `未保存: ${pendingEntries.length}件 / 保存済未通知: ${diffEntries.length}件\n` +
-    `合計変更: ${totalCount}件\n` +
+    `通知する変更: ${allChanges.length}件（同じ枠の重複はまとめ済み）\n` +
     `通知対象: ${targetNames.size}名（${Array.from(targetNames).join('、')}）\n\n` +
     `実行してよろしいですか？`
   );
