@@ -81,6 +81,10 @@ select:disabled{background:#f3f3ef;color:#999;}
 .chart-wrap{background:var(--card);border:.5px solid var(--line);border-radius:12px;padding:10px 10px 6px;margin-bottom:10px;}
 .chart-ttl{font-size:11px;color:#555;margin:0 0 6px;font-weight:500;}
 .chart-box{position:relative;height:150px;}
+.chart-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;}
+.chart-head .chart-ttl{margin:0;}
+.seg.mseg{margin:0;width:auto;flex:0 0 auto;gap:4px;}
+.seg.mseg button{flex:0 0 auto;padding:4px 12px;font-size:11px;}
 .loc-row{background:var(--card);border:.5px solid var(--line);border-radius:10px;padding:9px 10px;margin-bottom:8px;}
 .loc-row .top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px;gap:8px;}
 .loc-row .nm{font-size:13px;font-weight:500;}
@@ -255,7 +259,7 @@ select:disabled{background:#f3f3ef;color:#999;}
     </div>
 
   </div>
-  <div class="ver">v1.3</div>
+  <div class="ver">v1.4</div>
 </div>
 
 <div class="overlay" id="overlay">
@@ -290,7 +294,7 @@ var S = {
   plans:[], plansById:{},
   perf:null, perfLoaded:false, perfLoading:false,
   profitByLoc:{}, profitMeta:{ hasCostData:true },
-  period:'d', selectedDriverId:'',
+  period:'d', selectedDriverId:'', metric:'sales',
   hkLocId:'', hkPlanId:'', hkHistoryLoaded:false,
   mdLoaded:false, mdView:'overview', mdBlock:null,
   mandala:null, mdTarget:'', mdOwner:{}, mdDirty:false,
@@ -571,6 +575,15 @@ function bindJisseki(){
     });
   });
   $('drv-sel').addEventListener('change', function(){ S.selectedDriverId = $('drv-sel').value; renderPerf(); });
+  // 指標セグメント（売上/完売率）は perf-content 内に毎回描画されるため委譲で1度だけ束縛
+  $('perf-content').addEventListener('click', function(ev){
+    var b = (ev.target && ev.target.closest) ? ev.target.closest('#seg-metric button') : null;
+    if(!b) return;
+    var m = b.getAttribute('data-m');
+    if(!m || m === S.metric) return;
+    S.metric = m;
+    renderPerf();
+  });
 }
 function loadPerformance(){
   S.perfLoading = true;
@@ -666,6 +679,24 @@ function renderPerf(){
     ? '<div class="v na">—</div><div class="sub">原価未入力</div>'
     : (profitKnown ? '<div class="v'+(profitSum<0?' minus':'')+'">'+yen(profitSum)+'</div>' : '<div class="v na">—</div><div class="sub">報告待ち</div>');
 
+  // グラフ枠：週＝過去4週トレンド（指標セグメント付き）／日＝前日→当日の2本
+  var chartBlock;
+  if(S.period === 'w'){
+    chartBlock =
+      '<div class="chart-wrap">'
+      + '<div class="chart-head">'
+        + '<p class="chart-ttl">'+(S.metric==='rate'?'完売率の推移（過去4週）':'売上の推移（過去4週）')+'</p>'
+        + '<div class="seg mseg" id="seg-metric">'
+          + '<button data-m="sales"'+(S.metric!=='rate'?' class="on"':'')+'>売上</button>'
+          + '<button data-m="rate"'+(S.metric==='rate'?' class="on"':'')+'>完売率</button>'
+        + '</div>'
+      + '</div>'
+      + '<div class="chart-box"><canvas id="sales-chart"></canvas></div>'
+      + '</div>';
+  } else {
+    chartBlock = '<div class="chart-wrap"><p class="chart-ttl">売上（'+prevLabel+' → '+curLabel+'）</p><div class="chart-box"><canvas id="sales-chart"></canvas></div></div>';
+  }
+
   var html = ''
     + '<div class="drv-head"><span class="dot" style="background:'+(g.color||'#CBD5DF')+';"></span>'+esc(g.name)+'</div>'
     + '<div class="kpis">'
@@ -675,7 +706,7 @@ function renderPerf(){
         + '<div class="sub">拠点平均</div></div>'
       + '<div class="kpi"><div class="k">粗利</div>'+profitHtml+'</div>'
     + '</div>'
-    + '<div class="chart-wrap"><p class="chart-ttl">売上（'+prevLabel+' → '+curLabel+'）</p><div class="chart-box"><canvas id="sales-chart"></canvas></div></div>'
+    + chartBlock
     + '<p class="h">拠点別の内訳</p>'
     + '<div id="loc-breakdown"></div>'
     + '<p class="cap">'+esc(periodCaption())+'<br>完売率はお茶を除外。100%超は補充販売（そのまま表示）。粗利＝売上−原価−ギャラ−その他経費。</p>';
@@ -705,32 +736,80 @@ function renderPerf(){
     $('loc-breakdown').innerHTML = lh;
   }
 
-  // グラフ（売上：前期 → 当期）
+  // グラフ：週＝過去4週トレンド（指標切替）／日＝前日→当日の2本
   var ctx = $('sales-chart');
   if(ctx && window.Chart){
-    salesChart = new Chart(ctx.getContext('2d'), {
-      type:'bar',
-      data:{
-        labels:[prevLabel, curLabel],
-        datasets:[{
-          data:[Math.round(prevSales), Math.round(curSales)],
-          backgroundColor:['#C9CFD6', '#1A3C5E'],
-          borderRadius:6, maxBarThickness:64
-        }]
-      },
-      options:{
-        responsive:true, maintainAspectRatio:false,
-        plugins:{
-          legend:{ display:false },
-          tooltip:{ callbacks:{ label:function(c){ return yen(c.parsed.y); } } }
+    if(S.period === 'w'){
+      drawTrendChart(ctx, g.userId);
+    } else {
+      salesChart = new Chart(ctx.getContext('2d'), {
+        type:'bar',
+        data:{
+          labels:[prevLabel, curLabel],
+          datasets:[{
+            data:[Math.round(prevSales), Math.round(curSales)],
+            backgroundColor:['#C9CFD6', '#1A3C5E'],
+            borderRadius:6, maxBarThickness:64
+          }]
         },
-        scales:{
-          y:{ beginAtZero:true, ticks:{ callback:function(v){ return '¥' + (v>=10000 ? (v/10000)+'万' : Number(v).toLocaleString()); }, font:{ size:10 } }, grid:{ color:'rgba(0,0,0,.05)' } },
-          x:{ ticks:{ font:{ size:11 } }, grid:{ display:false } }
+        options:{
+          responsive:true, maintainAspectRatio:false,
+          plugins:{
+            legend:{ display:false },
+            tooltip:{ callbacks:{ label:function(c){ return yen(c.parsed.y); } } }
+          },
+          scales:{
+            y:{ beginAtZero:true, ticks:{ callback:function(v){ return '¥' + (v>=10000 ? (v/10000)+'万' : Number(v).toLocaleString()); }, font:{ size:10 } }, grid:{ color:'rgba(0,0,0,.05)' } },
+            x:{ ticks:{ font:{ size:11 } }, grid:{ display:false } }
+          }
         }
-      }
-    });
+      });
+    }
   }
+}
+
+// 過去4週トレンド（週モード）：選択ドライバーの 売上（棒）／完売率（折れ線）を切替表示
+function drawTrendChart(ctx, driverId){
+  var series = (S.perf && S.perf.weeklySeries) ? S.perf.weeklySeries : [];
+  if(salesChart){ salesChart.destroy(); salesChart = null; }
+  if(!series.length) return;
+  var isRate = (S.metric === 'rate');
+  var labels = series.map(function(w){ return w.label; });
+  var data = series.map(function(w){
+    var d = (w.byDriver && w.byDriver[driverId]) ? w.byDriver[driverId] : null;
+    if(!d) return 0;
+    return isRate ? (Number(d.avgRate)||0) : Math.round(Number(d.sales)||0);
+  });
+  var lastIdx = data.length - 1;
+  salesChart = new Chart(ctx.getContext('2d'), {
+    type: isRate ? 'line' : 'bar',
+    data:{
+      labels: labels,
+      datasets:[ isRate ? {
+        data: data,
+        borderColor:'#2E9E5B',
+        backgroundColor:'rgba(46,158,91,.12)',
+        fill:true, tension:.3, pointRadius:4, pointBackgroundColor:'#2E9E5B'
+      } : {
+        data: data,
+        backgroundColor: data.map(function(_v, i){ return i===lastIdx ? '#1A3C5E' : '#C9CFD6'; }),
+        borderRadius:6, maxBarThickness:44
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{ display:false },
+        tooltip:{ callbacks:{ label:function(c){ return isRate ? (rate1(c.parsed.y)+'%') : yen(c.parsed.y); } } }
+      },
+      scales:{
+        y: isRate
+          ? { beginAtZero:true, suggestedMax:100, ticks:{ callback:function(v){ return v+'%'; }, font:{ size:10 } }, grid:{ color:'rgba(0,0,0,.05)' } }
+          : { beginAtZero:true, ticks:{ callback:function(v){ return '¥' + (v>=10000 ? (v/10000)+'万' : Number(v).toLocaleString()); }, font:{ size:10 } }, grid:{ color:'rgba(0,0,0,.05)' } },
+        x:{ ticks:{ font:{ size:11 } }, grid:{ display:false } }
+      }
+    }
+  });
 }
 
 /* ============================================================
