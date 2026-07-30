@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>🍱 納品管理</title>
+<!-- kanri.html v3.51 (2026-07-31) 【献立表 定番（毎日）対応】銀しゃけ・あいもり等「毎日必ず献立に入る品目」を⚙マスタ編集UIで管理する「定番」欄を追加。①⚙パネルに「🍱 定番（毎日必ず入る）」欄（mn-tb-list/mn-tb-add-sel/mn-tb-add-btn）。品目候補は単価マスタ由来（dailyItems）なので商品が増えても自動で選べる。②mnNormalizeRules/mnRenderRules/mnSaveRules/イベントに teiban を追加。③配分調整のC-1：bmMenuTeiban を getMenuMeta.teibanProductIds から構築し、bmMenuExcluded で定番は除外しない（＝毎日0＋グレーにならない）。要メインGAS：getMenuRules/saveMenuRules に teiban、_menuAutoForDate_ が毎日先頭に定番を自動ON、getMenuMeta が teibanProductIds を返す、新シート「献立定番」。定番は集約グループ無しなので夜間バッチC-2は不変。 -->
 <!-- kanri.html v3.50 (2026-07-30) 【献立表 Phase2 D ＋ v3.48のバグ修正】①🔴**v3.48のバグ修正**＝献立表の全六の主菜を「名前」で保存していたのを**仕込みID**に戻した。メインGAS `_aggregateOrderItems_` は `shikomiMap[sel]` で**仕込みIDとして**引き、ヒットしない時だけ後方互換で `kawariKey + "_" + sel` という商品名を組み立てる。名前（例 `全六あり_南蛮`）を保存すると `全六あり_全六あり_南蛮` を探しに行って何も見つからず**仕込み表に主菜が反映されない**。Phase1(mnBuildSelect)は元々idだった。あわせてカレンダーのセル表示は仕込みID→主菜名に引き直す（`mnZenNameOf`／候補に無い旧データはそのまま表示）。**⚠ v3.48〜v3.49の間に保存した日は全六が名前で入っているので、献立表タブで選び直して保存し直す必要がある。**②**D＝仕込み表の全六選択UIを献立表へ集約**。仕込みタブの「🔄 当日おかず選択」（プルダウン＋保存ボタン）を削除し、**読み取り専用の確認表示＋「📋 献立表で設定」ボタン**（その日の献立パネルを直接開く `s4OpenMenuForDate`）に置換。未設定の日は赤字で警告（「設定しないと仕込み表に主菜が出ません」）。複数日選択時は先頭日の献立を表示する旨も明記。献立表を保存すると既存「日替わり選択」シートへミラーされるため、仕込み計算の経路（getKawariSelections → getSheet4Data&kawari=…）は**従来と同じ**＝GAS無変更。入力場所が2つあって食い違う問題が解消。削除: `onS4KawariSave`／`getS4KawariSelections`／`buildKawariSelect`／`showS4SavedBadge`。新規: `s4BuildZenrokuReadonly`／`s4ZenrokuName`／`s4OpenMenuForDate`＋`.kawari-ro-*` CSS。 -->
 <!-- kanri.html v3.49 (2026-07-30) 【献立表 Phase2 C-1】配分調整と献立表の0連動。その日の献立が**保存済み**の場合だけ、献立に入っていない日替わり商品（海苔弁系/満腹系）のセルを**0＋グレー表示**にする（ロックはせず編集可＝数字を入れれば戻る／編集値は常に優先）。未保存の日は連動しない（社長確定＝自動表示だけの日に効かせると、ローテの順番がズレていた時に間違った商品が0になるため）。これは**表示のみ**で、G列（納品個数）を実際に0にするのは夜間バッチ側（C-2＝applyRecommendToBasicMaster が献立表を見て、その日作る種類にグループ合計を入れ、作らない種類を0にする）。実装: bmMenuCache/bmMenuTargets/bmFetchMenu/bmLoadMenuTargets/bmMenuExcluded を追加、bmGetDisplaySales に0分岐、bmRenderCell に .bm-menu-off クラス＋ツールチップ。取得は bmLoadDate と bmPrefetchWeek の Promise.all に相乗り（getMenuSelections を日別・getMenuMeta は1回だけ）＝**追加の待ち時間なし・取得失敗時は従来表示にフォールバック**。getBasicMasterMatrix は無改修。要メインGAS @322以降。 -->
 <!-- kanri.html v3.48 (2026-07-30) 【献立表 Phase2】献立表タブを「平日のみの月カレンダー」に全面改修（単日入力→月一括）。①月〜金だけのカレンダー。土日と祝日はセルを作らない（祝日＝メニュー無し・ローテのカウントからも除外）。②開いた時点で全平日が自動で埋まる＝海苔弁はローテーション（営業日で連続。週も月もまたいで続き、祝日はスキップ）、満腹は曜日固定（1曜日に複数種可）。③セルは要約表示（品目名＋全六の主菜）。未保存＝薄字＋点線／保存済み＝濃字＋緑帯＋✓確定。保存済みなのに全六が空の日は赤字で警告。④セルをタップで日別パネル（海苔弁/満腹のチップ＝白米・玄米が1つにまとまり同時ON、全六の主菜1/2プルダウン、「↩自動に戻す」）。⑤保存は変更した日だけ（saveMenuSelections を日単位で呼ぶ＝触っていない日は献立表シートに行を作らない）。⑥上部の⚙折りたたみにローテ順（↑↓✕・追加）／基準日／満腹の曜日割りの編集UIを同居（getMenuRules / saveMenuRules）。取得は getMenuMonth 1本でmeta・rulesまで来るので初回1リクエスト。全六の選択キーは商品名（全六あり「白米」）ではなく区分（全六あり/全六なし）に統一。要メインGAS @321以降（getMenuMonth/getMenuRules/saveMenuRules＋getMenuMetaの全六候補バグ修正＋新シート 献立ローテ/献立曜日固定＋設定 menu_rotation_base_date）。※配分調整の0連動・仕込み表の全六選択UI移設は次段階（C/D）。 -->
@@ -2196,6 +2197,7 @@ body {
   #tab-menu .mn-rot-list li{ display:flex; align-items:center; gap:8px; padding:6px 8px; border:1px solid #cfd8dc; border-radius:6px; margin-bottom:6px; background:#fafafa; font-size:13px; }
   #tab-menu .mn-rot-no{ width:22px; height:22px; border-radius:50%; background:#1976d2; color:#fff; font-size:11px; display:flex; align-items:center; justify-content:center; font-weight:bold; flex:0 0 auto; }
   #tab-menu .mn-rot-add{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:4px; }
+  #tab-menu .mn-teiban-box{ margin-bottom:14px; padding-bottom:12px; border-bottom:1px solid #eceff1; }
   #tab-menu .mn-rules select{ padding:5px 8px; border:1px solid #bbb; border-radius:4px; font-size:13px; font-family:inherit; max-width:220px; }
   #tab-menu .mn-basedate{ margin-top:12px; font-size:13px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
   #tab-menu .mn-basedate input{ padding:5px 8px; border:1px solid #bbb; border-radius:4px; font-family:inherit; }
@@ -2284,6 +2286,15 @@ body {
       <span class="mn-rules-hint">（海苔弁の回す順番／満腹の曜日割り／基準日）</span>
     </div>
     <div class="mn-rules-body">
+      <div class="mn-teiban-box">
+        <h4 class="mn-h4">🍱 定番（毎日必ず献立に入る）</h4>
+        <ul class="mn-rot-list" id="mn-tb-list"></ul>
+        <div class="mn-rot-add">
+          <select id="mn-tb-add-sel"></select>
+          <button class="mn-mini" id="mn-tb-add-btn">＋ 品目を追加</button>
+        </div>
+        <div class="mn-hint">ここに入れた品目は毎営業日ONになり、配分調整でも0にされません（例：銀しゃけ・あいもり）。</div>
+      </div>
       <div class="mn-rules-grid">
         <div>
           <h4 class="mn-h4">🍱 海苔弁ローテーション（この順で1営業日ずつ回る）</h4>
@@ -4556,6 +4567,7 @@ let bmLocalConfirmedLocs = new Set();  // v3.19: ローカル確定マーク（�
 //   ※表示だけ。G列を書き換えるのは夜間バッチ側（C-2）。
 let bmMenuCache   = {};       // { dateStr: { found:bool, pids:{pid:true} } }
 let bmMenuTargets = null;     // 献立表の管理対象（海苔弁系/満腹系）商品IDの集合。null=未取得
+let bmMenuTeiban = null;      // 定番（毎日必ず入る）商品IDの集合。定番は0＋グレーにしない
 let bmMenuTargetsInflight = false;
 // localStorage 読込
 function bmLoadEdits() {
@@ -4721,6 +4733,9 @@ async function bmLoadMenuTargets() {
       (r.dailyProducts[cat] || []).forEach(function(p) { set[String(p.id)] = true; });
     });
     bmMenuTargets = set;
+    const tb = {};
+    (r.teibanProductIds || []).forEach(function(p) { tb[String(p)] = true; });
+    bmMenuTeiban = tb;
   } catch (e) {
     /* 取れなければ連動しない（従来表示） */
   } finally {
@@ -4745,6 +4760,7 @@ async function bmFetchMenu(dateStr) {
 function bmMenuExcluded(pid) {
   const m = bmMenuCache[bmCurrentDate];
   if (!m || !m.found) return false;               // 未保存の日は連動しない
+  if (bmMenuTeiban && bmMenuTeiban[String(pid)]) return false;      // 定番（毎日）は常に献立内＝0にしない
   if (!bmMenuTargets || !bmMenuTargets[String(pid)]) return false;  // 献立表の管理対象外（全六・お茶等）
   return !m.pids[String(pid)];
 }
@@ -7304,7 +7320,10 @@ async function mnLoadMonth(ym) {
 }
 
 function mnNormalizeRules(rules) {
-  var out = { rotation: [], weekly: {}, baseDate: (rules && rules.baseDate) || '' };
+  var out = { rotation: [], weekly: {}, teiban: [], baseDate: (rules && rules.baseDate) || '' };
+  ((rules && rules.teiban) || []).forEach(function (r) {
+    out.teiban.push({ key: r.key, category: r.category, label: r.label });
+  });
   ((rules && rules.rotation) || []).forEach(function (r) {
     out.rotation.push({ key: r.key, category: r.category, label: r.label });
   });
@@ -7542,6 +7561,18 @@ function mnRenderRules() {
   var rd = mnState.rulesDraft;
   if (!rd) return;
 
+  var tb = document.getElementById('mn-tb-list');
+  if (tb) {
+    tb.innerHTML = (rd.teiban && rd.teiban.length)
+      ? rd.teiban.map(function (r, i) {
+          return '<li><span class="mn-rot-no" style="background:#2e7d32;">定</span><span>' + mnEsc(r.label) + '</span><span class="mn-sp"></span>'
+               + '<button class="mn-mini" data-tact="del" data-i="' + i + '">✕</button></li>';
+        }).join('')
+      : '<li style="border:none;background:none;color:#999;padding-left:0;">（未設定＝定番なし）</li>';
+  }
+  var tbSel = document.getElementById('mn-tb-add-sel');
+  if (tbSel) tbSel.innerHTML = mnItemOptions('');
+
   var rot = document.getElementById('mn-rot-list');
   if (rot) {
     rot.innerHTML = rd.rotation.length
@@ -7582,6 +7613,7 @@ async function mnSaveRules() {
   var payload = {
     action: 'saveMenuRules',
     baseDate: (bd && bd.value) || '',
+    teiban: (rd.teiban || []).map(function (r) { return { category: r.category, label: r.label }; }),
     rotation: rd.rotation.map(function (r) { return { category: r.category, label: r.label }; }),
     weekly: {}
   };
@@ -7668,6 +7700,26 @@ async function mnSaveRules() {
     var it = sel ? mnItemFromKey(sel.value) : null;
     if (!it || !mnState.rulesDraft) return;
     mnState.rulesDraft.rotation.push(it);
+    mnRenderRules();
+  });
+
+  // 定番（毎日）の操作
+  var tb = $('mn-tb-list');
+  if (tb) tb.addEventListener('click', function (ev) {
+    var btn = ev.target.closest ? ev.target.closest('[data-tact]') : null;
+    if (!btn || !mnState.rulesDraft) return;
+    if (btn.getAttribute('data-tact') === 'del') {
+      (mnState.rulesDraft.teiban || []).splice(Number(btn.getAttribute('data-i')), 1);
+      mnRenderRules();
+    }
+  });
+  if ($('mn-tb-add-btn')) $('mn-tb-add-btn').addEventListener('click', function () {
+    var sel = $('mn-tb-add-sel');
+    var it = sel ? mnItemFromKey(sel.value) : null;
+    if (!it || !mnState.rulesDraft) return;
+    if (!mnState.rulesDraft.teiban) mnState.rulesDraft.teiban = [];
+    if (mnState.rulesDraft.teiban.some(function (t) { return t.key === it.key; })) return;  // 重複防止
+    mnState.rulesDraft.teiban.push(it);
     mnRenderRules();
   });
   if ($('mn-base-today')) $('mn-base-today').addEventListener('click', function () {
