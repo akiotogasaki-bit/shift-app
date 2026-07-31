@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v2.0 (2026-07-31) 【Phase B＋C】《C》タブ「📦 承認」に回収時の実査を同居させた。ドライバーが残った弁当の数とレジの現金を入力すると、販売員の申告と突き合わせて判定を返す（submitCollectionCheck）。合わなければ販売員へLINE。★あるべき数は入力前に一切見せない（getCollectionTargets は数字を返さない）。見せた瞬間、合わせて書くだけの作業になるため。《B》納品数の承認：タブ「📦 承認」を追加。販売員が配分表と違う個数でレジを開始すると、担当ドライバーのここに承認待ちが出る（getDeliveryApprovals）。承認／差し戻しは approveDelivery。★承認はゲートではない（社長決定：修正値を正＋警告表示）＝承認しなくてもレジは動くし締められる。ただし未承認のまま締められるとドライバーと社長にLINEが飛ぶ（メインGAS submitReport 内）。要: メインGAS getPlannedDelivery / getDeliveryApprovals / approveDelivery ＋ 納品数承認ログ＝同時反映。設計書: 40_ドキュメント/設計_再発防止_納品確定とPayPay即時突合_2026-07-31.md -->
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
@@ -801,10 +802,24 @@ body {
     <button class="tab-btn" id="tab-btn-torioki" onclick="switchTab('torioki')">
       🍱 取置
     </button>
+    <!-- ★2026-07-31 Phase B：納品数の承認 -->
+    <button class="tab-btn" id="tab-btn-approval" onclick="switchTab('approval')">
+      📦 承認
+      <span class="tab-badge red" id="approval-badge" style="display:none;">0</span>
+    </button>
   </div>
 
   <div id="tab-collection" class="tab-panel active">
     <div id="collection-list"></div>
+  </div>
+
+  <!-- ★2026-07-31 Phase B：納品数の承認タブ
+       販売員が配分表と違う個数で開始したとき、ここに出る。
+       承認はゲートではない（承認前でもレジは動く）。事実の確認と記録のための画面。
+       ★2026-07-31 Phase C：回収時の実査（残数・現金）もこのタブに同居させる。 -->
+  <div id="tab-approval" class="tab-panel">
+    <div id="collection-check-list"></div>
+    <div id="approval-list"></div>
   </div>
 
   <div id="tab-residual" class="tab-panel">
@@ -1995,6 +2010,208 @@ function stopResidualSummaryTimer() {
   if (residualSummaryTimer) { clearInterval(residualSummaryTimer); residualSummaryTimer = null; }
 }
 
+// ═══════════════════════════════════════════════════════════════
+// ★2026-07-31 【Phase B】納品数の承認
+//   設計書: 40_ドキュメント/設計_再発防止_納品確定とPayPay即時突合_2026-07-31.md
+//
+//   販売員が配分表と違う個数でレジを開始すると、ここに承認待ちが出る。
+//   ★承認はゲートではない（社長決定：修正値を正＋警告表示）。
+//     承認しなくてもレジは動くし締められる。ただし未承認のまま締められると
+//     ドライバーと社長にLINEが飛ぶ。
+// ═══════════════════════════════════════════════════════════════
+function apvToday() {
+  const d = new Date();
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+async function loadDeliveryApprovals() {
+  const box = document.getElementById('approval-list');
+  if (!box) return;
+  box.innerHTML = '<div style="padding:20px;text-align:center;opacity:.7;">読み込み中…</div>';
+  try {
+    const url = `${GAS_URL}?action=getDeliveryApprovals`
+              + `&uid=${encodeURIComponent(state.userId || '')}`
+              + `&date=${encodeURIComponent(apvToday())}`;
+    const res = await fetch(url, { redirect: 'follow' });
+    const j = await res.json();
+    renderDeliveryApprovals((j && j.items) ? j.items : []);
+  } catch (e) {
+    console.error('承認一覧の取得に失敗:', e);
+    box.innerHTML = '<div style="padding:20px;text-align:center;opacity:.7;">取得できませんでした。'
+                  + '<br><button onclick="loadDeliveryApprovals()" style="margin-top:10px;padding:8px 16px;border-radius:8px;border:0;background:#1A3C5E;color:#fff;font-family:inherit;">再試行</button></div>';
+  }
+}
+
+function renderDeliveryApprovals(items) {
+  const box   = document.getElementById('approval-list');
+  const badge = document.getElementById('approval-badge');
+  if (!box) return;
+
+  if (badge) {
+    badge.textContent = items.length;
+    badge.style.display = items.length > 0 ? '' : 'none';
+  }
+
+  if (!items.length) {
+    box.innerHTML = '<div style="padding:28px 20px;text-align:center;opacity:.7;line-height:1.8;">'
+                  + '✅ 承認待ちはありません<br>'
+                  + '<span style="font-size:12px;">配分表どおりの納品なら、ここには何も出ません。</span></div>';
+    return;
+  }
+
+  box.innerHTML = items.map(it => {
+    const rows = (it.lines || []).map(l => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(0,0,0,.07);">
+        <span>${l.productName}</span>
+        <span style="font-variant-numeric:tabular-nums;">
+          ${l.planned} → <b>${l.actual}</b>
+          <span style="color:${l.diff > 0 ? '#1B7F3B' : '#C0392B'};font-weight:700;margin-left:6px;">${l.diff > 0 ? '+' : ''}${l.diff}</span>
+        </span>
+      </div>`).join('');
+
+    const locJs = JSON.stringify(it.locationId);
+    return `
+      <div style="background:#fff;border-radius:14px;padding:14px 16px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,.12);">
+        <div style="font-weight:700;font-size:15px;margin-bottom:2px;">${it.locationName}</div>
+        <div style="font-size:12px;opacity:.75;margin-bottom:10px;">${it.userName} さん　／　配分表 ${it.plannedTotal}個 → 申告 ${it.actualTotal}個</div>
+        ${rows}
+        <div style="display:flex;gap:8px;margin-top:12px;">
+          <button onclick='doDeliveryApprove(${locJs}, true)'
+            style="flex:2;padding:11px;border:0;border-radius:10px;background:#1B7F3B;color:#fff;font-size:14px;font-weight:700;font-family:inherit;">承認する</button>
+          <button onclick='doDeliveryApprove(${locJs}, false)'
+            style="flex:1;padding:11px;border:1px solid #C0392B;border-radius:10px;background:#fff;color:#C0392B;font-size:14px;font-family:inherit;">違う</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function doDeliveryApprove(locationId, approve) {
+  if (!approve && !confirm('「違う」として販売員に差し戻します。よろしいですか？')) return;
+  try {
+    const url = `${GAS_URL}?action=approveDelivery`
+              + `&date=${encodeURIComponent(apvToday())}`
+              + `&loc=${encodeURIComponent(locationId)}`
+              + `&approve=${approve ? '1' : '0'}`
+              + `&uid=${encodeURIComponent(state.userId || '')}`
+              + `&uname=${encodeURIComponent(state.userName || '')}`;
+    const res = await fetch(url, { redirect: 'follow' });
+    const j = await res.json();
+    if (j && j.ok) {
+      if (typeof showToast === 'function') showToast(approve ? '承認しました' : '差し戻しました');
+      loadDeliveryApprovals();
+    } else {
+      alert('処理できませんでした: ' + ((j && j.error) || '不明なエラー'));
+    }
+  } catch (e) {
+    console.error('承認処理に失敗:', e);
+    alert('通信に失敗しました。電波の良い場所で もう一度お試しください。');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ★2026-07-31 【Phase C】回収時の実査（残数・現金）
+//   設計書: 40_ドキュメント/設計_再発防止_納品確定とPayPay即時突合_2026-07-31.md
+//
+//   ★あるべき数を先に見せない。
+//     販売員の申告も理論残も画面に出さず、実物を数えて入力してもらう。
+//     見せた瞬間、合わせて書くだけの作業になり、この仕組みの意味が消える。
+//   ★送信して初めて判定が返る。合わなければ販売員へLINEが飛ぶ。
+// ═══════════════════════════════════════════════════════════════
+async function loadCollectionChecks() {
+  const box = document.getElementById('collection-check-list');
+  if (!box) return;
+  try {
+    const url = `${GAS_URL}?action=getCollectionTargets`
+              + `&uid=${encodeURIComponent(state.userId || '')}`
+              + `&date=${encodeURIComponent(apvToday())}`;
+    const res = await fetch(url, { redirect: 'follow' });
+    const j = await res.json();
+    renderCollectionChecks((j && j.items) ? j.items : []);
+  } catch (e) {
+    console.error('回収確認の取得に失敗:', e);
+    box.innerHTML = '';
+  }
+}
+
+function renderCollectionChecks(items) {
+  const box = document.getElementById('collection-check-list');
+  if (!box) return;
+  if (!items.length) { box.innerHTML = ''; return; }
+
+  box.innerHTML =
+    '<div style="font-size:13px;font-weight:700;margin:4px 2px 8px;">🚚 回収時の確認</div>'
+    + items.map(it => {
+      const locJs = JSON.stringify(it.locationId);
+      const sid = String(it.locationId).replace(/[^A-Za-z0-9_]/g, '');
+      return `
+      <div style="background:#fff;border-radius:14px;padding:14px 16px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,.12);">
+        <div style="font-weight:700;font-size:15px;">${it.locationName}</div>
+        <div style="font-size:12px;opacity:.75;margin-bottom:10px;">${it.userName} さん</div>
+        <div style="font-size:12px;opacity:.8;line-height:1.7;margin-bottom:10px;">
+          実際の数を数えて入力してください。<br>入力後に販売員の報告と合っているか判定します。
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span style="flex:1;font-size:14px;">残った弁当</span>
+          <input type="number" inputmode="numeric" min="0" id="cc-res-${sid}"
+                 style="width:90px;padding:8px;border:1.5px solid #ccc;border-radius:8px;text-align:right;font-family:inherit;font-size:15px;">
+          <span style="font-size:13px;">個</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+          <span style="flex:1;font-size:14px;">レジの現金</span>
+          <input type="number" inputmode="numeric" min="0" id="cc-cash-${sid}" placeholder="任意"
+                 style="width:90px;padding:8px;border:1.5px solid #ccc;border-radius:8px;text-align:right;font-family:inherit;font-size:15px;">
+          <span style="font-size:13px;">円</span>
+        </div>
+        <button onclick='doCollectionCheck(${locJs}, "${sid}")'
+          style="width:100%;padding:12px;border:0;border-radius:10px;background:#1A3C5E;color:#fff;font-size:15px;font-weight:700;font-family:inherit;">確認する</button>
+        <div id="cc-result-${sid}" style="margin-top:10px;font-size:13px;line-height:1.8;"></div>
+      </div>`;
+    }).join('');
+}
+
+async function doCollectionCheck(locationId, sid) {
+  const resEl  = document.getElementById(`cc-res-${sid}`);
+  const cashEl = document.getElementById(`cc-cash-${sid}`);
+  const out    = document.getElementById(`cc-result-${sid}`);
+  if (!resEl || resEl.value === '') { alert('残った弁当の数を入力してください'); return; }
+
+  try {
+    const payload = {
+      action: 'submitCollectionCheck',
+      date: apvToday(),
+      locationId: locationId,
+      userId:   state.userId,
+      userName: state.userName,
+      actualResidual: parseInt(resEl.value) || 0,
+      actualCash: (cashEl && cashEl.value !== '') ? (parseInt(cashEl.value) || 0) : null,
+    };
+    const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload), redirect: 'follow' });
+    const j = await res.json();
+    if (!j || !j.ok) { alert('確認できませんでした: ' + ((j && j.error) || '不明なエラー')); return; }
+
+    // ★ここで初めて結果を見せる
+    const r = j.residual || {};
+    let html = '';
+    if (j.verdict === '一致') {
+      html = '<div style="color:#1B7F3B;font-weight:700;">✅ 販売員の報告と一致しました</div>';
+    } else {
+      html = '<div style="color:#C0392B;font-weight:700;">⚠️ 報告と合いません</div>'
+           + `<div>弁当　報告 ${r.declared}個 → 実際 ${r.actual}個（${r.diff > 0 ? '+' : ''}${r.diff}）</div>`;
+      if (j.cash) {
+        html += `<div>現金　報告 ¥${Number(j.cash.reported).toLocaleString()} → 実際 ¥${Number(j.cash.actual).toLocaleString()}`
+              + `（${j.cash.diff > 0 ? '+' : ''}¥${Number(j.cash.diff).toLocaleString()}）</div>`;
+      }
+      html += '<div style="opacity:.85;margin-top:4px;">販売員に確認の連絡を送りました。</div>';
+    }
+    if (out) out.innerHTML = html;
+    if (typeof showToast === 'function') showToast(j.verdict === '一致' ? '一致しました' : '差異を記録しました');
+  } catch (e) {
+    console.error('回収確認に失敗:', e);
+    alert('通信に失敗しました。電波の良い場所で もう一度お試しください。');
+  }
+}
+
 function switchTab(tab) {
   if (tab === 'residual') {
     startResidualSummaryTimer();
@@ -2013,6 +2230,10 @@ function switchTab(tab) {
   document.getElementById('tab-btn-nextroute').classList.toggle('active', tab === 'nextroute');
   document.getElementById('tab-btn-torioki').classList.toggle('active', tab === 'torioki');
   document.getElementById('tab-btn-move').classList.toggle('active', tab === 'move');
+  // ★2026-07-31 Phase B：納品数の承認タブ
+  document.getElementById('tab-approval').classList.toggle('active', tab === 'approval');
+  document.getElementById('tab-btn-approval').classList.toggle('active', tab === 'approval');
+  if (tab === 'approval') { loadDeliveryApprovals(); loadCollectionChecks(); }
   document.getElementById('sticky-collection').style.display = tab === 'collection' ? 'block' : 'none';
   document.getElementById('sticky-residual').style.display   = tab === 'residual'   ? 'block' : 'none';
   document.getElementById('sticky-nextroute').style.display  = tab === 'nextroute'  ? 'block' : 'none';
