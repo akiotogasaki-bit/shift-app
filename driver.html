@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v2.1 (2026-08-01) 【回収タブに残数を統合】回収タブの現金入力モーダルに「残った弁当」欄を追加し、残数の確認を回収作業と同じ画面で完結させた（社長要望：ドライバーが既に現金を打っている画面に置く）。★残数・現金とも「報告されている数字」を既定値で表示し、違うときだけ直す方式（社長決定 2026-08-01）。欄をタップするとテンキーの編集対象が切り替わる。確定時に saveActualCash → setCollected → submitCollectionCheck を順に送り、不一致ならトーストで表示＋販売員へLINE。既定値は getDeclaredResidual から取得。「📦 承認」タブから旧・回収実査UIは削除（重複解消）。 -->
 <!-- driver v2.0 (2026-07-31) 【Phase B＋C】《C》タブ「📦 承認」に回収時の実査を同居させた。ドライバーが残った弁当の数とレジの現金を入力すると、販売員の申告と突き合わせて判定を返す（submitCollectionCheck）。合わなければ販売員へLINE。★あるべき数は入力前に一切見せない（getCollectionTargets は数字を返さない）。見せた瞬間、合わせて書くだけの作業になるため。《B》納品数の承認：タブ「📦 承認」を追加。販売員が配分表と違う個数でレジを開始すると、担当ドライバーのここに承認待ちが出る（getDeliveryApprovals）。承認／差し戻しは approveDelivery。★承認はゲートではない（社長決定：修正値を正＋警告表示）＝承認しなくてもレジは動くし締められる。ただし未承認のまま締められるとドライバーと社長にLINEが飛ぶ（メインGAS submitReport 内）。要: メインGAS getPlannedDelivery / getDeliveryApprovals / approveDelivery ＋ 納品数承認ログ＝同時反映。設計書: 40_ドキュメント/設計_再発防止_納品確定とPayPay即時突合_2026-07-31.md -->
 <html lang="ja">
 <head>
@@ -753,6 +754,12 @@ body {
 .cash-modal-diff{font-size:13px;font-weight:700;text-align:right;min-height:18px;margin-bottom:12px;padding-right:4px;}
 .cash-modal-diff.plus{color:var(--blue);}
 .cash-modal-diff.minus{color:var(--red);}
+/* ★2026-08-01 回収モーダル：残数と現金の2欄（タップで編集対象を切り替え） */
+.cc-field{display:flex;align-items:center;gap:8px;padding:9px 12px;margin-bottom:6px;border:2px solid transparent;border-radius:10px;background:#F4F5F7;cursor:pointer;}
+.cc-field.active{border-color:var(--blue,#1A3C5E);background:#EAF0F7;}
+.cc-field .cc-label{flex:1;font-size:14px;color:var(--ink);}
+.cc-field .cc-value{font-size:20px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--ink);}
+.cc-field .cc-unit{font-size:12px;color:var(--ink-mute);}
 .cash-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
 .cash-key{padding:16px 0;border:none;border-radius:12px;background:#EEF0F3;color:var(--ink);font-size:22px;font-weight:700;font-family:inherit;cursor:pointer;}
 .cash-key:active{opacity:.7;}
@@ -818,7 +825,6 @@ body {
        承認はゲートではない（承認前でもレジは動く）。事実の確認と記録のための画面。
        ★2026-07-31 Phase C：回収時の実査（残数・現金）もこのタブに同居させる。 -->
   <div id="tab-approval" class="tab-panel">
-    <div id="collection-check-list"></div>
     <div id="approval-list"></div>
   </div>
 
@@ -1536,7 +1542,19 @@ async function toggleCollection(id) {
 // ═══════════════════════════════════════════════════════════════
 let cashModalLocId = null;
 let cashInput = '';
-function openCashModal(id) {
+// ★2026-08-01 残数も同じモーダルで確認する
+//   社長決定：残数・現金とも「報告されている数字」を既定で入れ、違うときだけ直してもらう。
+let residualInput  = '';      // 残った弁当の数（文字列で保持）
+let ccField        = 'residual';   // テンキーがどちらの欄を編集しているか
+let residualLoaded = false;        // 販売員の申告残数を取得できたか
+
+function ccToday_() {
+  const d = new Date();
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+async function openCashModal(id) {
   const loc = state.locations.find(l => l.id === id);
   if (!loc) return;
   if (state.inactiveIds.has(id)) return;
@@ -1544,28 +1562,63 @@ function openCashModal(id) {
   if (!r || r.status !== 'final') { showToast('報告が未提出です', 'error'); return; }
   cashModalLocId = id;
   const net = (r.registerEnd || 0) - (r.totalSalary || 0);
-  // 既に実額があればプリフィル、無ければ空
-  cashInput = (r.actualCash !== null && r.actualCash !== undefined) ? String(r.actualCash) : '';
+
+  // 現金：既に実額があればそれ、無ければ報告からの想定額を既定値にする
+  cashInput = (r.actualCash !== null && r.actualCash !== undefined) ? String(r.actualCash) : String(net);
+  // 残数：まず空。販売員の申告値を取りに行って入れる
+  residualInput  = '';
+  residualLoaded = false;
+  ccField = 'residual';
+
   document.getElementById('cash-modal-title').textContent = loc.name;
-  document.getElementById('cash-modal-expected').textContent =
-    '想定額 ¥' + net.toLocaleString() + '（レジ最終 − 合計ギャラ）';
+  document.getElementById('cash-modal-expected').textContent = '報告の数字が入っています。違う場合だけ直してください。';
   renderCashModal_(net);
   document.getElementById('cash-modal-bg').classList.add('show');
+
+  // 販売員が申告した残数を既定値として入れる（取れなくても現金だけで進められる）
+  try {
+    const url = `${GAS_URL}?action=getDeclaredResidual`
+              + `&date=${encodeURIComponent(ccToday_())}&loc=${encodeURIComponent(id)}`;
+    const j = await (await fetch(url, { redirect: 'follow' })).json();
+    if (cashModalLocId !== id) return;   // 閉じられていたら何もしない
+    if (j && j.ok && j.found && j.declared !== null) {
+      residualInput  = String(j.declared);
+      residualLoaded = true;
+    }
+  } catch (e) {
+    console.warn('申告残数の取得に失敗（手入力で進められます）:', e);
+  }
+  refreshCashModal_();
 }
+
+function ccFocus(field) {
+  ccField = field;
+  refreshCashModal_();
+}
+
 function closeCashModal() {
   document.getElementById('cash-modal-bg').classList.remove('show');
   cashModalLocId = null;
   cashInput = '';
+  residualInput = '';
+  ccField = 'residual';
 }
+// ★2026-08-01 テンキーは「選択中の欄」を編集する
+function ccGet_()      { return ccField === 'cash' ? cashInput : residualInput; }
+function ccSet_(v)     { if (ccField === 'cash') cashInput = v; else residualInput = v; }
+function ccMaxLen_()   { return ccField === 'cash' ? 9 : 4; }
+
 function cashKey(d) {
+  let cur = ccGet_();
   // 先頭0の連続を防止（"0"+"5"→"5"）
-  if (cashInput === '0') cashInput = '';
-  cashInput += d;
-  if (cashInput.length > 9) cashInput = cashInput.slice(0, 9);
+  if (cur === '0') cur = '';
+  cur += d;
+  if (cur.length > ccMaxLen_()) cur = cur.slice(0, ccMaxLen_());
+  ccSet_(cur);
   refreshCashModal_();
 }
 function cashBackspace() {
-  cashInput = cashInput.slice(0, -1);
+  ccSet_(ccGet_().slice(0, -1));
   refreshCashModal_();
 }
 function refreshCashModal_() {
@@ -1574,19 +1627,38 @@ function refreshCashModal_() {
   renderCashModal_(net);
 }
 function renderCashModal_(net) {
-  const val = cashInput === '' ? 0 : parseInt(cashInput, 10);
-  document.getElementById('cash-modal-display').textContent = '¥' + val.toLocaleString();
+  // ── 2つの欄 ──
+  const rv = document.getElementById('cc-val-residual');
+  const cv = document.getElementById('cc-val-cash');
+  if (rv) rv.textContent = residualInput === ''
+    ? (residualLoaded ? '0' : '—')
+    : parseInt(residualInput, 10).toLocaleString();
+  if (cv) cv.textContent = cashInput === '' ? '—' : parseInt(cashInput, 10).toLocaleString();
+
+  const fr = document.getElementById('cc-field-residual');
+  const fc = document.getElementById('cc-field-cash');
+  if (fr) fr.classList.toggle('active', ccField === 'residual');
+  if (fc) fc.classList.toggle('active', ccField === 'cash');
+
+  // ── テンキーの表示（選択中の欄の値）──
+  const cur = ccGet_();
+  const val = cur === '' ? 0 : parseInt(cur, 10);
+  document.getElementById('cash-modal-display').textContent =
+    (ccField === 'cash' ? '¥' + val.toLocaleString() : val.toLocaleString() + '個');
+
+  // ── 現金の誤差だけ、現金欄を触っている時に出す ──
   const diffEl = document.getElementById('cash-modal-diff');
-  if (cashInput === '') {
-    diffEl.textContent = '';
-    diffEl.className = 'cash-modal-diff';
-  } else {
+  if (ccField === 'cash' && cashInput !== '') {
     const diff = val - net;
     const sign = diff >= 0 ? '+' : '−';
-    diffEl.textContent = '誤差 ' + sign + '¥' + Math.abs(diff).toLocaleString();
+    diffEl.textContent = '報告との差 ' + sign + '¥' + Math.abs(diff).toLocaleString();
     diffEl.className = 'cash-modal-diff ' + (diff >= 0 ? 'plus' : 'minus');
+  } else {
+    diffEl.textContent = '';
+    diffEl.className = 'cash-modal-diff';
   }
-  // 入力必須：空のあいだは確定不可
+
+  // 現金は必須。残数は取得できていない拠点（締め前など）では空のままでも進める。
   document.getElementById('cash-modal-ok').disabled = (cashInput === '');
 }
 async function confirmCash() {
@@ -1630,6 +1702,37 @@ async function confirmCash() {
     });
     const j2 = await res2.json();
     if (!j2 || j2.success === false) throw new Error((j2 && j2.error) || '回収状態の更新に失敗');
+
+    // ③ ★2026-08-01 残数の照合（販売員の申告と突き合わせる）
+    //    残数を取得できていない拠点（締め前など）はスキップ。ここで失敗しても回収は成立させる。
+    if (residualInput !== '') {
+      try {
+        const res3 = await fetch(GAS_URL, {
+          method: 'POST',
+          body: JSON.stringify({
+            action:         'submitCollectionCheck',
+            date:           ccToday_(),
+            locationId:     id,
+            userId:         state.userId,
+            userName:       state.userName,
+            actualResidual: parseInt(residualInput, 10) || 0,
+            actualCash:     amount,
+          }),
+          redirect: 'follow',
+        });
+        const j3 = await res3.json();
+        if (j3 && j3.ok) {
+          if (j3.verdict === '一致') {
+            showToast('✅ 報告と一致しました');
+          } else {
+            const rr = j3.residual || {};
+            showToast(`⚠️ 弁当 報告${rr.declared}個→実際${rr.actual}個（販売員に連絡しました）`, 'error', 5000);
+          }
+        }
+      } catch (e) {
+        console.warn('残数の照合に失敗（回収は完了しています）:', e);
+      }
+    }
     // ローカル状態を更新
     if (state.reportsByLoc[id]) state.reportsByLoc[id].actualCash = amount;
     state.collectedIds.add(id);
@@ -2109,108 +2212,9 @@ async function doDeliveryApprove(locationId, approve) {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// ★2026-07-31 【Phase C】回収時の実査（残数・現金）
-//   設計書: 40_ドキュメント/設計_再発防止_納品確定とPayPay即時突合_2026-07-31.md
-//
-//   ★あるべき数を先に見せない。
-//     販売員の申告も理論残も画面に出さず、実物を数えて入力してもらう。
-//     見せた瞬間、合わせて書くだけの作業になり、この仕組みの意味が消える。
-//   ★送信して初めて判定が返る。合わなければ販売員へLINEが飛ぶ。
-// ═══════════════════════════════════════════════════════════════
-async function loadCollectionChecks() {
-  const box = document.getElementById('collection-check-list');
-  if (!box) return;
-  try {
-    const url = `${GAS_URL}?action=getCollectionTargets`
-              + `&uid=${encodeURIComponent(state.userId || '')}`
-              + `&date=${encodeURIComponent(apvToday())}`;
-    const res = await fetch(url, { redirect: 'follow' });
-    const j = await res.json();
-    renderCollectionChecks((j && j.items) ? j.items : []);
-  } catch (e) {
-    console.error('回収確認の取得に失敗:', e);
-    box.innerHTML = '';
-  }
-}
-
-function renderCollectionChecks(items) {
-  const box = document.getElementById('collection-check-list');
-  if (!box) return;
-  if (!items.length) { box.innerHTML = ''; return; }
-
-  box.innerHTML =
-    '<div style="font-size:13px;font-weight:700;margin:4px 2px 8px;">🚚 回収時の確認</div>'
-    + items.map(it => {
-      const locJs = JSON.stringify(it.locationId);
-      const sid = String(it.locationId).replace(/[^A-Za-z0-9_]/g, '');
-      return `
-      <div style="background:#fff;border-radius:14px;padding:14px 16px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,.12);">
-        <div style="font-weight:700;font-size:15px;">${it.locationName}</div>
-        <div style="font-size:12px;opacity:.75;margin-bottom:10px;">${it.userName} さん</div>
-        <div style="font-size:12px;opacity:.8;line-height:1.7;margin-bottom:10px;">
-          実際の数を数えて入力してください。<br>入力後に販売員の報告と合っているか判定します。
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-          <span style="flex:1;font-size:14px;">残った弁当</span>
-          <input type="number" inputmode="numeric" min="0" id="cc-res-${sid}"
-                 style="width:90px;padding:8px;border:1.5px solid #ccc;border-radius:8px;text-align:right;font-family:inherit;font-size:15px;">
-          <span style="font-size:13px;">個</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
-          <span style="flex:1;font-size:14px;">レジの現金</span>
-          <input type="number" inputmode="numeric" min="0" id="cc-cash-${sid}" placeholder="任意"
-                 style="width:90px;padding:8px;border:1.5px solid #ccc;border-radius:8px;text-align:right;font-family:inherit;font-size:15px;">
-          <span style="font-size:13px;">円</span>
-        </div>
-        <button onclick='doCollectionCheck(${locJs}, "${sid}")'
-          style="width:100%;padding:12px;border:0;border-radius:10px;background:#1A3C5E;color:#fff;font-size:15px;font-weight:700;font-family:inherit;">確認する</button>
-        <div id="cc-result-${sid}" style="margin-top:10px;font-size:13px;line-height:1.8;"></div>
-      </div>`;
-    }).join('');
-}
-
-async function doCollectionCheck(locationId, sid) {
-  const resEl  = document.getElementById(`cc-res-${sid}`);
-  const cashEl = document.getElementById(`cc-cash-${sid}`);
-  const out    = document.getElementById(`cc-result-${sid}`);
-  if (!resEl || resEl.value === '') { alert('残った弁当の数を入力してください'); return; }
-
-  try {
-    const payload = {
-      action: 'submitCollectionCheck',
-      date: apvToday(),
-      locationId: locationId,
-      userId:   state.userId,
-      userName: state.userName,
-      actualResidual: parseInt(resEl.value) || 0,
-      actualCash: (cashEl && cashEl.value !== '') ? (parseInt(cashEl.value) || 0) : null,
-    };
-    const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload), redirect: 'follow' });
-    const j = await res.json();
-    if (!j || !j.ok) { alert('確認できませんでした: ' + ((j && j.error) || '不明なエラー')); return; }
-
-    // ★ここで初めて結果を見せる
-    const r = j.residual || {};
-    let html = '';
-    if (j.verdict === '一致') {
-      html = '<div style="color:#1B7F3B;font-weight:700;">✅ 販売員の報告と一致しました</div>';
-    } else {
-      html = '<div style="color:#C0392B;font-weight:700;">⚠️ 報告と合いません</div>'
-           + `<div>弁当　報告 ${r.declared}個 → 実際 ${r.actual}個（${r.diff > 0 ? '+' : ''}${r.diff}）</div>`;
-      if (j.cash) {
-        html += `<div>現金　報告 ¥${Number(j.cash.reported).toLocaleString()} → 実際 ¥${Number(j.cash.actual).toLocaleString()}`
-              + `（${j.cash.diff > 0 ? '+' : ''}¥${Number(j.cash.diff).toLocaleString()}）</div>`;
-      }
-      html += '<div style="opacity:.85;margin-top:4px;">販売員に確認の連絡を送りました。</div>';
-    }
-    if (out) out.innerHTML = html;
-    if (typeof showToast === 'function') showToast(j.verdict === '一致' ? '一致しました' : '差異を記録しました');
-  } catch (e) {
-    console.error('回収確認に失敗:', e);
-    alert('通信に失敗しました。電波の良い場所で もう一度お試しください。');
-  }
-}
+// ※【Phase C】回収時の実査は 2026-08-01 に「回収タブの現金入力モーダル」へ統合した。
+//   ドライバーが既に現金を打っている画面で残数も一緒に確認できるようにするため（社長要望）。
+//   実装は openCashModal / renderCashModal_ / confirmCash を参照。
 
 function switchTab(tab) {
   if (tab === 'residual') {
@@ -2233,7 +2237,7 @@ function switchTab(tab) {
   // ★2026-07-31 Phase B：納品数の承認タブ
   document.getElementById('tab-approval').classList.toggle('active', tab === 'approval');
   document.getElementById('tab-btn-approval').classList.toggle('active', tab === 'approval');
-  if (tab === 'approval') { loadDeliveryApprovals(); loadCollectionChecks(); }
+  if (tab === 'approval') loadDeliveryApprovals();
   document.getElementById('sticky-collection').style.display = tab === 'collection' ? 'block' : 'none';
   document.getElementById('sticky-residual').style.display   = tab === 'residual'   ? 'block' : 'none';
   document.getElementById('sticky-nextroute').style.display  = tab === 'nextroute'  ? 'block' : 'none';
@@ -3202,7 +3206,19 @@ async function cancelMove_(moveId) {
 <div class="cash-modal-bg" id="cash-modal-bg" onclick="if(event.target===this)closeCashModal()">
   <div class="cash-modal-card">
     <div class="cash-modal-title" id="cash-modal-title">拠点</div>
-    <div class="cash-modal-expected" id="cash-modal-expected">想定額 —</div>
+    <div class="cash-modal-expected" id="cash-modal-expected">報告の数字が入っています。違う場合だけ直してください。</div>
+    <!-- ★2026-08-01 残数と現金を1画面で確認する（社長決定：報告値を既定表示し、違うときだけ直す）
+         欄をタップすると、その欄をテンキーで直せる。 -->
+    <div class="cc-field" id="cc-field-residual" onclick="ccFocus('residual')">
+      <span class="cc-label">残った弁当</span>
+      <span class="cc-value" id="cc-val-residual">—</span>
+      <span class="cc-unit">個</span>
+    </div>
+    <div class="cc-field" id="cc-field-cash" onclick="ccFocus('cash')">
+      <span class="cc-label">レジの現金</span>
+      <span class="cc-value" id="cc-val-cash">—</span>
+      <span class="cc-unit">円</span>
+    </div>
     <div class="cash-modal-display" id="cash-modal-display">¥0</div>
     <div class="cash-modal-diff" id="cash-modal-diff"></div>
     <div class="cash-pad">
