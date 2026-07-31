@@ -8,6 +8,7 @@
 <!-- register v3.2 (2026-07-10) 拠点間移動±を在庫表示に反映（残＝納品＋移動±−販売／完売率も移動±込み）。サーバー単一ソース getMoveAdjByLoc を在庫モーダル表示時に取得。 -->
 <!-- register v3.3 (2026-07-12) 【Phase3 D1】締め報告(submitFinal)のpayloadに couponTotal を追加送信。会計履歴 state.history のうち status==='active' のみ couponAmount を合算（取消分は二重計上しない）。GAS側 submitReport が受けて報告ログ col34「クーポン値引累計」に記録→日報の売上合計に反映される。UI・既存ロジック変更なし。要: メインGAS D2（col34）＝反映済。 -->
 <!-- register v3.4 (2026-07-24) 【現金誤差-300の修正】締め画面で確定した本日ギャラ（賄いなし補填+300／遅刻控除／固定給／社員・ドライバー0円を反映済）を totalSalary / incentive / makanaiBonus として送信。従来GAS側は 基本ギャラ+インセンティブ のみを報告ログ col20 に保存していたため、賄いなしの日は「想定額=レジ最終金額−col20」が300円過大となり現金誤差が必ず -300 になっていた。要: メインGAS submitReport / editReport / 報告ログ col37-38（賄い・遅刻控除）＝同時反映。 -->
+<!-- register v3.7 (2026-07-31) 【Phase A＋B＋C】《B》スタート画面に配分表の個数を既定表示（getPlannedDelivery）。違う数で開始すると担当ドライバーへ承認依頼が飛ぶ（GAS handleStart）。承認はゲートではない。《C》締め画面に「レジに残った数」と「賄いの個数」を追加。★理論残は入力前に一切表示しない。報告の送信完了を待ってから submitClosingResidual を送り、判定を完了画面に出す。賄いは1人1日1個まで（getMakanaiLimit）。《A》PayPay即時照合：締め送信後、完了画面でPayPay社の記録との照合結果を表示する。① enterFinalScreen() で ppClient&mode=prefetch を1回投げ、販売員が入力している間にPayPayの取得・取込を済ませる ② submitFinal() 後に mode=status を3秒間隔でポーリング（★金額は返らない。readyの真偽のみ）③ ready になったら mode=reveal を1回だけ叩き、そこで初めて数字を受け取って表示 ④ 結果を見せたら「報告内容を確認・修正する」を隠す（誤差を見てから書き換えさせない＝設計の「確認画面から戻れない」）。照合できなくても締めは完了扱い（「確認中」表示のまま／修正ボタンは残す）。要: メインGAS action=ppClient と PayPay突合キュー＝同時反映。設計書: 40_ドキュメント/設計_再発防止_納品確定とPayPay即時突合_2026-07-31.md -->
 <!-- register v3.5 (2026-07-29) 【現金誤差±300の修正・v3.4の残り穴】「集計する」を押した後も賄いトグル／遅刻分は操作できるのに calcFinal() が再実行されず、送信される totalSalary / makanaiBonus が集計時点の古い値のまま凍結されていた。「無し→有り」に戻して提出＝+300、「有り→無し」に変えて提出＝-300、遅刻を後入力＝控除されず+300単位の誤差。①A案: トグル・遅刻入力の変更時に結果表示中なら即再集計（refreshFinalIfShown） ②B案: submitFinal 冒頭で calcFinal() を再実行してから送信。GAS側の変更は不要。 -->
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
@@ -984,6 +985,8 @@ html, body { overscroll-behavior-y: contain; }
   <div class="form-section">
     <div class="form-card">
       <div class="form-card-title">納品数（種類別）</div>
+      <!-- ★2026-07-31 Phase B：配分表の個数を既定値として入れる。実物と違えば直してもらう。 -->
+      <div id="delivery-plan-note" style="display:none;font-size:12.5px;line-height:1.7;background:rgba(244,196,48,.14);border-left:3px solid var(--gold,#F4C430);border-radius:6px;padding:8px 11px;margin-bottom:10px;"></div>
       <div id="delivery-inputs"></div>
     </div>
     <div class="form-card">
@@ -1252,6 +1255,21 @@ html, body { overscroll-behavior-y: contain; }
         </div>
       </div>
     </div>
+    <!-- ★2026-07-31 Phase C：レジに残った数
+         ★理論残（あるべき数）は画面に出さない。出した瞬間、合わせて書くだけになる。
+           判定は送信後にサーバから返る。 -->
+    <div class="form-card">
+      <div class="form-card-title">レジに残った数</div>
+      <div style="font-size:12px;color:var(--ink-mute);line-height:1.7;margin-bottom:8px;">
+        いま手元に残っているお弁当を数えて入力してください。<br>賄いで食べた分は、この下の「賄い」に入れてください。
+      </div>
+      <div id="residual-inputs"></div>
+      <div class="form-row" style="border-top:1px solid var(--border);margin-top:6px;padding-top:8px;">
+        <span class="form-label" style="font-weight:700;">残り合計</span>
+        <span style="font-weight:700;font-size:16px;" id="residual-total">0個</span>
+      </div>
+    </div>
+
     <div class="form-card">
       <div class="form-card-title">賄い</div>
       <div class="form-row">
@@ -1259,6 +1277,16 @@ html, body { overscroll-behavior-y: contain; }
         <span style="font-size:12px;color:var(--ink-mute);margin-right:8px;" id="makanai-note">無しの場合+¥300</span>
         <div class="coupon-toggle" id="makanai-toggle" onclick="toggleMakanai()" style="background:var(--green);"></div>
         <span style="font-size:13px;color:var(--ink-soft);margin-left:8px;" id="makanai-label">有り</span>
+      </div>
+      <!-- ★2026-07-31 Phase C：賄いを個数で記録する（1人1日1個まで） -->
+      <div id="makanai-detail-box" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
+        <div style="font-size:12px;color:var(--ink-mute);line-height:1.7;margin-bottom:8px;" id="makanai-limit-note">食べたお弁当を選んでください。</div>
+        <div id="makanai-inputs"></div>
+        <div class="form-row" style="margin-top:4px;">
+          <span class="form-label" style="font-weight:700;">賄い合計</span>
+          <span style="font-weight:700;" id="makanai-total">0個</span>
+          <span style="font-size:12px;margin-left:8px;" id="makanai-over"></span>
+        </div>
       </div>
     </div>
     <div class="form-card">
@@ -1326,9 +1354,21 @@ html, body { overscroll-behavior-y: contain; }
   <div class="complete-icon">✅</div>
   <div class="complete-title">報告完了</div>
   <div class="complete-sub">本日もお疲れ様でした！<br>報告内容が送信されました。</div>
+  <!-- ★2026-07-31 PayPay照合パネル（Phase A）
+       締めを送信したあと、PayPay社の記録との照合結果をここに出す。
+       ・数字は表示の瞬間に初めてサーバから受け取る（それまでは端末に来ない）
+       ・照合結果が出たら「報告内容を修正する」は隠す（誤差を見てから書き換えられないようにする）
+       ・照合できなくても締めは完了している（「確認中」のまま終わってよい） -->
+  <div id="pp-check" style="width:100%;max-width:320px;margin-bottom:14px;border-radius:12px;padding:14px 16px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.3);display:none;">
+    <div style="font-size:13px;font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+      <span id="pp-check-icon">⏳</span><span id="pp-check-title">PayPayの記録と照合しています…</span>
+    </div>
+    <div id="pp-check-body" style="font-size:13px;line-height:1.9;"></div>
+  </div>
+
   <div style="display:flex;flex-direction:column;gap:10px;width:100%;max-width:320px;margin-bottom:16px;">
     <button onclick="resumeForAdditionalSales()" style="background:rgba(244,196,48,.25);color:#FFF;border:1px solid rgba(244,196,48,.7);border-radius:12px;padding:14px 24px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;">＋ 追加販売する</button>
-    <button onclick="goToEdit()" style="background:rgba(255,255,255,.2);color:#FFF;border:1px solid rgba(255,255,255,.4);border-radius:12px;padding:12px 24px;font-size:14px;font-family:inherit;cursor:pointer;">📝 報告内容を確認・修正する</button>
+    <button id="btn-goto-edit" onclick="goToEdit()" style="background:rgba(255,255,255,.2);color:#FFF;border:1px solid rgba(255,255,255,.4);border-radius:12px;padding:12px 24px;font-size:14px;font-family:inherit;cursor:pointer;">📝 報告内容を確認・修正する</button>
   </div>
   <div class="complete-card">
     <div class="complete-row"><span>販売数</span><span id="comp-sold">0個</span></div>
@@ -1924,6 +1964,57 @@ function renderDeliveryInputs() {
       <span class="form-unit">個</span>
     </div>
   `).join('');
+  // ★2026-07-31 Phase B：配分表の個数を既定値として流し込む（取得は非同期・待たせない）
+  loadPlannedDelivery();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ★2026-07-31 【Phase B】配分表の個数を既定値にする
+//   設計書: 40_ドキュメント/設計_再発防止_納品確定とPayPay即時突合_2026-07-31.md
+//
+//   ・スタート画面を開いた時に配分表（基本数マスタ）の個数を入れておく
+//   ・販売員は実物を見て確認し、違えば直す
+//   ・違う数で開始すると、GAS側が担当ドライバーへ承認依頼を送る（handleStart 内）
+//   ★承認はゲートではない。承認前でもレジはスタートできる（社長決定）。
+// ═══════════════════════════════════════════════════════════════
+async function loadPlannedDelivery() {
+  const note = document.getElementById('delivery-plan-note');
+  if (!state.location || !state.location.id) return;
+  try {
+    const url = `${state.GAS_URL}?action=getPlannedDelivery`
+              + `&date=${encodeURIComponent(ppToday())}`
+              + `&loc=${encodeURIComponent(state.location.id)}`;
+    const res = await fetch(url, { redirect: 'follow' });
+    const j = await res.json();
+    if (!j || !j.ok) { state.plannedDelivery = null; return; }
+
+    state.plannedDelivery = j.deliveryCount || {};
+    let filled = 0;
+    Object.keys(state.plannedDelivery).forEach(pid => {
+      const el = document.getElementById(`delivery-${pid}`);
+      if (!el) return;
+      // 既に手入力されている欄は上書きしない
+      if (el.value === '' || el.value === null) {
+        el.value = state.plannedDelivery[pid];
+        filled++;
+      }
+    });
+
+    if (note) {
+      if (j.total > 0) {
+        note.innerHTML = `📋 <b>配分表の個数（合計 ${j.total}個）</b>を入れました。<br>`
+                       + `実際に届いた数を確認し、違っていたら直してください。`
+                       + `<br><span style="opacity:.8">直した場合は担当ドライバーに確認の連絡がいきます。承認を待たずにレジは始められます。</span>`;
+      } else {
+        note.innerHTML = `📋 本日この拠点の配分表が見つかりませんでした。実際に届いた数を入力してください。`;
+      }
+      note.style.display = 'block';
+    }
+    if (typeof saveState === 'function') { try { saveState(); } catch (e) {} }
+  } catch (e) {
+    console.warn('配分表の取得に失敗（手入力で続行できます）:', e);
+    state.plannedDelivery = null;
+  }
 }
 
 document.getElementById('btn-start-submit').addEventListener('click', () => {
@@ -1932,6 +2023,19 @@ document.getElementById('btn-start-submit').addEventListener('click', () => {
   state.products.forEach(p => {
     state.deliveryCount[p.id] = parseInt(document.getElementById(`delivery-${p.id}`).value) || 0;
   });
+  // ★2026-07-31 Phase B：配分表と違う数で始めるなら、その場で伝えておく（驚かせない）
+  //   実際の承認依頼はGAS側（handleStart）が送る。ここは表示だけ。
+  try {
+    const plan = state.plannedDelivery;
+    if (plan) {
+      const changed = state.products.filter(p =>
+        (Number(plan[p.id]) || 0) !== (Number(state.deliveryCount[p.id]) || 0));
+      state.deliveryChangedCount = changed.length;
+      if (changed.length > 0) {
+        showToast(`配分表と${changed.length}品目が違います。担当ドライバーに確認の連絡がいきます`, 3500);
+      }
+    }
+  } catch (e) { console.warn('配分表との比較に失敗:', e); }
   showConfirm();
 });
 
@@ -3061,8 +3165,171 @@ function toggleMakanai() {
   state['makanaiあり'] = !state['makanaiあり'];
   document.getElementById('makanai-toggle').style.background = state['makanaiあり'] ? 'var(--green)' : '#888';
   document.getElementById('makanai-label').textContent = state['makanaiあり'] ? '有り' : '無し';
+  // ★2026-07-31 Phase C：賄い「有り」のときだけ個数の入力欄を出す
+  const box = document.getElementById('makanai-detail-box');
+  if (box) box.style.display = state['makanaiあり'] ? 'block' : 'none';
+  if (!state['makanaiあり']) {
+    state.makanaiDetail = {};
+    renderMakanaiInputs();
+  }
   saveState();
   refreshFinalIfShown();   // ★2026-07-29 集計後に切り替えた場合はその場で再集計（凍結値のまま提出＝±300の原因）
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ★2026-07-31 【Phase C】レジに残った数 ／ 賄いの個数
+//   設計書: 40_ドキュメント/設計_再発防止_納品確定とPayPay即時突合_2026-07-31.md
+//
+//   ★理論残（あるべき数）は絶対に画面に出さない。
+//     出した瞬間、合わせて書くだけの作業になり、この仕組みの意味が消える。
+//     判定はサーバへ送ったあとに返ってくる。
+//   ★賄いは1人1日1個まで（社長決定）。上限はシフト人数からサーバが出す。
+// ═══════════════════════════════════════════════════════════════
+
+// 残数・賄いの対象はお弁当のみ（お茶は数えない＝サーバの理論残と数え方を揃える）
+function rcBentoProducts() {
+  return (state.products || []).filter(p => String(p.name || '').indexOf('お茶') === -1);
+}
+
+function renderResidualInputs() {
+  const c = document.getElementById('residual-inputs');
+  if (!c) return;
+  state.residualDetail = state.residualDetail || {};
+  c.innerHTML = rcBentoProducts().map(p => `
+    <div class="form-row">
+      <span class="form-label">${p.name}</span>
+      <input type="number" class="form-input" id="residual-${p.id}" placeholder="0" inputmode="numeric" min="0"
+             style="width:80px;text-align:right;" value="${state.residualDetail[p.id] || ''}"
+             oninput="updateResidualTotal()">
+      <span class="form-unit">個</span>
+    </div>`).join('');
+  updateResidualTotal();
+}
+
+function updateResidualTotal() {
+  let total = 0;
+  state.residualDetail = {};
+  rcBentoProducts().forEach(p => {
+    const n = parseInt((document.getElementById(`residual-${p.id}`) || {}).value) || 0;
+    if (n > 0) state.residualDetail[p.id] = n;
+    total += n;
+  });
+  state.residualCount = total;
+  const el = document.getElementById('residual-total');
+  if (el) el.textContent = `${total}個`;
+  renderMakanaiInputs();   // 賄いは「残っている弁当から選ぶ」ので選択肢が連動する
+  saveState();
+}
+
+function renderMakanaiInputs() {
+  const c = document.getElementById('makanai-inputs');
+  if (!c) return;
+  state.makanaiDetail = state.makanaiDetail || {};
+  // 賄いに選べるのは「その日扱った弁当」。残数が0でも食べた分はあり得るので全弁当を出す。
+  c.innerHTML = rcBentoProducts().map(p => `
+    <div class="form-row">
+      <span class="form-label">${p.name}</span>
+      <input type="number" class="form-input" id="makanai-${p.id}" placeholder="0" inputmode="numeric" min="0"
+             style="width:80px;text-align:right;" value="${state.makanaiDetail[p.id] || ''}"
+             oninput="updateMakanaiTotal()">
+      <span class="form-unit">個</span>
+    </div>`).join('');
+  updateMakanaiTotal();
+}
+
+function updateMakanaiTotal() {
+  let total = 0;
+  state.makanaiDetail = {};
+  rcBentoProducts().forEach(p => {
+    const n = parseInt((document.getElementById(`makanai-${p.id}`) || {}).value) || 0;
+    if (n > 0) state.makanaiDetail[p.id] = n;
+    total += n;
+  });
+  state.makanaiCount = total;
+  const el = document.getElementById('makanai-total');
+  if (el) el.textContent = `${total}個`;
+
+  const over  = document.getElementById('makanai-over');
+  const limit = Number(state.makanaiLimit) || 0;
+  if (over) {
+    if (limit > 0 && total > limit) {
+      over.textContent = `⚠️ 上限${limit}個を超えています`;
+      over.style.color = 'var(--red)';
+    } else {
+      over.textContent = '';
+    }
+  }
+  saveState();
+}
+
+// 賄いの上限をサーバから取る（1人1日1個・人数はシフトから）
+async function loadMakanaiLimit() {
+  if (!state.location || !state.location.id) return;
+  try {
+    const url = `${state.GAS_URL}?action=getMakanaiLimit`
+              + `&date=${encodeURIComponent(ppToday())}`
+              + `&loc=${encodeURIComponent(state.location.id)}`;
+    const res = await fetch(url, { redirect: 'follow' });
+    const j = await res.json();
+    if (j && j.ok) {
+      state.makanaiLimit = j.limit;
+      const note = document.getElementById('makanai-limit-note');
+      if (note) {
+        note.textContent = `食べたお弁当を選んでください。本日の上限は ${j.limit}個（${j.people}名 × 1個）です。`;
+      }
+      updateMakanaiTotal();
+    }
+  } catch (e) {
+    console.warn('賄い上限の取得に失敗（入力は続けられます）:', e);
+  }
+}
+
+// 締め送信の直後に、残数と賄いをサーバへ送って理論残と突き合わせる。
+// ★報告ログが書かれた後でないと販売数が読めないので、submitReport の完了を待ってから呼ぶ。
+async function sendClosingResidual() {
+  if (!state.location || !state.location.id) return;
+  try {
+    const payload = {
+      action: 'submitClosingResidual',
+      date: ppToday(),
+      locationId:   state.location.id,
+      locationName: state.location.name,
+      userId:       state.userId,
+      userName:     state.userName,
+      residualCount:  Number(state.residualCount) || 0,
+      residualDetail: state.residualDetail || {},
+      makanaiCount:   state['makanaiあり'] ? (Number(state.makanaiCount) || 0) : 0,
+      makanaiDetail:  state['makanaiあり'] ? (state.makanaiDetail || {}) : {},
+    };
+    const res = await fetch(state.GAS_URL, { method: 'POST', body: JSON.stringify(payload), redirect: 'follow' });
+    const j = await res.json().catch(() => null);
+    if (j && j.ok) renderResidualVerdict(j);
+  } catch (e) {
+    console.warn('残数の送信に失敗:', e);
+  }
+}
+
+// ★判定はここで初めて見せる（入力前には出さない）
+function renderResidualVerdict(r) {
+  const box = document.getElementById('pp-check');
+  if (!box) return;
+  const extra = document.createElement('div');
+  extra.style.cssText = 'margin-top:10px;padding-top:9px;border-top:1px solid rgba(255,255,255,.3);font-size:13px;line-height:1.9;';
+  const rows =
+      `<div style="display:flex;justify-content:space-between;"><span>あなたの申告</span><span>${r.declared}個</span></div>`
+    + `<div style="display:flex;justify-content:space-between;"><span>計算上の残り</span><span>${r.theory}個</span></div>`;
+  if (r.match) {
+    extra.innerHTML = '<div style="font-weight:700;margin-bottom:4px;">✅ 残数は計算と一致しました</div>' + rows;
+  } else {
+    extra.innerHTML = '<div style="font-weight:700;margin-bottom:4px;">⚠️ 残数が計算と合いません</div>' + rows
+      + `<div style="display:flex;justify-content:space-between;font-weight:700;"><span>差</span><span>${r.diff > 0 ? '+' : ''}${r.diff}個</span></div>`
+      + '<div style="margin-top:6px;font-size:12px;opacity:.9;">回収に来るドライバーが実際の数を確認します。</div>';
+  }
+  if (r.makanaiOver) {
+    extra.innerHTML += `<div style="margin-top:6px;font-size:12px;">⚠️ 賄いが上限（${r.makanaiLimit}個）を超えています。ドライバーに確認の連絡がいきました。</div>`;
+  }
+  box.style.display = 'block';
+  box.appendChild(extra);
 }
 
 // ★2026-07-29 A案：集計結果を表示中に賄い／遅刻を変更したら、その場で calcFinal を回し直す。
@@ -3122,8 +3389,133 @@ function submitFinal() {
     makanaiBonus: state.calcMakanaiBonus,
     couponTotal: (state.history || []).filter(h => h.status === 'active').reduce((s, h) => s + (Number(h.couponAmount) || 0), 0),  // 2026-07-08 Phase3 D1: クーポン値引累計→GAS col34（取消分は除外）
   };
-  fetch(state.GAS_URL, { method: 'POST', body: JSON.stringify(payload) }).catch(e => console.error(e));
+  // ★2026-07-31 報告の送信を待ってから残数を送る。
+  //   submitClosingResidual は報告ログの販売数を読むので、書かれる前に送ると理論残が狂う。
+  fetch(state.GAS_URL, { method: 'POST', body: JSON.stringify(payload), redirect: 'follow' })
+    .then(() => { try { sendClosingResidual(); } catch (e) { console.error(e); } })
+    .catch(e => {
+      console.error(e);
+      // 報告の送信結果が取れなくても残数だけは送っておく（後追いで突き合わせできる）
+      try { sendClosingResidual(); } catch (e2) { console.error(e2); }
+    });
   showScreen('complete');
+  // ★2026-07-31 締め送信後にPayPay照合を開始（結果は数十秒後にこの画面へ出る）
+  try { startPayPayCheck(); } catch (e) { console.error('PayPay照合の開始に失敗:', e); }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ★2026-07-31 PayPay即時照合（Phase A）
+//   設計書: 40_ドキュメント/設計_再発防止_納品確定とPayPay即時突合_2026-07-31.md
+//
+//   ① 締め画面に入った時点で prefetch（PayPayの取得と取込を先に済ませておく）
+//   ② 締め送信後に status をポーリング（★金額は返ってこない。readyの真偽だけ）
+//   ③ ready になったら reveal を1回だけ叩き、そこで初めて数字を受け取って表示
+//   ④ 結果を見せたら「報告内容を修正する」を隠す（誤差を見てから書き換えさせない）
+//
+//   ★ここで何が起きても締めは完了している。照合できなければ「確認中」で終わってよい。
+// ═══════════════════════════════════════════════════════════════
+function ppToday() {
+  const d = new Date();
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}/${p(d.getMonth() + 1)}/${p(d.getDate())}`;
+}
+
+function ppClientUrl(mode) {
+  const loc = (state.location && state.location.id) ? state.location.id : '';
+  return `${state.GAS_URL}?action=ppClient&mode=${mode}`
+       + `&date=${encodeURIComponent(ppToday())}&loc=${encodeURIComponent(loc)}`;
+}
+
+// 締め画面に入ったら1回だけ。失敗しても何も言わない（締めに一切影響させない）
+function ppPrefetch() {
+  if (!state.location || !state.location.id) return;
+  fetch(ppClientUrl('prefetch')).catch(() => {});
+}
+
+let ppPollTimer = null;
+
+function startPayPayCheck() {
+  const box = document.getElementById('pp-check');
+  if (!box || !state.location || !state.location.id) return;
+  box.style.display = 'block';
+  document.getElementById('pp-check-icon').textContent  = '⏳';
+  document.getElementById('pp-check-title').textContent = 'PayPayの記録と照合しています…';
+  document.getElementById('pp-check-body').innerHTML =
+    '<span style="opacity:.85">少しお待ちください。このまま閉じても報告は完了しています。</span>';
+
+  let tries = 0;
+  const MAX = 25;   // 3秒 × 25 ＝ 約75秒で諦める
+  clearInterval(ppPollTimer);
+  ppPollTimer = setInterval(async () => {
+    tries++;
+    if (tries > MAX) { clearInterval(ppPollTimer); ppCheckUnavailable(); return; }
+    try {
+      const r = await fetch(ppClientUrl('status'));
+      const j = await r.json();
+      if (j && j.ready) { clearInterval(ppPollTimer); ppRevealResult(); }
+    } catch (e) { /* 通信が不安定でも黙って次の周回を待つ */ }
+  }, 3000);
+}
+
+// ★数字を受け取るのはここだけ
+async function ppRevealResult() {
+  try {
+    const r = await fetch(ppClientUrl('reveal'));
+    const j = await r.json();
+    if (!j || !j.ok || !j.result || !j.result.paypay) { ppCheckUnavailable(); return; }
+    ppRenderResult(j.result);
+  } catch (e) {
+    ppCheckUnavailable();
+  }
+}
+
+function ppRenderResult(res) {
+  const p     = res.paypay || {};
+  const icon  = document.getElementById('pp-check-icon');
+  const title = document.getElementById('pp-check-title');
+  const body  = document.getElementById('pp-check-body');
+  if (!icon) return;
+  const yen = n => '¥' + (Number(n) || 0).toLocaleString();
+
+  // その日その拠点にPayPayの記録が1件も無い（無人販売など）→ 誤報を出さない
+  if (!p.hasData) { ppCheckUnavailable(); return; }
+
+  const rows =
+      `<div style="display:flex;justify-content:space-between;"><span>アプリの入力</span><span>${yen(p.appAmount)}（${p.appCount}件）</span></div>`
+    + `<div style="display:flex;justify-content:space-between;"><span>PayPayの記録</span><span>${yen(p.actualAmount)}（${p.actualCount}件）</span></div>`;
+
+  if (p.diffAmount === 0 && p.diffCount === 0) {
+    icon.textContent  = '✅';
+    title.textContent = 'PayPayの記録と一致しました';
+    body.innerHTML    = rows;
+  } else {
+    icon.textContent  = '⚠️';
+    title.textContent = 'PayPayの記録と一致しません';
+    body.innerHTML = rows
+      + '<div style="display:flex;justify-content:space-between;margin-top:6px;padding-top:6px;'
+      + 'border-top:1px solid rgba(255,255,255,.35);font-weight:700;">'
+      + `<span>差</span><span>${yen(p.diffAmount)}（${p.diffCount > 0 ? '+' : ''}${p.diffCount}件）</span></div>`
+      + '<div style="margin-top:8px;font-size:12px;opacity:.9;">担当ドライバーにも同じ内容が届いています。'
+      + '心当たりがあれば伝えてください。</div>';
+  }
+
+  // ★結果を見たあとに報告を書き換えられないようにする（設計:「確認画面から戻れない」）
+  //   訂正が必要な場合はドライバーか社長へ申請する運用。
+  const editBtn = document.getElementById('btn-goto-edit');
+  if (editBtn) editBtn.style.display = 'none';
+  state.ppRevealed = true;
+  try { saveState(); } catch (e) { /* 保存できなくても表示は続ける */ }
+}
+
+// 照合できなかった時。★数字は何も見せていないので、報告の修正は許したままにする。
+function ppCheckUnavailable() {
+  const icon  = document.getElementById('pp-check-icon');
+  const title = document.getElementById('pp-check-title');
+  const body  = document.getElementById('pp-check-body');
+  if (!icon) return;
+  icon.textContent  = '🕓';
+  title.textContent = 'PayPayの照合は確認中です';
+  body.innerHTML    = '<span style="opacity:.85">あとで自動的に照合されます。報告はすでに完了しています。</span>';
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -3163,6 +3555,16 @@ function enterFinalScreen() {
   const finalResults = document.getElementById('final-results');
   if (finalResults) finalResults.style.display = 'none';
   showScreen('final');
+  // ★2026-07-31 PayPayの取得・取込をここで先に走らせておく。
+  //   販売員が現金有高や残数を入力している間に済むので、送信後の待ち時間が体感から消える。
+  try { ppPrefetch(); } catch (e) { console.error('PayPay先取りに失敗:', e); }
+  // ★2026-07-31 Phase C：残数・賄いの入力欄を用意する
+  try {
+    renderResidualInputs();
+    const mkBox = document.getElementById('makanai-detail-box');
+    if (mkBox) mkBox.style.display = state['makanaiあり'] ? 'block' : 'none';
+    loadMakanaiLimit();
+  } catch (e) { console.error('残数入力の初期化に失敗:', e); }
 }
 
 function backToRegisterFromFinal() {
