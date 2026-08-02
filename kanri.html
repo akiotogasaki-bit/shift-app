@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- kanri.html v3.53 (2026-08-03) 【配分の印刷前チェック】配分調整タブの「🖨 印刷」を bmPrintWithCheck() に変更し、押した瞬間に2点を確認する（社長要望）。①**担当者が未割り当てなのに納品数が入っている拠点** ②**担当者がいるのに納品数が0の拠点**。どちらかがあれば拠点名つきで confirm を出し、「キャンセル」なら印刷せずに戻る（直してから印刷し直せる）。判定は表示中の日付のみ・bmServerData.locations[].salesPerson と bmGetDisplaySales の拠点合計を使う＝GAS変更なし。印刷してから配り直しになるのを止めるのが狙い。 -->
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
@@ -2198,7 +2199,7 @@ body {
         <button class="bm-reload-btn" onclick="bmReload()" title="サーバーから取り直す（ローカル編集は破棄）">🔄 再取得</button>
         <button class="bm-ext-import-btn" id="bm-ext-import-btn" onclick="bmImportExternal()" title="他社弁当（メンチカツ/チキン南蛮/油淋鶏）の納品数を外部SSから取込→総数を更新">🔄 他社弁当を取込</button>
         <button class="bm-ext-import-btn" id="bm-ext-residual-btn" onclick="bmWriteExtResidual()" title="当日の他社弁当の残数を外部SS（残数・二次販売後残数）へ記入。空欄のセルにだけ書くので、手で直した数字は上書きしません">🧮 他社弁当の残数を記入</button>
-        <button class="bm-print-btn" onclick="window.print()">🖨 印刷</button>
+        <button class="bm-print-btn" onclick="bmPrintWithCheck()">🖨 印刷</button>
       </div>
     </div>
     <div class="bm-calc-info" id="bm-calc-info"></div>
@@ -4780,6 +4781,53 @@ let bmInitialized = false;
 let bmLoadedDates = new Set();
 // v3.41: 日付ごとにサーバーデータ/ドライバー色をキャッシュし、週分をプリフェッチして日切替を瞬時化
 let bmDataCache        = {};         // { dateStr: getBasicMasterMatrix応答 }
+
+// ═══════════════════════════════════════════════════════════════
+// ★2026-08-03 配分の印刷前チェック（社長要望）
+//   「配分を印刷するボタンを押した時に、
+//     ・未割り当て拠点に納品数が入っている
+//     ・スタッフが割り当てられているのに納品数がない
+//     それぞれの時にアラートが出るようにしたい」
+//   印刷してから気づくと配り直しになるので、押した瞬間に止める。
+//   ※あくまで確認。「このまま印刷」を選べば従来どおり印刷できる。
+// ═══════════════════════════════════════════════════════════════
+function bmPrintWithCheck() {
+  const noStaff = [];   // 担当者がいないのに納品数がある
+  const noQty   = [];   // 担当者がいるのに納品数が0
+  try {
+    const products = [].concat(
+      (bmServerData && bmServerData.products && bmServerData.products.rice)  || [],
+      (bmServerData && bmServerData.products && bmServerData.products.brown) || []
+    );
+    ((bmServerData && bmServerData.locations) || []).forEach(loc => {
+      let sum = 0;
+      for (const p of products) sum += (bmGetDisplaySales(p.id, loc.id) || 0);
+      const staff = String(loc.salesPerson || '').trim();
+      const name  = (loc.displayName && loc.displayName.length > 0) ? loc.displayName : loc.name;
+      if (!staff && sum > 0) noStaff.push('・' + name + '　' + sum + '個');
+      if (staff  && sum === 0) noQty.push('・' + name + '　' + staff);
+    });
+  } catch (e) {
+    console.warn('印刷前チェックに失敗（印刷は続行します）:', e);
+  }
+
+  if (noStaff.length || noQty.length) {
+    const lines = ['⚠️ 配分に気になるところがあります', ''];
+    if (noStaff.length) {
+      lines.push('■ 担当者が未割り当てなのに納品数が入っています（' + noStaff.length + '拠点）');
+      lines.push(noStaff.join('\n'));
+      lines.push('');
+    }
+    if (noQty.length) {
+      lines.push('■ 担当者がいるのに納品数が0です（' + noQty.length + '拠点）');
+      lines.push(noQty.join('\n'));
+      lines.push('');
+    }
+    lines.push('このまま印刷しますか？');
+    if (!confirm(lines.join('\n'))) return;   // キャンセル＝直してから印刷し直す
+  }
+  window.print();
+}
 let bmColorCache       = {};         // { dateStr: ドライバー色マップ }
 let bmPrefetchInflight = new Set();  // プリフェッチ進行中の日付（二重取得防止）
 let bmThisWeekDates = [];     // ['2026-05-19','2026-05-20',...]
