@@ -1158,6 +1158,11 @@ async function init() {
         enterKitchenFlow();
         return;
       }
+      // ?test=1&profile=1 でプロフィール登録画面の見た目だけ確認できる（保存はしない）
+      if (state.profileMode) {
+        showScreen('profile');
+        return;
+      }
     } else {
       await liff.init({ liffId: LIFF_ID });
       if (!liff.isLoggedIn()) {
@@ -1363,6 +1368,7 @@ document.getElementById('pf-file').addEventListener('change', async (ev) => {
 document.getElementById('btn-profile-save').addEventListener('click', async () => {
   const job   = document.getElementById('pf-job').value.trim();
   const birth = document.getElementById('pf-birth').value;      // YYYY-MM-DD
+  if (state.isTestMode) { toast('プレビュー中のため保存しません'); return; }
   if (!pfPhotoBase64) { toast('顔写真を登録してください'); return; }
   if (!job)   { toast('職業・学生を入力してください'); return; }
   if (!birth) { toast('生年月日を入力してください'); return; }
