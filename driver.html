@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v2.3 (2026-08-03) 【回収の残数を商品別に】回収モーダルの「残った弁当」を1欄（総数）から**商品ごとの入力**に変更（社長決定：「置き弁も通常拠点も全て種類別で入力で。じゃないと 納品数−残数＝販売個数 の計算式が成立しなくて本来あるべき売上が確定しない」）。既定値は getDeclaredResidual の items[] をそのまま使う＝通常拠点は販売員が申告した商品別残数、置き弁は納品数。商品名は白米/玄米を補って表示（銀しゃけ（白）／銀しゃけ（玄））。行タップでテンキーの編集対象が切り替わり、合計を下に表示。既定値から変えた商品は数字が青くなる。送信時に actualResidualDetail（{商品ID:個数}）を付ける（メインGASは detail があればその合計を採用・お茶除外）。実装: ccItems / ccVals / ccField='p:<商品ID>' / ccResidualTotal_ / ccResidualDetail_。要: メインGAS @403 以降（残数照合ログに 実査残数詳細JSON 列・getDeclaredResidual の items[]・置き弁の行自動生成）。 -->
 <!-- driver v2.2 (2026-08-03) 【全体の残数を拠点合算に】残数タブ上部の「入力済（＝残数ログ＝ドライバーの回収提出の合計）」を「拠点合計（各拠点で確認した残数の単純合算）」に差し替え（社長決定 2026-08-03「残数は拠点毎に確認することにした。単純に拠点での残数の合算でよい」）。メインGAS getResidualSummary の locationTotal / locationProducts / locationCount を使用。★計算上残数（理論値）は従来どおり。★残数入力タブは**残す**（今後「2次販売後の最終残数入力」へ転用するため消さない）。拠点の入力がまだ0件の時間帯は従来の回収入力合計を表示し、その旨をラベルに出す。ドライバー別の行は「回収入力（参考）」と明示して残した。 -->
 <!-- driver v2.1 (2026-08-01) 【回収タブに残数を統合】回収タブの現金入力モーダルに「残った弁当」欄を追加し、残数の確認を回収作業と同じ画面で完結させた（社長要望：ドライバーが既に現金を打っている画面に置く）。★残数・現金とも「報告されている数字」を既定値で表示し、違うときだけ直す方式（社長決定 2026-08-01）。欄をタップするとテンキーの編集対象が切り替わる。確定時に saveActualCash → setCollected → submitCollectionCheck を順に送り、不一致ならトーストで表示＋販売員へLINE。既定値は getDeclaredResidual から取得。「📦 承認」タブから旧・回収実査UIは削除（重複解消）。 -->
 <!-- driver v2.0 (2026-07-31) 【Phase B＋C】《C》タブ「📦 承認」に回収時の実査を同居させた。ドライバーが残った弁当の数とレジの現金を入力すると、販売員の申告と突き合わせて判定を返す（submitCollectionCheck）。合わなければ販売員へLINE。★あるべき数は入力前に一切見せない（getCollectionTargets は数字を返さない）。見せた瞬間、合わせて書くだけの作業になるため。《B》納品数の承認：タブ「📦 承認」を追加。販売員が配分表と違う個数でレジを開始すると、担当ドライバーのここに承認待ちが出る（getDeliveryApprovals）。承認／差し戻しは approveDelivery。★承認はゲートではない（社長決定：修正値を正＋警告表示）＝承認しなくてもレジは動くし締められる。ただし未承認のまま締められるとドライバーと社長にLINEが飛ぶ（メインGAS submitReport 内）。要: メインGAS getPlannedDelivery / getDeliveryApprovals / approveDelivery ＋ 納品数承認ログ＝同時反映。設計書: 40_ドキュメント/設計_再発防止_納品確定とPayPay即時突合_2026-07-31.md -->
@@ -761,6 +762,20 @@ body {
 .cc-field .cc-label{flex:1;font-size:14px;color:var(--ink);}
 .cc-field .cc-value{font-size:20px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--ink);}
 .cc-field .cc-unit{font-size:12px;color:var(--ink-mute);}
+/* ★2026-08-03 回収モーダル：残数を商品別に入力する
+   （社長決定「置き弁も通常拠点も全て種類別で入力で。じゃないと 納品数−残数＝販売個数 が成立しない」） */
+.cc-list{max-height:32vh;overflow-y:auto;margin-bottom:6px;border-radius:10px;background:#F4F5F7;padding:4px;-webkit-overflow-scrolling:touch;}
+.cc-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border:2px solid transparent;border-radius:8px;cursor:pointer;}
+.cc-item.active{border-color:var(--blue,#1A3C5E);background:#EAF0F7;}
+.cc-item .cc-i-name{flex:1;font-size:13px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.cc-item .cc-i-val{font-size:18px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--ink);min-width:32px;text-align:right;}
+.cc-item .cc-i-val.changed{color:var(--blue,#1A3C5E);}
+.cc-item .cc-i-unit{font-size:11px;color:var(--ink-mute);}
+.cc-total{display:flex;align-items:center;gap:8px;padding:8px 12px;margin-bottom:6px;border-radius:10px;background:#EDF3EA;}
+.cc-total .cc-label{flex:1;font-size:13px;font-weight:700;color:var(--ink);}
+.cc-total .cc-value{font-size:19px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--ink);}
+.cc-total .cc-unit{font-size:12px;color:var(--ink-mute);}
+.cc-empty{padding:14px;text-align:center;font-size:13px;color:var(--ink-mute);}
 .cash-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
 .cash-key{padding:16px 0;border:none;border-radius:12px;background:#EEF0F3;color:var(--ink);font-size:22px;font-weight:700;font-family:inherit;cursor:pointer;}
 .cash-key:active{opacity:.7;}
@@ -1548,9 +1563,14 @@ let cashModalLocId = null;
 let cashInput = '';
 // ★2026-08-01 残数も同じモーダルで確認する
 //   社長決定：残数・現金とも「報告されている数字」を既定で入れ、違うときだけ直してもらう。
-let residualInput  = '';      // 残った弁当の数（文字列で保持）
-let ccField        = 'residual';   // テンキーがどちらの欄を編集しているか
-let residualLoaded = false;        // 販売員の申告残数を取得できたか
+// ★2026-08-03 残数は**商品ごと**に持つ（社長決定：納品数−残数＝販売個数 を成立させるため）
+//   ccItems … [{productId, name, declared}] 並び順はサーバー（getDeclaredResidual）に従う
+//   ccVals  … { 商品ID: '文字列' } テンキーで編集中も文字列のまま保持する
+let ccItems        = [];
+let ccVals         = {};
+let ccField        = 'cash';       // 'cash' または 'p:<商品ID>'
+let residualLoaded = false;        // 既定値（申告残数／置き弁は納品数）を取得できたか
+let ccIsOkiben     = false;
 
 function ccToday_() {
   const d = new Date();
@@ -1569,30 +1589,64 @@ async function openCashModal(id) {
 
   // 現金：既に実額があればそれ、無ければ報告からの想定額を既定値にする
   cashInput = (r.actualCash !== null && r.actualCash !== undefined) ? String(r.actualCash) : String(net);
-  // 残数：まず空。販売員の申告値を取りに行って入れる
-  residualInput  = '';
+  // 残数：まず空。既定値（申告残数／置き弁は納品数）を取りに行って入れる
+  ccItems = [];
+  ccVals  = {};
   residualLoaded = false;
-  ccField = 'residual';
+  ccIsOkiben = false;
+  ccField = 'cash';
 
   document.getElementById('cash-modal-title').textContent = loc.name;
   document.getElementById('cash-modal-expected').textContent = '報告の数字が入っています。違う場合だけ直してください。';
+  const listEl0 = document.getElementById('cc-residual-list');
+  if (listEl0) listEl0.innerHTML = '<div class="cc-empty">読み込み中…</div>';
   renderCashModal_(net);
   document.getElementById('cash-modal-bg').classList.add('show');
 
-  // 販売員が申告した残数を既定値として入れる（取れなくても現金だけで進められる）
+  // ★2026-08-03 商品別の既定値を取る（items[]）。取れなくても現金だけで進められる。
   try {
     const url = `${GAS_URL}?action=getDeclaredResidual`
               + `&date=${encodeURIComponent(ccToday_())}&loc=${encodeURIComponent(id)}`;
     const j = await (await fetch(url, { redirect: 'follow' })).json();
     if (cashModalLocId !== id) return;   // 閉じられていたら何もしない
-    if (j && j.ok && j.found && j.declared !== null) {
-      residualInput  = String(j.declared);
-      residualLoaded = true;
+    if (j && j.ok && j.found) {
+      ccIsOkiben = !!j.okiben;
+      ccItems = Array.isArray(j.items) ? j.items : [];
+      ccItems.forEach(it => {
+        // 既に実査を入れ直している場合はその値、無ければ申告値（置き弁は納品数）
+        const v = (it.actual !== null && it.actual !== undefined) ? it.actual : it.declared;
+        ccVals[it.productId] = String(Number(v) || 0);
+      });
+      residualLoaded = ccItems.length > 0;
+      if (residualLoaded) ccField = 'p:' + ccItems[0].productId;
+      if (ccIsOkiben) {
+        document.getElementById('cash-modal-expected').textContent =
+          '置き弁：納品数が入っています。残った数に直してください。';
+      }
     }
   } catch (e) {
-    console.warn('申告残数の取得に失敗（手入力で進められます）:', e);
+    console.warn('既定の残数の取得に失敗（手入力で進められます）:', e);
   }
   refreshCashModal_();
+}
+
+// 残数の合計（商品別の入力を足す）
+function ccResidualTotal_() {
+  let s = 0, any = false;
+  ccItems.forEach(it => {
+    const v = ccVals[it.productId];
+    if (v !== undefined && v !== '') { s += parseInt(v, 10) || 0; any = true; }
+  });
+  return any ? s : null;
+}
+// 送信用：{商品ID:個数}
+function ccResidualDetail_() {
+  const o = {};
+  ccItems.forEach(it => {
+    const v = ccVals[it.productId];
+    o[it.productId] = (v === undefined || v === '') ? 0 : (parseInt(v, 10) || 0);
+  });
+  return o;
 }
 
 function ccFocus(field) {
@@ -1604,13 +1658,15 @@ function closeCashModal() {
   document.getElementById('cash-modal-bg').classList.remove('show');
   cashModalLocId = null;
   cashInput = '';
-  residualInput = '';
-  ccField = 'residual';
+  ccItems = [];
+  ccVals  = {};
+  ccField = 'cash';
 }
-// ★2026-08-01 テンキーは「選択中の欄」を編集する
-function ccGet_()      { return ccField === 'cash' ? cashInput : residualInput; }
-function ccSet_(v)     { if (ccField === 'cash') cashInput = v; else residualInput = v; }
-function ccMaxLen_()   { return ccField === 'cash' ? 9 : 4; }
+// ★2026-08-01 テンキーは「選択中の欄」を編集する／2026-08-03 残数は商品ごと
+function ccPid_()      { return ccField.indexOf('p:') === 0 ? ccField.slice(2) : null; }
+function ccGet_()      { const p = ccPid_(); return p ? (ccVals[p] || '') : cashInput; }
+function ccSet_(v)     { const p = ccPid_(); if (p) ccVals[p] = v; else cashInput = v; }
+function ccMaxLen_()   { return ccPid_() ? 3 : 9; }
 
 function cashKey(d) {
   let cur = ccGet_();
@@ -1631,17 +1687,34 @@ function refreshCashModal_() {
   renderCashModal_(net);
 }
 function renderCashModal_(net) {
-  // ── 2つの欄 ──
-  const rv = document.getElementById('cc-val-residual');
+  // ── ★2026-08-03 残数：商品ごとの行 ──
+  const listEl = document.getElementById('cc-residual-list');
+  if (listEl) {
+    if (!ccItems.length) {
+      listEl.innerHTML = residualLoaded
+        ? '<div class="cc-empty">対象の商品がありません</div>'
+        : '<div class="cc-empty">残数を取得できませんでした（現金だけで進められます）</div>';
+    } else {
+      listEl.innerHTML = ccItems.map(it => {
+        const key = 'p:' + it.productId;
+        const v   = ccVals[it.productId];
+        const shown = (v === undefined || v === '') ? '0' : String(parseInt(v, 10) || 0);
+        const changed = (parseInt(shown, 10) !== Number(it.declared)) ? ' changed' : '';
+        return `<div class="cc-item${ccField === key ? ' active' : ''}" onclick="ccFocus('${key}')">`
+             + `<span class="cc-i-name">${esc_(it.name)}</span>`
+             + `<span class="cc-i-val${changed}">${shown}</span>`
+             + `<span class="cc-i-unit">個</span></div>`;
+      }).join('');
+    }
+  }
+  const tot = ccResidualTotal_();
+  const tv = document.getElementById('cc-residual-total');
+  if (tv) tv.textContent = (tot === null) ? '—' : tot.toLocaleString();
+
   const cv = document.getElementById('cc-val-cash');
-  if (rv) rv.textContent = residualInput === ''
-    ? (residualLoaded ? '0' : '—')
-    : parseInt(residualInput, 10).toLocaleString();
   if (cv) cv.textContent = cashInput === '' ? '—' : parseInt(cashInput, 10).toLocaleString();
 
-  const fr = document.getElementById('cc-field-residual');
   const fc = document.getElementById('cc-field-cash');
-  if (fr) fr.classList.toggle('active', ccField === 'residual');
   if (fc) fc.classList.toggle('active', ccField === 'cash');
 
   // ── テンキーの表示（選択中の欄の値）──
@@ -1709,7 +1782,8 @@ async function confirmCash() {
 
     // ③ ★2026-08-01 残数の照合（販売員の申告と突き合わせる）
     //    残数を取得できていない拠点（締め前など）はスキップ。ここで失敗しても回収は成立させる。
-    if (residualInput !== '') {
+    const ccTotal = ccResidualTotal_();
+    if (ccTotal !== null) {
       try {
         const res3 = await fetch(GAS_URL, {
           method: 'POST',
@@ -1719,7 +1793,9 @@ async function confirmCash() {
             locationId:     id,
             userId:         state.userId,
             userName:       state.userName,
-            actualResidual: parseInt(residualInput, 10) || 0,
+            actualResidual: ccTotal,
+            // ★2026-08-03 商品別の内訳を送る（サーバーはこれがあれば合計を採用する）
+            actualResidualDetail: ccResidualDetail_(),
             actualCash:     amount,
           }),
           redirect: 'follow',
@@ -3226,9 +3302,11 @@ async function cancelMove_(moveId) {
     <div class="cash-modal-expected" id="cash-modal-expected">報告の数字が入っています。違う場合だけ直してください。</div>
     <!-- ★2026-08-01 残数と現金を1画面で確認する（社長決定：報告値を既定表示し、違うときだけ直す）
          欄をタップすると、その欄をテンキーで直せる。 -->
-    <div class="cc-field" id="cc-field-residual" onclick="ccFocus('residual')">
-      <span class="cc-label">残った弁当</span>
-      <span class="cc-value" id="cc-val-residual">—</span>
+    <!-- ★2026-08-03 残った弁当は商品ごとに入力する（行をタップして数字を打つ） -->
+    <div class="cc-list" id="cc-residual-list"></div>
+    <div class="cc-total">
+      <span class="cc-label">残った弁当 合計</span>
+      <span class="cc-value" id="cc-residual-total">—</span>
       <span class="cc-unit">個</span>
     </div>
     <div class="cc-field" id="cc-field-cash" onclick="ccFocus('cash')">
