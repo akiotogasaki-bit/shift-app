@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>🍱 納品管理</title>
+<!-- kanri.html v3.54 (2026-08-03) 【残数の出どころを拠点合算に】「🧮 他社弁当の残数を記入」の確認ダイアログを、拠点合算の言い方に変更（「残数ログの提出 N件」→「残数を入力した拠点 N件」）。締め報告はあるのに残数の入力が無い拠点があれば、拠点名を列挙して警告する（メインGAS writeExternalResidualToday が missingLocs を返す）。数字そのものの出どころ変更はメインGAS側（残数ログ→残数照合ログの拠点合算）。 -->
 <!-- kanri.html v3.53 (2026-08-03) 【他社弁当の残数を外部SSへ記入】配分調整に「🧮 他社弁当の残数を記入」ボタンを追加（bmWriteExtResidual）。押すとまずドライラン（action=writeExtResidual&dry=1）で「何をいくつ書くか／既存値で据え置く欄」を確認ダイアログに出し、承認後に実行。**当日のみ・空欄のセルにだけ書く**ので、手で直した数字は再実行しても上書きされない（社長指示 2026-08-03）。書く欄は外部SSの「残数」と「二次販売後残数」（二次販売をしていない今は同じ値）。残数ログの提出が0件の日は書かない。本番は平日21:30の自動実行（メインGAS setupExternalResidualTrigger）＋このボタンの2経路で、実行後は社長へLINE報告。要メインGAS 2026-08-03（writeExternalResidualToday / getExternalResidualCompare / action=writeExtResidual）。 -->
 <!-- kanri.html v3.52 (2026-08-03) 【盛り出し表 Phase2＝他社弁当の総数行】シート2（午前/1便）に他社弁当（メンチカツ/チキン南蛮/油淋鶏）の総数行を追加。GAS getSheet2Data が ①基本数マスタの拠点分から外部商品IDを除外（G列が空の日にH列＝翌週提案値が拠点合計として出てしまい、配りもしない商品の推奨値が並んでいた。実測 8/6: 43/31/42 ← 実納品 30/30/0）②「外部納品数」シートの総数を「拠点」列に入れた行を注入し isExternal:true を返す。米種は商品名の玄米/白米→米種列の順（南蛮・油淋鶏=玄米セクション／メンチカツ=白米セクション）。フロントは isExternal 行を薄紫（.s2-ext-row・配分調整と同色）＋「他社」バッジで表示し、**印刷にも出す**（print-color-adjust:exact）。総数0の日は行を作らない。午後2便（シート3）は拠点合計を持たないため対象外。要メインGAS 2026-08-03（getSheet2Data の ④除外／④-2注入／buildRows の isExternal）。 -->
 <!-- kanri.html v3.51 (2026-07-31) 【献立表 定番（毎日）対応】銀しゃけ・あいもり等「毎日必ず献立に入る品目」を⚙マスタ編集UIで管理する「定番」欄を追加。①⚙パネルに「🍱 定番（毎日必ず入る）」欄（mn-tb-list/mn-tb-add-sel/mn-tb-add-btn）。品目候補は単価マスタ由来（dailyItems）なので商品が増えても自動で選べる。②mnNormalizeRules/mnRenderRules/mnSaveRules/イベントに teiban を追加。③配分調整のC-1：bmMenuTeiban を getMenuMeta.teibanProductIds から構築し、bmMenuExcluded で定番は除外しない（＝毎日0＋グレーにならない）。要メインGAS：getMenuRules/saveMenuRules に teiban、_menuAutoForDate_ が毎日先頭に定番を自動ON、getMenuMeta が teibanProductIds を返す、新シート「献立定番」。定番は集約グループ無しなので夜間バッチC-2は不変。 -->
@@ -5476,10 +5477,15 @@ async function bmWriteExtResidual() {
 
     const lines = (dry.results || []).map(r =>
       '・' + r.extName + '　' + (r.value == null ? '—' : r.value + '個') + '\n　' + r.status);
+    // ★2026-08-03 数字の出どころを「拠点毎の残数の合算」に変更（メインGAS側）
+    const missing = (dry.missingLocs || []);
     const ok = confirm(
       '当日（' + dry.date + '）の残数を外部SSに記入します。\n'
-      + '残数ログの提出 ' + dry.submissions + '件\n\n'
-      + lines.join('\n') + '\n\n'
+      + '残数を入力した拠点 ' + dry.submissions + '件\n'
+      + (missing.length
+          ? '⚠ 締め報告はあるのに残数の入力が無い拠点 ' + missing.length + '件\n　' + missing.join(' / ') + '\n'
+          : '')
+      + '\n' + lines.join('\n') + '\n\n'
       + '※ 空欄のセルにだけ書きます（既に入っている数字は変えません）。\n'
       + '※ 外部SSは支払額が数式で連動します。よろしいですか？');
     if (!ok) { wpToast('中止しました', 'info'); return; }

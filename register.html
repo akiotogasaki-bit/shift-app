@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>お江戸弁当 レジ</title>
+<!-- register v3.8 (2026-08-03) 【残数欄に計算値を既定表示】締め画面「レジに残った数」に、商品ごとの計算値（納品数＋拠点間移動±−販売数−賄い／お茶除く）を**最初から入れておく**方式に変更（社長決定 2026-08-03）。違うときだけ直してもらう＝回収モーダル（driver v2.1）と同じ考え方に統一。★2026-07-31 の「理論残を絶対に見せない」方針はここで撤回。差異の検知はドライバーの回収時実査（submitCollectionCheck）に一本化する。実装: rcExpectedResidual / onResidualInput（手で直した商品は自動更新しない）/ syncResidualDefaults（賄いの増減・有無切替に追従）/ recalcResidualState（renderMakanaiInputs を呼ばない安全版）。締め画面に入った時に refreshMoveAdj_ を走らせてから既定値を入れ直す（在庫画面を開いていないと移動±が反映されないため）。狙い：締めを出せば必ず拠点の残数行が立つ＝拠点毎の残数が全拠点そろう（メインGAS 2026-08-03 の拠点合算に必要）。 -->
 <!-- register v3.1 (2026-07-08) 送信確実化＋在庫打ち直し導線修正（開始ログ欠落対策） -->
 <!-- register v3.2 (2026-07-10) 拠点間移動±を在庫表示に反映（残＝納品＋移動±−販売／完売率も移動±込み）。サーバー単一ソース getMoveAdjByLoc を在庫モーダル表示時に取得。 -->
 <!-- register v3.3 (2026-07-12) 【Phase3 D1】締め報告(submitFinal)のpayloadに couponTotal を追加送信。会計履歴 state.history のうち status==='active' のみ couponAmount を合算（取消分は二重計上しない）。GAS側 submitReport が受けて報告ログ col34「クーポン値引累計」に記録→日報の売上合計に反映される。UI・既存ロジック変更なし。要: メインGAS D2（col34）＝反映済。 -->
@@ -1255,13 +1256,14 @@ html, body { overscroll-behavior-y: contain; }
         </div>
       </div>
     </div>
-    <!-- ★2026-07-31 Phase C：レジに残った数
-         ★理論残（あるべき数）は画面に出さない。出した瞬間、合わせて書くだけになる。
-           判定は送信後にサーバから返る。 -->
+    <!-- ★2026-08-03 v3.8：計算値（納品＋移動−販売−賄い）を**最初から入れておく**方式に変更（社長決定）。
+         2026-07-31 の「理論残を見せない」方針はここで撤回。回収モーダル（driver v2.1）と同じく
+         「報告されている数字を既定で表示し、違うときだけ直す」に揃える。
+         差異を拾う役割は、ドライバーが回収時に実物を数える実査（submitCollectionCheck）に一本化する。 -->
     <div class="form-card">
       <div class="form-card-title">レジに残った数</div>
       <div style="font-size:12px;color:var(--ink-mute);line-height:1.7;margin-bottom:8px;">
-        いま手元に残っているお弁当を数えて入力してください。<br>賄いで食べた分は、この下の「賄い」に入れてください。
+        計算上の残り数を入れてあります。<br><b>実際に数えて違っていたら直してください。</b>賄いで食べた分は、この下の「賄い」に入れてください。
       </div>
       <div id="residual-inputs"></div>
       <div class="form-row" style="border-top:1px solid var(--border);margin-top:6px;padding-top:8px;">
@@ -3173,6 +3175,7 @@ function toggleMakanai() {
     renderMakanaiInputs();
   }
   saveState();
+  syncResidualDefaults();  // ★2026-08-03 賄い有無で残数の既定値が変わる
   refreshFinalIfShown();   // ★2026-07-29 集計後に切り替えた場合はその場で再集計（凍結値のまま提出＝±300の原因）
 }
 
@@ -3180,9 +3183,12 @@ function toggleMakanai() {
 // ★2026-07-31 【Phase C】レジに残った数 ／ 賄いの個数
 //   設計書: 40_ドキュメント/設計_再発防止_納品確定とPayPay即時突合_2026-07-31.md
 //
-//   ★理論残（あるべき数）は絶対に画面に出さない。
-//     出した瞬間、合わせて書くだけの作業になり、この仕組みの意味が消える。
-//     判定はサーバへ送ったあとに返ってくる。
+//   ★2026-08-03 v3.8 方針変更（社長決定）
+//     旧：理論残は絶対に見せない（合わせて書くだけになるため）
+//     新：**計算値を最初から入れておき、違うときだけ直してもらう**
+//         回収モーダル（driver v2.1）と同じ考え方に揃える。
+//         既定値 ＝ 納品数 ＋ 拠点間移動± − 販売数 − 賄い（商品別・お茶除く）
+//         差異の検知は、ドライバーが回収時に実物を数える実査に一本化する。
 //   ★賄いは1人1日1個まで（社長決定）。上限はシフト人数からサーバが出す。
 // ═══════════════════════════════════════════════════════════════
 
@@ -3191,22 +3197,46 @@ function rcBentoProducts() {
   return (state.products || []).filter(p => String(p.name || '').indexOf('お茶') === -1);
 }
 
-function renderResidualInputs() {
-  const c = document.getElementById('residual-inputs');
-  if (!c) return;
-  state.residualDetail = state.residualDetail || {};
-  c.innerHTML = rcBentoProducts().map(p => `
-    <div class="form-row">
-      <span class="form-label">${p.name}</span>
-      <input type="number" class="form-input" id="residual-${p.id}" placeholder="0" inputmode="numeric" min="0"
-             style="width:80px;text-align:right;" value="${state.residualDetail[p.id] || ''}"
-             oninput="updateResidualTotal()">
-      <span class="form-unit">個</span>
-    </div>`).join('');
+// ★2026-08-03 商品ごとの計算上の残り数（在庫画面の「残」と同じ式。賄いぶんも引く）
+function rcExpectedResidual(pid) {
+  const delivery = Number((state.deliveryCount || {})[pid]) || 0;
+  const mv       = Number((state.moveAdj       || {})[pid]) || 0;
+  const sold     = Number((state.productSales  || {})[pid]) || 0;
+  const makanai  = state['makanaiあり'] ? (Number((state.makanaiDetail || {})[pid]) || 0) : 0;
+  return Math.max(0, delivery + mv - sold - makanai);
+}
+
+// 手で直した商品は自動更新しない（賄いを入れ直しても書いた数字を勝手に変えない）
+function onResidualInput(pid) {
+  state.residualTouched = state.residualTouched || {};
+  state.residualTouched[pid] = true;
   updateResidualTotal();
 }
 
-function updateResidualTotal() {
+function renderResidualInputs() {
+  const c = document.getElementById('residual-inputs');
+  if (!c) return;
+  state.residualDetail  = state.residualDetail  || {};
+  state.residualTouched = state.residualTouched || {};
+  // ★2026-08-03 未入力の商品には計算値を入れておく（直した商品はその値を保持）
+  c.innerHTML = rcBentoProducts().map(p => {
+    const val = state.residualTouched[p.id]
+      ? (state.residualDetail[p.id] || 0)
+      : rcExpectedResidual(p.id);
+    return `
+    <div class="form-row">
+      <span class="form-label">${p.name}</span>
+      <input type="number" class="form-input" id="residual-${p.id}" placeholder="0" inputmode="numeric" min="0"
+             style="width:80px;text-align:right;" value="${val}"
+             oninput="onResidualInput('${p.id}')">
+      <span class="form-unit">個</span>
+    </div>`;
+  }).join('');
+  updateResidualTotal();
+}
+
+// 入力欄→state と合計表示（★renderMakanaiInputs は呼ばない＝賄い側からも安全に呼べる）
+function recalcResidualState() {
   let total = 0;
   state.residualDetail = {};
   rcBentoProducts().forEach(p => {
@@ -3217,7 +3247,23 @@ function updateResidualTotal() {
   state.residualCount = total;
   const el = document.getElementById('residual-total');
   if (el) el.textContent = `${total}個`;
+}
+
+function updateResidualTotal() {
+  recalcResidualState();
   renderMakanaiInputs();   // 賄いは「残っている弁当から選ぶ」ので選択肢が連動する
+  saveState();
+}
+
+// ★2026-08-03 賄いを入れ直したら、手で直していない商品の既定値を追従させる
+function syncResidualDefaults() {
+  state.residualTouched = state.residualTouched || {};
+  rcBentoProducts().forEach(p => {
+    if (state.residualTouched[p.id]) return;
+    const el = document.getElementById(`residual-${p.id}`);
+    if (el) el.value = rcExpectedResidual(p.id);
+  });
+  recalcResidualState();
   saveState();
 }
 
@@ -3260,6 +3306,8 @@ function updateMakanaiTotal() {
     }
   }
   saveState();
+  // ★2026-08-03 賄いを入れた分だけ残数の既定値を下げる（手で直した商品は触らない）
+  syncResidualDefaults();
 }
 
 // 賄いの上限をサーバから取る（1人1日1個・人数はシフトから）
@@ -3564,6 +3612,9 @@ function enterFinalScreen() {
     const mkBox = document.getElementById('makanai-detail-box');
     if (mkBox) mkBox.style.display = state['makanaiあり'] ? 'block' : 'none';
     loadMakanaiLimit();
+    // ★2026-08-03 既定値に拠点間移動±を含めるため、最新の移動を取ってから入れ直す
+    //   （在庫画面を一度も開いていないと state.moveAdj が空のままになるため）
+    refreshMoveAdj_().then(() => { try { syncResidualDefaults(); } catch (e) {} });
   } catch (e) { console.error('残数入力の初期化に失敗:', e); }
 }
 
