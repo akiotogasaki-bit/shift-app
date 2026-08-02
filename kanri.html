@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>🍱 納品管理</title>
+<!-- kanri.html v3.52 (2026-08-03) 【盛り出し表 Phase2＝他社弁当の総数行】シート2（午前/1便）に他社弁当（メンチカツ/チキン南蛮/油淋鶏）の総数行を追加。GAS getSheet2Data が ①基本数マスタの拠点分から外部商品IDを除外（G列が空の日にH列＝翌週提案値が拠点合計として出てしまい、配りもしない商品の推奨値が並んでいた。実測 8/6: 43/31/42 ← 実納品 30/30/0）②「外部納品数」シートの総数を「拠点」列に入れた行を注入し isExternal:true を返す。米種は商品名の玄米/白米→米種列の順（南蛮・油淋鶏=玄米セクション／メンチカツ=白米セクション）。フロントは isExternal 行を薄紫（.s2-ext-row・配分調整と同色）＋「他社」バッジで表示し、**印刷にも出す**（print-color-adjust:exact）。総数0の日は行を作らない。午後2便（シート3）は拠点合計を持たないため対象外。要メインGAS 2026-08-03（getSheet2Data の ④除外／④-2注入／buildRows の isExternal）。 -->
 <!-- kanri.html v3.51 (2026-07-31) 【献立表 定番（毎日）対応】銀しゃけ・あいもり等「毎日必ず献立に入る品目」を⚙マスタ編集UIで管理する「定番」欄を追加。①⚙パネルに「🍱 定番（毎日必ず入る）」欄（mn-tb-list/mn-tb-add-sel/mn-tb-add-btn）。品目候補は単価マスタ由来（dailyItems）なので商品が増えても自動で選べる。②mnNormalizeRules/mnRenderRules/mnSaveRules/イベントに teiban を追加。③配分調整のC-1：bmMenuTeiban を getMenuMeta.teibanProductIds から構築し、bmMenuExcluded で定番は除外しない（＝毎日0＋グレーにならない）。要メインGAS：getMenuRules/saveMenuRules に teiban、_menuAutoForDate_ が毎日先頭に定番を自動ON、getMenuMeta が teibanProductIds を返す、新シート「献立定番」。定番は集約グループ無しなので夜間バッチC-2は不変。 -->
 <!-- kanri.html v3.50 (2026-07-30) 【献立表 Phase2 D ＋ v3.48のバグ修正】①🔴**v3.48のバグ修正**＝献立表の全六の主菜を「名前」で保存していたのを**仕込みID**に戻した。メインGAS `_aggregateOrderItems_` は `shikomiMap[sel]` で**仕込みIDとして**引き、ヒットしない時だけ後方互換で `kawariKey + "_" + sel` という商品名を組み立てる。名前（例 `全六あり_南蛮`）を保存すると `全六あり_全六あり_南蛮` を探しに行って何も見つからず**仕込み表に主菜が反映されない**。Phase1(mnBuildSelect)は元々idだった。あわせてカレンダーのセル表示は仕込みID→主菜名に引き直す（`mnZenNameOf`／候補に無い旧データはそのまま表示）。**⚠ v3.48〜v3.49の間に保存した日は全六が名前で入っているので、献立表タブで選び直して保存し直す必要がある。**②**D＝仕込み表の全六選択UIを献立表へ集約**。仕込みタブの「🔄 当日おかず選択」（プルダウン＋保存ボタン）を削除し、**読み取り専用の確認表示＋「📋 献立表で設定」ボタン**（その日の献立パネルを直接開く `s4OpenMenuForDate`）に置換。未設定の日は赤字で警告（「設定しないと仕込み表に主菜が出ません」）。複数日選択時は先頭日の献立を表示する旨も明記。献立表を保存すると既存「日替わり選択」シートへミラーされるため、仕込み計算の経路（getKawariSelections → getSheet4Data&kawari=…）は**従来と同じ**＝GAS無変更。入力場所が2つあって食い違う問題が解消。削除: `onS4KawariSave`／`getS4KawariSelections`／`buildKawariSelect`／`showS4SavedBadge`。新規: `s4BuildZenrokuReadonly`／`s4ZenrokuName`／`s4OpenMenuForDate`＋`.kawari-ro-*` CSS。 -->
 <!-- kanri.html v3.49 (2026-07-30) 【献立表 Phase2 C-1】配分調整と献立表の0連動。その日の献立が**保存済み**の場合だけ、献立に入っていない日替わり商品（海苔弁系/満腹系）のセルを**0＋グレー表示**にする（ロックはせず編集可＝数字を入れれば戻る／編集値は常に優先）。未保存の日は連動しない（社長確定＝自動表示だけの日に効かせると、ローテの順番がズレていた時に間違った商品が0になるため）。これは**表示のみ**で、G列（納品個数）を実際に0にするのは夜間バッチ側（C-2＝applyRecommendToBasicMaster が献立表を見て、その日作る種類にグループ合計を入れ、作らない種類を0にする）。実装: bmMenuCache/bmMenuTargets/bmFetchMenu/bmLoadMenuTargets/bmMenuExcluded を追加、bmGetDisplaySales に0分岐、bmRenderCell に .bm-menu-off クラス＋ツールチップ。取得は bmLoadDate と bmPrefetchWeek の Promise.all に相乗り（getMenuSelections を日別・getMenuMeta は1回だけ）＝**追加の待ち時間なし・取得失敗時は従来表示にフォールバック**。getBasicMasterMatrix は無改修。要メインGAS @322以降。 -->
@@ -293,6 +294,14 @@ body {
   border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
 .bm-ext-import-btn:hover { background: #d1c4e9; }
 .bm-ext-import-btn:disabled { opacity: .6; cursor: default; }
+
+/* ── 盛り出し表（シート2）：他社弁当の総数行 ── ★v3.52 (2026-08-03)
+   拠点配分を持たない商品なので「拠点」列に総数だけを出す。配分調整と同じ薄紫で区別。
+   印刷にも出す（現場で総数を確認するため）＝ color-adjust で背景を落とさない。 */
+.matrix-table tr.s2-ext-row td { background: #ede7f6 !important; color: #4527a0; }
+.matrix-table tr.s2-ext-row td.cell-kyoten { font-weight: bold; box-shadow: inset 0 0 0 1px #b39ddb; }
+.s2-ext-badge { display: inline-block; margin-left: 4px; padding: 0 4px; font-size: 9px;
+  color: #fff; background: #7e57c2; border-radius: 8px; vertical-align: middle; }
 
 /* 凡例 */
 .legend {
@@ -1189,6 +1198,11 @@ body {
   }
   /* 空の配達列（その表に数量が1つも無い列）は印刷時のみ非表示 */
   #tab-sheet2 .matrix-table .col-empty-print { display: none; }
+  /* ★v3.52 他社弁当の総数行は印刷にも出す（背景を落とさない） */
+  #tab-sheet2 .matrix-table tr.s2-ext-row td {
+    background: #ede7f6 !important; color: #4527a0 !important;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
   /* セクション見出し行（白米／玄米）は横いっぱい・固定高 */
   #tab-sheet2 .matrix-table td.cell-section-rice,
   #tab-sheet2 .matrix-table td.cell-section-brown {
@@ -3750,10 +3764,13 @@ function renderSheet2(data) {
 
     activeRows.forEach(row => {
       const color  = getColor(row.category, row.baseName);
-      const trCls  = `g-${color}${rowClass}`;
+      // ★v3.52 他社弁当（総数管理）は薄紫の行。拠点配分を持たず「拠点」列＝外部SSの総数。
+      const trCls  = row.isExternal ? `s2-ext-row${rowClass}` : `g-${color}${rowClass}`;
+      const nameHTML = escHtml(row.baseName)
+        + (row.isExternal ? '<span class="s2-ext-badge" title="他社弁当：現地でドライバーが割り振り／外部SSから自動取込">他社</span>' : '');
       html += `<tr class="${trCls}">`;
-      html += `<td class="cell-name">${escHtml(row.baseName)}</td>`;
-      html += `<td class="cell-kyoten">${row.kyotenTotal || ''}</td>`;
+      html += `<td class="cell-name">${nameHTML}</td>`;
+      html += `<td class="cell-kyoten"${row.isExternal ? ' title="他社弁当の総数（拠点ごとの内訳なし）"' : ''}>${row.kyotenTotal || ''}</td>`;
 
       for (let d = 0; d < dCount; d++) {
         const qty  = row.deliveryQtys[d];
