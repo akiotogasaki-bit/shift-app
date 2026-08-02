@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v2.4 (2026-08-03) 【置き弁でも回収モーダルを開けるように】v2.3 の積み残しを修正。回収モーダルは「最終報告が出ている拠点」しか開けない作りだったため、**販売員の締めが無い置き弁（アスエネ）は回収リストに出るのにタップしても開かない**状態だった。報告が無くても開くようにし、置き弁かどうかは getDeclaredResidual の `okiben` / `cash` で判定する（置き弁でもなく報告も無ければ従来どおり「報告が未提出です」）。**現金会計なしの置き弁（ccNoCash）は現金欄そのものを隠し**、saveActualCash をスキップ、submitCollectionCheck の actualCash も空で送る（＝現金照合の対象外）。確定は残数だけで通る。要: メインGAS @404 以降（getDeclaredResidual が cash を返す）。 -->
 <!-- driver v2.3 (2026-08-03) 【回収の残数を商品別に】回収モーダルの「残った弁当」を1欄（総数）から**商品ごとの入力**に変更（社長決定：「置き弁も通常拠点も全て種類別で入力で。じゃないと 納品数−残数＝販売個数 の計算式が成立しなくて本来あるべき売上が確定しない」）。既定値は getDeclaredResidual の items[] をそのまま使う＝通常拠点は販売員が申告した商品別残数、置き弁は納品数。商品名は白米/玄米を補って表示（銀しゃけ（白）／銀しゃけ（玄））。行タップでテンキーの編集対象が切り替わり、合計を下に表示。既定値から変えた商品は数字が青くなる。送信時に actualResidualDetail（{商品ID:個数}）を付ける（メインGASは detail があればその合計を採用・お茶除外）。実装: ccItems / ccVals / ccField='p:<商品ID>' / ccResidualTotal_ / ccResidualDetail_。要: メインGAS @403 以降（残数照合ログに 実査残数詳細JSON 列・getDeclaredResidual の items[]・置き弁の行自動生成）。 -->
 <!-- driver v2.2 (2026-08-03) 【全体の残数を拠点合算に】残数タブ上部の「入力済（＝残数ログ＝ドライバーの回収提出の合計）」を「拠点合計（各拠点で確認した残数の単純合算）」に差し替え（社長決定 2026-08-03「残数は拠点毎に確認することにした。単純に拠点での残数の合算でよい」）。メインGAS getResidualSummary の locationTotal / locationProducts / locationCount を使用。★計算上残数（理論値）は従来どおり。★残数入力タブは**残す**（今後「2次販売後の最終残数入力」へ転用するため消さない）。拠点の入力がまだ0件の時間帯は従来の回収入力合計を表示し、その旨をラベルに出す。ドライバー別の行は「回収入力（参考）」と明示して残した。 -->
 <!-- driver v2.1 (2026-08-01) 【回収タブに残数を統合】回収タブの現金入力モーダルに「残った弁当」欄を追加し、残数の確認を回収作業と同じ画面で完結させた（社長要望：ドライバーが既に現金を打っている画面に置く）。★残数・現金とも「報告されている数字」を既定値で表示し、違うときだけ直す方式（社長決定 2026-08-01）。欄をタップするとテンキーの編集対象が切り替わる。確定時に saveActualCash → setCollected → submitCollectionCheck を順に送り、不一致ならトーストで表示＋販売員へLINE。既定値は getDeclaredResidual から取得。「📦 承認」タブから旧・回収実査UIは削除（重複解消）。 -->
@@ -1571,6 +1572,7 @@ let ccVals         = {};
 let ccField        = 'cash';       // 'cash' または 'p:<商品ID>'
 let residualLoaded = false;        // 既定値（申告残数／置き弁は納品数）を取得できたか
 let ccIsOkiben     = false;
+let ccNoCash       = false;        // 置き弁で現金会計なし＝現金欄を出さない
 
 function ccToday_() {
   const d = new Date();
@@ -1583,17 +1585,23 @@ async function openCashModal(id) {
   if (!loc) return;
   if (state.inactiveIds.has(id)) return;
   const r = state.reportsByLoc[id];
-  if (!r || r.status !== 'final') { showToast('報告が未提出です', 'error'); return; }
+  // ★2026-08-03 置き弁は販売員の締めが無い＝報告ログに行が立たない。
+  //   報告が無くても開けるようにし、「置き弁かどうか」はサーバーの応答で判定する。
+  //   置き弁でもなく報告も無ければ、従来どおり「報告が未提出です」で閉じる。
+  const hasReport = !!(r && r.status === 'final');
   cashModalLocId = id;
-  const net = (r.registerEnd || 0) - (r.totalSalary || 0);
+  const net = hasReport ? ((r.registerEnd || 0) - (r.totalSalary || 0)) : 0;
 
   // 現金：既に実額があればそれ、無ければ報告からの想定額を既定値にする
-  cashInput = (r.actualCash !== null && r.actualCash !== undefined) ? String(r.actualCash) : String(net);
+  cashInput = hasReport
+    ? ((r.actualCash !== null && r.actualCash !== undefined) ? String(r.actualCash) : String(net))
+    : '';
   // 残数：まず空。既定値（申告残数／置き弁は納品数）を取りに行って入れる
   ccItems = [];
   ccVals  = {};
   residualLoaded = false;
   ccIsOkiben = false;
+  ccNoCash   = false;
   ccField = 'cash';
 
   document.getElementById('cash-modal-title').textContent = loc.name;
@@ -1611,6 +1619,7 @@ async function openCashModal(id) {
     if (cashModalLocId !== id) return;   // 閉じられていたら何もしない
     if (j && j.ok && j.found) {
       ccIsOkiben = !!j.okiben;
+      ccNoCash   = ccIsOkiben && !j.cash;     // 置き弁で現金会計なし
       ccItems = Array.isArray(j.items) ? j.items : [];
       ccItems.forEach(it => {
         // 既に実査を入れ直している場合はその値、無ければ申告値（置き弁は納品数）
@@ -1620,12 +1629,19 @@ async function openCashModal(id) {
       residualLoaded = ccItems.length > 0;
       if (residualLoaded) ccField = 'p:' + ccItems[0].productId;
       if (ccIsOkiben) {
-        document.getElementById('cash-modal-expected').textContent =
-          '置き弁：納品数が入っています。残った数に直してください。';
+        document.getElementById('cash-modal-expected').textContent = ccNoCash
+          ? '置き弁：納品数が入っています。残った数に直してください。（現金の入力はありません）'
+          : '置き弁：納品数が入っています。残った数に直してください。';
       }
+    } else if (!hasReport) {
+      // 報告も無く置き弁でもない＝まだ締めていない拠点。従来どおり断る。
+      showToast('報告が未提出です', 'error');
+      closeCashModal();
+      return;
     }
   } catch (e) {
-    console.warn('既定の残数の取得に失敗（手入力で進められます）:', e);
+    console.warn('既定の残数の取得に失敗:', e);
+    if (!hasReport) { showToast('残数を取得できませんでした', 'error'); closeCashModal(); return; }
   }
   refreshCashModal_();
 }
@@ -1715,7 +1731,11 @@ function renderCashModal_(net) {
   if (cv) cv.textContent = cashInput === '' ? '—' : parseInt(cashInput, 10).toLocaleString();
 
   const fc = document.getElementById('cc-field-cash');
-  if (fc) fc.classList.toggle('active', ccField === 'cash');
+  if (fc) {
+    // ★現金会計なしの置き弁では現金欄そのものを出さない
+    fc.style.display = ccNoCash ? 'none' : '';
+    fc.classList.toggle('active', ccField === 'cash');
+  }
 
   // ── テンキーの表示（選択中の欄の値）──
   const cur = ccGet_();
@@ -1739,32 +1759,40 @@ function renderCashModal_(net) {
   document.getElementById('cash-modal-ok').disabled = (cashInput === '');
 }
 async function confirmCash() {
-  if (!cashModalLocId || cashInput === '') { showToast('金額を入力してください', 'error'); return; }
+  if (!cashModalLocId) return;
+  // ★2026-08-03 現金会計なしの置き弁は金額を求めない（残数だけで確定する）
+  if (!ccNoCash) {
+    if (cashInput === '') { showToast('金額を入力してください', 'error'); return; }
+  }
   const id  = cashModalLocId;
   const loc = state.locations.find(l => l.id === id);
-  const amount = parseInt(cashInput, 10);
-  if (isNaN(amount)) { showToast('金額を入力してください', 'error'); return; }
+  const amount = ccNoCash ? null : parseInt(cashInput, 10);
+  if (!ccNoCash && isNaN(amount)) { showToast('金額を入力してください', 'error'); return; }
+  if (ccNoCash && ccResidualTotal_() === null) { showToast('残った数を入力してください', 'error'); return; }
   const okBtn = document.getElementById('cash-modal-ok');
   okBtn.disabled = true;
   okBtn.textContent = '保存中…';
   try {
     // ① 現金有高を保存（ドライバー入力：誤差通知なし）
-    const res1 = await fetch(GAS_URL, {
-      method: 'POST',
-      body: JSON.stringify({
-        action:       'saveActualCash',
-        locationId:   id,
-        locationName: loc ? loc.name : '',
-        actualCash:   amount,
-        operatorId:   state.userId,
-        operatorName: state.userName,
-        notifyDiff:   false,              // ★ ドライバー入力は誤差通知しない
-        timestamp:    new Date().toISOString(),
-      }),
-      redirect: 'follow',
-    });
-    const j1 = await res1.json();
-    if (!j1 || j1.success === false) throw new Error((j1 && j1.error) || '現金有高の保存に失敗');
+    //    ★2026-08-03 現金会計なしの置き弁は保存するものが無いのでスキップ
+    if (!ccNoCash) {
+      const res1 = await fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action:       'saveActualCash',
+          locationId:   id,
+          locationName: loc ? loc.name : '',
+          actualCash:   amount,
+          operatorId:   state.userId,
+          operatorName: state.userName,
+          notifyDiff:   false,              // ★ ドライバー入力は誤差通知しない
+          timestamp:    new Date().toISOString(),
+        }),
+        redirect: 'follow',
+      });
+      const j1 = await res1.json();
+      if (!j1 || j1.success === false) throw new Error((j1 && j1.error) || '現金有高の保存に失敗');
+    }
     // ② 回収済みにする
     const res2 = await fetch(GAS_URL, {
       method: 'POST',
@@ -1796,7 +1824,7 @@ async function confirmCash() {
             actualResidual: ccTotal,
             // ★2026-08-03 商品別の内訳を送る（サーバーはこれがあれば合計を採用する）
             actualResidualDetail: ccResidualDetail_(),
-            actualCash:     amount,
+            actualCash:     ccNoCash ? '' : amount,   // ★現金会計なしは照合対象外
           }),
           redirect: 'follow',
         });
