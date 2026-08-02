@@ -3362,6 +3362,7 @@ function svRenderSales(data, wt) {
   });
   html += '</tbody></table></div>';
   host.innerHTML = html;
+  spPrefetch();          // ★v3.55 表を描き終えてからプロフィール一覧を先読み
 }
 
 // ── v3.38 キッチン時間グリッド用ヘルパー（kitchen-admin準拠） ──
@@ -3484,7 +3485,12 @@ function svRenderKitchen(data, reqData, wt) {
 //   ・一覧（写真なし）はタブを開いた時に1回だけ取得
 //   ・顔写真はタップした人のぶんだけ遅延取得＋メモリキャッシュ（表の描画を重くしない）
 //   ・関数は全て sp* 接頭辞（既存と無衝突）。取得失敗しても表の閲覧には影響させない。
-var spState = { loaded: false, profiles: {}, photos: {}, reqId: 0 };
+//   ★体感速度：プロフィール一覧の取得は**シフト表を描き終えてから**バックグラウンドで行う
+//     （タブを開いた瞬間に投げると、シフト表本体の取得と回線・GAS実行枠を取り合って遅くなる）。
+//     さらに localStorage に1時間キャッシュするので、2回目以降は通信ゼロで即座に出る。
+var spState = { loaded: false, pending: null, profiles: {}, photos: {}, reqId: 0 };
+var SP_LS_KEY = 'kanri_sp_profiles_v1';
+var SP_LS_TTL = 60 * 60 * 1000;   // 1時間
 
 //   突合キー：括弧書き（ふりがな）と空白を落とす。管理表は「下枝奈央(しもえだなお)」、
 //   シフト表は「下枝奈央」で入っているため、これを外さないと一致しない（GAS _spKey_ と同じ規則）。
@@ -3505,17 +3511,60 @@ function spInit() {
       spOpen(el.getAttribute('data-sp-name'));
     });
   }
-  if (spState.loaded) return;
-  spState.loaded = true;
-  fetch(GAS_URL + '?action=getStaffProfiles')
+  // localStorageのキャッシュがあれば即採用（通信ゼロ）
+  if (!spState.loaded) {
+    try {
+      var raw = localStorage.getItem(SP_LS_KEY);
+      if (raw) {
+        var c = JSON.parse(raw);
+        if (c && c.t && (Date.now() - c.t) < SP_LS_TTL && c.p) { spState.profiles = c.p; spState.loaded = true; }
+      }
+    } catch (e) {}
+  }
+}
+
+/** プロフィール一覧を取得（1回だけ）。二重呼び出しは同じPromiseを返す */
+function spLoadProfiles() {
+  if (spState.loaded) return Promise.resolve();
+  if (spState.pending) return spState.pending;
+  spState.pending = fetch(GAS_URL + '?action=getStaffProfiles')
     .then(function (r) { return r.json(); })
-    .then(function (d) { if (d && d.profiles) spState.profiles = d.profiles; })
-    .catch(function (e) { console.warn('getStaffProfiles error:', e && e.message); });
+    .then(function (d) {
+      if (d && d.profiles) {
+        spState.profiles = d.profiles;
+        spState.loaded = true;
+        try { localStorage.setItem(SP_LS_KEY, JSON.stringify({ t: Date.now(), p: d.profiles })); } catch (e) {}
+      }
+    })
+    .catch(function (e) { console.warn('getStaffProfiles error:', e && e.message); })
+    .then(function () { spState.pending = null; });
+  return spState.pending;
+}
+
+/** シフト表を描き終えてから、空いた時間に取りに行く（体感を悪くしない） */
+function spPrefetch() {
+  if (spState.loaded || spState.pending) return;
+  setTimeout(spLoadProfiles, 800);
 }
 
 function spOpen(name) {
   var nm = String(name || '').trim();
   if (!nm) return;
+  // 一覧がまだ来ていない（＝先読みが間に合わなかった）なら、ここで取ってから開く
+  if (!spState.loaded) {
+    document.getElementById('sp-name').textContent = nm;
+    document.getElementById('sp-job').textContent = '読込中…';
+    document.getElementById('sp-job').className = 'sp-value sp-empty';
+    document.getElementById('sp-birth').textContent = '';
+    document.getElementById('sp-photo').innerHTML = '読込中…';
+    document.getElementById('sp-overlay').classList.add('sp-show');
+    spLoadProfiles().then(function () { spRender(nm); });
+    return;
+  }
+  spRender(nm);
+}
+
+function spRender(nm) {
   var p = spState.profiles[spKey(nm)] || null;
 
   document.getElementById('sp-name').textContent = nm;
