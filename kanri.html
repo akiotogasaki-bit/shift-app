@@ -3486,7 +3486,14 @@ function svRenderKitchen(data, reqData, wt) {
 //   ・関数は全て sp* 接頭辞（既存と無衝突）。取得失敗しても表の閲覧には影響させない。
 var spState = { loaded: false, profiles: {}, photos: {}, reqId: 0 };
 
-function spKey(name) { return String(name == null ? '' : name).replace(/[\s　]/g, '').trim(); }
+//   突合キー：括弧書き（ふりがな）と空白を落とす。管理表は「下枝奈央(しもえだなお)」、
+//   シフト表は「下枝奈央」で入っているため、これを外さないと一致しない（GAS _spKey_ と同じ規則）。
+function spKey(name) {
+  return String(name == null ? '' : name)
+    .replace(/[（(][^）)]*[）)]/g, '')
+    .replace(/[\s　]/g, '')
+    .trim();
+}
 
 function spInit() {
   var host = document.getElementById('sv-content');
