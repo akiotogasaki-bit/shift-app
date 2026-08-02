@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>🍱 納品管理</title>
+<!-- kanri.html v3.55 (2026-08-03) 【シフト閲覧＝販売員の名前タップでプロフィール】「📅 シフト閲覧」の販売員シフト表で名前をタップすると、顔写真・職業（学生）・生年月日（＋年齢）をモーダル表示（閲覧専用）。データ源＝別SS「販売スタッフ管理表」(1Yh29o…Xg6w / gid=471776451)。①タブを開いた時に getStaffProfiles を1回取得（写真なし・軽量・GAS側10分キャッシュ）。②顔写真はタップした人のぶんだけ getStaffPhoto で遅延取得＋メモリキャッシュ（表の描画は重くしない）。Driveは非公開のままbase64で返すので共有設定を広げない。③未登録の人をタップすると「プロフィール未登録」と出る＝誰が未提出か分かる。④取得失敗しても表の閲覧には影響しない。関数は全て sp* 接頭辞。キッチンモードのチップは対象外（販売スタッフのみ・社長決定2026-08-03）。登録は index.html v2026-08-03 の初回登録フォームから。要メインGAS v2026-08-03（getStaffProfiles / getStaffPhoto / saveStaffProfile）。 -->
 <!-- kanri.html v3.54 (2026-08-03) 【残数の出どころを拠点合算に】「🧮 他社弁当の残数を記入」の確認ダイアログを、拠点合算の言い方に変更（「残数ログの提出 N件」→「残数を入力した拠点 N件」）。締め報告はあるのに残数の入力が無い拠点があれば、拠点名を列挙して警告する（メインGAS writeExternalResidualToday が missingLocs を返す）。数字そのものの出どころ変更はメインGAS側（残数ログ→残数照合ログの拠点合算）。 -->
 <!-- kanri.html v3.53 (2026-08-03) 【他社弁当の残数を外部SSへ記入】配分調整に「🧮 他社弁当の残数を記入」ボタンを追加（bmWriteExtResidual）。押すとまずドライラン（action=writeExtResidual&dry=1）で「何をいくつ書くか／既存値で据え置く欄」を確認ダイアログに出し、承認後に実行。**当日のみ・空欄のセルにだけ書く**ので、手で直した数字は再実行しても上書きされない（社長指示 2026-08-03）。書く欄は外部SSの「残数」と「二次販売後残数」（二次販売をしていない今は同じ値）。残数ログの提出が0件の日は書かない。本番は平日21:30の自動実行（メインGAS setupExternalResidualTrigger）＋このボタンの2経路で、実行後は社長へLINE報告。要メインGAS 2026-08-03（writeExternalResidualToday / getExternalResidualCompare / action=writeExtResidual）。 -->
 <!-- kanri.html v3.52 (2026-08-03) 【盛り出し表 Phase2＝他社弁当の総数行】シート2（午前/1便）に他社弁当（メンチカツ/チキン南蛮/油淋鶏）の総数行を追加。GAS getSheet2Data が ①基本数マスタの拠点分から外部商品IDを除外（G列が空の日にH列＝翌週提案値が拠点合計として出てしまい、配りもしない商品の推奨値が並んでいた。実測 8/6: 43/31/42 ← 実納品 30/30/0）②「外部納品数」シートの総数を「拠点」列に入れた行を注入し isExternal:true を返す。米種は商品名の玄米/白米→米種列の順（南蛮・油淋鶏=玄米セクション／メンチカツ=白米セクション）。フロントは isExternal 行を薄紫（.s2-ext-row・配分調整と同色）＋「他社」バッジで表示し、**印刷にも出す**（print-color-adjust:exact）。総数0の日は行を作らない。午後2便（シート3）は拠点合計を持たないため対象外。要メインGAS 2026-08-03（getSheet2Data の ④除外／④-2注入／buildRows の isExternal）。 -->
@@ -2039,6 +2040,40 @@ body {
     .sv-chip { display:block; background:#e8f0f7; color:#1f3b53; font-size:12px; font-weight:700; border-radius:7px; padding:3px 7px; margin:2px 0; white-space:nowrap; }
     .sv-chip .sv-end { color:#5a6b7d; font-weight:600; margin-left:3px; }
     .sv-kcell .sv-none { display:block; color:#d3d9df; font-size:13px; }
+
+    /* ===== スタッフプロフィール（v3.55 / 2026-08-03・販売員の名前タップ） ===== */
+    table.sv-table td.sv-on.sp-tap { cursor:pointer; text-decoration:underline dotted #9fd6c9; text-underline-offset:3px; }
+    table.sv-table td.sv-on.sp-tap:active { background:#eafaf5; }
+    .sp-overlay {
+      display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:10050;
+      justify-content:center; align-items:center; padding:16px;
+    }
+    .sp-overlay.sp-show { display:flex; }
+    .sp-card {
+      background:#fff; border-radius:14px; width:100%; max-width:360px;
+      box-shadow:0 8px 30px rgba(0,0,0,.3); overflow:hidden;
+    }
+    .sp-head {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:12px 14px; border-bottom:1px solid #e6ebf0; background:#f8fafc;
+    }
+    .sp-name { font-size:15px; font-weight:800; color:#23303c; }
+    .sp-close { border:0; background:none; font-size:20px; line-height:1; color:#98a2ad; cursor:pointer; padding:0 4px; }
+    .sp-body { padding:16px 14px; }
+    .sp-photo {
+      width:140px; height:175px; margin:0 auto 14px; border-radius:10px;
+      background:#f1f4f7; border:1px solid #e6ebf0; overflow:hidden;
+      display:flex; align-items:center; justify-content:center;
+      color:#b6bcc4; font-size:12px; text-align:center;
+    }
+    .sp-photo img { width:100%; height:100%; object-fit:cover; display:block; }
+    .sp-rows { display:flex; flex-direction:column; gap:8px; }
+    .sp-row { display:flex; gap:10px; align-items:baseline; }
+    .sp-label { flex:0 0 84px; font-size:11.5px; font-weight:700; color:#8a93a0; letter-spacing:.04em; }
+    .sp-value { flex:1; min-width:0; font-size:14px; font-weight:700; color:#23303c; word-break:break-all; }
+    .sp-value.sp-empty { color:#c3c9d0; font-weight:600; }
+    .sp-age { font-size:12px; font-weight:600; color:#8a93a0; margin-left:6px; }
+    .sp-note { margin-top:12px; font-size:11px; color:#98a2ad; line-height:1.6; }
 </style>
 </head>
 <body>
@@ -2399,6 +2434,24 @@ body {
   <!-- ★v3.43 シフト確認状況（販売員モードのみ・閲覧専用） -->
   <div id="sv-confirm" style="display:none"></div>
   <div id="sv-content"></div>
+</div>
+
+<!-- ★v3.55 スタッフプロフィール モーダル（販売員の名前タップ・閲覧専用 / 2026-08-03） -->
+<div class="sp-overlay" id="sp-overlay" onclick="spCloseFromOverlay(event)">
+  <div class="sp-card">
+    <div class="sp-head">
+      <div class="sp-name" id="sp-name">—</div>
+      <button class="sp-close" onclick="spClose()">×</button>
+    </div>
+    <div class="sp-body">
+      <div class="sp-photo" id="sp-photo">読込中…</div>
+      <div class="sp-rows">
+        <div class="sp-row"><div class="sp-label">職業・学生</div><div class="sp-value" id="sp-job">—</div></div>
+        <div class="sp-row"><div class="sp-label">生年月日</div><div class="sp-value" id="sp-birth">—</div></div>
+      </div>
+      <div class="sp-note">販売スタッフ管理表より。個人情報のため取り扱いにご注意ください。</div>
+    </div>
+  </div>
 </div>
 
 <style>
@@ -3117,6 +3170,7 @@ function svInit() {
   svSetKindUI();
   svSetWeekUI();
   svState.loaded = true;
+  spInit();          // ★v3.55 スタッフプロフィール（名前タップ）
   svLoad();
 }
 
@@ -3300,7 +3354,8 @@ function svRenderSales(data, wt) {
       if (!cell || cell === '【未割当】') {
         html += '<td class="sv-unassigned">—</td>';
       } else {
-        html += '<td class="sv-on">' + svEsc(cell) + '</td>';
+        // ★v3.55 名前タップでプロフィール（顔写真・職業・生年月日）
+        html += '<td class="sv-on sp-tap" data-sp-name="' + svEsc(cell) + '">' + svEsc(cell) + '</td>';
       }
     }
     html += '</tr>';
@@ -3422,6 +3477,101 @@ function svRenderKitchen(data, reqData, wt) {
   host.innerHTML = html;
 }
 // ══════════ シフト閲覧タブ v3.37 ここまで ══════════
+
+// ════════════ スタッフプロフィール v3.55（2026-08-03・閲覧専用）════════════
+//   販売員シフト表の名前タップ → 顔写真・職業（学生）・生年月日 を表示。
+//   データ源＝別SS「販売スタッフ管理表」（GAS: getStaffProfiles / getStaffPhoto）。
+//   ・一覧（写真なし）はタブを開いた時に1回だけ取得
+//   ・顔写真はタップした人のぶんだけ遅延取得＋メモリキャッシュ（表の描画を重くしない）
+//   ・関数は全て sp* 接頭辞（既存と無衝突）。取得失敗しても表の閲覧には影響させない。
+var spState = { loaded: false, profiles: {}, photos: {}, reqId: 0 };
+
+function spKey(name) { return String(name == null ? '' : name).replace(/[\s　]/g, '').trim(); }
+
+function spInit() {
+  var host = document.getElementById('sv-content');
+  if (host && !host.dataset.spBound) {
+    host.dataset.spBound = '1';
+    host.addEventListener('click', function (ev) {
+      var el = ev.target && ev.target.closest ? ev.target.closest('[data-sp-name]') : null;
+      if (!el) return;
+      spOpen(el.getAttribute('data-sp-name'));
+    });
+  }
+  if (spState.loaded) return;
+  spState.loaded = true;
+  fetch(GAS_URL + '?action=getStaffProfiles')
+    .then(function (r) { return r.json(); })
+    .then(function (d) { if (d && d.profiles) spState.profiles = d.profiles; })
+    .catch(function (e) { console.warn('getStaffProfiles error:', e && e.message); });
+}
+
+function spOpen(name) {
+  var nm = String(name || '').trim();
+  if (!nm) return;
+  var p = spState.profiles[spKey(nm)] || null;
+
+  document.getElementById('sp-name').textContent = nm;
+
+  var jobEl = document.getElementById('sp-job');
+  var brtEl = document.getElementById('sp-birth');
+  if (p) {
+    jobEl.textContent = p.job || '未入力';
+    jobEl.className = 'sp-value' + (p.job ? '' : ' sp-empty');
+    if (p.birthday) {
+      brtEl.innerHTML = svEsc(p.birthday) + (p.age !== '' && p.age != null ? '<span class="sp-age">（' + svEsc(String(p.age)) + '歳）</span>' : '');
+      brtEl.className = 'sp-value';
+    } else {
+      brtEl.textContent = '未入力';
+      brtEl.className = 'sp-value sp-empty';
+    }
+  } else {
+    jobEl.textContent = 'プロフィール未登録';
+    jobEl.className = 'sp-value sp-empty';
+    brtEl.textContent = '—';
+    brtEl.className = 'sp-value sp-empty';
+  }
+
+  document.getElementById('sp-overlay').classList.add('sp-show');
+
+  // ── 顔写真（遅延取得・キャッシュあり） ──
+  var photoEl = document.getElementById('sp-photo');
+  var key = spKey(nm);
+  if (!p || !p.hasPhoto) {
+    photoEl.innerHTML = '写真なし';
+    return;
+  }
+  if (spState.photos[key]) {
+    photoEl.innerHTML = '<img src="' + spState.photos[key] + '" alt="">';
+    return;
+  }
+  photoEl.innerHTML = '読込中…';
+  var myReq = ++spState.reqId;
+  fetch(GAS_URL + '?action=getStaffPhoto&name=' + encodeURIComponent(nm))
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      if (myReq !== spState.reqId) return;              // 連続タップのレース対策
+      if (d && d.success && d.dataUrl) {
+        spState.photos[key] = d.dataUrl;
+        photoEl.innerHTML = '<img src="' + d.dataUrl + '" alt="">';
+      } else {
+        photoEl.innerHTML = '写真なし';
+      }
+    })
+    .catch(function () {
+      if (myReq !== spState.reqId) return;
+      photoEl.innerHTML = '写真を取得できませんでした';
+    });
+}
+
+function spClose() {
+  spState.reqId++;                                       // 閉じたら進行中の描画を破棄
+  document.getElementById('sp-overlay').classList.remove('sp-show');
+}
+function spCloseFromOverlay(ev) {
+  if (ev && ev.target && ev.target.id === 'sp-overlay') spClose();
+}
+// ══════════ スタッフプロフィール v3.55 ここまで ══════════
 
 function toJstDateStr() {
   const now = new Date();

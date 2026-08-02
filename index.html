@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- index.html v2026-08-03 初回登録に「プロフィール登録」画面を追加（販売スタッフのみ）。氏名登録→getRoleで販売員判定→顔写真＋職業・学生＋生年月日（必須）／最寄駅・希望エリア・週何回・備考（任意）を入力。写真は端末側で長辺640px・JPEG q0.8に縮小してbase64送信。保存先＝別SS「販売スタッフ管理表」(1Yh29o…Xg6w / gid=471776451)のA〜J列をそのまま埋め、K=userId・L=顔写真FileId・M=更新日時を右に追加。写真はDrive非公開フォルダ、B列はHYPERLINKのみ。LINE表示名はLIFFプロフィールから自動。要メインGAS v2026-08-03（saveStaffProfile / getStaffProfiles / getStaffPhoto）。 -->
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
@@ -462,6 +463,35 @@ body {
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   プロフィール登録（2026-08-03 追加・販売スタッフのみ）
+   ═══════════════════════════════════════════════════════════════ */
+.pf-photo-row { display: flex; align-items: center; gap: 14px; }
+.pf-thumb {
+  width: 88px; height: 110px; flex: 0 0 88px;
+  border: 1.5px dashed var(--border);
+  border-radius: 10px;
+  background: #FAFAF6;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+  font-size: 26px; color: var(--ink-mute);
+}
+.pf-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pf-photo-side { flex: 1; min-width: 0; }
+.pf-photo-note { font-size: 12px; color: var(--ink-mute); line-height: 1.6; margin-top: 8px; }
+.pf-pick {
+  display: inline-block; width: 100%; text-align: center;
+  padding: 12px 14px;
+  border: 1.5px solid var(--border); border-radius: 10px;
+  background: var(--surface); color: var(--ink-soft);
+  font-size: 14px; font-weight: 700; cursor: pointer;
+}
+.pf-pick:active { opacity: .8; }
+.pf-req { color: #C0392B; font-weight: 700; margin-left: 4px; font-size: 12px; }
+.pf-opt { color: var(--ink-mute); margin-left: 4px; font-size: 12px; font-weight: 400; }
+.pf-field { margin-bottom: 14px; }
+.pf-field:last-child { margin-bottom: 0; }
+
+/* ═══════════════════════════════════════════════════════════════
    給与明細タブ（2026-07-03 追加）
    ═══════════════════════════════════════════════════════════════ */
 
@@ -594,6 +624,67 @@ body.with-tabbar .btn-area { bottom: calc(56px + var(--safe-bottom)); }
   </div>
   <div class="btn-area">
     <button class="btn btn-primary" id="btn-register">登録する</button>
+  </div>
+</div>
+
+<!-- ====== PROFILE (プロフィール登録・販売スタッフのみ / 2026-08-03) ====== -->
+<div id="screen-profile" class="screen">
+  <div class="header">
+    <h1>🍱 お江戸弁当</h1>
+    <div class="sub">プロフィール登録</div>
+  </div>
+  <div class="body-area">
+    <div class="notice">
+      勤務にあたって、プロフィールのご登録をお願いします。<br>
+      顔写真は本人確認と拠点でのご案内に使います。<span style="font-weight:700;">社内でのみ使用</span>し、外部には公開しません。
+    </div>
+
+    <div class="card">
+      <div class="card-title">顔写真<span class="pf-req">必須</span></div>
+      <div class="card-body">
+        <div class="pf-photo-row">
+          <div class="pf-thumb" id="pf-thumb">📷</div>
+          <div class="pf-photo-side">
+            <label class="pf-pick" for="pf-file">写真を撮る / 選ぶ</label>
+            <input type="file" id="pf-file" accept="image/*" style="display:none">
+            <div class="pf-photo-note">正面・顔がはっきり写っているものをお願いします。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">基本情報</div>
+      <div class="card-body">
+        <div class="pf-field">
+          <label class="form-label">職業・学生（学校名・何年生）<span class="pf-req">必須</span></label>
+          <input type="text" id="pf-job" class="form-input" placeholder="例：法政大学4年生 / 会社員" maxlength="40">
+        </div>
+        <div class="pf-field">
+          <label class="form-label">生年月日<span class="pf-req">必須</span></label>
+          <input type="date" id="pf-birth" class="form-input" max="2020-12-31">
+        </div>
+        <div class="pf-field">
+          <label class="form-label">最寄駅<span class="pf-opt">任意</span></label>
+          <input type="text" id="pf-station" class="form-input" placeholder="例：本八幡駅" maxlength="30">
+        </div>
+        <div class="pf-field">
+          <label class="form-label">希望エリア<span class="pf-opt">任意</span></label>
+          <input type="text" id="pf-area" class="form-input" placeholder="例：都営新宿線エリア" maxlength="40">
+        </div>
+        <div class="pf-field">
+          <label class="form-label">シフト（週何回）<span class="pf-opt">任意</span></label>
+          <input type="text" id="pf-freq" class="form-input" placeholder="例：週2 木・金" maxlength="30">
+        </div>
+        <div class="pf-field">
+          <label class="form-label">備考<span class="pf-opt">任意</span></label>
+          <input type="text" id="pf-note" class="form-input" placeholder="例：紹介者 山口英人" maxlength="60">
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="btn-area">
+    <button class="btn btn-primary" id="btn-profile-save">登録して次へ</button>
   </div>
 </div>
 
@@ -1168,6 +1259,10 @@ document.getElementById('btn-register').addEventListener('click', async () => {
       if (role === '調理') {
         // 調理スタッフ：キッチン提出フォームへ
         enterKitchenFlow();
+      } else if (role === '' || role === '販売員') {
+        // ★2026-08-03 販売スタッフのみ：プロフィール（顔写真・個人情報）登録へ
+        //   社員・ドライバーは対象外なので従来どおり選択画面へ直行
+        showScreen('profile');
       } else {
         await loadDatesAndShowSelect();
       }
@@ -1176,6 +1271,99 @@ document.getElementById('btn-register').addEventListener('click', async () => {
     toast(`登録失敗: ${e.message}`);
     btn.disabled = false;
     btn.textContent = '登録する';
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// PROFILE（プロフィール登録・販売スタッフのみ / 2026-08-03）
+//   保存先＝別SS「販売スタッフ管理表」（GAS: saveStaffProfile）
+//   顔写真は端末側で 640px / JPEG q0.8 に縮小してから base64 で送る
+//   （原寸のままだと数MBになり POST が通らない／Drive も膨らむ）
+// ═══════════════════════════════════════════════════════════════
+const PF_MAX_EDGE = 640;      // 長辺px
+const PF_QUALITY  = 0.8;      // JPEG品質
+let pfPhotoBase64 = '';       // data URL のカンマ以降だけを保持
+
+/** File → 縮小JPEGの dataURL */
+function pfShrinkImage(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('画像を読み込めませんでした'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('画像を表示できませんでした'));
+      img.onload = () => {
+        let w = img.naturalWidth || img.width;
+        let h = img.naturalHeight || img.height;
+        if (!w || !h) return reject(new Error('画像サイズを取得できませんでした'));
+        const scale = Math.min(1, PF_MAX_EDGE / Math.max(w, h));
+        w = Math.round(w * scale);
+        h = Math.round(h * scale);
+        const cv = document.createElement('canvas');
+        cv.width = w; cv.height = h;
+        const ctx = cv.getContext('2d');
+        ctx.fillStyle = '#FFF';
+        ctx.fillRect(0, 0, w, h);          // 透過PNG対策（JPEGで黒くならないように）
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(cv.toDataURL('image/jpeg', PF_QUALITY));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+document.getElementById('pf-file').addEventListener('change', async (ev) => {
+  const file = ev.target.files && ev.target.files[0];
+  if (!file) return;
+  try {
+    const dataUrl = await pfShrinkImage(file);
+    pfPhotoBase64 = dataUrl.split(',')[1] || '';
+    const thumb = document.getElementById('pf-thumb');
+    thumb.innerHTML = '';
+    const im = document.createElement('img');
+    im.src = dataUrl;
+    thumb.appendChild(im);
+  } catch (e) {
+    pfPhotoBase64 = '';
+    toast(`写真の読み込みに失敗しました: ${e.message}`);
+  } finally {
+    ev.target.value = '';   // 同じ写真を選び直せるように
+  }
+});
+
+document.getElementById('btn-profile-save').addEventListener('click', async () => {
+  const job   = document.getElementById('pf-job').value.trim();
+  const birth = document.getElementById('pf-birth').value;      // YYYY-MM-DD
+  if (!pfPhotoBase64) { toast('顔写真を登録してください'); return; }
+  if (!job)   { toast('職業・学生を入力してください'); return; }
+  if (!birth) { toast('生年月日を入力してください'); return; }
+
+  const btn = document.getElementById('btn-profile-save');
+  btn.disabled = true;
+  btn.textContent = '送信中...';
+  try {
+    const res = await apiPost({
+      action: 'saveStaffProfile',
+      userId: state.userId,
+      name: state.userName,
+      photoBase64: pfPhotoBase64,
+      photoMime: 'image/jpeg',
+      job: job,
+      birthday: birth,
+      station: document.getElementById('pf-station').value.trim(),
+      area: document.getElementById('pf-area').value.trim(),
+      shiftFreq: document.getElementById('pf-freq').value.trim(),
+      note: document.getElementById('pf-note').value.trim(),
+      lineDisplayName: state.displayName || '',
+    });
+    if (!res || res.success !== true) throw new Error((res && res.error) || '保存に失敗しました');
+    toast('プロフィールを登録しました');
+    setTimeout(async () => { await loadDatesAndShowSelect(); }, 600);
+  } catch (e) {
+    toast(`登録失敗: ${e.message}`);
+    btn.disabled = false;
+    btn.textContent = '登録して次へ';
   }
 });
 
