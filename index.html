@@ -974,6 +974,7 @@ const state = {
   userId: '',
   userName: '',
   displayName: '',     // LINEのプロフィール名
+  profileMode: false,  // ?profile=1 で開かれた（プロフィール登録のお願いから来た）
   role: '',            // スタッフ設定 H列（'調理' / '販売員' など）
   dates: [],           // 来週の平日 [{label: '5/12(月)', selected: false}, ...]
   alreadySubmitted: false,
@@ -1118,6 +1119,17 @@ async function apiPost(payload) {
 // ═══════════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════════
+/** ?profile=1 で開かれたか（liff.state 経由も拾う） */
+function detectProfileMode() {
+  try {
+    const p = new URLSearchParams(location.search);
+    if (p.get('profile') === '1') return true;
+    const st = p.get('liff.state');
+    if (st && new URLSearchParams(st.replace(/^\?/, '')).get('profile') === '1') return true;
+  } catch (e) {}
+  return false;
+}
+
 async function init() {
   // テストモード（?test=1 でLIFFをバイパス。?test=1&role=調理 でキッチン提出フォームの表示確認）
   const params = new URLSearchParams(location.search);
@@ -1129,6 +1141,11 @@ async function init() {
     enterAdminPreview();
     return;
   }
+
+  // ★2026-08-03 プロフィール登録モード（?profile=1）
+  //   LINEの「プロフィール登録のお願い」から開かれた時に、登録済みの人でも入力画面へ入れる。
+  //   LIFFは環境によって ?profile=1 をそのまま渡す場合と ?liff.state=%3Fprofile%3D1 で渡す場合がある。
+  state.profileMode = detectProfileMode();
 
   try {
     if (isTest) {
@@ -1150,6 +1167,8 @@ async function init() {
       const profile = await liff.getProfile();
       state.userId = profile.userId;
       state.displayName = profile.displayName || '';
+      // liff.init 後にURLが書き換わることがあるので、ここでも見る
+      if (!state.profileMode) state.profileMode = detectProfileMode();
     }
 
     // ─────────────────────────────────────────────────────────
@@ -1165,8 +1184,9 @@ async function init() {
       if (cachedUser.name) state.userName = cachedUser.name;
       if (prevRole) state.role = prevRole;
 
-      if (prevRole === '調理') {
+      if (prevRole === '調理' || state.profileMode) {
         // 調理：提出フォームはサーバーデータ必須のため Phase B で確定（ここでは loading 維持）
+        // プロフィールモード：選択画面をチラ見せしないよう Phase B まで loading のまま
         showScreen('loading');
       } else if (cachedUser.name) {
         // 販売員ら：従来通り即・選択画面へ（表示速度を維持）
@@ -1191,6 +1211,14 @@ async function init() {
       // 登録済
       state.userName = checkRes.name;
       saveIdxUserCache({ userId: state.userId, name: checkRes.name, role: role });
+
+      // ★2026-08-03 ?profile=1 で開かれた（LINEの「プロフィール登録のお願い」のリンク）
+      //   登録済みの販売スタッフでもプロフィール入力画面に入れるようにする。
+      //   ここが無いと初回登録の人しかフォームに辿り着けない。
+      if (state.profileMode && role !== '調理') {
+        showScreen('profile');
+        return;
+      }
 
       if (role === '調理') {
         // 調理：提出フォーム
