@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- kanri.html v3.57 (2026-08-03) 【シフト閲覧＝確認状況カードをシフト表の下へ】「📅 シフト閲覧」タブで、シフト表の上に出ていた「✅ シフト確認状況」バー（確認 n/N・未確認者一覧）を**シフト表の下**へ移動。DOM上で #sv-confirm を #sv-content の後ろに置き替え、CSSの margin-bottom:10px → margin-top:12px に変更しただけ。取得・描画ロジック（svRenderConfirm / getShiftConfirmStatus）とキッチンモードでの非表示は従来どおり。GAS変更なし。 -->
 <!-- kanri.html v3.56 (2026-08-03) 【配分の印刷前チェック】配分調整タブの「🖨 印刷」を bmPrintWithCheck() に変更し、押した瞬間に2点を確認する（社長要望）。①**担当者が未割り当てなのに納品数が入っている拠点** ②**担当者がいるのに納品数が0の拠点**。どちらかがあれば拠点名つきで confirm を出し、「キャンセル」なら印刷せずに戻る（直してから印刷し直せる）。判定は表示中の日付のみ・bmServerData.locations[].salesPerson と bmGetDisplaySales の拠点合計を使う＝GAS変更なし。印刷してから配り直しになるのを止めるのが狙い。 -->
 <html lang="ja">
 <head>
@@ -1982,7 +1983,7 @@ body {
     .sv-status.err { color:#c0392b; }
 
     /* ===== シフト確認状況（v3.43 / 2026-07-12・閲覧専用） ===== */
-    #sv-confirm { margin-bottom:10px; }
+    #sv-confirm { margin-top:12px; }   /* ★2026-08-03 シフト表の下に置くので上マージンへ */
     .svc-bar {
       display:flex; align-items:center; gap:10px;
       background:#fff; border:1px solid #e0e4e8; border-radius:12px;
@@ -2432,9 +2433,9 @@ body {
   </div>
   <div class="sv-weekrange" id="sv-weekrange">　</div>
   <div class="sv-status" id="sv-status"></div>
-  <!-- ★v3.43 シフト確認状況（販売員モードのみ・閲覧専用） -->
-  <div id="sv-confirm" style="display:none"></div>
   <div id="sv-content"></div>
+  <!-- ★v3.43 シフト確認状況（販売員モードのみ・閲覧専用）／★2026-08-03 シフト表の下へ移動 -->
+  <div id="sv-confirm" style="display:none"></div>
 </div>
 
 <!-- ★v3.55 スタッフプロフィール モーダル（販売員の名前タップ・閲覧専用 / 2026-08-03） -->
