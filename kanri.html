@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- kanri.html v3.61 (2026-08-04) 【カテゴリー別集計の表示整理】v3.60 は他社ぶんを「他社商品」カテゴリー行と「他社（総数）」行の2か所に出しており、同じ内容が重複して読みにくかった（社長報告）。重複していた「他社（総数）」行を削除し、カテゴリー別の「他社商品」行＋「総合計」行の構成にした。総合計行に「他社は拠点に配らないため拠点合計には含みません」の注記を追加。数字は v3.60 と同じ（8/4：海苔弁系579／満腹系81／全六422／他社商品85／拠点合計1082／総合計1167）。 -->
 <!-- kanri.html v3.60 (2026-08-04) 【カテゴリー別集計に他社弁当を出す＋合計を実態に合わせる】v3.59 で他社弁当を「総数のみ（byLocation なし）」に変えた結果、カテゴリー別合計は拠点分の積み上げしか見ておらず「他社商品」カテゴリーが合計0と判定されて**行ごと消え**、合計にも乗っていなかった（社長報告）。対応：①カテゴリー別合計を「拠点分＋総数分」で計算し、他社だけのカテゴリーは拠点列横断1マス「総数 N 個（拠点ごとの内訳なし）」＋薄紫＋他社バッジで表示 ②拠点合計行の下に「他社（総数）」行と「総合計」行を追加（総合計＝拠点合計＋他社総数）。お茶は従来どおり allRows の isTea で除外済み。検算（8/4）：海苔弁系579／満腹系81／全六422／他社商品85、拠点合計1082＋他社85＝**総合計1167**（社長の想定と一致）。GAS変更なし（v3.59 の getSheet1Data がそのまま使える）。 -->
 <!-- kanri.html v3.59 (2026-08-04) 【配分表の他社弁当を1まとめに】シート1（拠点配分表）だけ他社弁当（メンチカツ/チキン南蛮/油淋鶏）を通常商品と同じく拠点ごとにバラして配っていた（実測 8/4: 36/43/20 ← 実納品 25/30/30）。シート2に v3.52 で入れた対応がシート1に入っていなかった対応漏れ。メインGAS getSheet1Data に ①基本数マスタの拠点分から外部商品IDを除外（getExternalDeliveryPidSet_）②「外部納品数」シートの総数行を注入し isExternal:true を返す ③buildRows で外部行は総数をそのまま合計にする、を追加。フロントは isExternal 行を拠点列横断の1マス「総数 N 個（拠点ごとの内訳なし）」＋薄紫＋「他社」バッジで表示し、印刷にも色を出す（#tab-sheet1 にも print-color-adjust を追加）。※他社弁当は拠点別内訳を持たないため、カテゴリー別合計行・拠点合計行には含まれない（拠点に配らないので拠点合計には乗らない）。要メインGAS @417。 -->
 <!-- kanri.html v3.57 (2026-08-03) 【シフト閲覧＝確認状況カードをシフト表の下へ】「📅 シフト閲覧」タブで、シフト表の上に出ていた「✅ シフト確認状況」バー（確認 n/N・未確認者一覧）を**シフト表の下**へ移動。DOM上で #sv-confirm を #sv-content の後ろに置き替え、CSSの margin-bottom:10px → margin-top:12px に変更しただけ。取得・描画ロジック（svRenderConfirm / getShiftConfirmStatus）とキッチンモードでの非表示は従来どおり。GAS変更なし。 -->
@@ -3927,21 +3928,16 @@ function renderSheet1(data) {
     // ★2026-08-04 v3.60 他社弁当（総数管理）は拠点に配らないので「拠点合計」には乗らない。
     //   そのままだと総数ぶんが表のどこにも出ず、合計が実際の製造数と合わなくなるため、
     //   他社ぶんと総合計の行を足す（社長報告：合計数がおかしい）。
+    // ★2026-08-04 v3.61 他社ぶんは上の「他社商品」カテゴリー行で既に出しているので、
+    //   同じ内容の行を重ねず、総合計だけを足す（v3.60 は他社の行が2回出て読みにくかった）。
     const extGrand = allRows.reduce((a, r) => a + (r.isExternal ? (Number(r.total) || 0) : 0), 0);
     if (extGrand > 0) {
       const spanG = visLocIds.length + (subtotalInsertAt <= visLocIds.length ? 1 : 0);
-      html += '<tr class="cat-row s2-ext-row">';
-      html += '<td class="cell-name cat-label">他社（総数）'
-            + '<span class="s2-ext-badge" title="他社弁当：拠点ごとの配分は決めない（総数のみ）">他社</span></td>';
-      html += `<td class="cell-data" colspan="${spanG}" style="text-align:center;font-weight:700;">`
-            + `総数 ${extGrand} 個（拠点ごとの内訳なし）</td>`;
-      html += `<td class="cell-tot">${extGrand}</td>`;
-      html += '</tr>';
-
       html += '<tr class="cat-row cat-grand">';
       html += '<td class="cell-name cat-label">総合計</td>';
       html += `<td class="cell-data" colspan="${spanG}" style="text-align:center;">`
-            + `拠点 ${grandTotal} 個 ＋ 他社 ${extGrand} 個</td>`;
+            + `拠点 ${grandTotal} 個 ＋ 他社 ${extGrand} 個`
+            + `<span style="opacity:.7;font-weight:400;">（他社は拠点に配らないため拠点合計には含みません）</span></td>`;
       html += `<td class="cell-tot">${grandTotal + extGrand}</td>`;
       html += '</tr>';
     }
