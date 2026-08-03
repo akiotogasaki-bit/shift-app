@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>お江戸弁当 レジ</title>
+<!-- register v3.11 (2026-08-04) 【拠点によって商品リストが違う不具合を修正】社長報告「お茶の記録に拠点差がある」の原因究明。8/3実測でL001は15品（お茶P015・柚子P121が欠落）／L002は17品だった。商品スイッチ(getProductSwitches)は**日付単位のグローバル**で拠点別ではないため、原因はクライアント側と判明。真因＝`filterStoppedProducts()` が `state.products` を**破壊的にfilter**していたこと。起動時Phase Aで**localStorageの古い停止リスト（TTL24時間）**で商品を削り、その後 getMaster が失敗すると`loadMasterData` の catch が「キャッシュがあれば継続」で**黙って先へ進む**ため、削られた商品リストのまま1日レジを打っていた。修正：①`applyMasterToState` が絞り込み前の原本 `state.allProducts` を保持 ②`filterStoppedProducts` は必ず原本から作り直す（冪等。停止0件なら絞り込みを解除＝API復旧時に自動で正しい一覧へ戻る）③原本が空の時は現在の一覧を使う（空配列をbaseにして商品が全消えするのを防ぐ）④マスタ取得に失敗してキャッシュで動いている時はトーストで販売員に知らせる（従来は console.warn のみで誰も気づけなかった）。GAS変更なし。 -->
 <!-- register v3.10 (2026-08-04) 【配分調整で見えないものはレジにも数字を出さない】社長決定。対象＝①お茶（配分調整の商品リストに無い）②他社弁当＝メンチカツ/チキン南蛮/油淋鶏（総数管理で拠点配分は当方で決めず現地でドライバーが割り振る）。どちらも基本数マスタに行があり、G列が空だとH列（翌週提案値）が拾われるため、社長がどこからも設定・確認できない数字がレジのスタート画面に既定値として出ていた（社長指摘：見えない数字がどこかで走っている）。対応：GAS getPlannedDelivery がこの2種を既定値から除外し excludedPids で返す。レジは excludedPids を「配分表と◯品目違います」の判定から外す（GAS _dapDiffSummary_ も同じ2種を除外＝ドライバーへの承認依頼が飛ばない）。★商品としてはレジに出るので販売は従来どおり。届いた数は販売員が入力する（他社弁当は現地割り振りなので元々実数入力が筋）。締め（submitClosingResidual）は元からお茶を除外済み。要メインGAS @419。 -->
 <!-- register v3.9 (2026-08-04) 【お茶は納品数の差異として検知しない】社長決定。お茶は商品としてレジに出す（配分表の既定値もこれまでどおり入る）が、配分調整の画面では管理していないため、配分表との差異にすると「配分表と◯品目違います」＋ドライバーへの確認連絡が毎日飛んでしまう。スタート送信時の比較（state.plannedDelivery との突き合わせ）からお茶を除外。GAS側も _dapDiffSummary_ でお茶を除外（＝承認依頼が飛ばない）。締め（submitClosingResidual）は元から _rcTeaIds_/_rcSumNonTea_ でお茶を除いており、これで開始・締めの扱いが揃う。 -->
 <!-- register v3.8 (2026-08-03) 【残数欄に計算値を既定表示】締め画面「レジに残った数」に、商品ごとの計算値（納品数＋拠点間移動±−販売数−賄い／お茶除く）を**最初から入れておく**方式に変更（社長決定 2026-08-03）。違うときだけ直してもらう＝回収モーダル（driver v2.1）と同じ考え方に統一。★2026-07-31 の「理論残を絶対に見せない」方針はここで撤回。差異の検知はドライバーの回収時実査（submitCollectionCheck）に一本化する。実装: rcExpectedResidual / onResidualInput（手で直した商品は自動更新しない）/ syncResidualDefaults（賄いの増減・有無切替に追従）/ recalcResidualState（renderMakanaiInputs を呼ばない安全版）。締め画面に入った時に refreshMoveAdj_ を走らせてから既定値を入れ直す（在庫画面を開いていないと移動±が反映されないため）。狙い：締めを出せば必ず拠点の残数行が立つ＝拠点毎の残数が全拠点そろう（メインGAS 2026-08-03 の拠点合算に必要）。 -->
@@ -1634,6 +1635,17 @@ async function init() {
     ]);
     filterStoppedProducts();
 
+    // ★2026-08-04 マスタ取得に失敗してキャッシュのまま動いている時は、黙って続けない。
+    //   旧実装は console.warn だけで先へ進み、販売員も社長も気づけなかった。
+    //   その結果、古いキャッシュで欠けた商品リストのまま1日レジを打つことがあった
+    //   （2026-08-03 実測：L001は15品でお茶・柚子が欠落／L002は17品）。
+    if (!masterData && state.products && state.products.length > 0) {
+      console.warn('[マスタ] 取得に失敗しキャッシュで継続中');
+      try {
+        showToast('⚠️ 商品情報を取得できませんでした。商品が足りない場合は画面を再読み込みしてください', 7000);
+      } catch (e) {}
+    }
+
     // ─────────────────────────────────────────────────────────
     // Phase C：差分検出して silent 再描画（先描画していた場合のみ）
     // ─────────────────────────────────────────────────────────
@@ -1785,7 +1797,11 @@ function applyMasterToState(data) {
   const normalized = rawProducts
     .map(p => ({ ...p, price: Number(p.price) }))
     .filter(p => !isNaN(p.price) && p.price >= 0);
-  state.products      = normalized;
+  // ★2026-08-04 絞り込み前の原本を必ず持つ。
+  //   商品スイッチの絞り込み（filterStoppedProducts）が state.products を破壊的に上書きしていたため、
+  //   一度絞られると元に戻す手段が無く、古いキャッシュで欠けた商品リストのまま営業していた。
+  state.allProducts   = normalized;
+  state.products      = normalized.slice();
   state.locations     = data.locations || [];
   state.incentiveUnit = data.incentiveUnit || 10;
   state.incentiveRate = data.incentiveRate || 100;
@@ -1863,12 +1879,30 @@ async function applyProductSwitches() {
   }
 }
 
+// ★2026-08-04 【重要】必ず「絞り込み前の原本(state.allProducts)」から作り直す。
+//
+//   旧実装は state.products を破壊的に filter していたため、
+//   ① 起動直後（Phase A）に**キャッシュの古い停止リスト**で商品を削る
+//   ② その後 getMaster が失敗すると state.products は削られたまま復元されない
+//      （loadMasterData の catch が「キャッシュがあれば継続」で黙って先に進む）
+//   ③ 結果、欠けた商品リストのまま1日中レジを打つ
+//   という事故が起きていた。実測 2026-08-03：L001は15品（お茶・柚子欠け）／L002は17品。
+//   拠点によって記録される商品が違い、お茶の納品数が記録されない拠点があった。
+//
+//   原本から作り直せば何度呼んでも同じ結果（冪等）になり、
+//   API が復旧した時点で自動的に正しいリストへ戻る。
 function filterStoppedProducts() {
+  // ★原本が空（未取得・デモデータ等）の時は現在の一覧をそのまま使う。
+  //   ここで空配列を base にすると商品が全部消えるため、必ず length を見る。
+  const base = (Array.isArray(state.allProducts) && state.allProducts.length)
+             ? state.allProducts
+             : (Array.isArray(state.products) ? state.products : []);
   const stoppedIds = state.stoppedProductIds || [];
-  if (stoppedIds.length > 0 && Array.isArray(state.products)) {
-    const before = state.products.length;
-    state.products = state.products.filter(p => !stoppedIds.includes(p.id));
-    console.log(`[商品スイッチ] ${before - state.products.length}件の商品を停止中: ${stoppedIds.join(', ')}`);
+  if (stoppedIds.length > 0) {
+    state.products = base.filter(p => !stoppedIds.includes(p.id));
+    console.log(`[商品スイッチ] ${base.length - state.products.length}件の商品を停止中: ${stoppedIds.join(', ')}`);
+  } else {
+    state.products = base.slice();   // 停止なし＝原本そのまま（絞り込みを必ず解除する）
   }
 }
 
