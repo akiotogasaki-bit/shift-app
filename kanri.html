@@ -4797,29 +4797,58 @@ let bmDataCache        = {};         // { dateStr: getBasicMasterMatrix応答 }
 //   印刷してから気づくと配り直しになるので、押した瞬間に止める。
 //   ※あくまで確認。「このまま印刷」を選べば従来どおり印刷できる。
 // ═══════════════════════════════════════════════════════════════
-// ★2026-08-03 v3.57【献立と配分表のズレ検知】
-//   その日の献立と配分表（基本数マスタ）が食い違っていないかをサーバーに聞く。
-//   ★読み取り専用。数字は一切動かさない。取得に失敗しても印刷は止めない。
-//   きっかけ：2026-08-03 朝に献立を変えたが配分表が追従せず、厨房は塩麹を作ったのに
-//            配分表は柚子に数字を置いていた（レジのスタート画面が0のまま＝社長報告）。
-async function bmCheckMenuAllocation(dateStr) {
-  if (!dateStr) return null;
-  try {
-    const res = await fetch(`${GAS_URL}?action=checkMenuAllocation&date=${encodeURIComponent(dateStr)}`,
-                            { redirect: 'follow' });
-    const j = await res.json();
-    return (j && j.ok) ? j : null;
-  } catch (e) {
-    console.warn('献立と配分表のズレ検知に失敗（印刷は続行します）:', e);
-    return null;
-  }
+// ★2026-08-04 v3.58【献立と配分表のズレ検知：クライアント計算に変更】
+//   v3.57 はサーバーの action=checkMenuAllocation を await していたが、
+//   この呼び出しは実測 10〜15秒（120秒タイムアウトも発生）かかり、
+//   **印刷ボタンを押しても十数秒なにも起きない**状態になっていた（社長報告 2026-08-04）。
+//   判定に必要な材料は画面が既に持っている（cells の G列/H列＋bmMenuCache の献立）ので、
+//   通信ゼロ・同期で計算する。印刷は絶対に待たせない。
+//
+//   判定規約はサーバー getPlannedDelivery と同じ「G列（confirmed）優先・空ならH列（proposed）」。
+//   ＝レジが実際に見る値。表示用の bmGetDisplaySales は献立外を0で「見せる」だけなので使わない。
+function bmMenuEffective(pid, lid) {
+  // 未保存の編集も画面に出ている数字なので判定に含める
+  const edit = bmGetEdit(bmCurrentDate, pid, lid);
+  if (edit !== null && edit !== undefined && edit !== '') return Number(edit) || 0;
+  if (!bmServerData) return 0;
+  const c = bmServerData.cells[pid + '_' + lid];
+  if (!c) return 0;
+  if (c.confirmed !== null && c.confirmed !== undefined) return Number(c.confirmed) || 0;
+  return Number(c.proposed) || 0;
 }
 
-async function bmPrintWithCheck() {
+// その日の献立と配分表のズレを計算（同期・通信なし）。判定できなければ null。
+function bmComputeMenuMismatch() {
+  if (!bmServerData) return null;
+  const m = bmMenuCache[bmCurrentDate];
+  if (!m || !m.found) return null;          // 献立が未保存の日は判定しない（誤検知を避ける）
+  if (!bmMenuTargets) return null;          // 献立表の管理対象が未取得
+  const products = [].concat(
+    (bmServerData.products && bmServerData.products.rice)  || [],
+    (bmServerData.products && bmServerData.products.brown) || []
+  );
+  const locs = bmServerData.locations || [];
+  const extra = [];
+  for (const p of products) {
+    if (!bmMenuExcluded(p.id)) continue;    // 献立に載っている／管理対象外／定番 はスキップ
+    let nLoc = 0, qty = 0;
+    for (const loc of locs) {
+      const eff = bmMenuEffective(p.id, loc.id);
+      if (eff > 0) { nLoc++; qty += eff; }
+    }
+    if (nLoc > 0) extra.push({ name: p.name || p.id, locs: nLoc, qty: qty });
+  }
+  if (!extra.length) return { mismatch: false };
+  const lines = ['■ 献立に無いのに配分表へ数字が入っています（多く納品されます）'];
+  extra.forEach(x => lines.push('　・' + x.name + '　' + x.locs + '拠点・計' + x.qty + '個'));
+  return { mismatch: true, extra: extra, message: lines.join('\n') };
+}
+
+function bmPrintWithCheck() {
   const noStaff = [];   // 担当者がいないのに納品数がある
   const noQty   = [];   // 担当者がいるのに納品数が0
-  // ★2026-08-03 献立とのズレを先に聞いておく（失敗しても null が返るだけ）
-  const menuChk = await bmCheckMenuAllocation(bmCurrentDate);
+  // ★2026-08-04 献立とのズレ（同期・通信なし。印刷を待たせない）
+  const menuChk = bmComputeMenuMismatch();
   try {
     const products = [].concat(
       (bmServerData && bmServerData.products && bmServerData.products.rice)  || [],
@@ -5677,14 +5706,15 @@ function bmApplyData(dateStr, r, colorMap) {
 
 // ★2026-08-03 v3.57 献立と配分表のズレを配分調整タブの上部に帯で出す。
 //   数字は動かさない＝気づかせるだけ。取得に失敗したら黙って隠す（表を邪魔しない）。
-async function bmRenderMenuWarn(dateStr) {
+// ★2026-08-04 v3.58 同期化（通信なし）。v3.57 はサーバー呼び出しで10〜15秒かかっていた。
+function bmRenderMenuWarn(dateStr) {
   const el = document.getElementById('bm-menu-warn');
   if (!el) return;
   el.style.display = 'none';
   el.textContent = '';
-  const j = await bmCheckMenuAllocation(dateStr);
-  if (!j || dateStr !== bmCurrentDate) return;   // 表示中の日付が変わっていたら捨てる
-  if (!j.mismatch) return;
+  if (dateStr !== bmCurrentDate) return;
+  const j = bmComputeMenuMismatch();
+  if (!j || !j.mismatch) return;
   el.textContent = '⚠️ 献立と配分表がズレています\n' + (j.message || '');
   el.style.display = 'block';
 }
