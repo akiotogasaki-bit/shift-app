@@ -1,6 +1,14 @@
 <!DOCTYPE html>
 <!--
   お江戸弁当 shift-admin.html
+  v2026-08-03 週切替に「来週 ▶」を追加（前週／今週／来週の3つ）
+    - 従来は「今週」＝GASの calculateWeekTarget_ 依存で、金18:00を過ぎるまで
+      画面が運用中の週から動かず、木・金に提出された翌週分の希望を確認できなかった
+    - state.viewWeek に 'next' を追加。weekTarget は computeNextWeekTarget() で算出し
+      getShiftMatrix に明示的に渡す（GAS側の変更は不要）
+    - localStorage キャッシュのキーを weekCacheSuffix() で _prev/_this/_next の3系統に分離
+    - thisWeekTarget の更新は viewWeek==='this' のときのみ（prev/next の週で上書きしない）
+
   v2026-07-30b 自動割振に実行前プレビューを必須化
     - confirmAssign：先に action=previewAutoAssign を叩き、「変わる枠／消える手動割当／
       通知済みで動く人／割振対象日に無くなって消える行」を明細付きで提示してから実行
@@ -1344,6 +1352,7 @@ input { font-family: inherit; }
       <div class="week-nav">
         <button class="week-nav-btn" id="btnPrevWeek" onclick="switchWeek('prev')">◀ 前週</button>
         <button class="week-nav-btn active" id="btnThisWeek" onclick="switchWeek('this')">今週</button>
+        <button class="week-nav-btn" id="btnNextWeek" onclick="switchWeek('next')">来週 ▶</button>
       </div>
     </div>
     <button class="logout" onclick="logout()">ログアウト</button>
@@ -1666,6 +1675,10 @@ const PASSWORD = '1115';
 const SA_CACHE_KEY_PREFIX = 'oedo_shift_admin_';
 const SA_CACHE_TTL_MS     = 5 * 60 * 1000;  // 5分
 
+// ★2026-08-03 週切替は prev / this / next の3種になったのでキャッシュも3系統に分ける
+function weekCacheSuffix() {
+  return '_' + (state.viewWeek || 'this');
+}
 function _saCacheKey(kind, suffix) {
   return SA_CACHE_KEY_PREFIX + kind + '_cache_v1' + (suffix || '');
 }
@@ -1771,7 +1784,7 @@ async function apiPost(action, payload = {}) {
 
 // state.matrix・state.sellers等への反映を共通関数化（v2026-05-18 案B Phase-2）
 function applyMatrixToState(data) {
-  if (state.viewWeek !== 'prev') {
+  if (state.viewWeek === 'this') {
     state.thisWeekTarget = data.weekTarget;
   }
   state.weekTarget = data.weekTarget;
@@ -1814,13 +1827,15 @@ async function loadAll() {
     const params = {};
     if (state.viewWeek === 'prev' && state.thisWeekTarget) {
       params.weekTarget = computePrevWeekTarget(state.thisWeekTarget);
+    } else if (state.viewWeek === 'next' && state.thisWeekTarget) {
+      params.weekTarget = computeNextWeekTarget(state.thisWeekTarget);
     }
 
     // ─────────────────────────────────────────────────────────
     // Phase A：localStorage キャッシュから先描画
-    //   キャッシュキーには viewWeek を suffix で区別（this/prev 混同防止）
+    //   キャッシュキーには viewWeek を suffix で区別（prev/this/next 混同防止）
     // ─────────────────────────────────────────────────────────
-    const suffix = state.viewWeek === 'prev' ? '_prev' : '_this';
+    const suffix = weekCacheSuffix();
     const cachedMatrix = loadSaCacheFor('matrix', suffix);
     const cachedDiffs  = loadSaCacheFor('diffs', suffix);
     let prevSnapshot = null;
@@ -1927,7 +1942,7 @@ async function loadDiffs() {
     state.diffs = data.diffs || [];
     updateDiffBadge();
     // キャッシュも更新
-    const suffix = state.viewWeek === 'prev' ? '_prev' : '_this';
+    const suffix = weekCacheSuffix();
     saveSaCacheFor('diffs', suffix, data);
   } catch (e) {
     console.warn('diff load failed:', e);
@@ -1978,7 +1993,8 @@ function updateWeekInfo() {
     : '日付データなし';
   document.getElementById('weekInfo').textContent = `${wt} ・ ${dateRange}`;
   document.getElementById('btnPrevWeek').classList.toggle('active', state.viewWeek === 'prev');
-  document.getElementById('btnThisWeek').classList.toggle('active', state.viewWeek !== 'prev');
+  document.getElementById('btnThisWeek').classList.toggle('active', state.viewWeek === 'this');
+  document.getElementById('btnNextWeek').classList.toggle('active', state.viewWeek === 'next');
 }
 
 function isSpotName(name) {
@@ -3079,6 +3095,27 @@ function computePrevWeekTarget(wt) {
     week = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
   }
   return `${year}-W${String(week).padStart(2, '0')}`;
+}
+
+// ★2026-08-03 「来週」表示用。ISO週の年またぎ（52/53週）で壊れないよう、
+//   いったん月曜の実日付に戻して +7日 してから週番号を取り直す。
+function computeNextWeekTarget(wt) {
+  const m = String(wt || '').match(/^(\d{4})-W(\d{1,2})$/);
+  if (!m) return wt;
+  const year = parseInt(m[1]);
+  const week = parseInt(m[2]);
+  const jan4 = new Date(year, 0, 4);
+  const jan4Dow = jan4.getDay() || 7;
+  const week1Monday = new Date(jan4);
+  week1Monday.setDate(jan4.getDate() - jan4Dow + 1);
+  const monday = new Date(week1Monday);
+  monday.setDate(week1Monday.getDate() + week * 7);   // (week-1)*7 ＋ 7日
+  const tmp = new Date(Date.UTC(monday.getFullYear(), monday.getMonth(), monday.getDate()));
+  const dayNum = tmp.getUTCDay() || 7;
+  tmp.setUTCDate(tmp.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(tmp.getUTCFullYear(), 0, 1));
+  const wn = Math.ceil((((tmp - yearStart) / 86400000) + 1) / 7);
+  return `${tmp.getUTCFullYear()}-W${String(wn).padStart(2, '0')}`;
 }
 
 // ─────────────────────────────────────────
