@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>お江戸弁当 レジ</title>
+<!-- register v3.10 (2026-08-04) 【配分調整で見えないものはレジにも数字を出さない】社長決定。対象＝①お茶（配分調整の商品リストに無い）②他社弁当＝メンチカツ/チキン南蛮/油淋鶏（総数管理で拠点配分は当方で決めず現地でドライバーが割り振る）。どちらも基本数マスタに行があり、G列が空だとH列（翌週提案値）が拾われるため、社長がどこからも設定・確認できない数字がレジのスタート画面に既定値として出ていた（社長指摘：見えない数字がどこかで走っている）。対応：GAS getPlannedDelivery がこの2種を既定値から除外し excludedPids で返す。レジは excludedPids を「配分表と◯品目違います」の判定から外す（GAS _dapDiffSummary_ も同じ2種を除外＝ドライバーへの承認依頼が飛ばない）。★商品としてはレジに出るので販売は従来どおり。届いた数は販売員が入力する（他社弁当は現地割り振りなので元々実数入力が筋）。締め（submitClosingResidual）は元からお茶を除外済み。要メインGAS @419。 -->
 <!-- register v3.9 (2026-08-04) 【お茶は納品数の差異として検知しない】社長決定。お茶は商品としてレジに出す（配分表の既定値もこれまでどおり入る）が、配分調整の画面では管理していないため、配分表との差異にすると「配分表と◯品目違います」＋ドライバーへの確認連絡が毎日飛んでしまう。スタート送信時の比較（state.plannedDelivery との突き合わせ）からお茶を除外。GAS側も _dapDiffSummary_ でお茶を除外（＝承認依頼が飛ばない）。締め（submitClosingResidual）は元から _rcTeaIds_/_rcSumNonTea_ でお茶を除いており、これで開始・締めの扱いが揃う。 -->
 <!-- register v3.8 (2026-08-03) 【残数欄に計算値を既定表示】締め画面「レジに残った数」に、商品ごとの計算値（納品数＋拠点間移動±−販売数−賄い／お茶除く）を**最初から入れておく**方式に変更（社長決定 2026-08-03）。違うときだけ直してもらう＝回収モーダル（driver v2.1）と同じ考え方に統一。★2026-07-31 の「理論残を絶対に見せない」方針はここで撤回。差異の検知はドライバーの回収時実査（submitCollectionCheck）に一本化する。実装: rcExpectedResidual / onResidualInput（手で直した商品は自動更新しない）/ syncResidualDefaults（賄いの増減・有無切替に追従）/ recalcResidualState（renderMakanaiInputs を呼ばない安全版）。締め画面に入った時に refreshMoveAdj_ を走らせてから既定値を入れ直す（在庫画面を開いていないと移動±が反映されないため）。狙い：締めを出せば必ず拠点の残数行が立つ＝拠点毎の残数が全拠点そろう（メインGAS 2026-08-03 の拠点合算に必要）。 -->
 <!-- register v3.1 (2026-07-08) 送信確実化＋在庫打ち直し導線修正（開始ログ欠落対策） -->
@@ -1992,6 +1993,10 @@ async function loadPlannedDelivery() {
     if (!j || !j.ok) { state.plannedDelivery = null; return; }
 
     state.plannedDelivery = j.deliveryCount || {};
+    // ★2026-08-04 配分調整で拠点ごとの数を決めていない商品（お茶・他社弁当）。
+    //   既定値は入れず、「配分表と違います」の判定からも外す（GAS _dapDiffSummary_ と同じ規則）。
+    state.plannedExcluded = {};
+    (j.excludedPids || []).forEach(pid => { state.plannedExcluded[String(pid)] = true; });
     let filled = 0;
     Object.keys(state.plannedDelivery).forEach(pid => {
       const el = document.getElementById(`delivery-${pid}`);
@@ -2031,10 +2036,13 @@ document.getElementById('btn-start-submit').addEventListener('click', () => {
   try {
     const plan = state.plannedDelivery;
     if (plan) {
-      // ★2026-08-04 お茶は納品数の差異として検知しない（社長決定）。
-      //   お茶は商品としてはレジに出す（既定値も入る）が、配分調整で管理していないため
-      //   差異にするとドライバーへの確認連絡が毎日飛ぶ。GAS側（_dapDiffSummary_）と同じ規則。
+      // ★2026-08-04【社長決定】配分調整で拠点ごとの数を決めていない商品（お茶・他社弁当）は
+      //   納品数の差異として検知しない。商品としてはレジに出す（売れる）が、既定値は入らないので、
+      //   除外しないと販売員が実数を入れた瞬間に全部が差異になり確認連絡が飛ぶ。
+      //   除外リストはサーバー（getPlannedDelivery の excludedPids）が返す＝GASと同一基準。
+      const excl = state.plannedExcluded || {};
       const changed = state.products.filter(p =>
+        !excl[String(p.id)] &&
         String(p.name || '').indexOf('お茶') < 0 &&
         (Number(plan[p.id]) || 0) !== (Number(state.deliveryCount[p.id]) || 0));
       state.deliveryChangedCount = changed.length;
