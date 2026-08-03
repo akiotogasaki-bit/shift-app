@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- kanri.html v3.62 (2026-08-04) 【拠点合計をカテゴリー別合計の上へ】社長指定。配る時に見やすいよう、拠点ごとの持ち出し数（拠点合計）を先に出し、その下に▼カテゴリー別合計・総合計を並べる。行の並び＝拠点合計 → ▼カテゴリー別合計（海苔弁系／満腹系／全六／他社商品）→ 総合計。数字・計算は不変。 -->
 <!-- kanri.html v3.61 (2026-08-04) 【カテゴリー別集計の表示整理】v3.60 は他社ぶんを「他社商品」カテゴリー行と「他社（総数）」行の2か所に出しており、同じ内容が重複して読みにくかった（社長報告）。重複していた「他社（総数）」行を削除し、カテゴリー別の「他社商品」行＋「総合計」行の構成にした。総合計行に「他社は拠点に配らないため拠点合計には含みません」の注記を追加。数字は v3.60 と同じ（8/4：海苔弁系579／満腹系81／全六422／他社商品85／拠点合計1082／総合計1167）。 -->
 <!-- kanri.html v3.60 (2026-08-04) 【カテゴリー別集計に他社弁当を出す＋合計を実態に合わせる】v3.59 で他社弁当を「総数のみ（byLocation なし）」に変えた結果、カテゴリー別合計は拠点分の積み上げしか見ておらず「他社商品」カテゴリーが合計0と判定されて**行ごと消え**、合計にも乗っていなかった（社長報告）。対応：①カテゴリー別合計を「拠点分＋総数分」で計算し、他社だけのカテゴリーは拠点列横断1マス「総数 N 個（拠点ごとの内訳なし）」＋薄紫＋他社バッジで表示 ②拠点合計行の下に「他社（総数）」行と「総合計」行を追加（総合計＝拠点合計＋他社総数）。お茶は従来どおり allRows の isTea で除外済み。検算（8/4）：海苔弁系579／満腹系81／全六422／他社商品85、拠点合計1082＋他社85＝**総合計1167**（社長の想定と一致）。GAS変更なし（v3.59 の getSheet1Data がそのまま使える）。 -->
 <!-- kanri.html v3.59 (2026-08-04) 【配分表の他社弁当を1まとめに】シート1（拠点配分表）だけ他社弁当（メンチカツ/チキン南蛮/油淋鶏）を通常商品と同じく拠点ごとにバラして配っていた（実測 8/4: 36/43/20 ← 実納品 25/30/30）。シート2に v3.52 で入れた対応がシート1に入っていなかった対応漏れ。メインGAS getSheet1Data に ①基本数マスタの拠点分から外部商品IDを除外（getExternalDeliveryPidSet_）②「外部納品数」シートの総数行を注入し isExternal:true を返す ③buildRows で外部行は総数をそのまま合計にする、を追加。フロントは isExternal 行を拠点列横断の1マス「総数 N 個（拠点ごとの内訳なし）」＋薄紫＋「他社」バッジで表示し、印刷にも色を出す（#tab-sheet1 にも print-color-adjust を追加）。※他社弁当は拠点別内訳を持たないため、カテゴリー別合計行・拠点合計行には含まれない（拠点に配らないので拠点合計には乗らない）。要メインGAS @417。 -->
@@ -3848,6 +3849,30 @@ function renderSheet1(data) {
   function buildCategoryRowsHTML() {
     const colspan = 1 + visLocIds.length + 1 + 1;
     let html = '';
+
+    // ★2026-08-04 v3.62 拠点合計はカテゴリー別合計の「上」に出す（社長指定）。
+    //   拠点ごとに何個持っていくかが先に目に入る方が、配る時に見やすいため。
+    const grandByLoc = {};
+    let grandSub = 0, grandTotal = 0;
+    locIds.forEach((lid, idx) => {
+      let sum = 0;
+      allRows.forEach(r => { sum += Number(r.byLocation[lid]) || 0; });
+      grandByLoc[lid] = sum;
+      grandTotal += sum;
+      if (idx < subtotalSplit) grandSub += sum;
+    });
+    html += '<tr class="cat-row cat-grand">';
+    html += '<td class="cell-name cat-label">拠点合計</td>';
+    visLocIds.forEach((lid, vIdx) => {
+      if (vIdx === subtotalInsertAt) {
+        html += `<td class="cell-sub">${grandSub || ''}</td>`;
+      }
+      const bcls = visBoundaryCls(vIdx);
+      html += `<td class="cell-data${bcls}">${grandByLoc[lid] || ''}</td>`;
+    });
+    html += `<td class="cell-tot">${grandTotal}</td>`;
+    html += '</tr>';
+
     html += `<tr><td colspan="${colspan}" class="cell-section-cat">▼ カテゴリー別合計</td></tr>`;
 
     SHEET1_CATEGORIES.forEach(cat => {
@@ -3902,28 +3927,7 @@ function renderSheet1(data) {
       html += '</tr>';
     });
 
-    // 拠点合計行（全カテゴリー合算）
-    const grandByLoc = {};
-    let grandSub = 0, grandTotal = 0;
-    locIds.forEach((lid, idx) => {
-      let sum = 0;
-      allRows.forEach(r => { sum += Number(r.byLocation[lid]) || 0; });
-      grandByLoc[lid] = sum;
-      grandTotal += sum;
-      if (idx < subtotalSplit) grandSub += sum;
-    });
-    html += '<tr class="cat-row cat-grand">';
-    html += '<td class="cell-name cat-label">拠点合計</td>';
-    visLocIds.forEach((lid, vIdx) => {
-      if (vIdx === subtotalInsertAt) {
-        html += `<td class="cell-sub">${grandSub || ''}</td>`;
-      }
-      // v3.9/v3.40: 拠点グループ区切り線（本来位置ベース・左詰め）
-      const bcls = visBoundaryCls(vIdx);
-      html += `<td class="cell-data${bcls}">${grandByLoc[lid] || ''}</td>`;
-    });
-    html += `<td class="cell-tot">${grandTotal}</td>`;
-    html += '</tr>';
+    // （拠点合計行は v3.62 でカテゴリー別合計の上へ移動した）
 
     // ★2026-08-04 v3.60 他社弁当（総数管理）は拠点に配らないので「拠点合計」には乗らない。
     //   そのままだと総数ぶんが表のどこにも出ず、合計が実際の製造数と合わなくなるため、
