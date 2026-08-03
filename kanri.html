@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <!-- kanri.html v3.57 (2026-08-03) 【シフト閲覧＝確認状況カードをシフト表の下へ】「📅 シフト閲覧」タブで、シフト表の上に出ていた「✅ シフト確認状況」バー（確認 n/N・未確認者一覧）を**シフト表の下**へ移動。DOM上で #sv-confirm を #sv-content の後ろに置き替え、CSSの margin-bottom:10px → margin-top:12px に変更しただけ。取得・描画ロジック（svRenderConfirm / getShiftConfirmStatus）とキッチンモードでの非表示は従来どおり。GAS変更なし。 -->
+<!-- kanri.html v3.57 (2026-08-03) 【献立と配分表のズレ検知】配分調整タブに警告帯を追加し、「🖨 印刷」の確認にも最上段で出す。GAS の新エンドポイント action=checkMenuAllocation（★読み取り専用）を呼び、①献立に無いのに配分表へ数字が入っている（多く納品される）②献立にあるのに配分表がどこにも数字を持っていない（配られない）の2方向を検知する。判定は getPlannedDelivery と同じ「G列（確定値）優先・空ならH列（翌週提案値）」＝レジが実際に見る値。G列が空のままの日は「配分が未確定」と付記する。取得に失敗しても帯を隠すだけで表も印刷も止めない。きっかけ＝2026-08-03 朝に献立を変えたが配分表が追従せず、厨房は塩麹を作ったのに配分表は柚子に数字を置いていた（レジのスタート画面で実際に届いた種類が0のまま／社長報告）。要メインGAS @412。 -->
 <!-- kanri.html v3.56 (2026-08-03) 【配分の印刷前チェック】配分調整タブの「🖨 印刷」を bmPrintWithCheck() に変更し、押した瞬間に2点を確認する（社長要望）。①**担当者が未割り当てなのに納品数が入っている拠点** ②**担当者がいるのに納品数が0の拠点**。どちらかがあれば拠点名つきで confirm を出し、「キャンセル」なら印刷せずに戻る（直してから印刷し直せる）。判定は表示中の日付のみ・bmServerData.locations[].salesPerson と bmGetDisplaySales の拠点合計を使う＝GAS変更なし。印刷してから配り直しになるのを止めるのが狙い。 -->
 <html lang="ja">
 <head>
@@ -2179,6 +2180,10 @@ body {
       <div class="bm-title-left">
         <div class="bm-title">📐 配分調整</div>
         <div class="bm-subtitle" id="bm-subtitle">読み込み中...</div>
+        <!-- ★2026-08-03 v3.57 献立と配分表のズレ警告（読み取り専用・数字は動かさない） -->
+        <div id="bm-menu-warn" style="display:none;white-space:pre-line;margin-top:6px;padding:8px 11px;
+             background:#fff3e0;border-left:4px solid #ef6c00;border-radius:6px;
+             font-size:12.5px;line-height:1.7;color:#5d3a00;max-width:900px;"></div>
       </div>
       <div class="bm-title-right">
         <div class="bm-week-tabs" id="bm-week-tabs">
@@ -4792,9 +4797,29 @@ let bmDataCache        = {};         // { dateStr: getBasicMasterMatrix応答 }
 //   印刷してから気づくと配り直しになるので、押した瞬間に止める。
 //   ※あくまで確認。「このまま印刷」を選べば従来どおり印刷できる。
 // ═══════════════════════════════════════════════════════════════
-function bmPrintWithCheck() {
+// ★2026-08-03 v3.57【献立と配分表のズレ検知】
+//   その日の献立と配分表（基本数マスタ）が食い違っていないかをサーバーに聞く。
+//   ★読み取り専用。数字は一切動かさない。取得に失敗しても印刷は止めない。
+//   きっかけ：2026-08-03 朝に献立を変えたが配分表が追従せず、厨房は塩麹を作ったのに
+//            配分表は柚子に数字を置いていた（レジのスタート画面が0のまま＝社長報告）。
+async function bmCheckMenuAllocation(dateStr) {
+  if (!dateStr) return null;
+  try {
+    const res = await fetch(`${GAS_URL}?action=checkMenuAllocation&date=${encodeURIComponent(dateStr)}`,
+                            { redirect: 'follow' });
+    const j = await res.json();
+    return (j && j.ok) ? j : null;
+  } catch (e) {
+    console.warn('献立と配分表のズレ検知に失敗（印刷は続行します）:', e);
+    return null;
+  }
+}
+
+async function bmPrintWithCheck() {
   const noStaff = [];   // 担当者がいないのに納品数がある
   const noQty   = [];   // 担当者がいるのに納品数が0
+  // ★2026-08-03 献立とのズレを先に聞いておく（失敗しても null が返るだけ）
+  const menuChk = await bmCheckMenuAllocation(bmCurrentDate);
   try {
     const products = [].concat(
       (bmServerData && bmServerData.products && bmServerData.products.rice)  || [],
@@ -4812,8 +4837,14 @@ function bmPrintWithCheck() {
     console.warn('印刷前チェックに失敗（印刷は続行します）:', e);
   }
 
-  if (noStaff.length || noQty.length) {
+  const menuBad = !!(menuChk && menuChk.mismatch);
+  if (noStaff.length || noQty.length || menuBad) {
     const lines = ['⚠️ 配分に気になるところがあります', ''];
+    // ★2026-08-03 献立とのズレを最上段に出す（種類が違うと配り直しになるため一番重い）
+    if (menuBad) {
+      lines.push(menuChk.message);
+      lines.push('');
+    }
     if (noStaff.length) {
       lines.push('■ 担当者が未割り当てなのに納品数が入っています（' + noStaff.length + '拠点）');
       lines.push(noStaff.join('\n'));
@@ -5641,6 +5672,21 @@ function bmApplyData(dateStr, r, colorMap) {
   bmPurgeOldEdits(allDates);
   bmRenderAll();
   bmUpdateSaveDirty();             // v3.19: 保存ボタン状態更新
+  bmRenderMenuWarn(dateStr);       // ★2026-08-03 v3.57 献立と配分表のズレを帯で表示（非同期・待たせない）
+}
+
+// ★2026-08-03 v3.57 献立と配分表のズレを配分調整タブの上部に帯で出す。
+//   数字は動かさない＝気づかせるだけ。取得に失敗したら黙って隠す（表を邪魔しない）。
+async function bmRenderMenuWarn(dateStr) {
+  const el = document.getElementById('bm-menu-warn');
+  if (!el) return;
+  el.style.display = 'none';
+  el.textContent = '';
+  const j = await bmCheckMenuAllocation(dateStr);
+  if (!j || dateStr !== bmCurrentDate) return;   // 表示中の日付が変わっていたら捨てる
+  if (!j.mismatch) return;
+  el.textContent = '⚠️ 献立と配分表がズレています\n' + (j.message || '');
+  el.style.display = 'block';
 }
 
 // v3.41: 表示中の週の未取得日をバックグラウンドで並列プリフェッチ（GAS無変更・キャッシュに格納）
