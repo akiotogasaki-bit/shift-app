@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- kanri.html v3.59 (2026-08-04) 【配分表の他社弁当を1まとめに】シート1（拠点配分表）だけ他社弁当（メンチカツ/チキン南蛮/油淋鶏）を通常商品と同じく拠点ごとにバラして配っていた（実測 8/4: 36/43/20 ← 実納品 25/30/30）。シート2に v3.52 で入れた対応がシート1に入っていなかった対応漏れ。メインGAS getSheet1Data に ①基本数マスタの拠点分から外部商品IDを除外（getExternalDeliveryPidSet_）②「外部納品数」シートの総数行を注入し isExternal:true を返す ③buildRows で外部行は総数をそのまま合計にする、を追加。フロントは isExternal 行を拠点列横断の1マス「総数 N 個（拠点ごとの内訳なし）」＋薄紫＋「他社」バッジで表示し、印刷にも色を出す（#tab-sheet1 にも print-color-adjust を追加）。※他社弁当は拠点別内訳を持たないため、カテゴリー別合計行・拠点合計行には含まれない（拠点に配らないので拠点合計には乗らない）。要メインGAS @417。 -->
 <!-- kanri.html v3.57 (2026-08-03) 【シフト閲覧＝確認状況カードをシフト表の下へ】「📅 シフト閲覧」タブで、シフト表の上に出ていた「✅ シフト確認状況」バー（確認 n/N・未確認者一覧）を**シフト表の下**へ移動。DOM上で #sv-confirm を #sv-content の後ろに置き替え、CSSの margin-bottom:10px → margin-top:12px に変更しただけ。取得・描画ロジック（svRenderConfirm / getShiftConfirmStatus）とキッチンモードでの非表示は従来どおり。GAS変更なし。 -->
 <!-- kanri.html v3.57 (2026-08-03) 【献立と配分表のズレ検知】配分調整タブに警告帯を追加し、「🖨 印刷」の確認にも最上段で出す。GAS の新エンドポイント action=checkMenuAllocation（★読み取り専用）を呼び、①献立に無いのに配分表へ数字が入っている（多く納品される）②献立にあるのに配分表がどこにも数字を持っていない（配られない）の2方向を検知する。判定は getPlannedDelivery と同じ「G列（確定値）優先・空ならH列（翌週提案値）」＝レジが実際に見る値。G列が空のままの日は「配分が未確定」と付記する。取得に失敗しても帯を隠すだけで表も印刷も止めない。きっかけ＝2026-08-03 朝に献立を変えたが配分表が追従せず、厨房は塩麹を作ったのに配分表は柚子に数字を置いていた（レジのスタート画面で実際に届いた種類が0のまま／社長報告）。要メインGAS @412。 -->
 <!-- kanri.html v3.56 (2026-08-03) 【配分の印刷前チェック】配分調整タブの「🖨 印刷」を bmPrintWithCheck() に変更し、押した瞬間に2点を確認する（社長要望）。①**担当者が未割り当てなのに納品数が入っている拠点** ②**担当者がいるのに納品数が0の拠点**。どちらかがあれば拠点名つきで confirm を出し、「キャンセル」なら印刷せずに戻る（直してから印刷し直せる）。判定は表示中の日付のみ・bmServerData.locations[].salesPerson と bmGetDisplaySales の拠点合計を使う＝GAS変更なし。印刷してから配り直しになるのを止めるのが狙い。 -->
@@ -1205,7 +1206,9 @@ body {
   /* 空の配達列（その表に数量が1つも無い列）は印刷時のみ非表示 */
   #tab-sheet2 .matrix-table .col-empty-print { display: none; }
   /* ★v3.52 他社弁当の総数行は印刷にも出す（背景を落とさない） */
-  #tab-sheet2 .matrix-table tr.s2-ext-row td {
+  /* ★v3.59 シート1（拠点配分表）にも同じ扱いを追加 */
+  #tab-sheet2 .matrix-table tr.s2-ext-row td,
+  #tab-sheet1 .matrix-table tr.s2-ext-row td {
     background: #ede7f6 !important; color: #4527a0 !important;
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
@@ -3807,18 +3810,31 @@ function renderSheet1(data) {
       if (!row.total) return;
       if (isTea(row)) return;  // お茶を除外
       const color  = getColor(row.category, row.baseName);
-      const trCls  = `g-${color}${rowClass ? ' ' + rowClass : ''}`;
+      // ★2026-08-04 v3.59 他社弁当（外部納品）は拠点に配らず「総数」1まとめで出す。
+      //   シート2（v3.52）と同じ薄紫＋「他社」バッジ。GAS getSheet1Data が isExternal を返す。
+      const trCls  = row.isExternal
+        ? `s2-ext-row${rowClass ? ' ' + rowClass : ''}`
+        : `g-${color}${rowClass ? ' ' + rowClass : ''}`;
       html += `<tr class="${trCls}">`;
-      html += `<td class="cell-name">${escHtml(row.baseName)}</td>`;
-      visLocIds.forEach((lid, vIdx) => {
-        if (vIdx === subtotalInsertAt) {
-          html += `<td class="cell-sub">${row.subtotal || ''}</td>`;
-        }
-        const q = row.byLocation[lid];
-        // v3.9/v3.40: 拠点グループ区切り線（本来位置ベース・左詰め）
-        const bcls = visBoundaryCls(vIdx);
-        html += `<td class="cell-data${bcls}">${q ? q : ''}</td>`;
-      });
+      html += `<td class="cell-name">${escHtml(row.baseName)}`
+            + (row.isExternal ? '<span class="s2-ext-badge" title="他社弁当：拠点ごとの配分は決めない（総数のみ）／外部SSから自動取込">他社</span>' : '')
+            + '</td>';
+      if (row.isExternal) {
+        // 拠点列は横断して1マス＝「1まとめ」であることが印刷でも分かるようにする
+        const span = visLocIds.length + (subtotalInsertAt <= visLocIds.length ? 1 : 0);
+        html += `<td class="cell-data" colspan="${span}" style="text-align:center;font-weight:700;">`
+              + `総数 ${row.total} 個（拠点ごとの内訳なし）</td>`;
+      } else {
+        visLocIds.forEach((lid, vIdx) => {
+          if (vIdx === subtotalInsertAt) {
+            html += `<td class="cell-sub">${row.subtotal || ''}</td>`;
+          }
+          const q = row.byLocation[lid];
+          // v3.9/v3.40: 拠点グループ区切り線（本来位置ベース・左詰め）
+          const bcls = visBoundaryCls(vIdx);
+          html += `<td class="cell-data${bcls}">${q ? q : ''}</td>`;
+        });
+      }
       html += `<td class="cell-tot">${row.total || ''}</td>`;
       html += '</tr>';
     });
