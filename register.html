@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>お江戸弁当 レジ</title>
+<!-- register v3.12 (2026-08-04) 【引き継ぎでレジ開始金が0のまま継承される穴を塞ぐ】社長質問「レジの開始金額が打てなかったとはどういう状況？」の回答＝**引き継ぎモードがスタート報告画面ごと飛ばしていた**。開始金の入力欄はスタート報告画面にしか無いのに、`selectLocation` の引き継ぎ分岐は `state.registerStart = data.registerStart || 0` で前の人の値を継いで `showScreen('register')` へ直行するため、前の人が0で開始していると**その日ずっと0のまま誰も直せなかった**。8/3実測で19拠点中**7拠点が開始金0**（芝パーク・浜松町スクエア・ソフバン・平河町・銀座・ぜん六神谷・ダイビル）。実現金売上＝実現金＋ギャラ−開始金 のため、PayPay突合で**約60,000円が見かけのマイナス**として出ていた。販売員コメント「最初、納品報告の画面が出ず、開始金庫金額15000円入力できなかった」が実態。修正：①引き継ぎで開始金が0の時だけ、スタート報告画面を**納品数カードを隠した「開始金だけ」の姿**で1枚はさむ（`enterTakeoverStartCash`。金種入力もそのまま使える）②送信は新API `updateRegisterStart` で開始ログG列だけ更新（`submitTakeoverStartCash`。失敗を握りつぶさずalertで知らせる＝v3.1の反省）③通常フローでも開始金0のまま送ろうとしたら確認ダイアログを出す。要メインGAS（`updateRegisterStart` 追加＋doPostルーティング）。 -->
 <!-- register v3.11 (2026-08-04) 【拠点によって商品リストが違う不具合を修正】社長報告「お茶の記録に拠点差がある」の原因究明。8/3実測でL001は15品（お茶P015・柚子P121が欠落）／L002は17品だった。商品スイッチ(getProductSwitches)は**日付単位のグローバル**で拠点別ではないため、原因はクライアント側と判明。真因＝`filterStoppedProducts()` が `state.products` を**破壊的にfilter**していたこと。起動時Phase Aで**localStorageの古い停止リスト（TTL24時間）**で商品を削り、その後 getMaster が失敗すると`loadMasterData` の catch が「キャッシュがあれば継続」で**黙って先へ進む**ため、削られた商品リストのまま1日レジを打っていた。修正：①`applyMasterToState` が絞り込み前の原本 `state.allProducts` を保持 ②`filterStoppedProducts` は必ず原本から作り直す（冪等。停止0件なら絞り込みを解除＝API復旧時に自動で正しい一覧へ戻る）③原本が空の時は現在の一覧を使う（空配列をbaseにして商品が全消えするのを防ぐ）④マスタ取得に失敗してキャッシュで動いている時はトーストで販売員に知らせる（従来は console.warn のみで誰も気づけなかった）。GAS変更なし。 -->
 <!-- register v3.10 (2026-08-04) 【配分調整で見えないものはレジにも数字を出さない】社長決定。対象＝①お茶（配分調整の商品リストに無い）②他社弁当＝メンチカツ/チキン南蛮/油淋鶏（総数管理で拠点配分は当方で決めず現地でドライバーが割り振る）。どちらも基本数マスタに行があり、G列が空だとH列（翌週提案値）が拾われるため、社長がどこからも設定・確認できない数字がレジのスタート画面に既定値として出ていた（社長指摘：見えない数字がどこかで走っている）。対応：GAS getPlannedDelivery がこの2種を既定値から除外し excludedPids で返す。レジは excludedPids を「配分表と◯品目違います」の判定から外す（GAS _dapDiffSummary_ も同じ2種を除外＝ドライバーへの承認依頼が飛ばない）。★商品としてはレジに出るので販売は従来どおり。届いた数は販売員が入力する（他社弁当は現地割り振りなので元々実数入力が筋）。締め（submitClosingResidual）は元からお茶を除外済み。要メインGAS @419。 -->
 <!-- register v3.9 (2026-08-04) 【お茶は納品数の差異として検知しない】社長決定。お茶は商品としてレジに出す（配分表の既定値もこれまでどおり入る）が、配分調整の画面では管理していないため、配分表との差異にすると「配分表と◯品目違います」＋ドライバーへの確認連絡が毎日飛んでしまう。スタート送信時の比較（state.plannedDelivery との突き合わせ）からお茶を除外。GAS側も _dapDiffSummary_ でお茶を除外（＝承認依頼が飛ばない）。締め（submitClosingResidual）は元から _rcTeaIds_/_rcSumNonTea_ でお茶を除いており、これで開始・締めの扱いが揃う。 -->
@@ -987,12 +988,15 @@ html, body { overscroll-behavior-y: contain; }
     <div class="header-user" id="start-user-name"></div>
   </div>
   <div class="form-section">
-    <div class="form-card">
+    <!-- ★2026-08-04 v3.12：引き継ぎモードではこのカードだけ隠し、開始金の入力を必ず1回通す -->
+    <div class="form-card" id="start-card-delivery">
       <div class="form-card-title">納品数（種類別）</div>
       <!-- ★2026-07-31 Phase B：配分表の個数を既定値として入れる。実物と違えば直してもらう。 -->
       <div id="delivery-plan-note" style="display:none;font-size:12.5px;line-height:1.7;background:rgba(244,196,48,.14);border-left:3px solid var(--gold,#F4C430);border-radius:6px;padding:8px 11px;margin-bottom:10px;"></div>
       <div id="delivery-inputs"></div>
     </div>
+    <!-- ★2026-08-04 v3.12：引き継ぎで入った時だけ出す案内 -->
+    <div id="takeover-start-note" style="display:none;font-size:13px;line-height:1.75;background:rgba(244,196,48,.14);border-left:3px solid var(--gold,#F4C430);border-radius:6px;padding:11px 13px;margin-bottom:12px;"></div>
     <div class="form-card">
       <div class="form-card-title">レジ開始金額</div>
       <div class="form-row">
@@ -1548,6 +1552,7 @@ const state = {
   moveAdj: {},            // ★v3.2 当拠点の拠点間移動±（商品ID:純増減）サーバー単一ソース
   registerStart: 0,
   startReported: false,   // ★v3.1 開始報告(submitStart)がGASに届いたか
+  takeoverStartOnly: false, // ★v3.12 引き継ぎで「レジ開始金だけ」を入力させている最中か（保存しない・画面制御用）
   cart: [],
   cashSales: 0,
   paypayCount: 0,
@@ -1976,6 +1981,14 @@ async function selectLocation(id) {
         renderProducts();
         renderCart();
         saveState();
+        // ★2026-08-04 v3.12：ここで直行するとレジ開始金を打つ画面が二度と出ない。
+        //   前の人が0のまま開始していると0が引き継がれ、その日ずっと直せなかった
+        //   （8/3は19拠点中7拠点が開始金0。PayPay突合で約60,000円のズレとして出た）。
+        //   → 開始金が未入力(0)の時だけ、開始金の入力を1枚はさむ。
+        if (!state.registerStart) {
+          enterTakeoverStartCash(data.userName || '');
+          return;
+        }
         showScreen('register');
         return;
       }
@@ -1986,8 +1999,79 @@ async function selectLocation(id) {
   }
 
   // 通常フロー（誰も入力していない場合 or キャンセル時）
+  state.takeoverStartOnly = false;
+  document.getElementById('start-card-delivery').style.display = '';
+  document.getElementById('takeover-start-note').style.display = 'none';
+  document.getElementById('btn-start-submit').textContent = 'スタート最終確認をする';
   renderDeliveryInputs();
   showScreen('start');
+}
+
+// ★2026-08-04 v3.12【引き継ぎ時のレジ開始金】
+//   スタート報告画面を「レジ開始金だけ」の姿で見せる。納品数は前の人のものをそのまま使うので隠す。
+//   金種からの入力もそのまま使える（既存の calcCashBreakdown('start') を流用）。
+function enterTakeoverStartCash(fromUserName) {
+  state.takeoverStartOnly = true;
+
+  document.getElementById('start-card-delivery').style.display = 'none';
+
+  const note = document.getElementById('takeover-start-note');
+  note.innerHTML = `💰 <b>レジ開始金額を入力してください</b><br>`
+                 + `${fromUserName ? fromUserName + ' さんの' : '前の担当者の'}納品数を引き継ぎます。`
+                 + `納品数の入力は不要です。<br>`
+                 + `<span style="opacity:.8">レジ金庫の中身を数えて入れてください。これが入っていないと、`
+                 + `締めの現金が合わなくなります。</span>`;
+  note.style.display = 'block';
+
+  document.getElementById('register-start').value = '';
+  clearCashBreakdown('start');
+  document.getElementById('btn-start-submit').textContent = 'レジを開始する →';
+
+  showScreen('start');
+}
+
+// ★2026-08-04 v3.12 引き継ぎ時の開始金だけを送る（開始ログのG列を更新）
+async function submitTakeoverStartCash() {
+  const val = parseInt(document.getElementById('register-start').value) || 0;
+  if (val <= 0) {
+    showToast('レジ開始金額を入力してください');
+    return;
+  }
+  const btn = document.getElementById('btn-start-submit');
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '送信中…';
+  try {
+    const res = await fetch(state.GAS_URL, {
+      method: 'POST',
+      redirect: 'follow',
+      body: JSON.stringify({
+        action:        'updateRegisterStart',
+        locationId:    state.location.id,
+        registerStart: val,
+        userId:        state.userId,
+        userName:      state.userName,
+      }),
+    });
+    const j = await res.json();
+    if (!j || !j.success) throw new Error((j && j.error) || '保存できませんでした');
+
+    state.registerStart = val;
+    state.takeoverStartOnly = false;
+    document.getElementById('start-card-delivery').style.display = '';
+    document.getElementById('takeover-start-note').style.display = 'none';
+    btn.textContent = 'スタート最終確認をする';
+    saveState();
+    showToast(`開始金 ¥${val.toLocaleString()} を記録しました`);
+    showScreen('register');
+  } catch (e) {
+    // ★投げっぱなしにしない（v3.1で開始ログ欠落の原因になった作り）
+    console.warn('updateRegisterStart failed:', e);
+    alert('レジ開始金の保存に失敗しました。\n電波を確認して、もう一度お試しください。\n\n' + e.message);
+    btn.textContent = label;
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2060,7 +2144,18 @@ async function loadPlannedDelivery() {
 }
 
 document.getElementById('btn-start-submit').addEventListener('click', () => {
+  // ★2026-08-04 v3.12 引き継ぎモード＝開始金だけを送って終わり（納品数は前の人のものを使う）
+  if (state.takeoverStartOnly) { submitTakeoverStartCash(); return; }
+
   state.registerStart = parseInt(document.getElementById('register-start').value) || 0;
+  // ★2026-08-04 v3.12 開始金0のまま開始させない。
+  //   空欄で送ると0で通り、その日ずっと0が引き継がれて誰も直せなくなっていた。
+  if (!state.registerStart) {
+    if (!confirm('レジ開始金額が入っていません。\n\n本当に0円で開始しますか？\n\nOK : 0円で開始する\nキャンセル : 入力する')) {
+      document.getElementById('register-start').focus();
+      return;
+    }
+  }
   state.deliveryCount = {};
   state.products.forEach(p => {
     state.deliveryCount[p.id] = parseInt(document.getElementById(`delivery-${p.id}`).value) || 0;
@@ -3023,6 +3118,7 @@ function restoreState() {
     state.history        = save.history       || [];
     state.activeCategory = save.activeCategory || null;
     state.startReported  = save.startReported === true;   // ★v3.1
+    state.takeoverStartOnly = false;   // ★v3.12 画面制御用。復元時は必ず通常状態に戻す
     // Task-9：締め画面の入力値も復元（DOM反映はenterFinalScreen側で行う）
     state._finalRegisterEnd = save.finalRegisterEnd || '';
     state._finalLateMinutes = save.finalLateMinutes || '';
