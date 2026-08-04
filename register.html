@@ -3654,6 +3654,10 @@ async function ppRevealResult() {
     const r = await fetch(ppClientUrl('reveal'));
     const j = await r.json();
     if (!j || !j.ok || !j.result || !j.result.paypay) { ppCheckUnavailable(); return; }
+    // ★2026-08-04 検証期間中（notifyStaff:false）は、販売員の画面に差を出さない。
+    //   導入直後に誤検知が2種類出たため、確実に動くと確認できるまでは
+    //   「受け付けました」だけ見せる。判定は社長に届いている。
+    if (j.notifyStaff === false) { ppRenderReceived(); return; }
     ppRenderResult(j.result);
   } catch (e) {
     ppCheckUnavailable();
@@ -3705,6 +3709,18 @@ function ppRenderResult(res) {
   if (editBtn) editBtn.style.display = 'none';
   state.ppRevealed = true;
   try { saveState(); } catch (e) { /* 保存できなくても表示は続ける */ }
+}
+
+// ★2026-08-04 検証期間中の表示。差は見せず、受け付けたことだけ伝える。
+//   数字を何も見せていないので、報告の修正ボタンも残したままにする。
+function ppRenderReceived() {
+  const icon  = document.getElementById('pp-check-icon');
+  const title = document.getElementById('pp-check-title');
+  const body  = document.getElementById('pp-check-body');
+  if (!icon) return;
+  icon.textContent  = '✅';
+  title.textContent = 'PayPayの照合が完了しました';
+  body.innerHTML    = '<span style="opacity:.85">お疲れ様でした。報告は正常に受け付けています。</span>';
 }
 
 // 照合できなかった時。★数字は何も見せていないので、報告の修正は許したままにする。
