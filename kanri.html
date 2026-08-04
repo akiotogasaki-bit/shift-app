@@ -12,6 +12,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>🍱 納品管理</title>
+<!-- kanri.html v3.57 (2026-08-05) 【仕込みの読み込み高速化】社長報告「仕込みの読み込みがめちゃくちゃかかる」。実測＝`getKawariSelections` 3.4秒 ＋ `getSheet4Data` 13〜18秒の**直列2本で17〜22秒**。切り分け＝GASは**存在しないactionを叩くだけでも約5秒**（コード1.8MB）で、日数を1日→4日に増やしても時間が変わらない＝固定コスト（単価マスタ／基本数マスタ7,750行／配達データ）。**A＝1リクエスト化**：`fetchSheet4` から1本目の `getKawariSelections` を削除し、全六（日替わり選択）は**GAS側が先頭日のぶんを読む**（`getSheet4Data` の kawari 引数を省略可に）。表示は元から `data.kawari` を見ているので renderSheet4 は無改修。**B＝結果キャッシュ**：`getSheet4Data` の応答を CacheService に10分保持（GAS側）。数字が変わる操作＝配分の保存/確定・献立保存・日替わり選択の保存・配達取込・外部納品取込・便移動 で版番号を上げてキーごと捨てるので古い数字は出ない（`?fresh=1` で無条件に取り直し）。要メインGAS v2026-08-05（`_sheet4CacheVer_`／`_sheet4BumpCacheVer_`／`getSheet4Data` 改修＋`clearAllMasterCache` で版上げ）。 -->
 <!-- kanri.html v3.56 (2026-08-05) 【献立表：確定済みでも「あとからやった変更」を優先】社長報告「献立のローテーションを変えるとカレンダーを変更しましたと出るのに実際は変わらない。仕入れの関係などで確定後にメニューが変わることはよくある」。原因＝確定（保存）した日は献立表シートの保存値が無条件で最優先だったため、あとから⚙のローテ／曜日固定／定番を変えても一生反映されなかった（GAS `getMenuMonth` の `active: sv ? sv.active : auto.active`）。**修正＝時刻くらべの後勝ち**（GAS側 v2026-08-05）。確定日の更新日時（献立表C列）より⚙ルールの更新日時（設定 `menu_rules_updated_at`）が新しければ、その日は新ルールの自動値を採用する。対象は**今日以降だけ**（過去日は実際に作った記録として保存値のまま）。その日だけ違う献立にしたい時は日をタップして選び直し💾保存すれば、保存した方が新しくなるので**手で決めた内容が勝つ**。kanri側＝①カレンダーセルに `staleSaved` の表示（オレンジ帯＋`↻新ルール`バッジ・`.mn-cell.restale`）と凡例を追加。②日別パネルのピル `↻新ルールに更新` ＋注記（前の確定日時も表示）。③⚙保存後のステータスに「この月の確定済み N日 も新しいルールに切り替えました」と配分表の追従セル数を表示。④`mnSaveDay` は保存時に `staleSaved` を落とす。要メインGAS v2026-08-05（`menu_rules_updated_at`／`_menuSavedIsStale_`／`_menuResolveForDate_`／`saveMenuRules` の更新日時記録＋配分表追従）。 -->
 <!-- kanri.html v3.55 (2026-08-03) 【シフト閲覧＝販売員の名前タップでプロフィール】「📅 シフト閲覧」の販売員シフト表で名前をタップすると、顔写真・職業（学生）・生年月日（＋年齢）をモーダル表示（閲覧専用）。データ源＝別SS「販売スタッフ管理表」(1Yh29o…Xg6w / gid=471776451)。①タブを開いた時に getStaffProfiles を1回取得（写真なし・軽量・GAS側10分キャッシュ）。②顔写真はタップした人のぶんだけ getStaffPhoto で遅延取得＋メモリキャッシュ（表の描画は重くしない）。Driveは非公開のままbase64で返すので共有設定を広げない。③未登録の人をタップすると「プロフィール未登録」と出る＝誰が未提出か分かる。④取得失敗しても表の閲覧には影響しない。関数は全て sp* 接頭辞。キッチンモードのチップは対象外（販売スタッフのみ・社長決定2026-08-03）。登録は index.html v2026-08-03 の初回登録フォームから。要メインGAS v2026-08-03（getStaffProfiles / getStaffPhoto / saveStaffProfile）。 -->
 <!-- kanri.html v3.54 (2026-08-03) 【残数の出どころを拠点合算に】「🧮 他社弁当の残数を記入」の確認ダイアログを、拠点合算の言い方に変更（「残数ログの提出 N件」→「残数を入力した拠点 N件」）。締め報告はあるのに残数の入力が無い拠点があれば、拠点名を列挙して警告する（メインGAS writeExternalResidualToday が missingLocs を返す）。数字そのものの出どころ変更はメインGAS側（残数ログ→残数照合ログの拠点合算）。 -->
@@ -2798,14 +2799,11 @@ async function fetchSheet4() {
   s4SetStatus('取得中…');
   document.getElementById('sheet4-body').innerHTML = '';
   try {
-    // ① 最初の日の保存済み日替わり選択を取得
-    const kRes  = await fetch(GAS_URL + '?action=getKawariSelections&date=' + dates[0]);
-    const kData = await kRes.json();
-    const kawari = (kData.ok && kData.selections) ? kData.selections : {};
- 
-    // ② 仕込み表データを取得（複数日合算）
-    const kawariJson = encodeURIComponent(JSON.stringify(kawari));
-    const res  = await fetch(GAS_URL + '?action=getSheet4Data&dates=' + dates.join(',') + '&kawari=' + kawariJson);
+    // ★v3.57 1リクエストに集約。全六（日替わり選択）は**GAS側**が先頭日のぶんを読む。
+    //   従来は getKawariSelections → getSheet4Data の直列2本で、GASは1回の起動だけで
+    //   約5秒かかるため（コード1.8MB）、起動2回＋往復2回ぶんまるごと損していた。
+    //   応答の data.kawari を全六の読み取り専用表示に使う（renderSheet4 は元からそちらを見ている）。
+    const res  = await fetch(GAS_URL + '?action=getSheet4Data&dates=' + dates.join(','));
     const data = await res.json();
     if (!data.ok) {
       s4SetStatus(data.error || '取得エラー', true);
