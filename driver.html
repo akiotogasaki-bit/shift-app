@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v2.5 (2026-08-05) 【回収の送信を「移動」「2次販売」の2種類に／移動を2箇所に分けて下ろせるように】社長要望「ドライバーの回収時の残数入力の送信時に、報告ではなく移動・2次販売の2種類を用意して欲しい」「移動元は1箇所で移動先が2箇所の場合がある。1回目に下ろす拠点で下ろす数を入力、残りがある場合は次の拠点でその残りを表示」。★①回収モーダルは**残数が1個でもあれば**確定ボタンが「🔄 移動」「🛒 2次販売」の2つになる（残数0の拠点は従来どおり「回収済みにする」1つ）。「移動」を押すと入力した商品別残数がそのまま持ち出しになり、サーバー（submitCollectionCheck）が拠点間移動ログを1本立てて移動タブへ自動で切り替わる。移動元はこの残数で確定＝レジはロック、移動元の納品数からは同じ数が引かれるので**全体の納品数は増えない**（getMoveAdjByLocProduct_ が 移動元−出発数／移動先＋到着数 で合流）。置き弁など残数照合ログに行が無い拠点は startMove を直接投げる保険つき。「2次販売」は種別だけ記録（売上の付け方は社長保留・2026-08-05）。★②到着登録は「ここで下ろす数」に変わり、**減らした分は残りとして搬送中に残る**（元の行は下ろした分に縮み、残りは枝番ID `MV…-2` の新カードになる＝移動元の−は二重にならない）。差を移動中ロスにするのはやめた。回りきって余ったら搬送中カードの「持ち帰り」で締める（どの拠点の納品数にも乗らない）。★③現金会計なしの置き弁で確定ボタンが押せなかった不具合も直した（残数だけで通る）。要: メインGAS @405 以降（残数照合ログに 回収種別／移動ID 列・completeMove 分割・takeBackMove 追加）。 -->
 <!-- driver v2.4 (2026-08-03) 【置き弁でも回収モーダルを開けるように】v2.3 の積み残しを修正。回収モーダルは「最終報告が出ている拠点」しか開けない作りだったため、**販売員の締めが無い置き弁（アスエネ）は回収リストに出るのにタップしても開かない**状態だった。報告が無くても開くようにし、置き弁かどうかは getDeclaredResidual の `okiben` / `cash` で判定する（置き弁でもなく報告も無ければ従来どおり「報告が未提出です」）。**現金会計なしの置き弁（ccNoCash）は現金欄そのものを隠し**、saveActualCash をスキップ、submitCollectionCheck の actualCash も空で送る（＝現金照合の対象外）。確定は残数だけで通る。要: メインGAS @404 以降（getDeclaredResidual が cash を返す）。 -->
 <!-- driver v2.3 (2026-08-03) 【回収の残数を商品別に】回収モーダルの「残った弁当」を1欄（総数）から**商品ごとの入力**に変更（社長決定：「置き弁も通常拠点も全て種類別で入力で。じゃないと 納品数−残数＝販売個数 の計算式が成立しなくて本来あるべき売上が確定しない」）。既定値は getDeclaredResidual の items[] をそのまま使う＝通常拠点は販売員が申告した商品別残数、置き弁は納品数。商品名は白米/玄米を補って表示（銀しゃけ（白）／銀しゃけ（玄））。行タップでテンキーの編集対象が切り替わり、合計を下に表示。既定値から変えた商品は数字が青くなる。送信時に actualResidualDetail（{商品ID:個数}）を付ける（メインGASは detail があればその合計を採用・お茶除外）。実装: ccItems / ccVals / ccField='p:<商品ID>' / ccResidualTotal_ / ccResidualDetail_。要: メインGAS @403 以降（残数照合ログに 実査残数詳細JSON 列・getDeclaredResidual の items[]・置き弁の行自動生成）。 -->
 <!-- driver v2.2 (2026-08-03) 【全体の残数を拠点合算に】残数タブ上部の「入力済（＝残数ログ＝ドライバーの回収提出の合計）」を「拠点合計（各拠点で確認した残数の単純合算）」に差し替え（社長決定 2026-08-03「残数は拠点毎に確認することにした。単純に拠点での残数の合算でよい」）。メインGAS getResidualSummary の locationTotal / locationProducts / locationCount を使用。★計算上残数（理論値）は従来どおり。★残数入力タブは**残す**（今後「2次販売後の最終残数入力」へ転用するため消さない）。拠点の入力がまだ0件の時間帯は従来の回収入力合計を表示し、その旨をラベルに出す。ドライバー別の行は「回収入力（参考）」と明示して残した。 -->
@@ -786,6 +787,13 @@ body {
 .cash-modal-btn.cancel{background:#EAEAEA;color:var(--ink);}
 .cash-modal-btn.ok{background:var(--green);color:#FFF;}
 .cash-modal-btn.ok:disabled{opacity:.45;}
+/* ★2026-08-05 残った弁当の行き先（移動／2次販売）※社長要望「報告ではなく2種類」 */
+.cash-modal-btn.move{background:var(--blue);color:#FFF;}
+.cash-modal-btn.second{background:#D97706;color:#FFF;}
+.cash-modal-btn.move:disabled,.cash-modal-btn.second:disabled{opacity:.45;}
+.cc-kind-hint{font-size:11px;color:var(--ink-mute);text-align:center;margin-top:8px;line-height:1.5;}
+/* 搬送中カードのボタン（持ち帰り） */
+.mv-card-btn.takeback{background:#FDE8D0;color:#8A4B00;}
 </style>
 </head>
 <body>
@@ -1755,10 +1763,30 @@ function renderCashModal_(net) {
     diffEl.className = 'cash-modal-diff';
   }
 
+  // ── 送信ボタン ──
   // 現金は必須。残数は取得できていない拠点（締め前など）では空のままでも進める。
-  document.getElementById('cash-modal-ok').disabled = (cashInput === '');
+  // ★2026-08-05 現金会計なしの置き弁は現金欄が無いので、残数が入っていれば押せる（従来はここで詰まっていた）。
+  const okDisabled = ccNoCash ? (tot === null) : (cashInput === '');
+  // ★2026-08-05 残った弁当があるときは「移動／2次販売」の2択にする（社長要望）。
+  //   残数0なら運ぶものが無いので従来どおり「回収済みにする」1つ。
+  const hasResidual = (tot !== null && tot > 0);
+  const okBtn = document.getElementById('cash-modal-ok');
+  if (okBtn) { okBtn.style.display = hasResidual ? 'none' : ''; okBtn.disabled = okDisabled; }
+  const kindBox  = document.getElementById('cc-kind-btns');
+  const kindHint = document.getElementById('cc-kind-hint');
+  if (kindBox)  kindBox.style.display  = hasResidual ? '' : 'none';
+  if (kindHint) kindHint.style.display = hasResidual ? '' : 'none';
+  ['cc-btn-move', 'cc-btn-second'].forEach(function (bid) {
+    const b = document.getElementById(bid);
+    if (b) b.disabled = okDisabled;
+  });
 }
-async function confirmCash() {
+// ★2026-08-05 kind … '' ＝残数0の通常回収／'移動'／'2次販売'（社長要望）
+//   '移動' はサーバー（submitCollectionCheck）が拠点間移動ログを1本立てる。
+//   移動元はこの残数で確定＝レジはロック。移動元の納品数からは同じ数が引かれるので全体は増えない。
+//   下ろす拠点は「🔄 移動」タブの到着登録で決める（2箇所に分けて下ろせる）。
+async function confirmCash(kind) {
+  kind = kind || '';
   if (!cashModalLocId) return;
   // ★2026-08-03 現金会計なしの置き弁は金額を求めない（残数だけで確定する）
   if (!ccNoCash) {
@@ -1769,9 +1797,14 @@ async function confirmCash() {
   const amount = ccNoCash ? null : parseInt(cashInput, 10);
   if (!ccNoCash && isNaN(amount)) { showToast('金額を入力してください', 'error'); return; }
   if (ccNoCash && ccResidualTotal_() === null) { showToast('残った数を入力してください', 'error'); return; }
-  const okBtn = document.getElementById('cash-modal-ok');
-  okBtn.disabled = true;
-  okBtn.textContent = '保存中…';
+  const okBtn = document.getElementById(
+    kind === '移動' ? 'cc-btn-move' : (kind === '2次販売' ? 'cc-btn-second' : 'cash-modal-ok'));
+  const okLabel = okBtn ? okBtn.textContent : '回収済みにする';
+  // 押していない方も止める（二度押し防止）
+  ['cash-modal-ok', 'cc-btn-move', 'cc-btn-second'].forEach(function (bid) {
+    const b = document.getElementById(bid); if (b) b.disabled = true;
+  });
+  if (okBtn) okBtn.textContent = '保存中…';
   try {
     // ① 現金有高を保存（ドライバー入力：誤差通知なし）
     //    ★2026-08-03 現金会計なしの置き弁は保存するものが無いのでスキップ
@@ -1811,6 +1844,7 @@ async function confirmCash() {
     // ③ ★2026-08-01 残数の照合（販売員の申告と突き合わせる）
     //    残数を取得できていない拠点（締め前など）はスキップ。ここで失敗しても回収は成立させる。
     const ccTotal = ccResidualTotal_();
+    let movedOk = false;
     if (ccTotal !== null) {
       try {
         const res3 = await fetch(GAS_URL, {
@@ -1825,11 +1859,13 @@ async function confirmCash() {
             // ★2026-08-03 商品別の内訳を送る（サーバーはこれがあれば合計を採用する）
             actualResidualDetail: ccResidualDetail_(),
             actualCash:     ccNoCash ? '' : amount,   // ★現金会計なしは照合対象外
+            kind:           kind,   // ★2026-08-05 '移動' / '2次販売'
           }),
           redirect: 'follow',
         });
         const j3 = await res3.json();
         if (j3 && j3.ok) {
+          if (j3.moveId) movedOk = true;
           if (j3.verdict === '一致') {
             showToast('✅ 報告と一致しました');
           } else {
@@ -1841,6 +1877,40 @@ async function confirmCash() {
         console.warn('残数の照合に失敗（回収は完了しています）:', e);
       }
     }
+
+    // ★2026-08-05 「移動」を選んだのに移動が立たなかった時の保険。
+    //   置き弁など残数照合ログに行が無い拠点では submitCollectionCheck が空振りするため、
+    //   ここで直接 startMove を投げる（残数がそのまま持ち出しになる）。
+    if (kind === '移動' && !movedOk) {
+      try {
+        const detail = ccResidualDetail_();
+        const mq = {};
+        Object.keys(detail).forEach(pid => {
+          const it = ccItems.find(x => String(x.productId) === String(pid));
+          if (it && String(it.name || '').includes('お茶')) return;   // お茶は移動しない
+          const q = Number(detail[pid]) || 0;
+          if (q > 0) mq[pid] = q;
+        });
+        if (Object.keys(mq).length) {
+          const res4 = await fetch(GAS_URL, {
+            method: 'POST',
+            body: JSON.stringify({
+              action:           'startMove',
+              date:             getDateStrOffset_(0),
+              driverUserId:     state.userId,
+              driverName:       state.userName,
+              fromLocationId:   id,
+              fromLocationName: loc ? loc.name : '',
+              qty:              mq,
+            }),
+            redirect: 'follow',
+          });
+          const j4 = await res4.json();
+          if (j4 && j4.ok) movedOk = true;
+        }
+      } catch (e) { console.warn('移動の登録に失敗:', e); }
+      if (!movedOk) showToast('移動の登録に失敗しました。移動タブから手で登録してください', 'error', 6000);
+    }
     // ローカル状態を更新
     if (state.reportsByLoc[id]) state.reportsByLoc[id].actualCash = amount;
     state.collectedIds.add(id);
@@ -1849,12 +1919,22 @@ async function confirmCash() {
     saveDrvReportsCache(state.reportsByLoc);
     renderCollectionList();
     closeCashModal();
-    showToast('現金有高を記録し回収済みにしました', 'success');
+    // ★2026-08-05 種別ごとの後始末
+    if (kind === '移動' && movedOk) {
+      showToast('移動として登録しました。下ろす拠点は到着登録で選んでください', 'success', 5000);
+      switchTab('move');   // そのまま到着登録へ進めるよう移動タブを開く（中で loadTodayMoves_ が走る）
+    } else if (kind === '2次販売') {
+      showToast('2次販売として記録し回収済みにしました', 'success');
+    } else {
+      showToast('現金有高を記録し回収済みにしました', 'success');
+    }
   } catch (e) {
     console.warn('confirmCash error:', e);
     showToast((e && e.message) || '保存に失敗しました', 'error');
-    okBtn.disabled = false;
-    okBtn.textContent = '回収済みにする';
+    if (okBtn) { okBtn.disabled = false; okBtn.textContent = okLabel; }
+    ['cash-modal-ok', 'cc-btn-move', 'cc-btn-second'].forEach(function (bid) {
+      const b = document.getElementById(bid); if (b) b.disabled = false;
+    });
   }
 }
 
@@ -3179,11 +3259,16 @@ function renderOpenMoves_() {
   if (moves.length === 0) { box.innerHTML = '<p class="mv-empty">なし</p>'; return; }
   box.innerHTML = moves.map(m => {
     const t = (m.departTime || '').slice(11, 16);
+    // ★2026-08-05 分割で生まれたカード（移動IDに枝番がある）は「残り」と分かるように出す
+    const isSplit = String(m.moveId || '').indexOf('-') >= 0;
     return '<div class="mv-card">' +
-      '<div class="mv-card-main">' + _esc(m.fromLocationName || '') + ' → ？</div>' +
+      '<div class="mv-card-main">' + _esc(m.fromLocationName || '') + ' → ？' +
+        (isSplit ? '<span style="font-size:11px;font-weight:700;color:#8A4B00;background:#FDE8D0;border-radius:8px;padding:1px 7px;margin-left:6px;">残り</span>' : '') +
+      '</div>' +
       '<div class="mv-card-sub">' + _esc(_fmtQtyObj_(m.qty)) + '　' + _esc(t) + ' 出発</div>' +
       '<div class="mv-card-btns">' +
         '<button class="mv-card-btn arrive" onclick="openArrive_(\'' + _esc(m.moveId) + '\')">到着登録</button>' +
+        '<button class="mv-card-btn takeback" onclick="takeBackMove_(\'' + _esc(m.moveId) + '\')">持ち帰り</button>' +
         '<button class="mv-card-btn cancel" onclick="cancelMove_(\'' + _esc(m.moveId) + '\')">取消</button>' +
       '</div></div>';
   }).join('');
@@ -3195,8 +3280,11 @@ function renderTodayMoves_() {
   if (moves.length === 0) { box.innerHTML = '<p class="mv-empty">なし</p>'; return; }
   box.innerHTML = moves.map(m => {
     const arrived = m.status === '完結';
-    const to = arrived ? _esc(m.toLocationName || '') : '搬送中';
-    const sub = '出発 ' + _esc(_fmtQtyObj_(m.departQty)) + (arrived ? '<br>到着 ' + _esc(_fmtQtyObj_(m.arriveQty)) : '');
+    // ★2026-08-05 持ち帰りで締めた分（どの拠点の納品数にも乗らない）
+    const back = m.status === '持ち帰り';
+    const to = arrived ? _esc(m.toLocationName || '') : (back ? '持ち帰り' : '搬送中');
+    const sub = '出発 ' + _esc(_fmtQtyObj_(m.departQty))
+              + ((arrived || back) ? '<br>' + (back ? '持ち帰り ' : '到着 ') + _esc(_fmtQtyObj_(m.arriveQty)) : '');
     return '<div class="mv-card done"><div class="mv-card-main">' + _esc(m.fromLocationName || '') + ' → ' + to + '</div><div class="mv-card-sub">' + sub + '</div></div>';
   }).join('');
 }
@@ -3204,7 +3292,9 @@ function openArrive_(moveId) {
   const m = (state.move.openMoves || []).find(x => String(x.moveId) === String(moveId));
   if (!m) { showToast('対象が見つかりません', 'error'); return; }
   state.move.arrivingId = moveId;
-  document.getElementById('mv-arrive-from').textContent = '出発：' + (m.fromLocationName || '') + '（' + _fmtQtyObj_(m.qty) + '）';
+  // ★2026-08-05 いま積んでいる数を「運んでいる」と明示（下ろす数を減らせば残りは次の拠点へ回る）
+  document.getElementById('mv-arrive-from').textContent =
+    '運んでいる：' + (m.fromLocationName || '') + ' から ' + _fmtQtyObj_(m.qty);
   populateMoveLocations_(document.getElementById('mv-to-location'));
   renderMoveProducts_('mv-arrive-products', m.qty);
   document.getElementById('mv-arrive-modal').classList.add('show');
@@ -3219,6 +3309,7 @@ async function submitArrive_() {
   const toId = document.getElementById('mv-to-location').value || '';
   if (!toId) { showToast('到着拠点を選択してください', 'error'); return; }
   const qty = collectMoveQtys_('mv-arrive-products');
+  if (Object.keys(qty).length === 0) { showToast('下ろす数を入力してください', 'error'); return; }
   try {
     const payload = {
       action: 'completeMove',
@@ -3231,7 +3322,32 @@ async function submitArrive_() {
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || '登録に失敗しました');
     closeArrive_();
-    showToast('到着を登録しました');
+    // ★2026-08-05 全部下ろさなかった分は、そのまま次の拠点で下ろせる（サーバーが搬送中カードを立て直す）
+    if (data.remainTotal > 0) {
+      showToast('下ろしました。残り' + data.remainTotal + '個は次の拠点で下ろせます', 'success', 5000);
+    } else {
+      showToast('到着を登録しました');
+    }
+    await loadTodayMoves_();
+  } catch (e) {
+    showToast('エラー：' + (e.message || e), 'error');
+  }
+}
+
+// ★2026-08-05 持ち帰りで締める（社長決定：移動先を回りきっても残ったらこれで確定）
+//   持ち帰った分はどの拠点の納品数にも乗らない。移動元からは既に引かれている。
+async function takeBackMove_(moveId) {
+  const m = (state.move.openMoves || []).find(x => String(x.moveId) === String(moveId));
+  if (!m) { showToast('対象が見つかりません', 'error'); return; }
+  if (!confirm('残っている ' + _fmtQtyObj_(m.qty) + ' を持ち帰りで締めますか？\n\n※どの拠点の売上にも乗りません')) return;
+  try {
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'takeBackMove', moveId: moveId, qty: m.qty }),
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || '登録に失敗しました');
+    showToast('持ち帰りで締めました');
     await loadTodayMoves_();
   } catch (e) {
     showToast('エラー：' + (e.message || e), 'error');
@@ -3317,9 +3433,13 @@ async function cancelMove_(moveId) {
       <label class="mv-field-label">到着拠点</label>
       <select id="mv-to-location" class="mv-select"></select>
     </div>
-    <div class="mv-section-title">到着個数（出発分を初期表示・差は移動中ロス）</div>
+    <!-- ★2026-08-05 分割対応：ここで下ろす数を入れる。減らした分は「残り」として次の拠点に回る。 -->
+    <div class="mv-section-title">ここで下ろす数（運んでいる数を初期表示）</div>
     <div id="mv-arrive-products"></div>
-    <button class="mv-save-btn" style="margin-top:16px;" onclick="submitArrive_()">到着を登録</button>
+    <div style="font-size:11px;color:var(--ink-mute);margin-top:8px;line-height:1.5;">
+      数を減らして下ろすと、残りは搬送中のまま残り、次の拠点で下ろせます。<br>回りきって余ったら「持ち帰り」で締めてください。
+    </div>
+    <button class="mv-save-btn" style="margin-top:12px;" onclick="submitArrive_()">ここで下ろす</button>
   </div>
 </div>
 
@@ -3360,7 +3480,17 @@ async function cancelMove_(moveId) {
     </div>
     <div class="cash-modal-btns">
       <button class="cash-modal-btn cancel" onclick="closeCashModal()">キャンセル</button>
-      <button class="cash-modal-btn ok" id="cash-modal-ok" onclick="confirmCash()" disabled>回収済みにする</button>
+      <button class="cash-modal-btn ok" id="cash-modal-ok" onclick="confirmCash('')" disabled>回収済みにする</button>
+    </div>
+    <!-- ★2026-08-05 残った弁当があるときは行き先を選んで送る（社長要望：報告ではなく「移動」「2次販売」の2種類）
+         移動 … この残数がそのまま持ち出しになる。下ろす拠点は「🔄 移動」タブの到着登録で決める（2箇所に分けてもよい）。
+         2次販売 … 種別だけ記録する（売上の付け方は後決め） -->
+    <div class="cash-modal-btns" id="cc-kind-btns" style="display:none;">
+      <button class="cash-modal-btn move"   id="cc-btn-move"   onclick="confirmCash('移動')" disabled>🔄 移動</button>
+      <button class="cash-modal-btn second" id="cc-btn-second" onclick="confirmCash('2次販売')" disabled>🛒 2次販売</button>
+    </div>
+    <div class="cc-kind-hint" id="cc-kind-hint" style="display:none;">
+      移動＝残った弁当を積んで運ぶ（下ろす拠点は移動タブで登録）<br>2次販売＝この場から別の売り方をする
     </div>
   </div>
 </div>
