@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<!-- kitchen-admin v3.5 (2026-08-04) 「保存だけで終わって通知が飛んでいない」を潰す。①週の通知状況バーを新設（通知済み n/N名・最終送信・未通知者名を常時表示／GAS getKitchenNotifyStatus）②保存後に未通知が残っていれば通知を促す確認ダイアログ ③保存で差分バッジが 0 になり差分送信が空振りする穴を修正（保存した変更を state.pending に退避し、差分送信の対象＝未保存の変更＋保存済み未通知の和集合に）。差分バッジの意味を「変更セル数」→「未通知の人数」に変更。 -->
+<!-- kitchen-admin v3.5 (2026-08-04) 「調理スタッフに確定通知が届いていない」の是正。実測（getKitchenNotifyStatus）で 2026-W32 は22名保存済みなのに通知は本間mieko 1名だけ・W31は0名と判明＝「📣一括送信」を押さず「✏️差分送信」だけを使っており、内容が変わらない人には永久に飛ばない状態だった。①週の通知状況バーを新設（通知済み n/N名・最終送信・未通知者名を常時表示）②保存後に未通知が残っていれば通知を促す確認ダイアログ ③送信対象の判定を「変更があった人」→「まだ通知していない人」に変更＝未保存の変更 ∪ 保存済み未通知(state.pending) ∪ 通知履歴に無い出勤者。ボタン名「差分送信」→「未通知へ送信」、バッジの意味も「変更セル数」→「未通知の人数」。 -->
 <!-- kitchen-admin v3.4 (2026-06-20) 提出フォームに 09:00・10:00 を追加したことに対応。自動配置で開始09:00以上は「仕込み」行へ振り分け（時間行に吸着させない／assignDay）。v3.3の終了時刻併記（時間行のみ・B案）は維持。GAS変更なし。 -->
 <!-- kitchen-admin v3.3 (2026-06-15) グリッドのスタッフチップに終了時刻「〜HH:MM」を併記（B案＝終了は「キッチン希望」c.req[d]のレンジから補完／確定は開始のみ保存のため）。時間行のみ付与・仕込み行は名前のみ。希望未提出（社員等）は終了なし。GAS変更なし。 -->
 <title>お江戸弁当 キッチンシフト管理</title>
@@ -179,7 +179,7 @@
   <div class="actionbar" id="actionbar" style="display:none;">
     <button class="act save" id="btnSave" onclick="doSave()">💾 保存</button>
     <button class="act all" id="btnAll" onclick="doSendAll()">📣 一括送信</button>
-    <button class="act diff" id="btnDiff" onclick="doSendDiff()">✏️ 差分送信 <span class="bdg" id="diffBadge">0</span></button>
+    <button class="act diff" id="btnDiff" onclick="doSendDiff()">✏️ 未通知へ送信 <span class="bdg" id="diffBadge">0</span></button>
   </div>
 </div>
 
@@ -426,7 +426,7 @@ async function load(){
     document.getElementById('coverage').style.display='flex';
     document.getElementById('copyAllBtn').style.display='block';
     document.getElementById('actionbar').style.display='flex';
-    document.getElementById('hintLine').textContent='希望は自動配置済み。社員は「デフォルト開始」で自動配置（確定＞希望＞社員デフォルト＞休）。枠タップで追加・移動・×。固定時間に無い値は最寄り時間へ寄せます。★差分バッジ＝まだLINEを送っていない人数。「💾 保存」だけではLINEは飛びません。';
+    document.getElementById('hintLine').textContent='希望は自動配置済み。社員は「デフォルト開始」で自動配置（確定＞希望＞社員デフォルト＞休）。枠タップで追加・移動・×。固定時間に無い値は最寄り時間へ寄せます。★バッジ＝まだLINEを送っていない人数。「💾 保存」だけではLINEは飛びません。';
     updateMeta();
     setStatus('読込完了：キッチン対象 '+state.cooks.length+'名','ok');
   }catch(e){
@@ -579,14 +579,22 @@ function computeChanges(){
   });
   return ch;
 }
-/* 差分送信の対象（v3.5）
-   ＝「未保存の変更がある人」∪「保存はしたがまだ通知していない人（state.pending）」
-   保存すると base が更新されて computeChanges が空になるため、pending を足さないと
-   後から差分送信を押しても “変更はありません” で空振りする（v3.4までの穴）。 */
+/* 通知が必要な人（v3.5）＝次の3つの和集合
+     ①未保存の変更がある人（computeChanges）
+     ②このセッションで保存はしたがまだ通知していない人（state.pending）
+     ③この週に出勤があるのに通知履歴が1件も無い人（state.notify）
+   ①だけだったのが v3.4。保存すると base が更新されて computeChanges が空になるため
+   後から押しても “変更はありません” で空振りした。さらに③が無いと、
+   「保存済み・内容も変わっていない・でも一度も通知していない」人（＝今回の21名）が
+   永久に対象から漏れる。実測：2026-W32 は22名保存済みで通知は本間mieko 1名のみだった。 */
 function unsentNames(){
   const set={};
   computeChanges().forEach(c=>{ set[c.name]=true; });
   Object.keys(state.pending).forEach(n=>{ set[n]=true; });
+  if(state.notify){
+    const done={}; (state.notify.names||[]).forEach(x=>{ done[x.name]=true; });
+    workingNames().forEach(n=>{ if(!done[n]) set[n]=true; });
+  }
   return Object.keys(set);
 }
 /* この週に1日でも出勤がある人＝通知が飛ぶべき人（全休はGAS側でもスキップされる） */
@@ -705,8 +713,8 @@ async function doSendAll(){
 
 async function doSendDiff(){
   const names=unsentNames();
-  if(!names.length){ toast('通知が必要な人はいません'); return; }
-  if(!confirm('変更を保存し、'+names.length+'名にだけ通知します。\n対象：'+names.join('、')+'\n（過去日はスキップ）\nよろしいですか？')) return;
+  if(!names.length){ toast('未通知の人はいません'); return; }
+  if(!confirm('現在の内容を保存し、まだ通知していない '+names.length+'名にだけLINEを送ります。\n対象：'+names.join('、')+'\n（過去日はスキップ）\nよろしいですか？')) return;
   await sendDiffCore(names);
 }
 
