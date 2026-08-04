@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<!-- kitchen-admin v3.5 (2026-08-04) 「保存だけで終わって通知が飛んでいない」を潰す。①週の通知状況バーを新設（通知済み n/N名・最終送信・未通知者名を常時表示／GAS getKitchenNotifyStatus）②保存後に未通知が残っていれば通知を促す確認ダイアログ ③保存で差分バッジが 0 になり差分送信が空振りする穴を修正（保存した変更を state.pending に退避し、差分送信の対象＝未保存の変更＋保存済み未通知の和集合に）。差分バッジの意味を「変更セル数」→「未通知の人数」に変更。 -->
 <!-- kitchen-admin v3.4 (2026-06-20) 提出フォームに 09:00・10:00 を追加したことに対応。自動配置で開始09:00以上は「仕込み」行へ振り分け（時間行に吸着させない／assignDay）。v3.3の終了時刻併記（時間行のみ・B案）は維持。GAS変更なし。 -->
 <!-- kitchen-admin v3.3 (2026-06-15) グリッドのスタッフチップに終了時刻「〜HH:MM」を併記（B案＝終了は「キッチン希望」c.req[d]のレンジから補完／確定は開始のみ保存のため）。時間行のみ付与・仕込み行は名前のみ。希望未提出（社員等）は終了なし。GAS変更なし。 -->
 <title>お江戸弁当 キッチンシフト管理</title>
@@ -50,6 +51,15 @@
   .copyall{margin:8px 12px 0;width:calc(100% - 24px);border:1.5px dashed var(--green);background:#eafaf4;color:var(--green-d);border-radius:10px;padding:10px;font-size:13px;font-weight:800;cursor:pointer;}
   .copyall:active{background:#dcf3ea;}
   .hint-line{margin:6px 14px 0;font-size:11px;color:var(--mute);}
+
+  /* ── 通知状況バー（v3.5） ── */
+  .nbar{margin:8px 12px 0;border-radius:10px;padding:9px 11px;font-size:12px;font-weight:700;border:1px solid;display:none;}
+  .nbar .nb-t{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+  .nbar .nb-sub{margin-top:4px;font-size:11px;font-weight:600;line-height:1.5;}
+  .nbar.ok{background:#eafaf4;border-color:#9fdcc9;color:var(--green-d);}
+  .nbar.warn{background:#fdf0e4;border-color:#f0c48f;color:#8a4b0f;}
+  .nbar.none{background:#fdecea;border-color:#f0b3ad;color:#8e2a20;}
+  .nbar.load{background:#eef3f8;border-color:var(--line);color:var(--mute);}
 
   /* ── 時間×曜日グリッド ── */
   .gridwrap{margin:8px 12px 4px;overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:12px;background:var(--card);}
@@ -156,13 +166,15 @@
   <div class="weekrange" id="weekRange">　</div>
   <div class="status" id="status">読み込み中...</div>
 
+  <div class="nbar" id="notifyBar"></div>
+
   <div class="coverage" id="coverage" style="display:none;"></div>
   <button class="copyall" id="copyAllBtn" style="display:none;" onclick="copyReqAll()">🔁 希望＋社員デフォルトで配置</button>
   <div class="hint-line" id="hintLine"></div>
 
   <div id="grid"></div>
 
-  <footer>お江戸弁当 キッチンシフト管理 v3.4</footer>
+  <footer>お江戸弁当 キッチンシフト管理 v3.5</footer>
 
   <div class="actionbar" id="actionbar" style="display:none;">
     <button class="act save" id="btnSave" onclick="doSave()">💾 保存</button>
@@ -204,9 +216,12 @@ const COLORS = ['#1A3C5E','#0E7C66','#B5651D','#6A4C93','#1E6091','#9A3B3B','#3A
 const FIXED_TIMES = ['0:00','2:00','3:00','4:00','5:00','6:00','6:30','7:00','8:00'];
 const PREP_LABEL = '仕込み';
 
-const state = { week:'this', weekTarget:null, dates:[], cooks:[], rows:[] };
+const state = { week:'this', weekTarget:null, dates:[], cooks:[], rows:[], notify:null, pending:{} };
 // rows[i] = { id:'t0'..'t8'|'p0', type:'time'|'prep', time:'HH:MM', label:'仕込み' }
 // cooks[i] = { name, userId, registered, isEmployee, hasReq, req:[5], days:[{off,rowId}×5], base:[5], color }
+// notify   = { count, names:[{name,at}], lastSentAt } … この週に確定通知が飛んだ人（GAS通知履歴 type='kitchen'）
+// pending  = { 氏名:true } … 「保存はしたがまだ通知していない」人。保存で base が更新されて
+//                            差分が消えても差分送信の対象に残すための退避（v3.5）
 let sheetRowId = null, sheetDay = -1;
 
 /* ───────── 時刻ユーティリティ ───────── */
@@ -356,14 +371,19 @@ async function load(){
   document.getElementById('actionbar').style.display='none';
   document.getElementById('grid').innerHTML='';
   document.getElementById('hintLine').textContent='';
+  state.notify=null; state.pending={};
+  setNotifyBar('load','📣 通知状況を確認中...','');
   try{
     const wt=resolveWeekTarget();
-    const [staffR,reqR,confR]=await Promise.all([
+    const [staffR,reqR,confR,notiR]=await Promise.all([
       apiGet({action:'getKitchenStaff'}),
       apiGet({action:'getKitchenRequests',weekTarget:wt}),
       apiGet({action:'getKitchenShift',weekTarget:wt}),
+      // 通知状況は取れなくても本体に影響させない（未デプロイ・通信断でも表を出す）
+      apiGet({action:'getKitchenNotifyStatus',weekTarget:wt}).catch(()=>null),
     ]);
     if(staffR.ok===false) throw new Error(staffR.error||'スタッフ取得失敗');
+    state.notify=(notiR&&notiR.ok)?notiR:null;
 
     state.weekTarget=(confR&&confR.weekTarget)||(reqR&&reqR.weekTarget)||wt;
     state.dates=(confR&&confR.dates&&confR.dates.length?confR.dates:(reqR&&reqR.dates))||[];
@@ -406,7 +426,7 @@ async function load(){
     document.getElementById('coverage').style.display='flex';
     document.getElementById('copyAllBtn').style.display='block';
     document.getElementById('actionbar').style.display='flex';
-    document.getElementById('hintLine').textContent='希望は自動配置済み。社員は「デフォルト開始」で自動配置（確定＞希望＞社員デフォルト＞休）。枠タップで追加・移動・×。固定時間に無い値は最寄り時間へ寄せます。未保存ぶんは差分バッジ→保存で確定。';
+    document.getElementById('hintLine').textContent='希望は自動配置済み。社員は「デフォルト開始」で自動配置（確定＞希望＞社員デフォルト＞休）。枠タップで追加・移動・×。固定時間に無い値は最寄り時間へ寄せます。★差分バッジ＝まだLINEを送っていない人数。「💾 保存」だけではLINEは飛びません。';
     updateMeta();
     setStatus('読込完了：キッチン対象 '+state.cooks.length+'名','ok');
   }catch(e){
@@ -559,6 +579,22 @@ function computeChanges(){
   });
   return ch;
 }
+/* 差分送信の対象（v3.5）
+   ＝「未保存の変更がある人」∪「保存はしたがまだ通知していない人（state.pending）」
+   保存すると base が更新されて computeChanges が空になるため、pending を足さないと
+   後から差分送信を押しても “変更はありません” で空振りする（v3.4までの穴）。 */
+function unsentNames(){
+  const set={};
+  computeChanges().forEach(c=>{ set[c.name]=true; });
+  Object.keys(state.pending).forEach(n=>{ set[n]=true; });
+  return Object.keys(set);
+}
+/* この週に1日でも出勤がある人＝通知が飛ぶべき人（全休はGAS側でもスキップされる） */
+function workingNames(){
+  return state.cooks
+    .filter(c=>{ for(let d=0;d<5;d++){ if(!c.days[d].off) return true; } return false; })
+    .map(c=>c.name);
+}
 function updateMeta(){
   const counts=[0,0,0,0,0];
   state.cooks.forEach(c=>{ for(let d=0;d<5;d++){ if(!c.days[d].off) counts[d]++; } });
@@ -566,38 +602,99 @@ function updateMeta(){
   for(let d=0;d<5;d++){ cv+='<div class="cv">'+DAYS[d]+'<b>'+counts[d]+'</b></div>'; }
   document.getElementById('coverage').innerHTML=cv;
 
-  const changes=computeChanges();
-  document.getElementById('diffBadge').textContent=changes.length;
-  document.getElementById('btnDiff').disabled=(changes.length===0);
+  const names=unsentNames();   // ★バッジの意味＝「未通知の人数」（v3.4までは変更セル数）
+  document.getElementById('diffBadge').textContent=names.length;
+  document.getElementById('btnDiff').disabled=(names.length===0);
+  renderNotifyBar();
+}
+
+/* ───────── 通知状況バー（v3.5） ───────── */
+function setNotifyBar(kind,title,sub){
+  const el=document.getElementById('notifyBar');
+  el.className='nbar '+kind;
+  el.style.display='block';
+  el.innerHTML='<div class="nb-t">'+esc(title)+'</div>'+(sub?('<div class="nb-sub">'+esc(sub)+'</div>'):'');
+}
+function renderNotifyBar(){
+  if(!state.notify){
+    setNotifyBar('load','📣 通知状況を取得できませんでした','この週に通知が飛んだかは画面からは確認できません。🔄更新で再取得してください。');
+    return;
+  }
+  const work=workingNames();
+  if(!work.length){ setNotifyBar('load','📣 この週はまだ出勤者がいません',''); return; }
+
+  const done={}; (state.notify.names||[]).forEach(x=>{ done[x.name]=x.at; });
+  const un=work.filter(n=>!done[n]);
+  const last=state.notify.lastSentAt||'';
+  const head='📣 この週の確定通知：'+(work.length-un.length)+'/'+work.length+'名'+(last?('　最終送信 '+last):'');
+
+  if(!un.length){ setNotifyBar('ok',head,'この週の出勤者全員にLINEが飛んでいます。'); return; }
+  if(un.length===work.length){
+    setNotifyBar('none',head,'⚠️ まだ誰にも通知が飛んでいません。組み終わったら「📣 一括送信」を押してください（「💾 保存」だけではLINEは飛びません）。');
+    return;
+  }
+  setNotifyBar('warn',head,'未通知：'+un.join('、'));
+}
+/* 送信後に通知状況を取り直す（失敗しても画面は壊さない） */
+async function refreshNotifyStatus(){
+  try{
+    const r=await apiGet({action:'getKitchenNotifyStatus',weekTarget:state.weekTarget});
+    state.notify=(r&&r.ok)?r:state.notify;
+  }catch(e){ /* 表示は据え置き */ }
+  renderNotifyBar();
 }
 
 /* ───────── 保存・送信 ───────── */
-async function doSave(){
+function buildRowsPayload(){
+  return state.cooks.map(c=>({name:c.name,days:[0,1,2,3,4].map(d=>serializeDay(c,d))}));
+}
+function commitBase(){
+  state.cooks.forEach(c=>{ c.base=[0,1,2,3,4].map(d=>normNV(serializeDay(c,d))); });
+}
+
+async function doSave(opt){
+  const promptSend=!(opt&&opt.promptSend===false);
+  const changed=computeChanges();          // ★保存前に退避（保存すると差分が消えるため）
   showLoading('保存中...'); setStatus('保存中...');
+  let ok=false;
   try{
-    const rows=state.cooks.map(c=>({name:c.name,days:[0,1,2,3,4].map(d=>serializeDay(c,d))}));
-    const data=await apiPost({action:'saveKitchenShift',weekTarget:state.weekTarget,rows:rows});
+    const data=await apiPost({action:'saveKitchenShift',weekTarget:state.weekTarget,rows:buildRowsPayload()});
     if(!data.success) throw new Error(data.error||'保存失敗');
-    state.cooks.forEach(c=>{ c.base=[0,1,2,3,4].map(d=>normNV(serializeDay(c,d))); });
+    commitBase();
+    changed.forEach(c=>{ state.pending[c.name]=true; });   // ★保存済み・未通知として残す
     updateMeta();
-    setStatus('保存完了（'+data.saved+'名）','ok');
+    setStatus('保存完了（'+data.saved+'名）※LINEはまだ飛んでいません','ok');
     toast('保存しました（'+data.saved+'名）','ok');
+    ok=true;
   }catch(e){
     setStatus('保存失敗：'+e.message,'err'); toast('保存失敗：'+e.message,'err');
   }finally{ hideLoading(); }
+  if(ok&&promptSend) await promptNotifyAfterSave();
+}
+
+/* 保存しただけで終わらせないための促し（v3.5）
+   ＝「保存だけで通知が飛んでいない」が今回の不具合の直接の再発防止 */
+async function promptNotifyAfterSave(){
+  const names=unsentNames();
+  if(!names.length) return;
+  const list=names.slice(0,10).join('、')+(names.length>10?(' ほか'+(names.length-10)+'名'):'');
+  if(!confirm('保存しました。まだLINEは飛んでいません。\n\n未通知：'+names.length+'名\n'+list+'\n\n今すぐこの'+names.length+'名へ通知しますか？\n（キャンセル＝送らない。あとから「✏️ 差分送信」でも送れます）')) return;
+  await sendDiffCore(names);
 }
 
 async function doSendAll(){
-  const n=state.cooks.length;
-  if(!confirm('現在の内容を保存し、キッチン対象 全員（'+n+'名）へ確定シフトをLINE通知します。\n（過去日・休は通知されません）\nよろしいですか？')) return;
+  const work=workingNames();
+  if(!work.length){ toast('この週は出勤者がいません'); return; }
+  if(!confirm('現在の内容を保存し、この週に出勤がある '+work.length+'名へ確定シフトをLINE通知します。\n（過去日・休は通知されません）\nよろしいですか？')) return;
   showLoading('保存＋一括通知中...'); setStatus('保存＋一括通知中...');
   try{
-    const rows=state.cooks.map(c=>({name:c.name,days:[0,1,2,3,4].map(d=>serializeDay(c,d))}));
-    const sv=await apiPost({action:'saveKitchenShift',weekTarget:state.weekTarget,rows:rows});
+    const sv=await apiPost({action:'saveKitchenShift',weekTarget:state.weekTarget,rows:buildRowsPayload()});
     if(!sv.success) throw new Error(sv.error||'保存失敗');
-    state.cooks.forEach(c=>{ c.base=[0,1,2,3,4].map(d=>normNV(serializeDay(c,d))); });
+    commitBase();
     const data=await apiPost({action:'sendKitchenShiftNotify',weekTarget:state.weekTarget,source:'manual'});
     if(!data.success) throw new Error(data.error||'通知失敗');
+    state.pending={};
+    await refreshNotifyStatus();
     updateMeta();
     setStatus('一括送信完了（送信'+data.sent+'名 / スキップ'+data.skipped+'名）','ok');
     toast('一括送信：'+data.sent+'名へ通知','ok');
@@ -607,18 +704,25 @@ async function doSendAll(){
 }
 
 async function doSendDiff(){
-  const changes=computeChanges();
-  if(!changes.length){ toast('通知対象の変更はありません'); return; }
-  const names=Array.from(new Set(changes.map(c=>c.name)));
-  if(!confirm('変更を保存し、変更があった '+names.length+'名にだけ通知します。\n対象：'+names.join('、')+'\n（過去日はスキップ）\nよろしいですか？')) return;
+  const names=unsentNames();
+  if(!names.length){ toast('通知が必要な人はいません'); return; }
+  if(!confirm('変更を保存し、'+names.length+'名にだけ通知します。\n対象：'+names.join('、')+'\n（過去日はスキップ）\nよろしいですか？')) return;
+  await sendDiffCore(names);
+}
+
+/* 差分送信の実体（保存→氏名指定で送信）。
+   GAS の sendKitchenShiftDiff は changes の name しか見ず、
+   その人の「確定シートの現在の内容」を丸ごと送る仕様なので氏名だけ渡せばよい。 */
+async function sendDiffCore(names){
   showLoading('保存＋差分通知中...'); setStatus('保存＋差分通知中...');
   try{
-    const rows=state.cooks.map(c=>({name:c.name,days:[0,1,2,3,4].map(d=>serializeDay(c,d))}));
-    const sv=await apiPost({action:'saveKitchenShift',weekTarget:state.weekTarget,rows:rows});
+    const sv=await apiPost({action:'saveKitchenShift',weekTarget:state.weekTarget,rows:buildRowsPayload()});
     if(!sv.success) throw new Error(sv.error||'保存失敗');
-    const data=await apiPost({action:'sendKitchenShiftDiff',weekTarget:state.weekTarget,changes:changes});
+    const data=await apiPost({action:'sendKitchenShiftDiff',weekTarget:state.weekTarget,changes:names.map(n=>({name:n}))});
     if(!data.success) throw new Error(data.error||'通知失敗');
-    state.cooks.forEach(c=>{ c.base=[0,1,2,3,4].map(d=>normNV(serializeDay(c,d))); });
+    commitBase();
+    state.pending={};
+    await refreshNotifyStatus();
     updateMeta();
     setStatus('差分送信完了（送信'+data.sent+'名 / スキップ'+data.skipped+'名）','ok');
     toast('差分送信：'+data.sent+'名へ通知','ok');
