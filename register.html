@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>お江戸弁当 レジ</title>
+<!-- register v3.14 (2026-08-05) 【レジ開始金は「後からいつでも直せる」に。不完全な開始ログ行も断つ】社長指示「先に納品数を入れるのは今後も発生するから、それも踏まえた運用に」。★実データで原因を特定：8/3 銀座の開始ログは **10:59:06 に「商品1種・合計1個（{"P001":1}）・開始金0」の行**、その**7秒後の 10:59:13 に「13種74個・開始金0」の行**が同一UIDで立っていた（ソフバン・ダイビルも同型／開始金0だった拠点と完全一致）。出どころは `sendDeliveryUpdate → ensureStartReported → sendStartReport` の経路で、`state.deliveryCount` がまだ1商品しか入っていない状態のまま開始報告が送られたもの。この不完全な行が先に立つと、後から入る販売員が引き継ぎ判定に落ちて開始金を打てなくなる。対応3点：①**在庫モーダルの「開始金庫」が0のとき「未入力 ▸ 入力する」と赤字表示**になり、タップすれば**レジを打っている途中でもいつでも開始金を入れ直せる**（`openRegisterStartFix` → `enterTakeoverStartCash(_, {fromRegister:true})` → `updateRegisterStart`）。引き継ぎ画面に頼らないので、先に納品数が入る運用でも必ず直せる ②`sendStartReport` は**納品数が1〜2種しか入っていない時は送信を中止**してトーストで知らせる（不完全な開始ログ行を作らない） ③開始金を入れたら金庫サマリーを即時再描画。GAS変更なし（`updateRegisterStart` は @452 で追加済み）。 -->
 <!-- register v3.13 (2026-08-04) 【v3.12の穴を塞ぐ：スタート報告のボタンが無反応になる経路をなくす】社長報告「レジのスタート報告の時にレジのスタート金を入力できない」（※同じ症状は8/3にも発生しており v3.12 が原因ではないが、v3.12 に実在の穴があったので塞ぐ）。真因＝`renderDeliveryInputs()` はアプリ全体で `selectLocation` の通常フロー**1箇所からしか呼ばれない**のに、v3.12 で追加した `enterTakeoverStartCash()`（引き継ぎ時の開始金だけ画面）がそれを呼んでいなかった。そのためこの画面を通ったあとスタート報告画面に戻ると `delivery-<商品ID>` が存在せず、送信ボタンが `document.getElementById(...).value` の **null 参照で例外→ボタンを押しても何も起きない**状態になっていた（販売員からは「入力できない」に見える）。修正3点：①`enterTakeoverStartCash` はカードを隠す前に必ず `renderDeliveryInputs()` を呼ぶ ②`btn-start-submit` は入力欄が1つでも無ければ**黙って落ちず、画面を作り直して alert で知らせて中止**する ③`submitTakeoverStartCash` が「本日の開始報告が見つかりません」を受けたら詰まらせず通常のスタート報告へ戻す（`backToNormalStartReport`）。あわせて引き継ぎ画面に「納品数から自分で入力し直す →」の逃げ道リンクを追加し、**どんな理由で詰まっても販売員が自力で通常フローに戻れる**ようにした。GAS変更なし。 -->
 <!-- register v3.12 (2026-08-04) 【引き継ぎでレジ開始金が0のまま継承される穴を塞ぐ】社長質問「レジの開始金額が打てなかったとはどういう状況？」の回答＝**引き継ぎモードがスタート報告画面ごと飛ばしていた**。開始金の入力欄はスタート報告画面にしか無いのに、`selectLocation` の引き継ぎ分岐は `state.registerStart = data.registerStart || 0` で前の人の値を継いで `showScreen('register')` へ直行するため、前の人が0で開始していると**その日ずっと0のまま誰も直せなかった**。8/3実測で19拠点中**7拠点が開始金0**（芝パーク・浜松町スクエア・ソフバン・平河町・銀座・ぜん六神谷・ダイビル）。実現金売上＝実現金＋ギャラ−開始金 のため、PayPay突合で**約60,000円が見かけのマイナス**として出ていた。販売員コメント「最初、納品報告の画面が出ず、開始金庫金額15000円入力できなかった」が実態。修正：①引き継ぎで開始金が0の時だけ、スタート報告画面を**納品数カードを隠した「開始金だけ」の姿**で1枚はさむ（`enterTakeoverStartCash`。金種入力もそのまま使える）②送信は新API `updateRegisterStart` で開始ログG列だけ更新（`submitTakeoverStartCash`。失敗を握りつぶさずalertで知らせる＝v3.1の反省）③通常フローでも開始金0のまま送ろうとしたら確認ダイアログを出す。要メインGAS（`updateRegisterStart` 追加＋doPostルーティング）。 -->
 <!-- register v3.11 (2026-08-04) 【拠点によって商品リストが違う不具合を修正】社長報告「お茶の記録に拠点差がある」の原因究明。8/3実測でL001は15品（お茶P015・柚子P121が欠落）／L002は17品だった。商品スイッチ(getProductSwitches)は**日付単位のグローバル**で拠点別ではないため、原因はクライアント側と判明。真因＝`filterStoppedProducts()` が `state.products` を**破壊的にfilter**していたこと。起動時Phase Aで**localStorageの古い停止リスト（TTL24時間）**で商品を削り、その後 getMaster が失敗すると`loadMasterData` の catch が「キャッシュがあれば継続」で**黙って先へ進む**ため、削られた商品リストのまま1日レジを打っていた。修正：①`applyMasterToState` が絞り込み前の原本 `state.allProducts` を保持 ②`filterStoppedProducts` は必ず原本から作り直す（冪等。停止0件なら絞り込みを解除＝API復旧時に自動で正しい一覧へ戻る）③原本が空の時は現在の一覧を使う（空配列をbaseにして商品が全消えするのを防ぐ）④マスタ取得に失敗してキャッシュで動いている時はトーストで販売員に知らせる（従来は console.warn のみで誰も気づけなかった）。GAS変更なし。 -->
@@ -2011,8 +2012,10 @@ async function selectLocation(id) {
 // ★2026-08-04 v3.12【引き継ぎ時のレジ開始金】
 //   スタート報告画面を「レジ開始金だけ」の姿で見せる。納品数は前の人のものをそのまま使うので隠す。
 //   金種からの入力もそのまま使える（既存の calcCashBreakdown('start') を流用）。
-function enterTakeoverStartCash(fromUserName) {
+function enterTakeoverStartCash(fromUserName, opts) {
+  opts = opts || {};
   state.takeoverStartOnly = true;
+  state.startCashFromRegister = !!opts.fromRegister;   // ★v3.14 レジ画面から呼ばれたか
 
   // ★2026-08-04 v3.13【重要】カードを隠す前に必ず納品数の入力欄を作っておく。
   //   renderDeliveryInputs() はアプリ全体で selectLocation の通常フロー1箇所からしか呼ばれない。
@@ -2023,15 +2026,25 @@ function enterTakeoverStartCash(fromUserName) {
   document.getElementById('start-card-delivery').style.display = 'none';
 
   const note = document.getElementById('takeover-start-note');
-  note.innerHTML = `💰 <b>レジ開始金額を入力してください</b><br>`
-                 + `${fromUserName ? fromUserName + ' さんの' : '前の担当者の'}納品数を引き継ぎます。`
-                 + `納品数の入力は不要です。<br>`
-                 + `<span style="opacity:.8">レジ金庫の中身を数えて入れてください。これが入っていないと、`
-                 + `締めの現金が合わなくなります。</span>`
-                 // ★2026-08-04 v3.13 逃げ道：この画面で困ったら普通のスタート報告に戻れるようにする
-                 + `<div style="margin-top:9px;"><a href="javascript:void(0)" onclick="backToNormalStartReport()"`
-                 + ` style="color:#8a6d00;text-decoration:underline;font-size:12.5px;">`
-                 + `納品数から自分で入力し直す →</a></div>`;
+  const linkStyle = 'color:#8a6d00;text-decoration:underline;font-size:12.5px;';
+  if (opts.fromRegister) {
+    // ★v3.14 レジを打っている途中から開始金を入れに来た場合
+    note.innerHTML = `💰 <b>レジ開始金額が入っていません</b><br>`
+                   + `金庫の中身を数えて入れてください。納品数はそのままです。<br>`
+                   + `<span style="opacity:.8">これが入っていないと締めの現金が合わず、`
+                   + `売上とPayPayの照合もできません。</span>`
+                   + `<div style="margin-top:9px;"><a href="javascript:void(0)" onclick="showScreen('register')"`
+                   + ` style="${linkStyle}">入力せずレジに戻る →</a></div>`;
+  } else {
+    note.innerHTML = `💰 <b>レジ開始金額を入力してください</b><br>`
+                   + `${fromUserName ? fromUserName + ' さんの' : '前の担当者の'}納品数を引き継ぎます。`
+                   + `納品数の入力は不要です。<br>`
+                   + `<span style="opacity:.8">レジ金庫の中身を数えて入れてください。これが入っていないと、`
+                   + `締めの現金が合わなくなります。</span>`
+                   // ★2026-08-04 v3.13 逃げ道：この画面で困ったら普通のスタート報告に戻れるようにする
+                   + `<div style="margin-top:9px;"><a href="javascript:void(0)" onclick="backToNormalStartReport()"`
+                   + ` style="${linkStyle}">納品数から自分で入力し直す →</a></div>`;
+  }
   note.style.display = 'block';
 
   document.getElementById('register-start').value = '';
@@ -2045,6 +2058,7 @@ function enterTakeoverStartCash(fromUserName) {
 //   どんな理由で詰まっても、販売員が自力で普通のスタート報告に戻れる逃げ道を必ず用意する。
 function backToNormalStartReport(msg) {
   state.takeoverStartOnly = false;
+  state.startCashFromRegister = false;
   try { renderDeliveryInputs(); } catch (e) { console.warn('renderDeliveryInputs:', e); }
   document.getElementById('start-card-delivery').style.display = '';
   document.getElementById('takeover-start-note').style.display = 'none';
@@ -2090,10 +2104,13 @@ async function submitTakeoverStartCash() {
 
     state.registerStart = val;
     state.takeoverStartOnly = false;
+    state.startCashFromRegister = false;
     document.getElementById('start-card-delivery').style.display = '';
     document.getElementById('takeover-start-note').style.display = 'none';
     btn.textContent = 'スタート最終確認をする';
     saveState();
+    // ★v3.14 レジ画面の金庫サマリーを即時反映（「未入力」表示を消す）
+    try { renderCashboxSummary(); } catch (e) {}
     showToast(`開始金 ¥${val.toLocaleString()} を記録しました`);
     showScreen('register');
   } catch (e) {
@@ -2331,6 +2348,18 @@ async function retryFailedSends() {
 
 // 開始報告（submitStart）。成功で startReported=true。失敗はキューへ。戻り値: 成功bool
 async function sendStartReport() {
+  // ★2026-08-05 v3.14【重要】納品数がほぼ空のまま開始報告を送らない。
+  //   実データ（8/3 銀座 10:59:06／ソフバン／ダイビル）で
+  //   「商品1種・合計1個・開始金0」の開始ログ行が、本来の行の**7秒前**に立っていた。
+  //   出どころは sendDeliveryUpdate → ensureStartReported → sendStartReport の経路で、
+  //   state.deliveryCount がまだ1商品しか入っていない状態のまま送られたもの。
+  //   この不完全な行が立つと、後から入る販売員が引き継ぎ判定に落ちて開始金を打てなくなる。
+  const _kinds = Object.keys(state.deliveryCount || {}).length;
+  if ((state.products || []).length >= 4 && _kinds > 0 && _kinds < 3) {
+    console.warn('開始報告を中止：納品数が不完全（' + _kinds + '種のみ）');
+    showToast('納品数が読み込めていません。スタート報告からやり直してください');
+    return false;
+  }
   const payload = {
     action:        'submitStart',
     userId:        state.userId,
@@ -2830,9 +2859,33 @@ function renderCashboxSummary() {
   const elStart = document.getElementById('cs-start');
   const elCash  = document.getElementById('cs-cash');
   const elTotal = document.getElementById('cs-total');
-  if (elStart) elStart.textContent = `¥${start.toLocaleString()}`;
+  // ★2026-08-05 v3.14【社長指示「先に納品数を入れるのは今後も発生するから、それも踏まえた運用に」】
+  //   開始金が入っていない時は、ここから**いつでも入れ直せる**ようにする。
+  //   引き継ぎ画面（スタート報告時）に頼らず、レジを打っている最中でも直せるのが要点。
+  //   実データで銀座・ソフバン・ダイビル・平河町が開始金0のまま1日を終えていた（8/3・8/4）。
+  if (elStart) {
+    if (start > 0) {
+      elStart.textContent = `¥${start.toLocaleString()}`;
+      elStart.style.color = '';
+      elStart.style.cursor = '';
+      elStart.style.textDecoration = '';
+      elStart.onclick = null;
+    } else {
+      elStart.textContent = '未入力 ▸ 入力する';
+      elStart.style.color = '#ff6b6b';
+      elStart.style.cursor = 'pointer';
+      elStart.style.textDecoration = 'underline';
+      elStart.onclick = openRegisterStartFix;
+    }
+  }
   if (elCash)  elCash.textContent  = `¥${cash.toLocaleString()}`;
   if (elTotal) elTotal.textContent = `¥${total.toLocaleString()}`;
+}
+
+// ★2026-08-05 v3.14 レジを打っている途中から開始金を入れ直す
+function openRegisterStartFix() {
+  try { closeStockModal(); } catch (e) {}
+  enterTakeoverStartCash('', { fromRegister: true });
 }
 
 function renderStockList() {
