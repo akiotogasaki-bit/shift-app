@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v2.6 (2026-08-05) 【残数タブの手入力を廃止】社長指示「ドライバーアプリの残数入力は今は回収時の合計で出しているから、入力できないようにして」。残数は回収モーダルで拠点ごとに商品別入力する方式に一本化されたため、残数タブで打つと二重入力になる。①商品ごとの入力欄を外し「残数の入力は不要になりました／数え直したいときは回収タブでその拠点をタップ」の案内に差し替え ②下部の「報告を送信する」を「🚚 回収へ戻る」に変更（`submitResidual` は画面から呼べなくなった） ③回収タブ下部の導線も「📦 残数入力へ切り替え」→「📦 残数を確認する」 ④入力が無くなり必ず0になる「入力済」欄を消し、「自分の残数」は**計算上だけ**を大きく表示（全体の数字は上の「拠点合計」で見る） ⑤`submitReport()` は誤呼び出しガードを付けて残置。★`RESIDUAL_INPUT_ENABLED = false` の1行を true に戻せば元の入力欄がそのまま復活する＝**2次販売後の最終残数入力へ転用するため**（2026-08-03 の社長決定「残数入力タブは消さない」を維持）。GAS変更なし。 -->
 <!-- driver v2.5 (2026-08-05) 【回収の送信を「移動」「2次販売」の2種類に／移動を2箇所に分けて下ろせるように】社長要望「ドライバーの回収時の残数入力の送信時に、報告ではなく移動・2次販売の2種類を用意して欲しい」「移動元は1箇所で移動先が2箇所の場合がある。1回目に下ろす拠点で下ろす数を入力、残りがある場合は次の拠点でその残りを表示」。★①回収モーダルは**残数が1個でもあれば**確定ボタンが「🔄 移動」「🛒 2次販売」の2つになる（残数0の拠点は従来どおり「回収済みにする」1つ）。「移動」を押すと入力した商品別残数がそのまま持ち出しになり、サーバー（submitCollectionCheck）が拠点間移動ログを1本立てて移動タブへ自動で切り替わる。移動元はこの残数で確定＝レジはロック、移動元の納品数からは同じ数が引かれるので**全体の納品数は増えない**（getMoveAdjByLocProduct_ が 移動元−出発数／移動先＋到着数 で合流）。置き弁など残数照合ログに行が無い拠点は startMove を直接投げる保険つき。「2次販売」は種別だけ記録（売上の付け方は社長保留・2026-08-05）。★②到着登録は「ここで下ろす数」に変わり、**減らした分は残りとして搬送中に残る**（元の行は下ろした分に縮み、残りは枝番ID `MV…-2` の新カードになる＝移動元の−は二重にならない）。差を移動中ロスにするのはやめた。回りきって余ったら搬送中カードの「持ち帰り」で締める（どの拠点の納品数にも乗らない）。★③現金会計なしの置き弁で確定ボタンが押せなかった不具合も直した（残数だけで通る）。要: メインGAS @405 以降（残数照合ログに 回収種別／移動ID 列・completeMove 分割・takeBackMove 追加）。 -->
 <!-- driver v2.4 (2026-08-03) 【置き弁でも回収モーダルを開けるように】v2.3 の積み残しを修正。回収モーダルは「最終報告が出ている拠点」しか開けない作りだったため、**販売員の締めが無い置き弁（アスエネ）は回収リストに出るのにタップしても開かない**状態だった。報告が無くても開くようにし、置き弁かどうかは getDeclaredResidual の `okiben` / `cash` で判定する（置き弁でもなく報告も無ければ従来どおり「報告が未提出です」）。**現金会計なしの置き弁（ccNoCash）は現金欄そのものを隠し**、saveActualCash をスキップ、submitCollectionCheck の actualCash も空で送る（＝現金照合の対象外）。確定は残数だけで通る。要: メインGAS @404 以降（getDeclaredResidual が cash を返す）。 -->
 <!-- driver v2.3 (2026-08-03) 【回収の残数を商品別に】回収モーダルの「残った弁当」を1欄（総数）から**商品ごとの入力**に変更（社長決定：「置き弁も通常拠点も全て種類別で入力で。じゃないと 納品数−残数＝販売個数 の計算式が成立しなくて本来あるべき売上が確定しない」）。既定値は getDeclaredResidual の items[] をそのまま使う＝通常拠点は販売員が申告した商品別残数、置き弁は納品数。商品名は白米/玄米を補って表示（銀しゃけ（白）／銀しゃけ（玄））。行タップでテンキーの編集対象が切り替わり、合計を下に表示。既定値から変えた商品は数字が青くなる。送信時に actualResidualDetail（{商品ID:個数}）を付ける（メインGASは detail があればその合計を採用・お茶除外）。実装: ccItems / ccVals / ccField='p:<商品ID>' / ccResidualTotal_ / ccResidualDetail_。要: メインGAS @403 以降（残数照合ログに 実査残数詳細JSON 列・getDeclaredResidual の items[]・置き弁の行自動生成）。 -->
@@ -884,21 +885,18 @@ body {
 
     <div class="residual-summary" onclick="openBreakdown()" style="cursor:pointer;">
       <div class="residual-summary-label">自分の残数（お茶除く）</div>
-      <!-- v1.2: 計算上 / 入力済 を併記 -->
-      <div style="display:flex;gap:10px;justify-content:center;align-items:flex-end;margin:4px 0;">
-        <div style="text-align:center;">
-          <div style="font-size:11px;opacity:.6;margin-bottom:2px;">計算上</div>
-          <div style="font-size:36px;font-weight:700;line-height:1;" id="residual-calculated">0</div>
-        </div>
-        <div style="font-size:28px;opacity:.4;padding-bottom:2px;">/</div>
-        <div style="text-align:center;">
-          <div style="font-size:11px;opacity:.6;margin-bottom:2px;">入力済</div>
-          <div style="font-size:36px;font-weight:700;line-height:1;color:#FFD700;" id="residual-total">0</div>
-        </div>
+      <!-- ★2026-08-05 残数はドライバーが手で入力しなくなった（回収時の入力から出す）ので、
+           必ず0になる「入力済」欄をやめて計算上だけを出す。全体の数字は上の「拠点合計」で見る。 -->
+      <div style="margin:4px 0;">
+        <div style="font-size:11px;opacity:.6;margin-bottom:2px;">計算上</div>
+        <div style="font-size:40px;font-weight:700;line-height:1;" id="residual-calculated">0</div>
       </div>
+      <span id="residual-total" style="display:none;">0</span>
       <div class="residual-summary-unit">個</div>
       <div style="font-size:11px;opacity:.6;margin-top:6px;">タップで内訳を確認</div>
     </div>
+    <!-- ★2026-08-05 残数の手入力は廃止（社長指示：「今は回収時の合計で出しているから、入力できないように」）。
+         2次販売後の最終残数入力へ転用する時のために renderProductList / submitReport は残してある。 -->
     <div class="product-list" id="product-list"></div>
   </div>
 
@@ -1010,11 +1008,13 @@ body {
 
   <div class="sticky-bottom" id="sticky-collection">
     <button class="btn-primary" onclick="switchTab('residual')">
-      📦 残数入力へ切り替え
+      📦 残数を確認する
     </button>
   </div>
+  <!-- ★2026-08-05 「報告を送信する」は廃止（残数は回収時の入力から出すため。二重入力を防ぐ）。
+       submitReport() 自体は2次販売後の最終残数入力へ転用するので残してある。 -->
   <div class="sticky-bottom" id="sticky-residual" style="display:none;">
-    <button class="btn-primary" onclick="submitReport()">報告を送信する</button>
+    <button class="btn-primary" onclick="switchTab('collection')">🚚 回収へ戻る</button>
   </div>
   <div class="sticky-bottom" id="sticky-nextroute" style="display:none;">
     <button class="save-route-btn" id="save-nextroute-btn" onclick="saveNextDayRoute()" disabled>変更を保存</button>
@@ -2089,9 +2089,27 @@ async function confirmSendReminder() {
 // ═══════════════════════════════════════════════════════════════
 // 残数入力
 // ═══════════════════════════════════════════════════════════════
+// ★2026-08-05 残数の手入力は廃止（社長指示：「残数入力は今は回収時の合計で出しているから、入力できないように」）。
+//   回収モーダルで商品別に入れた数がそのまま残数になるため、ここで打つと二重入力になる。
+//   関数は消さずに案内へ差し替える＝2次販売後の最終残数入力へ転用するときに元に戻せるようにしておく。
+const RESIDUAL_INPUT_ENABLED = false;
+
 function renderProductList() {
+  const box = document.getElementById('product-list');
+  if (!box) return;
+  if (!RESIDUAL_INPUT_ENABLED) {
+    box.innerHTML =
+      '<div style="background:#FFF;border-radius:14px;margin:8px 12px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,.06);">'
+      + '<div style="font-size:14px;font-weight:700;color:var(--ink);margin-bottom:6px;">残数の入力は不要になりました</div>'
+      + '<div style="font-size:12px;color:var(--ink-mute);line-height:1.7;">'
+      + '残数は<b>回収のときに拠点ごとに入力した数</b>から出しています。<br>'
+      + 'ここで打つと二重になるため、入力欄は外しました。<br>'
+      + '数え直したいときは「🚚 回収」タブでその拠点をタップしてください。'
+      + '</div></div>';
+    return;
+  }
   const teaIds = state.products.filter(p => p.name.includes('お茶')).map(p => p.id);
-  document.getElementById('product-list').innerHTML = state.products.map(p => {
+  box.innerHTML = state.products.map(p => {
     const isTea = teaIds.includes(p.id);
     return `
       <div class="product-input-card ${isTea ? 'tea' : ''}">
@@ -2103,11 +2121,15 @@ function renderProductList() {
 }
 
 function updateResidualTotal() {
-  const teaIds = state.products.filter(p => p.name.includes('お茶')).map(p => p.id);
-  const total  = state.products
-    .filter(p => !teaIds.includes(p.id))
-    .reduce((sum, p) => sum + (parseInt(document.getElementById(`res-${p.id}`)?.value || '0') || 0), 0);
-  document.getElementById('residual-total').textContent = total;
+  // ★2026-08-05 入力欄が無い間は合計するものが無い（計算上残数だけ更新する）
+  if (RESIDUAL_INPUT_ENABLED) {
+    const teaIds = state.products.filter(p => p.name.includes('お茶')).map(p => p.id);
+    const total  = state.products
+      .filter(p => !teaIds.includes(p.id))
+      .reduce((sum, p) => sum + (parseInt(document.getElementById(`res-${p.id}`)?.value || '0') || 0), 0);
+    const el = document.getElementById('residual-total');
+    if (el) el.textContent = total;
+  }
   // v1.2: 計算上残数も同時に更新（state.reportsByLocベース）
   updateCalculatedResidualTotal();
 }
@@ -2471,6 +2493,12 @@ function switchTab(tab) {
 // 残数報告送信
 // ═══════════════════════════════════════════════════════════════
 async function submitReport() {
+  // ★2026-08-05 手入力を止めている間は送らせない（画面にボタンは無いが、念のための二重ガード）。
+  //   2次販売後の最終残数入力へ転用するときは RESIDUAL_INPUT_ENABLED を true に戻す。
+  if (!RESIDUAL_INPUT_ENABLED) {
+    showToast('残数は回収のときに入力した数から出しています', 'error', 4000);
+    return;
+  }
   const residualCount = {};
   state.products.forEach(p => {
     residualCount[p.id] = parseInt(document.getElementById(`res-${p.id}`)?.value) || 0;
