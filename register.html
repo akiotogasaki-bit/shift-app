@@ -3675,10 +3675,19 @@ function ppRenderResult(res) {
       `<div style="display:flex;justify-content:space-between;"><span>アプリの入力</span><span>${yen(p.appAmount)}（${p.appCount}件）</span></div>`
     + `<div style="display:flex;justify-content:space-between;"><span>PayPayの記録</span><span>${yen(p.actualAmount)}（${p.actualCount}件）</span></div>`;
 
-  if (p.diffAmount === 0 && p.diffCount === 0) {
+  // ★2026-08-04 判定は片方向。
+  //   アプリ < PayPay は二次販売・取り置きの後日入金で普通に起きるので警告にしない。
+  //   （締めたあとに二次販売でPayPay決済が乗ると必ずこの向きになる）
+  if (p.diffAmount <= 0 && p.diffCount <= 0) {
     icon.textContent  = '✅';
-    title.textContent = 'PayPayの記録と一致しました';
+    title.textContent = (p.diffAmount === 0 && p.diffCount === 0)
+      ? 'PayPayの記録と一致しました'
+      : 'PayPayの入力に問題ありません';
     body.innerHTML    = rows;
+    if (p.diffAmount < 0 || p.diffCount < 0) {
+      body.innerHTML += '<div style="margin-top:6px;font-size:12px;opacity:.85;">'
+                      + '※ PayPay側が多いのは、二次販売や取り置きの後日入金が同じ店舗に乗るためです。</div>';
+    }
   } else {
     icon.textContent  = '⚠️';
     title.textContent = 'PayPayの記録と一致しません';
