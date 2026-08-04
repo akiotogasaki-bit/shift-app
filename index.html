@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- index.html v2026-08-04 兼任スタッフが販売の希望を提出できるようにした。原因＝スタッフ設定H列（属性）は値を1つしか持てず、兼任者はH列='調理'のためLIFFの入口が `if (role === '調理') enterKitchenFlow()` で調理フォームに固定され、販売の希望提出画面に一度も辿り着けなかった（2026-08-03にK列＝兼任を見る名簿ゲートは直したが、この入口だけ残っていた）。対処＝getRole のレスポンスに kennin（K列）を追加し、兼任者にだけ「🍳 調理の希望／🏢 販売の希望」の切替バーを screen-select と screen-kitchen-submit の2画面に表示。既定の入口は従来どおりで、兼任でない人の画面・挙動は一切変わらない。旧レスポンス（roleのみ）でも kennin=false に倒れるため、GAS未反映でも壊れない。検証用に ?test=1&role=調理&kennin=1。要メインGAS v2026-08-04（getRoleInfo_）。 -->
 <!-- index.html v2026-08-03 初回登録に「プロフィール登録」画面を追加（販売スタッフのみ）。氏名登録→getRoleで販売員判定→顔写真＋職業・学生＋生年月日（必須）／最寄駅・希望エリア・週何回・備考（任意）を入力。写真は端末側で長辺640px・JPEG q0.8に縮小してbase64送信。保存先＝別SS「販売スタッフ管理表」(1Yh29o…Xg6w / gid=471776451)のA〜J列をそのまま埋め、K=userId・L=顔写真FileId・M=更新日時を右に追加。写真はDrive非公開フォルダ、B列はHYPERLINKのみ。LINE表示名はLIFFプロフィールから自動。要メインGAS v2026-08-03（saveStaffProfile / getStaffProfiles / getStaffPhoto）。 -->
 <html lang="ja">
 <head>
@@ -495,6 +496,35 @@ body {
    給与明細タブ（2026-07-03 追加）
    ═══════════════════════════════════════════════════════════════ */
 
+/* ── 兼任スタッフの提出モード切替（2026-08-04）──
+   K列＝兼任 の人にだけ出す。他の人には表示されない（.on が付かない） */
+.modeswitch {
+  display: none;
+  margin: 12px 16px 0;
+  background: var(--border-soft);
+  border-radius: 999px;
+  padding: 3px;
+}
+.modeswitch.on { display: flex; }
+.modeswitch button {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-mute);
+  padding: 9px 6px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.modeswitch button.active {
+  background: var(--surface);
+  color: var(--primary);
+  box-shadow: 0 1px 3px rgba(0,0,0,.12);
+}
+.modeswitch button:active { opacity: .7; }
+
 /* 下部タブバー */
 .tabbar {
   position: fixed;
@@ -698,6 +728,11 @@ body.with-tabbar .btn-area { bottom: calc(56px + var(--safe-bottom)); }
       </div>
     </div>
   </div>
+  <!-- ★2026-08-04 兼任スタッフのみ表示（提出モード切替） -->
+  <div class="modeswitch" id="ms-select">
+    <button type="button" onclick="switchSubmitMode('kitchen')">🍳 調理の希望</button>
+    <button type="button" class="active" onclick="switchSubmitMode('sales')">🏢 販売の希望</button>
+  </div>
   <div class="body-area">
     <div id="resubmit-notice" class="notice" style="display:none;">
       今週分はすでに提出済みです。再提出すると<strong>上書き</strong>されます。
@@ -776,6 +811,11 @@ body.with-tabbar .btn-area { bottom: calc(56px + var(--safe-bottom)); }
         <div class="sub" id="ks-user-name">—</div>
       </div>
     </div>
+  </div>
+  <!-- ★2026-08-04 兼任スタッフのみ表示（提出モード切替） -->
+  <div class="modeswitch" id="ms-kitchen">
+    <button type="button" class="active" onclick="switchSubmitMode('kitchen')">🍳 調理の希望</button>
+    <button type="button" onclick="switchSubmitMode('sales')">🏢 販売の希望</button>
   </div>
   <div class="body-area">
     <div id="ks-resubmit-notice" class="notice" style="display:none;">
@@ -976,6 +1016,7 @@ const state = {
   displayName: '',     // LINEのプロフィール名
   profileMode: false,  // ?profile=1 で開かれた（プロフィール登録のお願いから来た）
   role: '',            // スタッフ設定 H列（'調理' / '販売員' など）
+  kennin: false,       // スタッフ設定 K列（兼任）★2026-08-04。true なら提出モード切替を出す
   dates: [],           // 来週の平日 [{label: '5/12(月)', selected: false}, ...]
   alreadySubmitted: false,
   isTestMode: false,
@@ -1039,12 +1080,44 @@ function loadIdxMyShiftCache() { return _idxLoadCache(IDX_MYSHIFT_CACHE_KEY, IDX
 function saveIdxMyShiftCache(data){ _idxSaveCache(IDX_MYSHIFT_CACHE_KEY, data); }
 
 // ═══════════════════════════════════════════════════════════════
+// 兼任スタッフの提出モード切替（2026-08-04）
+//   スタッフ設定 H列（属性）は値を1つしか持てないため、兼任者は H列='調理' となり
+//   LIFFの入口が調理の提出フォームに固定され、販売の希望提出画面へ辿り着けなかった。
+//   （社長報告 2026-08-04「兼任の人、調理のシフトは送れるけど販売のシフトが送れない」）
+//   K列＝兼任 の人にだけ切替を出し、両方の希望を出せるようにする。
+//   既定の入口は従来どおり（調理は調理フォーム）＝兼任でない人の画面は一切変わらない。
+// ═══════════════════════════════════════════════════════════════
+function renderModeSwitch() {
+  const on = !!state.kennin;
+  const s = document.getElementById('ms-select');
+  const k = document.getElementById('ms-kitchen');
+  if (s) s.classList.toggle('on', on);
+  if (k) k.classList.toggle('on', on);
+}
+
+let msSwitching = false;
+async function switchSubmitMode(mode) {
+  if (msSwitching) return;
+  msSwitching = true;
+  try {
+    if (mode === 'kitchen') await enterKitchenFlow();
+    else                    await loadDatesAndShowSelect();
+  } catch (e) {
+    showError(`切り替えに失敗しました：${e.message}`);
+  } finally {
+    msSwitching = false;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // SCREEN CONTROL
 // ═══════════════════════════════════════════════════════════════
 function showScreen(name) {
   document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
   const target = document.getElementById('screen-' + name);
   if (target) target.classList.add('active');
+
+  renderModeSwitch();   // ★2026-08-04 兼任スタッフの提出モード切替
 
   // 下部タブバーの表示制御（select / kitchen-submit / payslip のみ）
   const tb = document.getElementById('tabbar');
@@ -1153,6 +1226,8 @@ async function init() {
       state.userName = 'テストユーザー';
       state.displayName = 'テストユーザー';
       // ?role=調理 を付けるとキッチン提出フォーム（ダミーデータ）を確認できる
+      // ★2026-08-04 &kennin=1 を足すと兼任スタッフの提出モード切替を確認できる
+      state.kennin = params.get('kennin') === '1';
       if (params.get('role') === '調理') {
         state.role = '調理';
         enterKitchenFlow();
@@ -1188,6 +1263,7 @@ async function init() {
       prevRole = (cachedUser.role || '').trim() || null;
       if (cachedUser.name) state.userName = cachedUser.name;
       if (prevRole) state.role = prevRole;
+      state.kennin = !!cachedUser.kennin;   // ★2026-08-04 Phase Bで上書きされるまでの暫定
 
       if (prevRole === '調理' || state.profileMode) {
         // 調理：提出フォームはサーバーデータ必須のため Phase B で確定（ここでは loading 維持）
@@ -1211,11 +1287,13 @@ async function init() {
     ]);
     const role = (roleRes && typeof roleRes.role === 'string') ? roleRes.role.trim() : '';
     state.role = role;
+    // ★2026-08-04 兼任（スタッフ設定K列）。getRole が旧レスポンス（roleのみ）でも false で安全に倒れる
+    state.kennin = !!(roleRes && roleRes.kennin);
 
     if (checkRes.status === 'ok' && checkRes.name) {
       // 登録済
       state.userName = checkRes.name;
-      saveIdxUserCache({ userId: state.userId, name: checkRes.name, role: role });
+      saveIdxUserCache({ userId: state.userId, name: checkRes.name, role: role, kennin: state.kennin });
 
       // ★2026-08-03 ?profile=1 で開かれた（LINEの「プロフィール登録のお願い」のリンク）
       //   登録済みの販売スタッフでもプロフィール入力画面に入れるようにする。
@@ -1278,14 +1356,17 @@ document.getElementById('btn-register').addEventListener('click', async () => {
 
     // 登録直後にロール再判定（userId が調理行に紐付いたか確認）
     let role = '';
+    let kennin = false;
     try {
       const roleRes = await apiGet({ action: 'getRole', userId: state.userId });
       if (roleRes && typeof roleRes.role === 'string') role = roleRes.role.trim();
+      kennin = !!(roleRes && roleRes.kennin);   // ★2026-08-04
     } catch (e2) {
       console.warn('登録後 getRole エラー:', e2.message);
     }
     state.role = role;
-    saveIdxUserCache({ userId: state.userId, name: name, role: role });
+    state.kennin = kennin;
+    saveIdxUserCache({ userId: state.userId, name: name, role: role, kennin: kennin });
     toast('登録しました');
 
     setTimeout(async () => {
