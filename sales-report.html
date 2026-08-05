@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- お江戸弁当 営業報告アプリ sales-report.html v1.3 (2026-06-12) 目標マンダラに行動メモ機能を追加(案A:行動セル選択で下部にメモ欄・遷移なし/メモは行動64セルのみ)。裏側vB1.5(actionMemos)結線。 -->
+<!-- お江戸弁当 営業報告アプリ sales-report.html v1.7 (2026-08-06) 販売実績②に「拠点別の売上推移」線グラフを追加。選択中ドライバーの担当拠点を1拠点1本で重ね、日＝直近14営業日／週＝直近8週で描く（凡例タップで拠点ごとに表示ON/OFF・実績の無い日は線を繋いで飛ばす）。既存の棒グラフ／過去4週トレンドはそのまま。※要 営業GAS vB2.1（locSeries）デプロイ。旧GASでは枠ごと非表示になるだけで他機能に影響なし。／v1.6=販売実績②をボーナス基準に切替。サマリーを二段化（上段＝ボーナスに反映される数字／下段＝実績・参考）。完売率は「ボーナス完売率」（拠点間移動を 移動元＝移動後／移動先＝移動前 で評価・加重）を正とし、従来の拠点単純平均は参考値に格下げ。過去4週トレンドもボーナス完売率基準。※要 営業GAS vB1.8 デプロイ／v1.4=過去4週トレンド＋指標切替・v1.5=目標マンダラ複数枚（ヘッダ未更新のまま来たため本版でまとめて記載） -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">
@@ -78,9 +78,21 @@ select:disabled{background:#f3f3ef;color:#999;}
 .kpi .v.minus{color:var(--red);}
 .kpi .v.na{color:#bbb;font-weight:500;}
 .kpi .sub{font-size:9px;color:#9a9a93;margin-top:3px;}
+/* v1.6 二段サマリー：上段＝ボーナス反映値 / 下段＝実績（参考） */
+.kpi-tier{margin-bottom:10px;}
+.kpi-tier .tier-ttl{display:flex;align-items:center;gap:5px;font-size:10px;font-weight:600;color:var(--muted);margin:0 0 5px 2px;letter-spacing:.02em;}
+.kpi-tier .tier-ttl .tag{font-size:9px;font-weight:700;color:#fff;background:var(--navy);border-radius:4px;padding:1px 5px;letter-spacing:.04em;}
+.kpi-tier.bonus .kpis{margin-bottom:0;}
+.kpi-tier.bonus .kpi{background:#fff;border:1px solid var(--navy);box-shadow:0 1px 3px rgba(26,60,94,.08);}
+.kpi-tier.bonus .kpi.main .v{font-size:22px;}
+.kpi-tier.ref .tier-ttl .tag{background:#B7BCC2;}
+.kpi-tier.ref .kpi{background:rgba(255,255,255,.62);}
+.kpi-tier.ref .kpi .v{font-size:14px;font-weight:500;}
 .chart-wrap{background:var(--card);border:.5px solid var(--line);border-radius:12px;padding:10px 10px 6px;margin-bottom:10px;}
 .chart-ttl{font-size:11px;color:#555;margin:0 0 6px;font-weight:500;}
 .chart-box{position:relative;height:150px;}
+/* v1.7 拠点別の売上推移（線グラフ）：凡例が入るぶん背を高くする */
+.chart-box.tall{height:230px;}
 .chart-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;}
 .chart-head .chart-ttl{margin:0;}
 .seg.mseg{margin:0;width:auto;flex:0 0 auto;gap:4px;}
@@ -129,6 +141,13 @@ select:disabled{background:#f3f3ef;color:#999;}
 .m-save{display:flex;gap:8px;align-items:center;margin-bottom:10px;}
 .m-save .btn{flex:1;}
 .m-save .dirty{font-size:10px;color:var(--orange);white-space:nowrap;}
+.m-pick{display:flex;gap:6px;align-items:center;margin-bottom:8px;flex-wrap:wrap;}
+.m-pick select{flex:1;min-width:130px;margin:0;}
+.m-pick .mbtn{flex:0 0 auto;padding:7px 11px;font-size:12px;white-space:nowrap;border-radius:8px;border:.5px solid var(--navy);background:var(--navy);color:#fff;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:4px;}
+.m-pick .mbtn.del{background:#fff;color:var(--red);border-color:var(--red);}
+.m-pick .mbtn:disabled{opacity:.45;cursor:default;}
+.m-title-in{width:100%;box-sizing:border-box;margin:0 0 10px;padding:8px 10px;border:.5px solid var(--line2);border-radius:8px;font-size:13px;font-family:inherit;}
+.m-title-in::placeholder{color:#b3b3ad;}
 
 /* 俯瞰：3×3ブロック（各ブロックは3×3ミニ） */
 .m-blocks{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;}
@@ -259,7 +278,7 @@ select:disabled{background:#f3f3ef;color:#999;}
     </div>
 
   </div>
-  <div class="ver">v1.4</div>
+  <div class="ver">v1.7</div>
 </div>
 
 <div class="overlay" id="overlay">
@@ -298,10 +317,14 @@ var S = {
   hkLocId:'', hkPlanId:'', hkHistoryLoaded:false,
   mdLoaded:false, mdView:'overview', mdBlock:null,
   mandala:null, mdTarget:'', mdOwner:{}, mdDirty:false,
+  mandalaId:'', mandalaTitle:'', mandalaList:[],
   mdSuperLoaded:false, mdIsSuper:false, mdOwners:[], mdSuggest:null, mdSuggesting:false,
   mdMemoIdx:0
 };
 var salesChart = null;
+var locChart = null;  // v1.7 拠点別の売上推移
+// v1.7 拠点線の色（担当拠点は多くて10前後。超えたら循環）
+var LOC_COLORS = ['#1A3C5E','#2E9E5B','#E08A1E','#C0453B','#7B5EA7','#0E8A8A','#4A7FB5','#B8860B','#D2691E','#5B8C5A'];
 
 /* ============================================================
    汎用ヘルパー
@@ -643,6 +666,7 @@ function periodCaption(){
 }
 function renderPerf(){
   if(salesChart){ salesChart.destroy(); salesChart = null; }
+  if(locChart){ locChart.destroy(); locChart = null; }
   if(!S.perf || S.perf.ok === false || !S.perf.curDate){
     $('perf-content').innerHTML = '<div class="empty">まだ実績データがありません。<br>当日分は21:00のバッチ後に反映されます。</div>';
     return;
@@ -671,6 +695,13 @@ function renderPerf(){
   });
   var avgRate = rateCnt ? rate1(rateSum / rateCnt) : 0;
   var salesDiffTotal = curSales - prevSales;
+  // v1.6: ボーナス反映値（API vB1.8 の加重集計）。旧バージョンのGASでも落ちないようフォールバックを持つ。
+  var bn = g.bonus || { rate:0, num:0, den:0, rateDiff:0, moveOut:0, moveIn:0, moveBack:0 };
+  var bRate = rate1(Number(bn.rate)||0);
+  var bRateDiff = Number(bn.rateDiff)||0;
+  var moveNote = (Number(bn.moveOut)||0) === 0 && (Number(bn.moveIn)||0) === 0
+    ? '移動なし'
+    : ('送出 −'+num(bn.moveOut)+' / 受入 +'+num(bn.moveIn)+((Number(bn.moveBack)||0) > 0 ? ' / 戻り +'+num(bn.moveBack) : ''));
   var prevLabel = (S.period === 'd') ? '前日' : '前週';
   var curLabel  = (S.period === 'd') ? '当日' : '今週';
 
@@ -685,7 +716,7 @@ function renderPerf(){
     chartBlock =
       '<div class="chart-wrap">'
       + '<div class="chart-head">'
-        + '<p class="chart-ttl">'+(S.metric==='rate'?'完売率の推移（過去4週）':'売上の推移（過去4週）')+'</p>'
+        + '<p class="chart-ttl">'+(S.metric==='rate'?'ボーナス完売率の推移（過去4週）':'売上の推移（過去4週）')+'</p>'
         + '<div class="seg mseg" id="seg-metric">'
           + '<button data-m="sales"'+(S.metric!=='rate'?' class="on"':'')+'>売上</button>'
           + '<button data-m="rate"'+(S.metric==='rate'?' class="on"':'')+'>完売率</button>'
@@ -697,19 +728,51 @@ function renderPerf(){
     chartBlock = '<div class="chart-wrap"><p class="chart-ttl">売上（'+prevLabel+' → '+curLabel+'）</p><div class="chart-box"><canvas id="sales-chart"></canvas></div></div>';
   }
 
+  // v1.7: 拠点別の売上推移（線グラフ）。旧GAS（locSeries なし）では枠ごと出さない。
+  var ls = S.perf.locSeries;
+  var hasLocSeries = !!(ls && ls.points && ls.points.length && ls.byLoc);
+  var locChartBlock = hasLocSeries
+    ? '<div class="chart-wrap"><p class="chart-ttl">拠点別の売上推移（'+(S.period==='w'?'直近8週':'直近14営業日')+'）</p>'
+      + '<div class="chart-box tall"><canvas id="loc-chart"></canvas></div></div>'
+    : '';
+
   var html = ''
     + '<div class="drv-head"><span class="dot" style="background:'+(g.color||'#CBD5DF')+';"></span>'+esc(g.name)+'</div>'
-    + '<div class="kpis">'
-      + '<div class="kpi"><div class="k">売上</div><div class="v">'+yen(curSales)+'</div>'
-        + '<div class="sub '+diffCls(salesDiffTotal)+'">'+(salesDiffTotal>=0?'▲':'▼')+yen(Math.abs(salesDiffTotal))+'</div></div>'
-      + '<div class="kpi"><div class="k">平均完売率</div><div class="v" style="color:'+rateColor(avgRate)+';">'+avgRate+'%</div>'
-        + '<div class="sub">拠点平均</div></div>'
-      + '<div class="kpi"><div class="k">粗利</div>'+profitHtml+'</div>'
+    // ── 上段：ボーナスに反映される数字 ──
+    + '<div class="kpi-tier bonus">'
+      + '<p class="tier-ttl"><span class="tag">ボーナス</span>この数字が支給率に反映されます</p>'
+      + '<div class="kpis">'
+        + '<div class="kpi main"><div class="k">ボーナス完売率</div>'
+          + '<div class="v" style="color:'+rateColor(bRate)+';">'+bRate+'%</div>'
+          + '<div class="sub '+diffCls(bRateDiff)+'">'+ppStr(bRateDiff)+'pp</div></div>'
+        + '<div class="kpi"><div class="k">納品（移動調整後）</div><div class="v">'+num(bn.den)+'個</div>'
+          + '<div class="sub">'+esc(moveNote)+'</div></div>'
+        + '<div class="kpi"><div class="k">販売数</div><div class="v">'+num(bn.num)+'個</div>'
+          + '<div class="sub">分子</div></div>'
+      + '</div>'
+    + '</div>'
+    // ── 下段：実績（参考） ──
+    + '<div class="kpi-tier ref">'
+      + '<p class="tier-ttl"><span class="tag">実績</span>参考値</p>'
+      + '<div class="kpis">'
+        + '<div class="kpi"><div class="k">売上</div><div class="v">'+yen(curSales)+'</div>'
+          + '<div class="sub '+diffCls(salesDiffTotal)+'">'+(salesDiffTotal>=0?'▲':'▼')+yen(Math.abs(salesDiffTotal))+'</div></div>'
+        + '<div class="kpi"><div class="k">平均完売率</div><div class="v" style="color:'+rateColor(avgRate)+';">'+avgRate+'%</div>'
+          + '<div class="sub">拠点平均（旧基準）</div></div>'
+        + '<div class="kpi"><div class="k">粗利</div>'+profitHtml+'</div>'
+      + '</div>'
     + '</div>'
     + chartBlock
+    + locChartBlock
     + '<p class="h">拠点別の内訳</p>'
     + '<div id="loc-breakdown"></div>'
-    + '<p class="cap">'+esc(periodCaption())+'<br>完売率はお茶を除外。100%超は補充販売（そのまま表示）。粗利＝売上−原価−ギャラ−その他経費。</p>';
+    + '<p class="cap">'+esc(periodCaption())+'<br>'
+      + '<b>ボーナス完売率</b>＝販売数 ÷ 納品（移動調整後）。移動した弁当は、<b>送った側</b>は分母から外れ（売れれば中立）、<b>残った分だけ</b>送った側の分母に戻ります。<b>受け取った側</b>は分母を増やさないので100%を超えることがあり、受入分が残っても責任は負いません。<br>'
+      + '完売率はお茶を除外。粗利＝売上−原価−ギャラ−その他経費。平均完売率（拠点単純平均）は従来表示の参考値です。'
+      + (hasLocSeries ? ('<br><b>拠点別の売上推移</b>は' + (S.period === 'w'
+          ? '各週とも週初〜今日と同じ曜日まで（week-to-date）で切って比較しています。'
+          : '実績のある営業日だけを並べています（休業日は詰めて表示）。')) : '')
+      + '</p>';
   $('perf-content').innerHTML = html;
 
   // 拠点別内訳
@@ -720,16 +783,28 @@ function renderPerf(){
       var pf = S.profitByLoc[String(l.locationId)];
       var pfTxt = !S.profitMeta.hasCostData ? '<span class="muted">—</span>'
         : (pf===undefined||pf===null ? '<span class="muted">報告待ち</span>' : '<b>'+yen(pf)+'</b>');
-      var rd = Number(l.rateDiff)||0;
       var sd = Number(l.salesDiff)||0;
+      // v1.6: 拠点行の完売率もボーナス基準に差し替え（旧GAS時は selloutRate にフォールバック）
+      var lbRate = (l.bonusRate !== undefined) ? rate1(l.bonusRate) : rate1(l.selloutRate);
+      var rd = (l.bonusRateDiff !== undefined) ? (Number(l.bonusRateDiff)||0) : (Number(l.rateDiff)||0);
+      var mvTxt = '';
+      if((Number(l.moveOut)||0) > 0 || (Number(l.moveIn)||0) > 0){
+        mvTxt = '<span class="m" style="color:var(--muted);">移動 '
+          + ((Number(l.moveOut)||0) > 0 ? '−'+num(l.moveOut) : '')
+          + ((Number(l.moveOut)||0) > 0 && (Number(l.moveIn)||0) > 0 ? ' / ' : '')
+          + ((Number(l.moveIn)||0) > 0 ? '+'+num(l.moveIn) : '')
+          + ((Number(l.moveBack)||0) > 0 ? '（戻り +'+num(l.moveBack)+'）' : '')
+          + '</span>';
+      }
       return '<div class="loc-row">'
         + '<div class="top"><span class="nm">'+esc(l.displayName || l.locationName || l.locationId)+'</span>'
-          + '<span class="sell" style="color:'+rateColor(l.selloutRate)+';">'+rate1(l.selloutRate)+'%'
+          + '<span class="sell" style="color:'+rateColor(lbRate)+';">'+lbRate+'%'
           + '<span class="cmp '+diffCls(rd)+'">'+ppStr(rd)+'pp</span></span></div>'
         + '<div class="mets">'
           + '<span class="m">売上 <b>'+yen(l.sales)+'</b><span class="cmp '+diffCls(sd)+'">'+yenDiffStr(sd)+'</span></span>'
           + '<span class="m">販売数 <b>'+num(l.sold)+'個</b></span>'
           + '<span class="m">粗利 '+pfTxt+'</span>'
+          + mvTxt
         + '</div>'
       + '</div>';
     }).join('');
@@ -766,6 +841,62 @@ function renderPerf(){
       });
     }
   }
+
+  // v1.7: 拠点別の売上推移（選択ドライバーの担当拠点を1拠点1本で重ねる）
+  var lctx = $('loc-chart');
+  if(hasLocSeries && lctx && window.Chart) drawLocChart(lctx, locs);
+}
+
+// 拠点別の売上推移（v1.7）：locSeries を担当拠点ぶんだけ線にする。凡例タップで拠点ごとに表示ON/OFF。
+function drawLocChart(ctx, locs){
+  var ls = S.perf.locSeries;
+  if(locChart){ locChart.destroy(); locChart = null; }
+  if(!ls || !ls.points || !ls.points.length || !locs || !locs.length) return;
+
+  var labels = ls.points.map(function(p){ return p.label; });
+  var sorted = locs.slice().sort(function(a,b){ return (a.order||9999)-(b.order||9999); });
+  var datasets = [];
+  sorted.forEach(function(l, i){
+    var vals = ls.byLoc[String(l.locationId)];
+    if(!vals) return;                       // 期間中まったく実績が無い拠点は線を引かない
+    var c = LOC_COLORS[datasets.length % LOC_COLORS.length];
+    datasets.push({
+      label: l.displayName || l.locationName || l.locationId,
+      data: vals.slice(),
+      borderColor: c,
+      backgroundColor: c,
+      borderWidth: 2,
+      fill: false,
+      tension: .3,
+      pointRadius: 2.5,
+      pointHoverRadius: 5,
+      spanGaps: true                        // 休業日など実績の無い点は線を繋いで飛ばす
+    });
+  });
+  if(!datasets.length) return;
+
+  locChart = new Chart(ctx.getContext('2d'), {
+    type:'line',
+    data:{ labels: labels, datasets: datasets },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      interaction:{ mode:'nearest', intersect:false },
+      plugins:{
+        legend:{
+          display:true, position:'bottom',
+          labels:{ boxWidth:8, boxHeight:8, usePointStyle:true, pointStyle:'circle',
+                   padding:8, font:{ size:10 } }
+        },
+        tooltip:{ callbacks:{ label:function(c){
+          return c.dataset.label + '  ' + (c.parsed.y == null ? '—' : yen(c.parsed.y));
+        } } }
+      },
+      scales:{
+        y:{ beginAtZero:true, ticks:{ callback:function(v){ return '¥' + (v>=10000 ? (v/10000)+'万' : Number(v).toLocaleString()); }, font:{ size:10 } }, grid:{ color:'rgba(0,0,0,.05)' } },
+        x:{ ticks:{ font:{ size:10 }, maxRotation:0, autoSkipPadding:8 }, grid:{ display:false } }
+      }
+    }
+  });
 }
 
 // 過去4週トレンド（週モード）：選択ドライバーの 売上（棒）／完売率（折れ線）を切替表示
@@ -778,7 +909,9 @@ function drawTrendChart(ctx, driverId){
   var data = series.map(function(w){
     var d = (w.byDriver && w.byDriver[driverId]) ? w.byDriver[driverId] : null;
     if(!d) return 0;
-    return isRate ? (Number(d.avgRate)||0) : Math.round(Number(d.sales)||0);
+    // v1.6: 完売率トレンドはボーナス完売率（加重）を正とする。旧GAS時は avgRate にフォールバック。
+    if(!isRate) return Math.round(Number(d.sales)||0);
+    return (d.bonusRate !== undefined) ? (Number(d.bonusRate)||0) : (Number(d.avgRate)||0);
   });
   var lastIdx = data.length - 1;
   salesChart = new Chart(ctx.getContext('2d'), {
@@ -929,19 +1062,30 @@ function loadMandala(){
         S.mdIsSuper = S.mdOwners.length > 0;
         return null;
       }).catch(function(){ S.mdSuperLoaded = true; S.mdOwners = []; S.mdIsSuper = false; return null; });
-  ownersP.then(function(){ return fetchMandala(S.mdTarget); }).then(function(){
+  ownersP.then(function(){ return refreshMandalaList(S.mdTarget); })
+    .then(function(){ return fetchMandala(S.mdTarget, ''); }).then(function(){
     S.mdView = 'overview'; S.mdSuggest = null;
     renderMandala();
   }).catch(function(){
     $('m-root').innerHTML = '<div class="empty">マンダラの読み込みに失敗しました。</div>';
   });
 }
-function fetchMandala(target){
-  return apiGet(SALES_API, 'getMandala', { userId:S.userId, targetUserId:(target||'') }).then(function(res){
+// オーナーの全マンダラ一覧を取得（新しい順）
+function refreshMandalaList(target){
+  return apiGet(SALES_API, 'listMandalas', { userId:S.userId, targetUserId:(target||'') }).then(function(res){
+    S.mandalaList = (res && res.mandalas) ? res.mandalas : [];
+    return res;
+  }).catch(function(){ S.mandalaList = []; return null; });
+}
+// mandalaId='' は最新1枚（無ければ空の新規）を取得
+function fetchMandala(target, mandalaId){
+  return apiGet(SALES_API, 'getMandala', { userId:S.userId, targetUserId:(target||''), mandalaId:(mandalaId||'') }).then(function(res){
     if(!res || res.ok === false){ throw new Error(res && res.error ? res.error : 'failed'); }
     S.mandala = res.mandala || emptyMandala();
     S.mandala.actionMemos = normalizeMemos(S.mandala.actionMemos);
     S.mdOwner = res.owner || { userId:(target||S.userId), name:'' };
+    S.mandalaId = res.mandalaId || '';
+    S.mandalaTitle = res.title || '';
     S.mdDirty = false;
     // 新規（中心も全テーマも全行動も空）ならプリセットのテーマを初期表示
     var blank = !S.mandala.center
@@ -978,10 +1122,27 @@ function mdSaveBar(btnId){
     + '<i class="ti ti-device-floppy" aria-hidden="true"></i> 保存</button>'
     + (S.mdDirty?'<span class="dirty">未保存の変更があります</span>':'') + '</div>';
 }
+// 複数マンダラの一覧・新規・削除・タイトル（俯瞰画面のみ）— vB1.7
+function mdPickBar(){
+  var list = S.mandalaList || [];
+  var opts = list.map(function(x){
+    var lbl = (x.title || x.center || '(無題)');
+    if(x.updatedAt) lbl += '・' + fmtDate(x.updatedAt);
+    return '<option value="'+esc(x.mandalaId)+'"'+(x.mandalaId===S.mandalaId?' selected':'')+'>'+esc(lbl)+'</option>';
+  }).join('');
+  if(!S.mandalaId) opts = '<option value="" selected>＜新規（未保存）＞</option>' + opts; // 未保存の新規
+  var html = '<div class="m-pick">'
+    + '<select id="md-list">'+opts+'</select>'
+    + '<button class="mbtn" id="md-new"><i class="ti ti-plus" aria-hidden="true"></i>新規</button>'
+    + '<button class="mbtn del" id="md-del"'+(S.mandalaId?'':' disabled')+'><i class="ti ti-trash" aria-hidden="true"></i>削除</button>'
+    + '</div>';
+  html += '<input class="m-title-in" id="md-title" maxlength="40" placeholder="このマンダラの名前（例：2026上期／新規開拓）" value="'+esc(S.mandalaTitle||'')+'">';
+  return html;
+}
 
 function renderMandalaOverview(){
   var m = S.mandala || emptyMandala();
-  var html = mdBar() + mdSaveBar('md-save');
+  var html = mdBar() + mdPickBar() + mdSaveBar('md-save');
   html += '<div class="m-blocks">';
   for(var pos=0; pos<9; pos++){
     var isCenter = (pos === 4);
@@ -1013,8 +1174,34 @@ function bindOverview(){
     if(S.mdDirty && !confirm('未保存の変更があります。対象者を切り替えると破棄されます。よろしいですか？')){ ow.value = S.mdTarget; return; }
     S.mdTarget = ow.value;
     $('m-root').innerHTML = '<div class="inline-loading"><span class="spinner"></span>読み込み中…</div>';
-    fetchMandala(S.mdTarget).then(function(){ S.mdView='overview'; S.mdSuggest=null; renderMandala(); })
+    refreshMandalaList(S.mdTarget).then(function(){ return fetchMandala(S.mdTarget, ''); })
+      .then(function(){ S.mdView='overview'; S.mdSuggest=null; renderMandala(); })
       .catch(function(){ $('m-root').innerHTML = '<div class="empty">読み込みに失敗しました（権限がない可能性）。</div>'; });
+  });
+  // マンダラ切替
+  var lst = $('md-list');
+  if(lst) lst.addEventListener('change', function(){
+    var id = lst.value;
+    if(id === S.mandalaId) return;
+    if(!id){ lst.value = S.mandalaId; return; } // 「新規（未保存）」は選べない
+    if(S.mdDirty && !confirm('未保存の変更があります。切り替えると破棄されます。よろしいですか？')){ lst.value = S.mandalaId; return; }
+    switchMandala(id);
+  });
+  // 新規作成
+  var nw = $('md-new');
+  if(nw) nw.addEventListener('click', function(){
+    if(S.mdDirty && !confirm('未保存の変更があります。新規作成すると破棄されます。よろしいですか？')) return;
+    startNewMandala();
+  });
+  // 削除
+  var dl = $('md-del');
+  if(dl) dl.addEventListener('click', deleteMandalaNow);
+  // タイトル入力（再描画せずフォーカス維持）
+  var ti = $('md-title');
+  if(ti) ti.addEventListener('input', function(){
+    S.mandalaTitle = ti.value;
+    S.mdDirty = true;
+    var s2 = $('md-save'); if(s2) s2.disabled = false;
   });
   Array.prototype.forEach.call(document.querySelectorAll('#m-root .m-blk'), function(b){
     b.addEventListener('click', function(){
@@ -1175,17 +1362,51 @@ function applySuggestAll(){
   toast('候補を反映しました');
 }
 
+// 別マンダラへ切替（俯瞰の一覧から）
+function switchMandala(id){
+  $('m-root').innerHTML = '<div class="inline-loading"><span class="spinner"></span>読み込み中…</div>';
+  fetchMandala(S.mdTarget, id).then(function(){ S.mdView='overview'; S.mdSuggest=null; renderMandala(); })
+    .catch(function(){ $('m-root').innerHTML = '<div class="empty">読み込みに失敗しました。</div>'; });
+}
+// 空の新規マンダラを開始（プリセットのテーマ入り・未保存）
+function startNewMandala(){
+  S.mandala = emptyMandala();
+  for(var i=0;i<8;i++){ S.mandala.themes[i] = PRESET_THEMES[i] || ''; }
+  S.mandalaId = ''; S.mandalaTitle = '';
+  S.mdView = 'overview'; S.mdSuggest = null; S.mdDirty = true;
+  renderMandala();
+  toast('新しいマンダラを作成中です。記入して保存してください');
+}
+// 現在のマンダラを削除
+function deleteMandalaNow(){
+  if(!S.mandalaId) return;
+  var cur = null, L = S.mandalaList || [];
+  for(var i=0;i<L.length;i++){ if(L[i].mandalaId === S.mandalaId){ cur = L[i]; break; } }
+  var nm = (cur && (cur.title||cur.center)) ? (cur.title||cur.center) : 'このマンダラ';
+  if(!confirm('「'+nm+'」を削除します。元に戻せません。よろしいですか？')) return;
+  $('m-root').innerHTML = '<div class="inline-loading"><span class="spinner"></span>削除中…</div>';
+  apiPost(SALES_API, 'deleteMandala', { userId:S.userId, targetUserId:(S.mdTarget||''), mandalaId:S.mandalaId }).then(function(res){
+    if(!res || res.ok === false){ toast((res&&res.error)?('削除失敗：'+res.error):'削除に失敗しました', true); renderMandala(); return; }
+    toast('削除しました');
+    refreshMandalaList(S.mdTarget).then(function(){ return fetchMandala(S.mdTarget, ''); })
+      .then(function(){ S.mdView='overview'; S.mdSuggest=null; renderMandala(); })
+      .catch(function(){ $('m-root').innerHTML = '<div class="empty">読み込みに失敗しました。</div>'; });
+  }).catch(function(){ toast('削除の通信に失敗しました', true); renderMandala(); });
+}
+
 function saveMandalaNow(){
   if(!S.mandala) return;
   var payload = { center:S.mandala.center||'', themes:S.mandala.themes||[], actions:S.mandala.actions||[], actionMemos:S.mandala.actionMemos||[] };
   var btns = [ $('md-save'), $('md-save2') ];
   btns.forEach(function(b){ if(b) b.disabled = true; });
-  apiPost(SALES_API, 'saveMandala', { userId:S.userId, targetUserId:(S.mdTarget||''), json:JSON.stringify(payload) }).then(function(res){
+  apiPost(SALES_API, 'saveMandala', { userId:S.userId, targetUserId:(S.mdTarget||''), mandalaId:(S.mandalaId||''), title:(S.mandalaTitle||''), json:JSON.stringify(payload) }).then(function(res){
     if(res && res.ok){
       S.mdDirty = false;
+      S.mandalaId = res.mandalaId || S.mandalaId;
+      if(res.title != null) S.mandalaTitle = res.title;
       if(res.updatedAt) S.mandala.updatedAt = res.updatedAt;
       toast('保存しました');
-      renderMandala();
+      refreshMandalaList(S.mdTarget).then(function(){ renderMandala(); });
     } else {
       toast((res && res.error) ? ('保存失敗：'+res.error) : '保存に失敗しました', true);
       btns.forEach(function(b){ if(b) b.disabled = false; });
