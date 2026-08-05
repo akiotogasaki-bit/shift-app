@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>お江戸弁当 レジ</title>
-<!-- register v3.15 (2026-08-06) 【置き弁（アスエネ）のインセンティブを締め画面に別枠で表示】社長要望「虎ノ門でレジを閉めた時に、虎ノ門分とアスエネの分のインセンティブの金額が別でわかるようにしてね」。背景＝従来はアスエネ分のギャラを発生させるために**その販売数を虎ノ門②のレジにPayPayで打ち込んで**いた。副作用が3つあり、①虎ノ門②の販売数・完売率が過大→**翌週推奨が虎ノ門②に多く配る**二次被害 ②アプリのPayPayが実PayPayより過大→突合で毎回「アプリ過大＝現金抜き疑い」に出る ③アスエネの販売数が取れず増減判断ができない。メインGAS側で「置き弁ギャラログ」（販売数＝納品数−残数 から算出）を別建てにしたので、レジに混ぜる必要が無くなった。★締め画面の「販売実績・ギャラ」に `res-okiben-row` を追加し、`action=okibenGigForStaff` で取得して表示（`showOkibenGig_`）。**『置き弁設定』の報酬対象者に設定された人にだけ出る**。★**当日分は出せない**（締める14〜16時にはドライバーの回収がまだで残数が入っていない・確定は夜間バッチ23:04）ため社長選択＝**前営業日の1日分**。★**「本日の合計」には足さない**＝報告ログの本日合計ギャラは 実現金＋ギャラ−開始金 の現金誤差計算に使われるため、足すと虎ノ門②の現金が毎日ずれる（アスエネ分は現金で持ち帰らず給与で払う）。取得に失敗しても締め作業は止めない（行を出さないだけ）。要: メインGAS（`getOkibenGigForStaff` ＋ doGet ルーティング／置き弁ギャラログ）。 -->
+<!-- register v3.15 (2026-08-06) 【置き弁（アスエネ）のギャラを締め画面に別枠表示し、現金で当日渡す】社長要望「虎ノ門でレジを閉めた時に、虎ノ門分とアスエネの分のインセンティブの金額が別でわかるようにしてね」→「アスエネ分のギャラも合わせて**現金で当日渡す**ので、その仕様に」。★背景＝従来はアスエネ分のギャラを発生させるために**その販売数を虎ノ門②のレジにPayPayで打ち込んで**いた。副作用が3つ ①虎ノ門②の販売数・完売率が過大→**翌週推奨が虎ノ門②に多く配る**二次被害 ②アプリのPayPayが実PayPayより過大→突合で毎回「アプリ過大＝現金抜き疑い」に出る ③アスエネの販売数が取れず増減判断ができない。メインGASに「置き弁ギャラログ」（販売数＝納品数−残数 から算出）を新設したのでレジに混ぜる必要が無くなった。★実装：締め画面「販売実績・ギャラ」に `res-okiben-row`、完了画面に `comp-okiben-row` を追加。`action=okibenGigForStaff` で**未払い分をすべて**取得（`fetchOkibenGig_`／`renderOkibenGig_`）。**『置き弁設定』の報酬対象者に設定された人にだけ出る**。★**当日分は原理的に出せない**（締める14〜16時にはドライバーの回収がまだで残数が入っていない・確定は夜間バッチ23:04）＝出るのは前営業日以前。社長決定「未払い分は全部まとめて渡す」＝休み明けは2〜3日ぶんまとまって出る（1日分ずつだと連休明けに未払いが溜まり続けて渡し切れないため）。★**「本日の合計」に足す**。この人はレジからこの額も一緒に抜いて持ち帰るので、ドライバーが回収時に数える実現金はその分減っている。**実現金＋ギャラ−開始金＝現金売上** が成り立つにはギャラ側に含まれている必要がある（含めないとその額だけ現金売上が過小に出る）。※画面の「現金差異」には影響しない＝あれは registerEnd（ギャラを抜く前）で見ているため。※res-incentive（虎ノ門②のぶん）には足さず**別の行**で見せる。★二重払い防止：渡した対象日を `okibenGigPaid` として **submitReport と同じ送信に載せる**。別APIで投げると締めは通ったのに支払記録だけ落ちる経路ができ、翌日また同じ未払い分が出て二重に渡る。GAS側 `okibenGigMarkPaid_` が「支払済日／支払拠点／支払方法」を立て、以後この人の締め画面にも給与明細（`spOkibenByUid_`）にも出ない。`calcFinal`/`submitFinal` を async 化（await 必須）。要: メインGAS（`getOkibenGigForStaff`／`okibenGigMarkPaid_`／submitReport の okibenGigPaid 受け／置き弁ギャラログ N〜Q列）。 -->
 <!-- register v3.14 (2026-08-05) 【レジ開始金は「後からいつでも直せる」に。不完全な開始ログ行も断つ】社長指示「先に納品数を入れるのは今後も発生するから、それも踏まえた運用に」。★実データで原因を特定：8/3 銀座の開始ログは **10:59:06 に「商品1種・合計1個（{"P001":1}）・開始金0」の行**、その**7秒後の 10:59:13 に「13種74個・開始金0」の行**が同一UIDで立っていた（ソフバン・ダイビルも同型／開始金0だった拠点と完全一致）。出どころは `sendDeliveryUpdate → ensureStartReported → sendStartReport` の経路で、`state.deliveryCount` がまだ1商品しか入っていない状態のまま開始報告が送られたもの。この不完全な行が先に立つと、後から入る販売員が引き継ぎ判定に落ちて開始金を打てなくなる。対応3点：①**在庫モーダルの「開始金庫」が0のとき「未入力 ▸ 入力する」と赤字表示**になり、タップすれば**レジを打っている途中でもいつでも開始金を入れ直せる**（`openRegisterStartFix` → `enterTakeoverStartCash(_, {fromRegister:true})` → `updateRegisterStart`）。引き継ぎ画面に頼らないので、先に納品数が入る運用でも必ず直せる ②`sendStartReport` は**納品数が1〜2種しか入っていない時は送信を中止**してトーストで知らせる（不完全な開始ログ行を作らない） ③開始金を入れたら金庫サマリーを即時再描画。GAS変更なし（`updateRegisterStart` は @452 で追加済み）。 -->
 <!-- register v3.13 (2026-08-04) 【v3.12の穴を塞ぐ：スタート報告のボタンが無反応になる経路をなくす】社長報告「レジのスタート報告の時にレジのスタート金を入力できない」（※同じ症状は8/3にも発生しており v3.12 が原因ではないが、v3.12 に実在の穴があったので塞ぐ）。真因＝`renderDeliveryInputs()` はアプリ全体で `selectLocation` の通常フロー**1箇所からしか呼ばれない**のに、v3.12 で追加した `enterTakeoverStartCash()`（引き継ぎ時の開始金だけ画面）がそれを呼んでいなかった。そのためこの画面を通ったあとスタート報告画面に戻ると `delivery-<商品ID>` が存在せず、送信ボタンが `document.getElementById(...).value` の **null 参照で例外→ボタンを押しても何も起きない**状態になっていた（販売員からは「入力できない」に見える）。修正3点：①`enterTakeoverStartCash` はカードを隠す前に必ず `renderDeliveryInputs()` を呼ぶ ②`btn-start-submit` は入力欄が1つでも無ければ**黙って落ちず、画面を作り直して alert で知らせて中止**する ③`submitTakeoverStartCash` が「本日の開始報告が見つかりません」を受けたら詰まらせず通常のスタート報告へ戻す（`backToNormalStartReport`）。あわせて引き継ぎ画面に「納品数から自分で入力し直す →」の逃げ道リンクを追加し、**どんな理由で詰まっても販売員が自力で通常フローに戻れる**ようにした。GAS変更なし。 -->
 <!-- register v3.12 (2026-08-04) 【引き継ぎでレジ開始金が0のまま継承される穴を塞ぐ】社長質問「レジの開始金額が打てなかったとはどういう状況？」の回答＝**引き継ぎモードがスタート報告画面ごと飛ばしていた**。開始金の入力欄はスタート報告画面にしか無いのに、`selectLocation` の引き継ぎ分岐は `state.registerStart = data.registerStart || 0` で前の人の値を継いで `showScreen('register')` へ直行するため、前の人が0で開始していると**その日ずっと0のまま誰も直せなかった**。8/3実測で19拠点中**7拠点が開始金0**（芝パーク・浜松町スクエア・ソフバン・平河町・銀座・ぜん六神谷・ダイビル）。実現金売上＝実現金＋ギャラ−開始金 のため、PayPay突合で**約60,000円が見かけのマイナス**として出ていた。販売員コメント「最初、納品報告の画面が出ず、開始金庫金額15000円入力できなかった」が実態。修正：①引き継ぎで開始金が0の時だけ、スタート報告画面を**納品数カードを隠した「開始金だけ」の姿**で1枚はさむ（`enterTakeoverStartCash`。金種入力もそのまま使える）②送信は新API `updateRegisterStart` で開始ログG列だけ更新（`submitTakeoverStartCash`。失敗を握りつぶさずalertで知らせる＝v3.1の反省）③通常フローでも開始金0のまま送ろうとしたら確認ダイアログを出す。要メインGAS（`updateRegisterStart` 追加＋doPostルーティング）。 -->
@@ -1395,6 +1395,10 @@ html, body { overscroll-behavior-y: contain; }
     <div class="complete-row"><span>販売数</span><span id="comp-sold">0個</span></div>
     <div class="complete-row"><span>完売率</span><span id="comp-rate">0%</span></div>
     <div class="complete-row"><span>インセンティブ</span><span id="comp-incentive">¥0</span></div>
+    <!-- ★2026-08-06 置き弁分。合計に含まれるので、内訳が無いと数字が合わなく見える -->
+    <div class="complete-row" id="comp-okiben-row" style="display:none;">
+      <span id="comp-okiben-label">アスエネ分</span><span id="comp-okiben">¥0</span>
+    </div>
     <div class="complete-row"><span>基本ギャラ</span><span id="comp-base">¥0</span></div>
     <div class="complete-row" style="border-top:1px solid rgba(255,255,255,.3);margin-top:4px;padding-top:12px;">
       <span style="font-weight:700;">本日の合計</span>
@@ -3321,7 +3325,10 @@ function clearCashBreakdown(prefix) {
 // ═══════════════════════════════════════════════════════════════
 // FINAL REPORT
 // ═══════════════════════════════════════════════════════════════
-function calcFinal() {
+async function calcFinal() {
+  // ★2026-08-06 置き弁ギャラ（現金で当日渡す未払い分）を最初の集計時に1回だけ取りに行く。
+  //   ここで固定し、以後の再集計では取り直さない＝**画面に出た額と実際に渡す現金を一致させる**。
+  if (!state.okibenGig) { await fetchOkibenGig_(); }
   const registerEnd  = parseInt(document.getElementById('register-end').value) || 0;
   const cashFromReg  = registerEnd - state.registerStart;
   // PayPayお釣りで現金返金した分を差し引く
@@ -3348,6 +3355,16 @@ function calcFinal() {
     totalSalary = state.baseGigSalary + incentive + makanaiBonus - latePenalty;
   }
 
+  // ★2026-08-06 置き弁（アスエネ等）のギャラを**現金で当日渡す**ので合計に足す。
+  //   社長決定「アスエネ分のギャラも合わせて現金で当日渡すので、その仕様に」。
+  //   足す理由：この人はレジからこの額も一緒に抜いて持ち帰る。ドライバーが回収時に数える
+  //   実現金はその分だけ減っているので、**実現金＋ギャラ−開始金＝現金売上** が成り立つには
+  //   ギャラ側に含まれている必要がある。含めないとその額だけ現金売上が過小に出る。
+  //   ※上の「現金差異(diff)」には影響しない。あれは registerEnd（ギャラを抜く前）で見ているため。
+  //   ※res-incentive（虎ノ門②のインセンティブ）には足さない＝**別の行で見せる**のが社長要望。
+  const okibenGigAmt = (state.okibenGig && state.okibenGig.amount) || 0;
+  totalSalary += okibenGigAmt;
+
   // ★2026-07-24 賄い/遅刻/固定給を報告ログにそのまま保存するため、画面の確定値を state に保持
   //   （GAS側で再計算せず、この値を「本日合計ギャラ」列に採用する＝表示と帳簿の完全一致）
   state.calcTotalSalary  = totalSalary;
@@ -3368,9 +3385,8 @@ function calcFinal() {
   //   従来はアスエネ分のギャラを出すために**その販売数を虎ノ門②のレジに打ち込んで**いたため、
   //   虎ノ門②の販売数・完売率・PayPayが過大になり、翌週推奨の配分まで狂っていた。
   //   置き弁ギャラログから別建てで出すようになったので、レジに混ぜる必要が無くなった。
-  //   ★「本日の合計」には足さない（現金誤差＝実現金＋ギャラ−開始金 に効いてしまうため）。
-  //   ★当日分は出せない（締める時刻にはドライバーの回収がまだ）ので前営業日の1日分。
-  showOkibenGig_();
+  //   ★当日分は出せない（締める時刻にはドライバーの回収がまだ）ので前営業日以前の未払い分。
+  renderOkibenGig_();
 
   const lateRow = document.getElementById('res-late-row');
   if (lateMinutes > 0) {
@@ -3405,16 +3421,31 @@ function calcFinal() {
   document.getElementById('comp-incentive').textContent = `¥${incentive.toLocaleString()}`;
   document.getElementById('comp-base').textContent      = `¥${state.baseGigSalary.toLocaleString()}`;
   document.getElementById('comp-total').textContent     = `¥${totalSalary.toLocaleString()}`;
+  // ★2026-08-06 置き弁分（現金で当日渡す分）。合計に含まれているので内訳も出す。
+  const compOkRow = document.getElementById('comp-okiben-row');
+  if (compOkRow) {
+    if (okibenGigAmt > 0) {
+      document.getElementById('comp-okiben-label').textContent =
+        `${state.okibenGig.locName}分（${state.okibenGig.label}）`;
+      document.getElementById('comp-okiben').textContent = `¥${okibenGigAmt.toLocaleString()}`;
+      compOkRow.style.display = '';
+    } else {
+      compOkRow.style.display = 'none';
+    }
+  }
 }
 
-// ★2026-08-06 置き弁（アスエネ等）のインセンティブを締め画面に別枠で出す。
+// ★2026-08-06 置き弁（アスエネ等）のギャラを締め画面に別枠で出し、**現金で当日渡す**。
+//   社長決定「アスエネ分のギャラも合わせて現金で当日渡すので、その仕様に」。
 //   『置き弁設定』の「報酬対象者」に設定された人にだけ出る（他の販売員には何も出ない）。
-//   金額は表示専用。state.calcTotalSalary には一切触らない＝報告ログ・現金誤差に影響しない。
-//   失敗しても締め作業は止めない（行を出さないだけ）。
-async function showOkibenGig_() {
-  const row = document.getElementById('res-okiben-row');
-  if (!row) return;
-  row.style.display = 'none';
+//   ★当日分は出せない（締める14〜16時にはドライバーの回収がまだ）ので、出るのは
+//     前営業日以前の**未払い分すべて**。休み明けは2〜3日ぶんまとまって出る。
+//   ★現金で渡すので「本日の合計」に**足す**。足さないと 実現金＋ギャラ−開始金 の
+//     現金誤差がその額だけ合わなくなる（レジから抜いた現金なので）。
+//   ★渡した日は submitReport の okibenGigPaid で支払済にする＝二重に渡らない。
+//   ★取得に失敗したら 0 のまま進める（渡さない）。締め作業は止めない。
+async function fetchOkibenGig_() {
+  state.okibenGig = { amount: 0, dates: [], label: '', locName: '', sold: 0 };
   if (!state.userId) return;
   try {
     const url = `${state.GAS_URL}?action=okibenGigForStaff`
@@ -3422,14 +3453,27 @@ async function showOkibenGig_() {
               + `&date=${encodeURIComponent(regToday_())}`;
     const j = await (await fetch(url, { method: 'GET', redirect: 'follow' })).json();
     if (!j || !j.ok || !j.found) return;
-    document.getElementById('res-okiben-label').textContent =
-      `${j.locName || '置き弁'}分（${j.label}）`;
-    document.getElementById('res-okiben').textContent =
-      `¥${Number(j.amount || 0).toLocaleString()}（${j.sold || 0}個）`;
-    row.style.display = '';
+    state.okibenGig = {
+      amount:  Number(j.amount) || 0,
+      dates:   Array.isArray(j.dates) ? j.dates : [],
+      label:   String(j.label || ''),
+      locName: String(j.locName || '置き弁'),
+      sold:    Number(j.sold) || 0,
+    };
   } catch (e) {
     console.warn('置き弁ギャラの取得に失敗（締めには影響しません）:', e);
   }
+}
+
+function renderOkibenGig_() {
+  const row = document.getElementById('res-okiben-row');
+  if (!row) return;
+  const g = state.okibenGig;
+  if (!g || !g.amount) { row.style.display = 'none'; return; }
+  document.getElementById('res-okiben-label').textContent = `${g.locName}分（${g.label}）`;
+  document.getElementById('res-okiben').textContent =
+    `¥${g.amount.toLocaleString()}（${g.sold}個）`;
+  row.style.display = '';
 }
 
 function regToday_() {
@@ -3684,10 +3728,12 @@ function recalcFinal() {
   window.scrollTo(0, 0);
 }
 
-function submitFinal() {
+async function submitFinal() {
   // ★2026-07-29 B案：送信直前に必ず再集計する。集計後に賄い／遅刻を触っても
   //   totalSalary・makanaiBonus が古いまま送られ、現金誤差が±300になっていた。
-  try { calcFinal(); } catch (e) { console.error('submitFinal recalc error:', e); }
+  // ★2026-08-06 calcFinal を async にしたので await する。await しないと
+  //   置き弁ギャラを取り終える前に payload を組んでしまい、送信額と支払記録がずれる。
+  try { await calcFinal(); } catch (e) { console.error('submitFinal recalc error:', e); }
   // ★ 追加販売モード対応：clearSavedStateは呼ばない（再開時にstate保持）
   const diff = document.getElementById('res-diff').textContent;
   const hasDiff = diff.includes('差異');
@@ -3724,6 +3770,12 @@ function submitFinal() {
     totalSalary:  state.calcTotalSalary,
     incentive:    state.calcIncentive,
     makanaiBonus: state.calcMakanaiBonus,
+    // ★2026-08-06 置き弁ギャラを現金で渡した対象日（YYYY-MM-DD の配列）。
+    //   GAS の submitReport が受け取って『置き弁ギャラログ』を支払済にする。
+    //   ★別APIで投げない：締めが通ったのに支払記録だけ落ちると、翌日また同じ未払い分が
+    //     締め画面に出て**二重に渡る**。同じ送信に載せて一蓮托生にする。
+    //   ★金額は totalSalary に既に含まれている（レジから一緒に抜くため）。
+    okibenGigPaid: (state.okibenGig && state.okibenGig.amount) ? state.okibenGig.dates : [],
     couponTotal: (state.history || []).filter(h => h.status === 'active').reduce((s, h) => s + (Number(h.couponAmount) || 0), 0),  // 2026-07-08 Phase3 D1: クーポン値引累計→GAS col34（取消分は除外）
   };
   // ★2026-07-31 報告の送信を待ってから残数を送る。
