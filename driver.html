@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v2.8 (2026-08-06) 【残数タップの内訳をエリア別×種別に】社長要望「残数は今は回収時の残りをそのまま足す仕様だと思うけど、残数とタップするとエリア別で種別が出るようにして欲しい」。★従来＝「拠点合計」をタップすると**全社の商品別リスト1本**だけが出ていた（銀しゃけ11／唐揚げ12…）。どのエリアに何が残っているか分からないので、移動の出し手を探すのに使えなかった。★変更後＝エリア行（例「芝エリア 24個 5拠点」）が残数の多い順に並び、**タップでそのエリアの種別が開く**。開いた中に対象拠点名も小さく出す。一番残数が多いエリアだけ最初から開いた状態にする（回収中に真っ先に見たいのがそこなので）。開閉は `_openAreaRows` に保持し、30秒自動更新をまたいでも閉じない。★数字の出どころは従来と同じ（残数照合ログの拠点合算・お茶除外・締め後の持ち出しは差引済み）＝**合計は1個も変わらない**。エリアは拠点マスタの「エリア」列。空欄の拠点は「(エリア未設定)」にまとめる（記入漏れが数字から消えないように）。拠点の入力がまだ0件の時間帯は従来どおり全社の商品別リストに落ちる。★実装: `renderAllBreakdown_` / `toggleAreaDetail(添字)` を新設し `openAllBreakdown` は描画を委譲。エリア名ではなく**添字**で開閉するのは、エリア名に ' が入っても onclick が壊れないようにするため。★「自分の残数（計算上）」のタップ内訳は**従来のまま**（社長判断 2026-08-06）。要: メインGAS @2026-08-06 以降（getResidualSummary の locationAreas / buildResidualAreas_ / _oedoResidualByDate_ の rows.products）。 -->
 <!-- driver v2.7 (2026-08-06) 【重大バグ修正：完売した拠点の残数が永久に記録されなかった】社長報告「芝エリアは残数確認してボタン押してるらしい」を起点に調査。ドライバーは正しく操作していたが、アプリが送信を丸ごと飛ばしていた。★原因の連鎖：getDeclaredResidual は「申告残数0の商品は items に並べない」（メインGAS `if (d <= 0 && a === null) return;`）→ **完売拠点は items が空** → 入力欄がゼロ → `ccResidualTotal_()` が null → `confirmCash` の `if (ccTotal !== null)` で **submitCollectionCheck を丸ごとスキップ**。②の setCollected は成功するので画面は「回収済み」に変わり、残数照合ログだけが「未回収」のまま残る。失敗表示は console.warn だけで誰も気づけなかった。**一番売れている拠点ほどデータが落ちる**最悪の落ち方。実測：8/5 の未回収9拠点のうち6拠点（芝パーク・京橋・神田スクエア・芝パーク②・パソナ・ソフバン②）が declared=0 / items=0 でこの経路。★修正①`ccFound`（getDeclaredResidual が found:true を返したか）を新設し、**完売＝残数0 は事実なので必ず送る**／取得失敗の時だけスキップ、と区別した（residualLoaded は「欄ができたか」なので両者を区別できない）。②送信が失敗・スキップした時に**必ず知らせる**（ok:false／例外／取得できず の3経路）。ただし `showToast` は前のトーストを消して置き換わるため、ここで出しても関数末尾の「現金有高を記録し回収済みにしました」に**必ず上書きされて見えなかった**（不一致メッセージも同じ理由で消えていた）。`residualSaved` / `residualMsg` に持ち回り、**最後の1回のトーストに集約**して解決。③`showToast` が3つ目の引数 duration を受け取っていなかったのを修正（呼び出し側は以前から 5000/6000 を渡していたが無視され常に2.8秒だった）。★2択ボタン（移動／2次販売）は社長判断で従来どおり変更なし。要: メインGAS @480 以降（getDeclaredResidual が納品商品を0で並べる・okibenNightlyApply が回収行を毎晩用意）。 -->
 <!-- driver v2.6 (2026-08-05) 【残数タブの手入力を廃止】社長指示「ドライバーアプリの残数入力は今は回収時の合計で出しているから、入力できないようにして」。残数は回収モーダルで拠点ごとに商品別入力する方式に一本化されたため、残数タブで打つと二重入力になる。①商品ごとの入力欄を外し「残数の入力は不要になりました／数え直したいときは回収タブでその拠点をタップ」の案内に差し替え ②下部の「報告を送信する」を「🚚 回収へ戻る」に変更（`submitResidual` は画面から呼べなくなった） ③回収タブ下部の導線も「📦 残数入力へ切り替え」→「📦 残数を確認する」 ④入力が無くなり必ず0になる「入力済」欄を消し、「自分の残数」は**計算上だけ**を大きく表示（全体の数字は上の「拠点合計」で見る） ⑤`submitReport()` は誤呼び出しガードを付けて残置。★`RESIDUAL_INPUT_ENABLED = false` の1行を true に戻せば元の入力欄がそのまま復活する＝**2次販売後の最終残数入力へ転用するため**（2026-08-03 の社長決定「残数入力タブは消さない」を維持）。GAS変更なし。 -->
 <!-- driver v2.6 (2026-08-06) 【移動に「登録経路」を付ける】回収モーダルの「🔄 移動」から立つ移動に origin='終了拠点振り分け' を付けて送る（置き弁の保険経路 submitCollectionCheck 相当）。移動タブからの手動登録は origin 未指定＝サーバ側で '手入力' になる。狙いは検証の分離：ドライバーが販売数を見て判断した移動（売り逃しを止める）と、回収時の振り分け（二次販売行きを減らす）は意味が違うため、混ぜて数えると販売ペース通知の効果が測れない。要: メインGAS @476（拠点間移動ログ22列目「登録経路」・startMove の origin・RTV_MOVE_HEAD）。UIの見た目・操作は変わらない。 -->
@@ -2348,21 +2349,86 @@ async function loadResidualSummary() {
     // ★2026-08-03 内訳も拠点合算に合わせる（拠点の入力が無い間だけ従来の残数ログ内訳）
     window._allResidualProducts = hasLoc ? (data.locationProducts || []) : (data.products || []);
     window._allResidualIsByLoc  = hasLoc;
+    // ★2026-08-06 エリア別×種別（社長要望）。拠点の入力がまだ無い時間帯は空＝従来の商品別リストに落ちる。
+    window._allResidualAreas    = hasLoc ? (data.locationAreas || []) : [];
   } catch(e) { console.warn('loadResidualSummary error:', e); }
 }
 
+// ★2026-08-06 エリアの開閉状態（エリア名 → true）。モーダルを開き直しても保持する。
+window._openAreaRows = window._openAreaRows || {};
+
+//   ※エリア名ではなく**添字**で受ける。エリア名に ' が入っていても onclick が壊れないようにするため。
+function toggleAreaDetail(idx) {
+  const a = (window._allResidualAreas || [])[idx];
+  if (!a) return;
+  if (window._openAreaRows[a.area]) delete window._openAreaRows[a.area];
+  else                              window._openAreaRows[a.area] = true;
+  renderAllBreakdown_();
+}
+
+// ★2026-08-06 拠点合計の内訳を「エリア別 → 種別」で描く（社長要望）。
+//   エリア行をタップすると、そのエリアの商品別残数が開く。
+//   一番残数が多いエリアだけ最初から開けておく（回収中に一番見たいのがそこなので）。
+//   locationAreas が無い＝拠点の入力がまだ0件の時間帯は、従来どおり全社の商品別リストを出す。
+function renderAllBreakdown_() {
+  const areas = window._allResidualAreas || [];
+  const list  = document.getElementById('all-breakdown-list');
+  if (!list) return;
+
+  if (areas.length === 0) {
+    const products = window._allResidualProducts || [];
+    list.innerHTML = products.length === 0
+      ? '<p style="color:#999;font-size:13px;text-align:center;padding:20px 0;">データがありません</p>'
+      : products.map(p =>
+          '<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #F0EDE5;font-size:14px;">'
+          + '<span style="color:#4A4A4A;">' + esc_(p.productName) + '</span>'
+          + '<span style="font-weight:700;color:#1A3C5E;">' + p.qty + '個</span></div>'
+        ).join('');
+    return;
+  }
+
+  // 初回だけ「一番残数が多いエリア」を開いた状態で出す。以降はドライバーの開閉に従う。
+  if (!window._areaInitDone) {
+    window._areaInitDone = true;
+    window._openAreaRows = {};
+    if (areas[0]) window._openAreaRows[areas[0].area] = true;
+  }
+
+  list.innerHTML = areas.map((a, i) => {
+    const isOpen = !!window._openAreaRows[a.area];
+    const prods  = a.products || [];
+    const detail = prods.length > 0
+      ? prods.map(p =>
+          '<div style="display:flex;justify-content:space-between;padding:7px 0;font-size:14px;">'
+          + '<span style="color:#4A4A4A;">' + esc_(p.productName) + '</span>'
+          + '<span style="font-weight:700;color:#1A3C5E;">' + p.qty + '個</span></div>'
+        ).join('')
+        + ((a.locNames && a.locNames.length)
+            ? '<div style="color:#9A9A9A;font-size:11px;margin-top:6px;line-height:1.5;">拠点: '
+              + a.locNames.map(esc_).join(' / ') + '</div>'
+            : '')
+      : '<div style="color:#9A9A9A;font-size:12px;padding:6px 0;">残数なし（完売）</div>';
+    return '<div style="border-bottom:1px solid #F0EDE5;">'
+      + '<div onclick="toggleAreaDetail(' + i + ')" '
+      + 'style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;cursor:pointer;">'
+      + '<div style="display:flex;align-items:center;gap:8px;">'
+      + '<span style="color:#B0AEA6;font-size:11px;">' + (isOpen ? '▼' : '▶') + '</span>'
+      + '<span style="color:#1A3C5E;font-size:15px;font-weight:700;">' + esc_(a.area) + '</span>'
+      + '<span style="color:#9A9A9A;font-size:11px;">' + (a.locCount || 0) + '拠点</span></div>'
+      + '<span style="color:#1A3C5E;font-size:17px;font-weight:700;">' + a.total + '個</span></div>'
+      + '<div style="display:' + (isOpen ? 'block' : 'none') + ';padding:0 0 12px 19px;">' + detail + '</div>'
+      + '</div>';
+  }).join('');
+}
+
 function openAllBreakdown() {
-  const products = window._allResidualProducts || [];
   const title = document.getElementById('all-breakdown-title');
-  if (title) title.textContent = window._allResidualIsByLoc ? '拠点合計の内訳' : '回収入力の内訳';
-  const list = document.getElementById('all-breakdown-list');
-  list.innerHTML = products.length === 0
-    ? '<p style="color:#999;font-size:13px;text-align:center;padding:20px 0;">データがありません</p>'
-    : products.map(p =>
-        '<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #F0EDE5;font-size:14px;">'
-        + '<span style="color:#4A4A4A;">' + p.productName + '</span>'
-        + '<span style="font-weight:700;color:#1A3C5E;">' + p.qty + '個</span></div>'
-      ).join('');
+  if (title) {
+    title.textContent = window._allResidualIsByLoc
+      ? ((window._allResidualAreas || []).length > 0 ? '拠点合計の内訳（エリア別）' : '拠点合計の内訳')
+      : '回収入力の内訳';
+  }
+  renderAllBreakdown_();
   document.getElementById('all-breakdown-modal').style.display = 'flex';
 }
 
