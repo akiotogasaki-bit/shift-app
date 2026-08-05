@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>お江戸弁当 レジ</title>
+<!-- register v3.15 (2026-08-06) 【置き弁（アスエネ）のインセンティブを締め画面に別枠で表示】社長要望「虎ノ門でレジを閉めた時に、虎ノ門分とアスエネの分のインセンティブの金額が別でわかるようにしてね」。背景＝従来はアスエネ分のギャラを発生させるために**その販売数を虎ノ門②のレジにPayPayで打ち込んで**いた。副作用が3つあり、①虎ノ門②の販売数・完売率が過大→**翌週推奨が虎ノ門②に多く配る**二次被害 ②アプリのPayPayが実PayPayより過大→突合で毎回「アプリ過大＝現金抜き疑い」に出る ③アスエネの販売数が取れず増減判断ができない。メインGAS側で「置き弁ギャラログ」（販売数＝納品数−残数 から算出）を別建てにしたので、レジに混ぜる必要が無くなった。★締め画面の「販売実績・ギャラ」に `res-okiben-row` を追加し、`action=okibenGigForStaff` で取得して表示（`showOkibenGig_`）。**『置き弁設定』の報酬対象者に設定された人にだけ出る**。★**当日分は出せない**（締める14〜16時にはドライバーの回収がまだで残数が入っていない・確定は夜間バッチ23:04）ため社長選択＝**前営業日の1日分**。★**「本日の合計」には足さない**＝報告ログの本日合計ギャラは 実現金＋ギャラ−開始金 の現金誤差計算に使われるため、足すと虎ノ門②の現金が毎日ずれる（アスエネ分は現金で持ち帰らず給与で払う）。取得に失敗しても締め作業は止めない（行を出さないだけ）。要: メインGAS（`getOkibenGigForStaff` ＋ doGet ルーティング／置き弁ギャラログ）。 -->
 <!-- register v3.14 (2026-08-05) 【レジ開始金は「後からいつでも直せる」に。不完全な開始ログ行も断つ】社長指示「先に納品数を入れるのは今後も発生するから、それも踏まえた運用に」。★実データで原因を特定：8/3 銀座の開始ログは **10:59:06 に「商品1種・合計1個（{"P001":1}）・開始金0」の行**、その**7秒後の 10:59:13 に「13種74個・開始金0」の行**が同一UIDで立っていた（ソフバン・ダイビルも同型／開始金0だった拠点と完全一致）。出どころは `sendDeliveryUpdate → ensureStartReported → sendStartReport` の経路で、`state.deliveryCount` がまだ1商品しか入っていない状態のまま開始報告が送られたもの。この不完全な行が先に立つと、後から入る販売員が引き継ぎ判定に落ちて開始金を打てなくなる。対応3点：①**在庫モーダルの「開始金庫」が0のとき「未入力 ▸ 入力する」と赤字表示**になり、タップすれば**レジを打っている途中でもいつでも開始金を入れ直せる**（`openRegisterStartFix` → `enterTakeoverStartCash(_, {fromRegister:true})` → `updateRegisterStart`）。引き継ぎ画面に頼らないので、先に納品数が入る運用でも必ず直せる ②`sendStartReport` は**納品数が1〜2種しか入っていない時は送信を中止**してトーストで知らせる（不完全な開始ログ行を作らない） ③開始金を入れたら金庫サマリーを即時再描画。GAS変更なし（`updateRegisterStart` は @452 で追加済み）。 -->
 <!-- register v3.13 (2026-08-04) 【v3.12の穴を塞ぐ：スタート報告のボタンが無反応になる経路をなくす】社長報告「レジのスタート報告の時にレジのスタート金を入力できない」（※同じ症状は8/3にも発生しており v3.12 が原因ではないが、v3.12 に実在の穴があったので塞ぐ）。真因＝`renderDeliveryInputs()` はアプリ全体で `selectLocation` の通常フロー**1箇所からしか呼ばれない**のに、v3.12 で追加した `enterTakeoverStartCash()`（引き継ぎ時の開始金だけ画面）がそれを呼んでいなかった。そのためこの画面を通ったあとスタート報告画面に戻ると `delivery-<商品ID>` が存在せず、送信ボタンが `document.getElementById(...).value` の **null 参照で例外→ボタンを押しても何も起きない**状態になっていた（販売員からは「入力できない」に見える）。修正3点：①`enterTakeoverStartCash` はカードを隠す前に必ず `renderDeliveryInputs()` を呼ぶ ②`btn-start-submit` は入力欄が1つでも無ければ**黙って落ちず、画面を作り直して alert で知らせて中止**する ③`submitTakeoverStartCash` が「本日の開始報告が見つかりません」を受けたら詰まらせず通常のスタート報告へ戻す（`backToNormalStartReport`）。あわせて引き継ぎ画面に「納品数から自分で入力し直す →」の逃げ道リンクを追加し、**どんな理由で詰まっても販売員が自力で通常フローに戻れる**ようにした。GAS変更なし。 -->
 <!-- register v3.12 (2026-08-04) 【引き継ぎでレジ開始金が0のまま継承される穴を塞ぐ】社長質問「レジの開始金額が打てなかったとはどういう状況？」の回答＝**引き継ぎモードがスタート報告画面ごと飛ばしていた**。開始金の入力欄はスタート報告画面にしか無いのに、`selectLocation` の引き継ぎ分岐は `state.registerStart = data.registerStart || 0` で前の人の値を継いで `showScreen('register')` へ直行するため、前の人が0で開始していると**その日ずっと0のまま誰も直せなかった**。8/3実測で19拠点中**7拠点が開始金0**（芝パーク・浜松町スクエア・ソフバン・平河町・銀座・ぜん六神谷・ダイビル）。実現金売上＝実現金＋ギャラ−開始金 のため、PayPay突合で**約60,000円が見かけのマイナス**として出ていた。販売員コメント「最初、納品報告の画面が出ず、開始金庫金額15000円入力できなかった」が実態。修正：①引き継ぎで開始金が0の時だけ、スタート報告画面を**納品数カードを隠した「開始金だけ」の姿**で1枚はさむ（`enterTakeoverStartCash`。金種入力もそのまま使える）②送信は新API `updateRegisterStart` で開始ログG列だけ更新（`submitTakeoverStartCash`。失敗を握りつぶさずalertで知らせる＝v3.1の反省）③通常フローでも開始金0のまま送ろうとしたら確認ダイアログを出す。要メインGAS（`updateRegisterStart` 追加＋doPostルーティング）。 -->
@@ -1331,6 +1332,15 @@ html, body { overscroll-behavior-y: contain; }
       <div class="result-row"><span class="result-label">販売数</span><span class="result-value" id="res-sold">0個</span></div>
       <div class="result-row"><span class="result-label">完売率</span><span class="result-value gold" id="res-rate">0%</span></div>
       <div class="result-row salary-row"><span class="result-label">インセンティブ</span><span class="result-value gold" id="res-incentive">¥0</span></div>
+      <!-- ★2026-08-06 置き弁（アスエネ等）のインセンティブを**別枠**で見せる。
+           社長要望「虎ノ門でレジを閉めた時に、虎ノ門分とアスエネの分のインセンティブの
+           金額が別でわかるようにしてね」。報酬対象者に設定された人にだけ出る。
+           ★当日分は出せない（締める時刻にはまだ残数が入っていない）ので前営業日の1日分。
+           ★下の「本日の合計」には**足さない**＝現金誤差の計算に効かせないため。 -->
+      <div class="result-row salary-row" id="res-okiben-row" style="display:none;">
+        <span class="result-label" id="res-okiben-label">アスエネ分</span>
+        <span class="result-value gold" id="res-okiben">¥0</span>
+      </div>
       <div class="result-row salary-row"><span class="result-label">基本ギャラ</span><span class="result-value" id="res-base">¥0</span></div>
       <div class="result-row salary-row" id="res-late-row" style="display:none;">
         <span class="result-label" style="color:var(--red);">遅刻ペナルティ</span>
@@ -3354,6 +3364,14 @@ function calcFinal() {
   document.getElementById('res-base').textContent     = `¥${state.baseGigSalary.toLocaleString()}`;
   document.getElementById('res-total').textContent    = `¥${totalSalary.toLocaleString()}`;
 
+  // ★2026-08-06 置き弁（アスエネ等）のインセンティブを別枠で表示。
+  //   従来はアスエネ分のギャラを出すために**その販売数を虎ノ門②のレジに打ち込んで**いたため、
+  //   虎ノ門②の販売数・完売率・PayPayが過大になり、翌週推奨の配分まで狂っていた。
+  //   置き弁ギャラログから別建てで出すようになったので、レジに混ぜる必要が無くなった。
+  //   ★「本日の合計」には足さない（現金誤差＝実現金＋ギャラ−開始金 に効いてしまうため）。
+  //   ★当日分は出せない（締める時刻にはドライバーの回収がまだ）ので前営業日の1日分。
+  showOkibenGig_();
+
   const lateRow = document.getElementById('res-late-row');
   if (lateMinutes > 0) {
     document.getElementById('res-late').textContent = `-¥${latePenalty.toLocaleString()}（${lateMinutes}分）`;
@@ -3387,6 +3405,37 @@ function calcFinal() {
   document.getElementById('comp-incentive').textContent = `¥${incentive.toLocaleString()}`;
   document.getElementById('comp-base').textContent      = `¥${state.baseGigSalary.toLocaleString()}`;
   document.getElementById('comp-total').textContent     = `¥${totalSalary.toLocaleString()}`;
+}
+
+// ★2026-08-06 置き弁（アスエネ等）のインセンティブを締め画面に別枠で出す。
+//   『置き弁設定』の「報酬対象者」に設定された人にだけ出る（他の販売員には何も出ない）。
+//   金額は表示専用。state.calcTotalSalary には一切触らない＝報告ログ・現金誤差に影響しない。
+//   失敗しても締め作業は止めない（行を出さないだけ）。
+async function showOkibenGig_() {
+  const row = document.getElementById('res-okiben-row');
+  if (!row) return;
+  row.style.display = 'none';
+  if (!state.userId) return;
+  try {
+    const url = `${state.GAS_URL}?action=okibenGigForStaff`
+              + `&uid=${encodeURIComponent(state.userId)}`
+              + `&date=${encodeURIComponent(regToday_())}`;
+    const j = await (await fetch(url, { method: 'GET', redirect: 'follow' })).json();
+    if (!j || !j.ok || !j.found) return;
+    document.getElementById('res-okiben-label').textContent =
+      `${j.locName || '置き弁'}分（${j.label}）`;
+    document.getElementById('res-okiben').textContent =
+      `¥${Number(j.amount || 0).toLocaleString()}（${j.sold || 0}個）`;
+    row.style.display = '';
+  } catch (e) {
+    console.warn('置き弁ギャラの取得に失敗（締めには影響しません）:', e);
+  }
+}
+
+function regToday_() {
+  const d = new Date();
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
 function calcLatePenalty(minutes) {
