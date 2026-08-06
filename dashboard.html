@@ -8,6 +8,7 @@
 <!-- dashboard v5 (2026-06-06): リアルタイムタブに「サマリー/エリア別マトリクス」サブ切替を追加。GAS変更なし。 -->
 <!-- dashboard v6 (2026-07-09): エリア別マトリクス最下部に拠点別「合計」行を追加（販売合計/納品合計・お茶除外）。GAS変更なし。 -->
 <!-- dashboard v7 (2026-07-10): 拠点間移動±を完売率の全ビュー（一覧・マトリクス・ランキング・モーダル）に反映（乙案）。getMoveAdjByLoc を取得し実効納品＝納品＋移動±で完売率を再計算。確定完売率も実効値で動く（社長了承済）。GAS変更なし。 -->
+<!-- dashboard v8 (2026-08-07): 【エリア別マトリクスの集計を直す（欠陥4件）】社長報告「浜松町スクエアで販売数と完売率がおかしい。全体的にマトリクスをチェックして」。受け取り側でも出し側でもある拠点で出やすい。★A 行に出す商品の条件を「実効納品>0」→「実効納品≠0 **または 販売>0**」に。従来は移動で入ったが未完結（＝実効納品が増えていない）商品が**行ごと消え**、その販売数がマトリクスのどこにも出ないまま合計にだけ乗っていた。★B 合計行を**表示している行だけ**で足すように変更（従来は全商品を合算していたため「セルを縦に足した数」と合計行が一致しなかった）。★C `_effDeliveryObj_` の商品ごとの 0止め（Math.max(0,…)）を廃止。受け取った数より多く出した商品が納品0に潰れ「販売3/納品0」のような表示になっていた。マイナスは実態（出しすぎ・未着の持ち出し）なのでそのまま -1 と出し、セルに赤背景（.minus）を付けて気づけるようにした。※移動は出発時点で移動元から −／完結時に移動先へ ＋ なので、出発済のまま未着の便があると移動元は一時的にマイナスになる（8/6 13:04 浜松町スクエア発の未着便がこれ）。★D 完売率の分子を `soldCount` から **`productSalesJson` の非お茶合計**に統一（マトリクスのセルと同じ出どころに揃え、ヘッダーの完売率と合計行が必ず一致するようにした）。productSalesJson を持たない拠点だけ従来の soldCount−お茶販売 に落とす。GAS変更なし。 -->
 
 <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
@@ -1579,6 +1580,9 @@ font-family: inherit;
 .matrix-cell.soldout { background: var(--green-light); }
 .matrix-cell.soldout .sold { color: #1A7A42; }
 .matrix-cell.zero { color: var(--ink-mute); }
+/* ★2026-08-07 実効納品がマイナス＝出しすぎ／未着の持ち出しがある（0止めをやめたので出る） */
+.matrix-cell.minus, .matrix-total-cell.minus { background: #FDECEC; color: var(--red); }
+.matrix-cell.minus .sold, .matrix-total-cell.minus .sold { color: var(--red); }
 /* v6: 拠点別 合計行 */
 .matrix-table tbody tr.matrix-total-row th,
 .matrix-table tbody tr.matrix-total-row td {
@@ -2625,7 +2629,11 @@ function _teaIds_() {
 
 // ── v7: 拠点間移動±の共通ヘルパー（全ビュー同一基準） ──────────────
 // 実効納品オブジェクト（商品ID→数）= 生納品 ＋ moveAdjMap[locId]（商品別）。
-//   deliveryCount（object）/ deliveryCountJson（string）両対応。純増減で0未満は0に丸め。
+//   deliveryCount（object）/ deliveryCountJson（string）両対応。
+// ★2026-08-07 商品ごとの 0止め（Math.max(0,…)）をやめた。
+//   受け取った数より多く出した商品は納品が0に潰れ、「販売3/納品0」のような表示になっていた。
+//   マイナスは実態（出しすぎ・未着の持ち出し）なので、そのまま -1 と出して気づけるようにする。
+//   例：出発済のまま未着の便があると、移動元は出発時点で − されるので一時的にマイナスが出る。
 function _effDeliveryObj_(r) {
   if (!r) return {};
   let base = {};
@@ -2638,7 +2646,7 @@ function _effDeliveryObj_(r) {
   Object.entries(base).forEach(([id, v]) => { out[id] = Number(v) || 0; });
   const adj = moveAdjMap[r.locationId] || moveAdjMap[String(r.locationId)] || {};
   Object.entries(adj).forEach(([id, v]) => {
-    out[id] = Math.max(0, (Number(out[id]) || 0) + (Number(v) || 0));
+    out[id] = (Number(out[id]) || 0) + (Number(v) || 0);
   });
   return out;
 }
@@ -2653,18 +2661,26 @@ function _effDeliveryTotal_(r) {
   return sum;
 }
 
-// 実効完売率（お茶抜き・%）。確定/中間とも実効納品を分母に統一。分母0は null。
-//   分子 sold = soldCount − お茶販売（productSalesJson基準）。分母だけに moveAdj を反映。
+// 実効完売率（お茶抜き・%）。確定/中間とも実効納品を分母に統一。分母0以下は null。
+// ★2026-08-07 分子の出どころをマトリクスのセルと同じ productSalesJson に統一した。
+//   従来は分子が soldCount（＝別集計）で、セルは productSalesJson。両者がズレると
+//   「ヘッダーの完売率」と「合計行の 販売/納品」が一致せず、どちらが正しいか分からなかった。
+//   productSalesJson が空の拠点だけ、従来どおり soldCount−お茶販売 に落とす
+//   （中間報告など商品別内訳を持たない拠点で完売率が 0% に化けるのを防ぐ）。
 function _effSellRate_(r) {
   if (!r) return null;
   const teaIds = _teaIds_();
   const delivery = _effDeliveryTotal_(r);
-  let teaSold = 0;
+  let sold = 0, hasDetail = false, teaSold = 0;
   try {
     const sObj = JSON.parse(r.productSalesJson || '{}');
-    teaIds.forEach(id => { teaSold += Number(sObj[id] || 0); });
+    Object.entries(sObj).forEach(([id, v]) => {
+      hasDetail = true;
+      if (teaIds.includes(id)) teaSold += Number(v) || 0;
+      else sold += Number(v) || 0;
+    });
   } catch (e) {}
-  const sold = Math.max(0, (Number(r.soldCount) || 0) - teaSold);
+  if (!hasDetail) sold = Math.max(0, (Number(r.soldCount) || 0) - teaSold);
   return delivery > 0 ? Math.round(sold / delivery * 1000) / 10 : null;
 }
 
@@ -2741,10 +2757,15 @@ function renderAreaMatrix() {
       return { loc, delivery, sales, rate, status };
     });
 
-    // 行に出す商品 = このエリアで納品>0（お茶除外）。商品マスタ順を保持
+    // 行に出す商品 = このエリアで 実効納品≠0 **または 販売>0**（お茶除外）。商品マスタ順を保持
+    // ★2026-08-07 従来は「実効納品>0」だけで絞っていたため、
+    //   移動で入ったが未完結（＝実効納品が増えていない）商品は**行ごと消え**、
+    //   その販売数がマトリクスのどこにも出ないまま合計行にだけ乗っていた。
+    //   販売があるなら必ず行を出す。納品がマイナスの商品も出す（0止めをやめたため）。
     const rowProducts = products.filter(p => {
       if (teaIds.includes(p.id)) return false;
-      return perLoc.some(pl => Number(pl.delivery[p.id] || 0) > 0);
+      return perLoc.some(pl => (Number(pl.delivery[p.id] || 0) !== 0)
+                            || (Number(pl.sales[p.id]    || 0) >  0));
     });
 
     // ヘッダー
@@ -2771,7 +2792,9 @@ function renderAreaMatrix() {
           if (d === 0 && s === 0) {
             tr += `<td class="matrix-cell zero">—</td>`;
           } else {
-            const cls = (d > 0 && s >= d) ? 'matrix-cell soldout' : 'matrix-cell';
+            // ★2026-08-07 納品がマイナス＝出しすぎ／未着の持ち出しがある。色で気づけるようにする
+            const cls = (d < 0) ? 'matrix-cell minus'
+                      : (d > 0 && s >= d) ? 'matrix-cell soldout' : 'matrix-cell';
             tr += `<td class="${cls}"><span class="sold">${s}</span>/${d}</td>`;
           }
         });
@@ -2779,15 +2802,22 @@ function renderAreaMatrix() {
       });
 
       // v6: 拠点別 合計行（列＝拠点ごとに 販売合計/納品合計。お茶除外）
+      // ★2026-08-07 合計は **表示している行（rowProducts）だけ** で足す。
+      //   従来は全商品を合算していたため、行に出ていない商品の販売数が合計にだけ乗り、
+      //   「セルを縦に足した数」と「合計行」が合わなかった（社長報告①の直接の原因）。
+      //   rowProducts はお茶を除いてあるので、ここで teaIds を見る必要はない。
       let totRow = '<th>合計</th>';
       perLoc.forEach(pl => {
         let dTot = 0, sTot = 0;
-        Object.entries(pl.delivery).forEach(([id, v]) => { if (!teaIds.includes(id)) dTot += Number(v) || 0; });
-        Object.entries(pl.sales).forEach(([id, v])    => { if (!teaIds.includes(id)) sTot += Number(v) || 0; });
+        rowProducts.forEach(p => {
+          dTot += Number(pl.delivery[p.id] || 0);
+          sTot += Number(pl.sales[p.id]    || 0);
+        });
         if (dTot === 0 && sTot === 0) {
           totRow += `<td class="matrix-total-cell zero">—</td>`;
         } else {
-          totRow += `<td class="matrix-total-cell"><span class="sold">${sTot}</span>/${dTot}</td>`;
+          const tcls = (dTot < 0) ? 'matrix-total-cell minus' : 'matrix-total-cell';
+          totRow += `<td class="${tcls}"><span class="sold">${sTot}</span>/${dTot}</td>`;
         }
       });
       body += `<tr class="matrix-total-row">${totRow}</tr>`;
