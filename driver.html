@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v2.9 (2026-08-07) 【移動の行き先を積んだ時点で決める／置き弁で移動の案内が出なかった不具合】社長「行き先は移動元から弁当を持った時点で確定している。２箇所の時も。ただ出発時点にどこに何を入れるかまで入力するのは面倒。これは最後の回収の時も一緒」。★従来＝行き先は**回収時にも出発登録時にも選べず**、移動タブの搬送中カードは常に「◯◯ → ？」。行き先は到着登録で初めて選ぶ設計だった（2026-08-05 の「移動先が2箇所ある」要望に合わせたもの）。★変更後＝回収モーダルの「🔄 移動」と移動タブの「出発を登録」の両方で、先に**行き先の拠点だけ**を選ぶ（複数タップ可・個数の内訳は入れない）。個数を入れるのは実際に下ろす時だけ。カードは「浜松町 → 田町 → 品川」と出る。到着登録は予定先がボタンで並び、**1箇所なら選択済みなので「ここで下ろす」を押すだけ**。2箇所目は残りが自動で次のカードになり、行き先も引き継ぐので選び直さなくていい（分割の仕組みは 2026-08-05 のまま）。決まっていない時は「行き先はあとで決める」で従来フローに落ちる。現場で変わった時は到着登録の「別の拠点に下ろす」で一覧から選べる。★行き先が**1箇所の時だけ**、出発時点で移動先の担当者へ「◯◯から△△が向かっています」とLINE通知（社長決定 2026-08-07。2箇所以上は内訳が未定なので出さない）。従来は到着登録を押すまで受け取り側に何も伝わらなかった。★あわせて社長報告③を修正：置き弁など残数照合ログに行が無い拠点では submitCollectionCheck が空振りして residualSaved=false になり、**移動タブへ飛ぶだけで案内トーストが一切出なかった**。案内を残数の記録可否から切り離し、必ず出すようにした（残数エラーと重なる時は3秒後に続けて出す＝showToast は前のトーストを置き換えるため）。★実装: 行き先ピッカー openDestPicker_/renderDestGrid_/toggleDest_/submitDestPick_/submitDestPickUndecided_、回収側 openCollectDestPicker_ + ccPlannedTo（confirmCash 冒頭で planned に控えを取る。途中の closeCashModal で空に戻るため）、到着側 renderArriveDest_/pickArriveDest_/arriveShowAll_ + _arriveToId_、出発側 submitDepart→_submitDepart2_。ピッカーは回収モーダル(z-index:1000)の上に出すため #mv-dest-modal を 1100 にしている。要: メインGAS @2026-08-07 以降（拠点間移動ログ23列目「予定先JSON」・startMove の plannedTo と事前通知・completeMove の分割で残りの予定先を引き継ぎ・getOpenMoves が plannedTo を返す・submitCollectionCheck が plannedTo を渡す）。 -->
 <!-- driver v2.8 (2026-08-06) 【残数タップの内訳をエリア別×種別に】社長要望「残数は今は回収時の残りをそのまま足す仕様だと思うけど、残数とタップするとエリア別で種別が出るようにして欲しい」。★従来＝「拠点合計」をタップすると**全社の商品別リスト1本**だけが出ていた（銀しゃけ11／唐揚げ12…）。どのエリアに何が残っているか分からないので、移動の出し手を探すのに使えなかった。★変更後＝エリア行（例「芝エリア 24個 5拠点」）が残数の多い順に並び、**タップでそのエリアの種別が開く**。開いた中に対象拠点名も小さく出す。一番残数が多いエリアだけ最初から開いた状態にする（回収中に真っ先に見たいのがそこなので）。開閉は `_openAreaRows` に保持し、30秒自動更新をまたいでも閉じない。★数字の出どころは従来と同じ（残数照合ログの拠点合算・お茶除外・締め後の持ち出しは差引済み）＝**合計は1個も変わらない**。エリアは拠点マスタの「エリア」列。空欄の拠点は「(エリア未設定)」にまとめる（記入漏れが数字から消えないように）。拠点の入力がまだ0件の時間帯は従来どおり全社の商品別リストに落ちる。★実装: `renderAllBreakdown_` / `toggleAreaDetail(添字)` を新設し `openAllBreakdown` は描画を委譲。エリア名ではなく**添字**で開閉するのは、エリア名に ' が入っても onclick が壊れないようにするため。★「自分の残数（計算上）」のタップ内訳は**従来のまま**（社長判断 2026-08-06）。要: メインGAS @2026-08-06 以降（getResidualSummary の locationAreas / buildResidualAreas_ / _oedoResidualByDate_ の rows.products）。 -->
 <!-- driver v2.7 (2026-08-06) 【重大バグ修正：完売した拠点の残数が永久に記録されなかった】社長報告「芝エリアは残数確認してボタン押してるらしい」を起点に調査。ドライバーは正しく操作していたが、アプリが送信を丸ごと飛ばしていた。★原因の連鎖：getDeclaredResidual は「申告残数0の商品は items に並べない」（メインGAS `if (d <= 0 && a === null) return;`）→ **完売拠点は items が空** → 入力欄がゼロ → `ccResidualTotal_()` が null → `confirmCash` の `if (ccTotal !== null)` で **submitCollectionCheck を丸ごとスキップ**。②の setCollected は成功するので画面は「回収済み」に変わり、残数照合ログだけが「未回収」のまま残る。失敗表示は console.warn だけで誰も気づけなかった。**一番売れている拠点ほどデータが落ちる**最悪の落ち方。実測：8/5 の未回収9拠点のうち6拠点（芝パーク・京橋・神田スクエア・芝パーク②・パソナ・ソフバン②）が declared=0 / items=0 でこの経路。★修正①`ccFound`（getDeclaredResidual が found:true を返したか）を新設し、**完売＝残数0 は事実なので必ず送る**／取得失敗の時だけスキップ、と区別した（residualLoaded は「欄ができたか」なので両者を区別できない）。②送信が失敗・スキップした時に**必ず知らせる**（ok:false／例外／取得できず の3経路）。ただし `showToast` は前のトーストを消して置き換わるため、ここで出しても関数末尾の「現金有高を記録し回収済みにしました」に**必ず上書きされて見えなかった**（不一致メッセージも同じ理由で消えていた）。`residualSaved` / `residualMsg` に持ち回り、**最後の1回のトーストに集約**して解決。③`showToast` が3つ目の引数 duration を受け取っていなかったのを修正（呼び出し側は以前から 5000/6000 を渡していたが無視され常に2.8秒だった）。★2択ボタン（移動／2次販売）は社長判断で従来どおり変更なし。要: メインGAS @480 以降（getDeclaredResidual が納品商品を0で並べる・okibenNightlyApply が回収行を毎晩用意）。 -->
 <!-- driver v2.6 (2026-08-05) 【残数タブの手入力を廃止】社長指示「ドライバーアプリの残数入力は今は回収時の合計で出しているから、入力できないようにして」。残数は回収モーダルで拠点ごとに商品別入力する方式に一本化されたため、残数タブで打つと二重入力になる。①商品ごとの入力欄を外し「残数の入力は不要になりました／数え直したいときは回収タブでその拠点をタップ」の案内に差し替え ②下部の「報告を送信する」を「🚚 回収へ戻る」に変更（`submitResidual` は画面から呼べなくなった） ③回収タブ下部の導線も「📦 残数入力へ切り替え」→「📦 残数を確認する」 ④入力が無くなり必ず0になる「入力済」欄を消し、「自分の残数」は**計算上だけ**を大きく表示（全体の数字は上の「拠点合計」で見る） ⑤`submitReport()` は誤呼び出しガードを付けて残置。★`RESIDUAL_INPUT_ENABLED = false` の1行を true に戻せば元の入力欄がそのまま復活する＝**2次販売後の最終残数入力へ転用するため**（2026-08-03 の社長決定「残数入力タブは消さない」を維持）。GAS変更なし。 -->
@@ -750,6 +751,18 @@ body {
 .mv-save-btn{width:100%;padding:14px;border:none;border-radius:12px;background:var(--blue);color:#FFF;font-size:16px;font-weight:700;font-family:inherit;cursor:pointer;}
 .mv-save-btn:disabled{opacity:.5;}
 .mv-arrive-from{font-size:13px;color:var(--ink-mute);margin:2px 0 10px;}
+/* ★2026-08-07 行き先ピッカー（積んだ時点で行き先を選ぶ・個数は入れない） */
+.dest-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0 4px;}
+.dest-btn{padding:13px 8px;border:2px solid #DDD;border-radius:12px;background:#FFF;
+  font-size:14px;font-weight:700;color:var(--ink);text-align:center;line-height:1.3;}
+.dest-btn.on{border-color:#1A3C5E;background:#E8F0F8;color:#1A3C5E;}
+.dest-btn.on::before{content:'✓ ';}
+.dest-count{font-size:13px;font-weight:700;color:#1A3C5E;margin-top:10px;text-align:center;}
+.dest-hint{font-size:11px;color:var(--ink-mute);line-height:1.5;margin-top:8px;}
+.dest-other{width:100%;margin-top:8px;padding:9px;border:1px dashed #BBB;border-radius:10px;
+  background:#FAFAFA;font-size:12px;color:#666;}
+/* 行き先ピッカーは回収モーダル(.cash-modal-bg z-index:1000)の上に重ねて開く */
+#mv-dest-modal{z-index:1100;}
 
 /* ── 現金有高テンキーモーダル（v1.7 NEW）── */
 .cash-modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:flex-end;justify-content:center;z-index:1000;}
@@ -1587,6 +1600,8 @@ let ccField        = 'cash';       // 'cash' または 'p:<商品ID>'
 let residualLoaded = false;        // 既定値（申告残数／置き弁は納品数）を取得できたか
 let ccIsOkiben     = false;
 let ccNoCash       = false;        // 置き弁で現金会計なし＝現金欄を出さない
+// ★2026-08-07 「🔄 移動」で選んだ行き先 [{id,name}]。空＝あとで決める（従来どおり到着登録で選ぶ）
+let ccPlannedTo    = [];
 // ★2026-08-06 getDeclaredResidual が found:true を返したか。
 //   residualLoaded は「入力欄が1つ以上できたか」なので、**完売拠点（申告残数0）と
 //   取得失敗の区別がつかない**。完売は「残数0」という事実なので送らなければならず、
@@ -1698,6 +1713,7 @@ function closeCashModal() {
   ccItems = [];
   ccVals  = {};
   ccField = 'cash';
+  ccPlannedTo = [];   // ★2026-08-07 次の拠点に行き先を持ち越さない
 }
 // ★2026-08-01 テンキーは「選択中の欄」を編集する／2026-08-03 残数は商品ごと
 function ccPid_()      { return ccField.indexOf('p:') === 0 ? ccField.slice(2) : null; }
@@ -1798,9 +1814,23 @@ function renderCashModal_(net) {
 //   '移動' はサーバー（submitCollectionCheck）が拠点間移動ログを1本立てる。
 //   移動元はこの残数で確定＝レジはロック。移動元の納品数からは同じ数が引かれるので全体は増えない。
 //   下ろす拠点は「🔄 移動」タブの到着登録で決める（2箇所に分けて下ろせる）。
+// ★2026-08-07 回収の「🔄 移動」は、先に行き先を選んでから確定する。
+//   社長決定：行き先は積んだ時点で確定している（最後の回収の時も同じ）。個数の内訳は入れない。
+function openCollectDestPicker_() {
+  if (!cashModalLocId) return;
+  const loc = state.locations.find(l => l.id === cashModalLocId);
+  openDestPicker_(
+    (loc ? loc.name : '') + ' の残りを持って行く先',
+    cashModalLocId, ccPlannedTo,
+    function (sel) { ccPlannedTo = sel; confirmCash('移動'); }
+  );
+}
 async function confirmCash(kind) {
   kind = kind || '';
   if (!cashModalLocId) return;
+  // ★2026-08-07 行き先はここで控えを取る。この関数の途中で closeCashModal() が走り
+  //   ccPlannedTo が空に戻るため、後段の案内文が参照できなくなる。
+  const planned = (kind === '移動') ? ccPlannedTo.slice() : [];
   // ★2026-08-03 現金会計なしの置き弁は金額を求めない（残数だけで確定する）
   if (!ccNoCash) {
     if (cashInput === '') { showToast('金額を入力してください', 'error'); return; }
@@ -1890,6 +1920,7 @@ async function confirmCash(kind) {
             actualResidualDetail: ccResidualDetail_(),
             actualCash:     ccNoCash ? '' : amount,   // ★現金会計なしは照合対象外
             kind:           kind,   // ★2026-08-05 '移動' / '2次販売'
+            plannedTo:      planned,   // ★2026-08-07 回収時に選んだ行き先
           }),
           redirect: 'follow',
         });
@@ -1941,6 +1972,7 @@ async function confirmCash(kind) {
               fromLocationName: loc ? loc.name : '',
               qty:              mq,
               origin:           '終了拠点振り分け',   // ★2026-08-06 販売判断の移動と分けて数えるため
+              plannedTo:        planned,              // ★2026-08-07 回収時に選んだ行き先
             }),
             redirect: 'follow',
           });
@@ -1960,11 +1992,25 @@ async function confirmCash(kind) {
     closeCashModal();
     // ★2026-08-05 種別ごとの後始末
     // ★2026-08-06 残数を記録できていない時は、それを最優先で出す（成功メッセージで隠さない）。
+    // ★2026-08-07 移動の案内を「残数を記録できたか」から切り離す（社長報告③）。
+    //   置き弁など残数照合ログに行が無い拠点では residualSaved=false になり、
+    //   従来は移動タブへ飛ぶだけで案内が一切出なかった。画面には「◯◯ → ？」のカードだけが残り、
+    //   ドライバーは行き先の決め方が分からなかった。案内は必ず出す。
+    const moveMsg = (kind === '移動' && movedOk)
+      ? (planned.length
+          ? '移動を登録しました（行き先：' + planned.map(x => x.name).join(' → ')
+            + '）。着いたら「到着登録」で下ろす数を入れてください'
+          : '移動を登録しました。行き先は移動タブの「到着登録」で選んでください')
+      : '';
     if (!residualSaved) {
       showToast('⚠️ 回収済みにしましたが、残数を記録できませんでした。社長に連絡してください', 'error', 7000);
-      if (kind === '移動' && movedOk) switchTab('move');
-    } else if (kind === '移動' && movedOk) {
-      showToast('移動として登録しました。下ろす拠点は到着登録で選んでください', 'success', 5000);
+      if (moveMsg) {
+        // showToast は前のトーストを置き換えるので、移動の案内は少し遅らせて必ず見せる
+        setTimeout(function () { showToast(moveMsg, 'success', 6000); }, 3000);
+        switchTab('move');
+      }
+    } else if (moveMsg) {
+      showToast(moveMsg, 'success', 6000);
       switchTab('move');   // そのまま到着登録へ進めるよう移動タブを開く（中で loadTodayMoves_ が走る）
     } else if (residualMsg) {
       showToast(residualMsg, 'error', 6000);
@@ -3273,6 +3319,73 @@ function _moveLocName_(locId) {
   const l = (state.locations || []).find(x => String(x.id) === String(locId));
   return l ? l.name : locId;
 }
+/* ★2026-08-07 行き先ピッカー ─────────────────────────────────────────
+   社長決定：行き先は積んだ時点で確定している（2箇所の時も）。個数の内訳は出発時に入れない。
+   回収モーダルの「🔄 移動」と、移動タブの「出発を登録」の両方から同じUIを使う。
+   選ばれた行き先は startMove の plannedTo として移動ログ23列目に入り、
+   到着登録では「その拠点ボタンを押すだけ」になる（2箇所目は残りが自動で次のカードになる）。 */
+let _destSel_       = [];    // 選択中の [{id,name}]
+let _destCb_        = null;  // 決定時に呼ぶ関数
+let _destExcludeId_ = '';    // 出発拠点は行き先に出さない
+
+function openDestPicker_(subText, excludeLocId, preset, cb) {
+  _destSel_       = (preset || []).slice();
+  _destCb_        = cb || null;
+  _destExcludeId_ = String(excludeLocId || '');
+  const sub = document.getElementById('mv-dest-sub');
+  if (sub) sub.textContent = subText || '';
+  renderDestGrid_();
+  document.getElementById('mv-dest-modal').classList.add('show');
+}
+function renderDestGrid_() {
+  const box = document.getElementById('mv-dest-grid');
+  if (!box) return;
+  const on = {};
+  _destSel_.forEach(x => { on[String(x.id)] = true; });
+  box.innerHTML = (state.locations || [])
+    .filter(l => l && l.id && l.name && String(l.id) !== _destExcludeId_)
+    .map(l => '<button class="dest-btn' + (on[String(l.id)] ? ' on' : '') + '"'
+            + ' data-id="' + _esc(l.id) + '" onclick="toggleDest_(\'' + _esc(l.id) + '\')">'
+            + _esc(l.name) + '</button>')
+    .join('');
+  const c = document.getElementById('mv-dest-count');
+  if (c) c.textContent = _destSel_.length === 0
+    ? '行き先を選んでください'
+    : ('行き先：' + _destSel_.map(x => x.name).join(' → '));
+}
+function toggleDest_(id) {
+  const sid = String(id);
+  const i = _destSel_.findIndex(x => String(x.id) === sid);
+  if (i >= 0) {
+    _destSel_.splice(i, 1);
+  } else {
+    const l = (state.locations || []).find(x => String(x.id) === sid);
+    if (l) _destSel_.push({ id: String(l.id), name: String(l.name) });
+  }
+  renderDestGrid_();
+}
+function closeDestPicker_() {
+  document.getElementById('mv-dest-modal').classList.remove('show');
+  _destCb_ = null;
+}
+function submitDestPick_() {
+  if (_destSel_.length === 0) {
+    showToast('行き先を選んでください。決まっていなければ「行き先はあとで決める」を押してください', 'error', 5000);
+    return;
+  }
+  const cb = _destCb_, sel = _destSel_.slice();
+  document.getElementById('mv-dest-modal').classList.remove('show');
+  _destCb_ = null;
+  if (cb) cb(sel);
+}
+// 決まっていない時は空で進む＝従来どおり到着登録で行き先を選ぶ
+function submitDestPickUndecided_() {
+  const cb = _destCb_;
+  document.getElementById('mv-dest-modal').classList.remove('show');
+  _destCb_ = null;
+  if (cb) cb([]);
+}
+
 function populateMoveLocations_(selectEl) {
   if (!selectEl) return;
   selectEl.innerHTML = (state.locations || [])
@@ -3347,11 +3460,20 @@ function initMoveTab_() {
   }
   loadTodayMoves_();
 }
+// ★2026-08-07 出発の前に行き先を選ぶ（積んだ時点で決まっているため）。
+//   選ばなくても「行き先はあとで決める」で従来どおり進める。
 async function submitDepart() {
   const fromId = document.getElementById('mv-from-location').value || '';
   if (!fromId) { showToast('出発拠点を選択してください', 'error'); return; }
   const qty = collectMoveQtys_('mv-products');
   if (Object.keys(qty).length === 0) { showToast('数量を入力してください', 'error'); return; }
+  openDestPicker_(
+    _moveLocName_(fromId) + ' から ' + _fmtQtyObj_(qty),
+    fromId, [],
+    function (sel) { _submitDepart2_(fromId, qty, sel); }
+  );
+}
+async function _submitDepart2_(fromId, qty, plannedTo) {
   const btn = document.getElementById('mv-depart-btn');
   if (btn) { btn.disabled = true; btn.textContent = '送信中…'; }
   try {
@@ -3363,11 +3485,14 @@ async function submitDepart() {
       fromLocationId: fromId,
       fromLocationName: _moveLocName_(fromId),
       qty: qty,
+      plannedTo: plannedTo || [],   // ★2026-08-07 行き先（拠点だけ・個数は到着登録で）
     };
     const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) });
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || '登録に失敗しました');
-    showToast('出発を登録しました');
+    showToast((plannedTo && plannedTo.length)
+      ? '出発を登録しました（行き先：' + plannedTo.map(x => x.name).join(' → ') + '）'
+      : '出発を登録しました。行き先は到着登録で選んでください', 'success', 4000);
     renderMoveProducts_('mv-products', {});
     await loadTodayMoves_();
   } catch (e) {
@@ -3399,8 +3524,12 @@ function renderOpenMoves_() {
     const t = (m.departTime || '').slice(11, 16);
     // ★2026-08-05 分割で生まれたカード（移動IDに枝番がある）は「残り」と分かるように出す
     const isSplit = String(m.moveId || '').indexOf('-') >= 0;
+    // ★2026-08-07 行き先は積んだ時点で決まっている。持っていれば出す（従来は常に「？」だった）
+    const dest = (m.plannedTo && m.plannedTo.length)
+      ? m.plannedTo.map(x => _esc(x.name)).join(' → ')
+      : '？';
     return '<div class="mv-card">' +
-      '<div class="mv-card-main">' + _esc(m.fromLocationName || '') + ' → ？' +
+      '<div class="mv-card-main">' + _esc(m.fromLocationName || '') + ' → ' + dest +
         (isSplit ? '<span style="font-size:11px;font-weight:700;color:#8A4B00;background:#FDE8D0;border-radius:8px;padding:1px 7px;margin-left:6px;">残り</span>' : '') +
       '</div>' +
       '<div class="mv-card-sub">' + _esc(_fmtQtyObj_(m.qty)) + '　' + _esc(t) + ' 出発</div>' +
@@ -3433,9 +3562,55 @@ function openArrive_(moveId) {
   // ★2026-08-05 いま積んでいる数を「運んでいる」と明示（下ろす数を減らせば残りは次の拠点へ回る）
   document.getElementById('mv-arrive-from').textContent =
     '運んでいる：' + (m.fromLocationName || '') + ' から ' + _fmtQtyObj_(m.qty);
-  populateMoveLocations_(document.getElementById('mv-to-location'));
+  renderArriveDest_(m);                                  // ★2026-08-07 予定先をボタンで出す
   renderMoveProducts_('mv-arrive-products', m.qty);
   document.getElementById('mv-arrive-modal').classList.add('show');
+}
+// ★2026-08-07 到着拠点の選び方。
+//   予定先あり … ボタンで並べる（1箇所なら選択済みなので「ここで下ろす」を押すだけ）
+//   予定先なし … 従来どおり全拠点のセレクト
+//   現場で行き先が変わった時は「別の拠点に下ろす」で一覧に切り替えられる
+let _arriveToId_ = '';
+function renderArriveDest_(m) {
+  const grid  = document.getElementById('mv-arrive-dest');
+  const sel   = document.getElementById('mv-to-location');
+  const other = document.getElementById('mv-arrive-other');
+  const planned = (m && m.plannedTo) ? m.plannedTo : [];
+  populateMoveLocations_(sel);
+  if (planned.length === 0) {
+    _arriveToId_ = '';
+    if (grid)  { grid.style.display = 'none'; grid.innerHTML = ''; }
+    if (sel)   sel.style.display = '';
+    if (other) other.style.display = 'none';
+    return;
+  }
+  _arriveToId_ = String(planned[0].id);   // 1箇所なら確定／複数は先頭を既定にする
+  if (grid) {
+    grid.style.display = '';
+    grid.innerHTML = planned.map(x =>
+      '<button class="dest-btn' + (String(x.id) === _arriveToId_ ? ' on' : '') + '"'
+      + ' data-id="' + _esc(x.id) + '" onclick="pickArriveDest_(\'' + _esc(x.id) + '\')">'
+      + _esc(x.name) + '</button>').join('');
+  }
+  if (sel)   sel.style.display = 'none';
+  if (other) other.style.display = '';
+}
+function pickArriveDest_(id) {
+  _arriveToId_ = String(id);
+  const grid = document.getElementById('mv-arrive-dest');
+  if (!grid) return;
+  grid.querySelectorAll('.dest-btn').forEach(b => {
+    b.classList.toggle('on', String(b.getAttribute('data-id')) === _arriveToId_);
+  });
+}
+function arriveShowAll_() {
+  const grid  = document.getElementById('mv-arrive-dest');
+  const sel   = document.getElementById('mv-to-location');
+  const other = document.getElementById('mv-arrive-other');
+  if (grid)  grid.style.display = 'none';
+  if (sel)   { sel.style.display = ''; if (_arriveToId_) sel.value = _arriveToId_; }
+  if (other) other.style.display = 'none';
+  _arriveToId_ = '';   // 以降はセレクトの値を使う
 }
 function closeArrive_() {
   document.getElementById('mv-arrive-modal').classList.remove('show');
@@ -3444,7 +3619,8 @@ function closeArrive_() {
 async function submitArrive_() {
   const moveId = state.move.arrivingId;
   if (!moveId) return;
-  const toId = document.getElementById('mv-to-location').value || '';
+  // ★2026-08-07 予定先ボタンで選んでいればそれを使う（セレクトは隠れている）
+  const toId = _arriveToId_ || (document.getElementById('mv-to-location').value || '');
   if (!toId) { showToast('到着拠点を選択してください', 'error'); return; }
   const qty = collectMoveQtys_('mv-arrive-products');
   if (Object.keys(qty).length === 0) { showToast('下ろす数を入力してください', 'error'); return; }
@@ -3462,7 +3638,11 @@ async function submitArrive_() {
     closeArrive_();
     // ★2026-08-05 全部下ろさなかった分は、そのまま次の拠点で下ろせる（サーバーが搬送中カードを立て直す）
     if (data.remainTotal > 0) {
-      showToast('下ろしました。残り' + data.remainTotal + '個は次の拠点で下ろせます', 'success', 5000);
+      // ★2026-08-07 次に行く拠点が決まっていれば名前で出す（もう選び直さなくていい）
+      const np = data.nextPlanned || [];
+      showToast('下ろしました。残り' + data.remainTotal + '個は'
+        + (np.length ? np.map(x => x.name).join('・') + ' で下ろせます' : '次の拠点で下ろせます'),
+        'success', 5000);
     } else {
       showToast('到着を登録しました');
     }
@@ -3561,6 +3741,26 @@ async function cancelMove_(moveId) {
   </div>
 </div>
 
+<!-- ★2026-08-07 行き先ピッカー（回収モーダルの「🔄 移動」／移動タブの「出発を登録」から開く）
+     社長決定：「行き先は移動元から弁当を持った時点で確定している。2箇所の時も。
+     ただ出発時点にどこに何を入れるかまで入力するのは面倒」
+     → ここでは**行き先の拠点だけ**を選ぶ。個数は実際に下ろす時（到着登録）に入れる。 -->
+<div class="modal-bg" id="mv-dest-modal" onclick="if(event.target===this)closeDestPicker_()">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">どこへ持って行きますか？</div>
+    <div class="mv-arrive-from" id="mv-dest-sub">--</div>
+    <div class="dest-grid" id="mv-dest-grid"></div>
+    <div class="dest-count" id="mv-dest-count">行き先を選んでください</div>
+    <div class="dest-hint">
+      2箇所に分ける時は<b>両方タップ</b>してください。<br>
+      個数はここでは入れません。実際に下ろす時に入力します。
+    </div>
+    <button class="mv-save-btn" style="margin-top:12px;" onclick="submitDestPick_()">これで進む</button>
+    <button class="dest-other" onclick="submitDestPickUndecided_()">行き先はあとで決める</button>
+  </div>
+</div>
+
 <!-- 拠点移動 到着登録モーダル v1.5 -->
 <div class="modal-bg" id="mv-arrive-modal" onclick="if(event.target===this)closeArrive_()">
   <div class="modal-sheet">
@@ -3569,7 +3769,12 @@ async function cancelMove_(moveId) {
     <div class="mv-arrive-from" id="mv-arrive-from">--</div>
     <div class="mv-field">
       <label class="mv-field-label">到着拠点</label>
+      <!-- ★2026-08-07 出発時に選んだ行き先をボタンで出す（1箇所なら選択済み）。
+           行き先を持たない古い移動・「あとで決める」で出た分は従来どおりセレクトを出す。 -->
+      <div class="dest-grid" id="mv-arrive-dest" style="display:none;"></div>
       <select id="mv-to-location" class="mv-select"></select>
+      <button type="button" class="dest-other" id="mv-arrive-other" style="display:none;"
+              onclick="arriveShowAll_()">別の拠点に下ろす（一覧から選ぶ）</button>
     </div>
     <!-- ★2026-08-05 分割対応：ここで下ろす数を入れる。減らした分は「残り」として次の拠点に回る。 -->
     <div class="mv-section-title">ここで下ろす数（運んでいる数を初期表示）</div>
@@ -3624,7 +3829,7 @@ async function cancelMove_(moveId) {
          移動 … この残数がそのまま持ち出しになる。下ろす拠点は「🔄 移動」タブの到着登録で決める（2箇所に分けてもよい）。
          2次販売 … 種別だけ記録する（売上の付け方は後決め） -->
     <div class="cash-modal-btns" id="cc-kind-btns" style="display:none;">
-      <button class="cash-modal-btn move"   id="cc-btn-move"   onclick="confirmCash('移動')" disabled>🔄 移動</button>
+      <button class="cash-modal-btn move"   id="cc-btn-move"   onclick="openCollectDestPicker_()" disabled>🔄 移動</button>
       <button class="cash-modal-btn second" id="cc-btn-second" onclick="confirmCash('2次販売')" disabled>🛒 2次販売</button>
     </div>
     <div class="cc-kind-hint" id="cc-kind-hint" style="display:none;">
