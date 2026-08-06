@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <!-- driver v2.9 (2026-08-07) 【移動の行き先を積んだ時点で決める／置き弁で移動の案内が出なかった不具合】社長「行き先は移動元から弁当を持った時点で確定している。２箇所の時も。ただ出発時点にどこに何を入れるかまで入力するのは面倒。これは最後の回収の時も一緒」。★従来＝行き先は**回収時にも出発登録時にも選べず**、移動タブの搬送中カードは常に「◯◯ → ？」。行き先は到着登録で初めて選ぶ設計だった（2026-08-05 の「移動先が2箇所ある」要望に合わせたもの）。★変更後＝回収モーダルの「🔄 移動」と移動タブの「出発を登録」の両方で、先に**行き先の拠点だけ**を選ぶ（複数タップ可・個数の内訳は入れない）。個数を入れるのは実際に下ろす時だけ。カードは「浜松町 → 田町 → 品川」と出る。到着登録は予定先がボタンで並び、**1箇所なら選択済みなので「ここで下ろす」を押すだけ**。2箇所目は残りが自動で次のカードになり、行き先も引き継ぐので選び直さなくていい（分割の仕組みは 2026-08-05 のまま）。決まっていない時は「行き先はあとで決める」で従来フローに落ちる。現場で変わった時は到着登録の「別の拠点に下ろす」で一覧から選べる。★行き先が**1箇所の時だけ**、出発時点で移動先の担当者へ「◯◯から△△が向かっています」とLINE通知（社長決定 2026-08-07。2箇所以上は内訳が未定なので出さない）。従来は到着登録を押すまで受け取り側に何も伝わらなかった。★あわせて社長報告③を修正：置き弁など残数照合ログに行が無い拠点では submitCollectionCheck が空振りして residualSaved=false になり、**移動タブへ飛ぶだけで案内トーストが一切出なかった**。案内を残数の記録可否から切り離し、必ず出すようにした（残数エラーと重なる時は3秒後に続けて出す＝showToast は前のトーストを置き換えるため）。★実装: 行き先ピッカー openDestPicker_/renderDestGrid_/toggleDest_/submitDestPick_/submitDestPickUndecided_、回収側 openCollectDestPicker_ + ccPlannedTo（confirmCash 冒頭で planned に控えを取る。途中の closeCashModal で空に戻るため）、到着側 renderArriveDest_/pickArriveDest_/arriveShowAll_ + _arriveToId_、出発側 submitDepart→_submitDepart2_。ピッカーは回収モーダル(z-index:1000)の上に出すため #mv-dest-modal を 1100 にしている。要: メインGAS @2026-08-07 以降（拠点間移動ログ23列目「予定先JSON」・startMove の plannedTo と事前通知・completeMove の分割で残りの予定先を引き継ぎ・getOpenMoves が plannedTo を返す・submitCollectionCheck が plannedTo を渡す）。 -->
 <!-- driver v2.8 (2026-08-06) 【残数タップの内訳をエリア別×種別に】社長要望「残数は今は回収時の残りをそのまま足す仕様だと思うけど、残数とタップするとエリア別で種別が出るようにして欲しい」。★従来＝「拠点合計」をタップすると**全社の商品別リスト1本**だけが出ていた（銀しゃけ11／唐揚げ12…）。どのエリアに何が残っているか分からないので、移動の出し手を探すのに使えなかった。★変更後＝エリア行（例「芝エリア 24個 5拠点」）が残数の多い順に並び、**タップでそのエリアの種別が開く**。開いた中に対象拠点名も小さく出す。一番残数が多いエリアだけ最初から開いた状態にする（回収中に真っ先に見たいのがそこなので）。開閉は `_openAreaRows` に保持し、30秒自動更新をまたいでも閉じない。★数字の出どころは従来と同じ（残数照合ログの拠点合算・お茶除外・締め後の持ち出しは差引済み）＝**合計は1個も変わらない**。エリアは拠点マスタの「エリア」列。空欄の拠点は「(エリア未設定)」にまとめる（記入漏れが数字から消えないように）。拠点の入力がまだ0件の時間帯は従来どおり全社の商品別リストに落ちる。★実装: `renderAllBreakdown_` / `toggleAreaDetail(添字)` を新設し `openAllBreakdown` は描画を委譲。エリア名ではなく**添字**で開閉するのは、エリア名に ' が入っても onclick が壊れないようにするため。★「自分の残数（計算上）」のタップ内訳は**従来のまま**（社長判断 2026-08-06）。要: メインGAS @2026-08-06 以降（getResidualSummary の locationAreas / buildResidualAreas_ / _oedoResidualByDate_ の rows.products）。 -->
+<!-- driver v2.8 (2026-08-06) 【スポット拠点（当日限りのバイト・レジ非使用）に対応】社長決定：「スポットバイトが入っている拠点は当日のみのバイトなので基本レジを使わせていない。1回しか来ない人にレジの使い方を説明するのは大変だし、スマホがちゃんと使えない人も来る」→ 販売員はレジを打たず紙でチェックし、ドライバーがアプリで代行する。★対象は**シフトの割当が「スポットバイト◯」の拠点**をサーバーが自動判定（拠点を手で登録しない／実在の販売員が1人でも居れば通常拠点のまま）。★納品は**定数**なので入力させない（定数納品マスタ→配分調整＝基本数マスタG列へ自動反映されるので、キッチンの製造数にも乗る）。★①回収タブの先頭に「🏪 本日のスポット拠点」を追加。朝はここで**レジ開始金だけ**を入れる（`updateSpotStart`）。定数どおり届かなかった日だけ商品別に直せる（既定は触らない＝通常は1タップも増えない）。②回収モーダルはスポットのとき社長が決めた順番で動く：残数を入力 → クーポンを入力 → **ここで売上が確定** → PayPay実績を売上から引いて**あるべき現金有高を表示**（`spotPreview`）→ レジの現金を入力して差額をチェック。③**お茶も残数欄に出る**（社長「スポット拠点もお茶はその場でカウントしてもらう」）。通常拠点はレジが実売数を持つので従来どおりお茶は出ない。④ギャラは0円で通す（別立てで現金支給）・賄いなし・昼の販売ペース通知は対象外。⑤PayPayが取れなかった時は**黙って0円で進めない**（driver v2.7 の「送信スキップが誰にも見えなかった」の反省）。要: メインGAS（スポット拠点設定／スポット定数納品／getSpotToday／updateSpotStart／spotPreview／submitCollectionCheck の spotCoupon）。 -->
 <!-- driver v2.7 (2026-08-06) 【重大バグ修正：完売した拠点の残数が永久に記録されなかった】社長報告「芝エリアは残数確認してボタン押してるらしい」を起点に調査。ドライバーは正しく操作していたが、アプリが送信を丸ごと飛ばしていた。★原因の連鎖：getDeclaredResidual は「申告残数0の商品は items に並べない」（メインGAS `if (d <= 0 && a === null) return;`）→ **完売拠点は items が空** → 入力欄がゼロ → `ccResidualTotal_()` が null → `confirmCash` の `if (ccTotal !== null)` で **submitCollectionCheck を丸ごとスキップ**。②の setCollected は成功するので画面は「回収済み」に変わり、残数照合ログだけが「未回収」のまま残る。失敗表示は console.warn だけで誰も気づけなかった。**一番売れている拠点ほどデータが落ちる**最悪の落ち方。実測：8/5 の未回収9拠点のうち6拠点（芝パーク・京橋・神田スクエア・芝パーク②・パソナ・ソフバン②）が declared=0 / items=0 でこの経路。★修正①`ccFound`（getDeclaredResidual が found:true を返したか）を新設し、**完売＝残数0 は事実なので必ず送る**／取得失敗の時だけスキップ、と区別した（residualLoaded は「欄ができたか」なので両者を区別できない）。②送信が失敗・スキップした時に**必ず知らせる**（ok:false／例外／取得できず の3経路）。ただし `showToast` は前のトーストを消して置き換わるため、ここで出しても関数末尾の「現金有高を記録し回収済みにしました」に**必ず上書きされて見えなかった**（不一致メッセージも同じ理由で消えていた）。`residualSaved` / `residualMsg` に持ち回り、**最後の1回のトーストに集約**して解決。③`showToast` が3つ目の引数 duration を受け取っていなかったのを修正（呼び出し側は以前から 5000/6000 を渡していたが無視され常に2.8秒だった）。★2択ボタン（移動／2次販売）は社長判断で従来どおり変更なし。要: メインGAS @480 以降（getDeclaredResidual が納品商品を0で並べる・okibenNightlyApply が回収行を毎晩用意）。 -->
 <!-- driver v2.6 (2026-08-05) 【残数タブの手入力を廃止】社長指示「ドライバーアプリの残数入力は今は回収時の合計で出しているから、入力できないようにして」。残数は回収モーダルで拠点ごとに商品別入力する方式に一本化されたため、残数タブで打つと二重入力になる。①商品ごとの入力欄を外し「残数の入力は不要になりました／数え直したいときは回収タブでその拠点をタップ」の案内に差し替え ②下部の「報告を送信する」を「🚚 回収へ戻る」に変更（`submitResidual` は画面から呼べなくなった） ③回収タブ下部の導線も「📦 残数入力へ切り替え」→「📦 残数を確認する」 ④入力が無くなり必ず0になる「入力済」欄を消し、「自分の残数」は**計算上だけ**を大きく表示（全体の数字は上の「拠点合計」で見る） ⑤`submitReport()` は誤呼び出しガードを付けて残置。★`RESIDUAL_INPUT_ENABLED = false` の1行を true に戻せば元の入力欄がそのまま復活する＝**2次販売後の最終残数入力へ転用するため**（2026-08-03 の社長決定「残数入力タブは消さない」を維持）。GAS変更なし。 -->
 <!-- driver v2.6 (2026-08-06) 【移動に「登録経路」を付ける】回収モーダルの「🔄 移動」から立つ移動に origin='終了拠点振り分け' を付けて送る（置き弁の保険経路 submitCollectionCheck 相当）。移動タブからの手動登録は origin 未指定＝サーバ側で '手入力' になる。狙いは検証の分離：ドライバーが販売数を見て判断した移動（売り逃しを止める）と、回収時の振り分け（二次販売行きを減らす）は意味が違うため、混ぜて数えると販売ペース通知の効果が測れない。要: メインGAS @476（拠点間移動ログ22列目「登録経路」・startMove の origin・RTV_MOVE_HEAD）。UIの見た目・操作は変わらない。 -->
@@ -795,6 +796,27 @@ body {
 .cc-total .cc-value{font-size:19px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--ink);}
 .cc-total .cc-unit{font-size:12px;color:var(--ink-mute);}
 .cc-empty{padding:14px;text-align:center;font-size:13px;color:var(--ink-mute);}
+/* ★2026-08-06 スポット拠点（当日限りのバイト・レジ非使用） */
+.sp-sec{margin:0 0 6px;}
+.sp-card{display:flex;align-items:center;gap:10px;padding:11px 13px;margin-bottom:6px;border:2px solid #B8860B;border-radius:12px;background:#FFFDF4;cursor:pointer;}
+.sp-card.done{border-color:#C9C2B4;background:#F7F5F0;}
+.sp-card .sp-name{flex:1;min-width:0;}
+.sp-card .sp-n1{font-size:15px;font-weight:700;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.sp-card .sp-n2{font-size:11px;color:var(--ink-mute);margin-top:2px;}
+.sp-card .sp-cash{font-size:17px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--ink);text-align:right;}
+.sp-card .sp-cash.none{color:var(--red);font-size:13px;font-weight:700;}
+.sp-card .sp-go{font-size:11px;color:#8A6508;font-weight:700;text-align:right;margin-top:2px;}
+/* 締めの経過（売上→PayPay→あるべき現金）。数えた後に見せる */
+.sp-calc{margin-bottom:6px;border:2px solid #B8860B;border-radius:10px;background:#FFFDF4;padding:8px 10px;}
+.sp-calc .r{display:flex;align-items:center;gap:8px;font-size:13px;padding:2px 0;}
+.sp-calc .r .l{flex:1;color:var(--ink-soft,#4A4A4A);}
+.sp-calc .r .v{font-weight:800;font-variant-numeric:tabular-nums;color:var(--ink);}
+.sp-calc .r.big{border-top:1px dashed #C9B98A;margin-top:4px;padding-top:5px;}
+.sp-calc .r.big .l{font-weight:700;color:#8A6508;}
+.sp-calc .r.big .v{font-size:20px;color:#8A6508;}
+.sp-calc .warn{margin-top:5px;padding:6px 8px;border-radius:6px;background:#FADBD8;color:#922B21;font-size:12px;font-weight:700;}
+.sp-run{width:100%;padding:13px;margin-bottom:6px;border:none;border-radius:12px;background:#B8860B;color:#FFF;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;}
+.sp-run:disabled{opacity:.45;}
 .cash-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
 .cash-key{padding:16px 0;border:none;border-radius:12px;background:#EEF0F3;color:var(--ink);font-size:22px;font-weight:700;font-family:inherit;cursor:pointer;}
 .cash-key:active{opacity:.7;}
@@ -1344,6 +1366,10 @@ async function init() {
     // ★ A3：ドライバー状態の常時ポーリング開始（10秒）
     startDriverStateTimer();
 
+    // ★2026-08-06 スポット拠点（当日限りのバイト・レジ非使用）を取りに行く。
+    //   待たせない（await しない）。取れたら回収タブの先頭に差し込まれる。
+    loadSpotToday();
+
   } catch (e) {
     // キャッシュ先描画していればエラー画面で潰さない
     if (state.locations.length > 0) {
@@ -1401,6 +1427,165 @@ function startDriverStateTimer() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// ★2026-08-06 スポット拠点（当日限りのバイト・レジ非使用）
+//   社長決定：レジは使わせない。販売員は紙でチェックし、ドライバーがアプリで代行する。
+//   対象はサーバーがシフトの割当（「スポットバイト◯」）から自動で決める＝ここでは受け取るだけ。
+//   朝にやることは**レジ開始金を入れる**ことだけ。納品数は定数なので入力しない。
+// ═══════════════════════════════════════════════════════════════
+let spotToday = [];          // [{locationId, locationName, staff, registerStart, deliveryTotal, items[], collected}]
+
+async function loadSpotToday(rerender) {
+  try {
+    const url = `${GAS_URL}?action=getSpotToday&date=${encodeURIComponent(ccToday_())}`;
+    const j = await (await fetch(url, { redirect: 'follow' })).json();
+    spotToday = (j && j.ok && Array.isArray(j.items)) ? j.items : [];
+  } catch (e) {
+    console.warn('スポット拠点の取得に失敗:', e);
+    spotToday = [];
+  }
+  if (rerender !== false) { try { renderCollectionList(); } catch (e) {} }
+}
+
+function spotOf_(locId) {
+  return spotToday.find(s => String(s.locationId) === String(locId)) || null;
+}
+
+// 回収タブの先頭に出す「本日のスポット拠点」
+function renderSpotSection_() {
+  if (!spotToday.length) return '';
+  const cards = spotToday.map(s => {
+    const set  = Number(s.registerStart) > 0;
+    const done = !!s.collected;
+    return `<div class="sp-card${done ? ' done' : ''}" onclick="openSpotStartModal('${esc_(s.locationId)}')">`
+         + `<div class="sp-name">`
+         +   `<div class="sp-n1">${esc_(s.locationName)}</div>`
+         +   `<div class="sp-n2">${esc_(s.staff || 'スポット')}・納品 ${Number(s.deliveryTotal) || 0}個</div>`
+         + `</div>`
+         + `<div>`
+         +   (set
+              ? `<div class="sp-cash">¥${(Number(s.registerStart) || 0).toLocaleString()}</div>`
+              : `<div class="sp-cash none">開始金 未入力</div>`)
+         +   `<div class="sp-go">${done ? '回収済み' : (set ? 'タップで直す' : 'タップで入力')}</div>`
+         + `</div></div>`;
+  }).join('');
+  return `<div class="section-label" style="color:#8A6508;">🏪 本日のスポット拠点 `
+       + `<span style="background:#B8860B;color:#FFF;font-size:11px;font-weight:700;padding:1px 8px;border-radius:10px;">${spotToday.length}</span></div>`
+       + `<div class="list-wrap sp-sec">${cards}`
+       + `<div style="font-size:11px;color:var(--ink-mute);padding:4px 4px 2px;">レジは使いません。朝はレジ開始金だけ入れてください（納品数は定数です）。</div>`
+       + `</div>`;
+}
+
+// ── 朝のレジ開始金モーダル ──
+let spStartLocId = null;
+let spStartInput = '';
+let spQtyOpen    = false;      // 「定数どおり届かなかった」を開いているか
+let spQtyVals    = {};         // { 商品ID: '文字列' }
+let spField      = 'cash';     // 'cash' または 'p:<商品ID>'
+
+function openSpotStartModal(locId) {
+  const s = spotOf_(locId);
+  if (!s) return;
+  spStartLocId = locId;
+  spStartInput = Number(s.registerStart) > 0 ? String(Number(s.registerStart)) : '';
+  spQtyOpen = false;
+  spField   = 'cash';
+  spQtyVals = {};
+  (s.items || []).forEach(it => { spQtyVals[it.productId] = String(Number(it.qty) || 0); });
+  document.getElementById('sp-modal-title').textContent = s.locationName;
+  document.getElementById('sp-modal-sub').textContent =
+    `${s.staff || 'スポット'}・定数納品 ${Number(s.deliveryTotal) || 0}個（入力は不要です）`;
+  document.getElementById('sp-modal-bg').classList.add('show');
+  renderSpotStartModal_();
+}
+function closeSpotStartModal() {
+  document.getElementById('sp-modal-bg').classList.remove('show');
+  spStartLocId = null; spStartInput = ''; spQtyOpen = false; spQtyVals = {}; spField = 'cash';
+}
+function spToggleQty() { spQtyOpen = !spQtyOpen; if (!spQtyOpen) spField = 'cash'; renderSpotStartModal_(); }
+function spFocus(f)    { spField = f; renderSpotStartModal_(); }
+function spPid_()      { return spField.indexOf('p:') === 0 ? spField.slice(2) : null; }
+function spGet_()      { const p = spPid_(); return p ? (spQtyVals[p] || '') : spStartInput; }
+function spSet_(v)     { const p = spPid_(); if (p) spQtyVals[p] = v; else spStartInput = v; }
+function spKey(n) {
+  const cur = spGet_();
+  if (cur.length >= 9) return;
+  spSet_((cur === '' && n === '00') ? '0' : (cur + n).replace(/^0+(?=\d)/, ''));
+  renderSpotStartModal_();
+}
+function spBackspace() { spSet_(spGet_().slice(0, -1)); renderSpotStartModal_(); }
+
+function renderSpotStartModal_() {
+  const s = spStartLocId ? spotOf_(spStartLocId) : null;
+  if (!s) return;
+  const cf = document.getElementById('sp-field-cash');
+  if (cf) cf.classList.toggle('active', spField === 'cash');
+  document.getElementById('sp-val-cash').textContent =
+    spStartInput === '' ? '—' : parseInt(spStartInput, 10).toLocaleString();
+
+  const box = document.getElementById('sp-qty-box');
+  const btn = document.getElementById('sp-qty-toggle');
+  if (btn) btn.textContent = spQtyOpen ? '▲ 定数どおりだった（閉じる）' : '▼ 定数どおり届かなかった場合はこちら';
+  if (box) {
+    box.style.display = spQtyOpen ? '' : 'none';
+    if (spQtyOpen) {
+      box.innerHTML = (s.items || []).map(it => {
+        const key = 'p:' + it.productId;
+        const v   = spQtyVals[it.productId];
+        const shown = (v === undefined || v === '') ? '0' : String(parseInt(v, 10) || 0);
+        const changed = (parseInt(shown, 10) !== Number(it.qty)) ? ' changed' : '';
+        return `<div class="cc-item${spField === key ? ' active' : ''}" onclick="spFocus('${key}')">`
+             + `<span class="cc-i-name">${esc_(it.name)}</span>`
+             + `<span class="cc-i-val${changed}">${shown}</span>`
+             + `<span class="cc-i-unit">個</span></div>`;
+      }).join('') || '<div class="cc-empty">定数納品が登録されていません</div>';
+    }
+  }
+  const cur = spGet_();
+  const val = cur === '' ? 0 : parseInt(cur, 10);
+  document.getElementById('sp-modal-display').textContent =
+    (spField === 'cash' ? '¥' + val.toLocaleString() : val.toLocaleString() + '個');
+  const ok = document.getElementById('sp-modal-ok');
+  if (ok) ok.disabled = (spStartInput === '');
+}
+
+async function submitSpotStart() {
+  if (!spStartLocId) return;
+  if (spStartInput === '') { showToast('レジ開始金を入力してください', 'error'); return; }
+  const id  = spStartLocId;
+  const s   = spotOf_(id);
+  const btn = document.getElementById('sp-modal-ok');
+  if (btn) { btn.disabled = true; btn.textContent = '保存中…'; }
+  try {
+    const body = {
+      action:        'updateSpotStart',
+      date:          ccToday_(),
+      locationId:    id,
+      registerStart: parseInt(spStartInput, 10),
+      userId:        state.userId,
+      userName:      state.userName,
+    };
+    // ★定数どおりの日は納品数を送らない（触らない＝サーバー側の値がそのまま残る）
+    if (spQtyOpen) {
+      const dc = {};
+      (s.items || []).forEach(it => {
+        const v = spQtyVals[it.productId];
+        dc[it.productId] = (v === undefined || v === '') ? 0 : (parseInt(v, 10) || 0);
+      });
+      body.deliveryCount = dc;
+    }
+    const j = await (await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(body), redirect: 'follow' })).json();
+    if (!j || !j.ok) throw new Error((j && j.error) || '保存に失敗しました');
+    closeSpotStartModal();
+    await loadSpotToday();
+    showToast('レジ開始金を記録しました', 'success');
+  } catch (e) {
+    // ★黙って失敗させない（driver v2.7 の反省）
+    showToast('保存に失敗しました：' + (e && e.message ? e.message : e), 'error', 5000);
+    if (btn) { btn.disabled = false; btn.textContent = '保存する'; }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // 回収チェック表示
 // ═══════════════════════════════════════════════════════════════
 function renderCollectionList() {
@@ -1411,7 +1596,8 @@ function renderCollectionList() {
   const uncollected = activeLocations.filter(l => !state.collectedIds.has(l.id));
   const collected   = activeLocations.filter(l =>  state.collectedIds.has(l.id));
 
-  let html = '';
+  // ★2026-08-06 スポット拠点は先頭に別枠で出す（朝のレジ開始金入力の導線）
+  let html = renderSpotSection_();
 
   // 未回収セクション（休止中も末尾に含める）
   const sectionCount = uncollected.length;
@@ -1607,6 +1793,15 @@ let ccPlannedTo    = [];
 //   取得失敗の区別がつかない**。完売は「残数0」という事実なので送らなければならず、
 //   取得失敗は送ってはいけない。その2つを分けるためのフラグ。
 let ccFound        = false;
+// ★2026-08-06 スポット拠点（当日限りのバイト・レジ非使用）
+//   社長が決めた締めの順番：残数を入力 → クーポンを入力 → ここで売上が確定 →
+//   PayPay実績を売上から引いてあるべき現金有高を表示 → レジの現金を数えて突き合わせる。
+//   ccSpot が出るまでレジの現金欄は出さない（順番を守らせる）。
+//   残数やクーポンを触ったら ccSpot は捨てる（古いあるべき現金を残さない）。
+let ccIsSpot   = false;
+let ccCoupon   = '0';
+let ccSpot     = null;    // spotPreview の結果 {sales, payPay, payPayFound, expectCash, ...}
+let ccSpotBusy = false;
 
 function ccToday_() {
   const d = new Date();
@@ -1637,6 +1832,10 @@ async function openCashModal(id) {
   ccIsOkiben = false;
   ccNoCash   = false;
   ccFound    = false;
+  ccIsSpot   = false;
+  ccCoupon   = '0';
+  ccSpot     = null;
+  ccSpotBusy = false;
   ccField = 'cash';
 
   document.getElementById('cash-modal-title').textContent = loc.name;
@@ -1656,6 +1855,8 @@ async function openCashModal(id) {
       ccFound    = true;                      // ★2026-08-06 行は見つかった＝残数0でも送ってよい
       ccIsOkiben = !!j.okiben;
       ccNoCash   = ccIsOkiben && !j.cash;     // 置き弁で現金会計なし
+      ccIsSpot   = !!j.spot;                  // ★2026-08-06 スポット拠点（レジ非使用・お茶も並ぶ）
+      if (ccIsSpot) ccCoupon = String(Number(j.spotCoupon) || 0);
       ccItems = Array.isArray(j.items) ? j.items : [];
       ccItems.forEach(it => {
         // 既に実査を入れ直している場合はその値、無ければ申告値（置き弁は納品数）
@@ -1668,6 +1869,10 @@ async function openCashModal(id) {
         document.getElementById('cash-modal-expected').textContent = ccNoCash
           ? '置き弁：納品数が入っています。残った数に直してください。（現金の入力はありません）'
           : '置き弁：納品数が入っています。残った数に直してください。';
+      } else if (ccIsSpot) {
+        // ★2026-08-06 スポットは順番が決まっている。最初に何をするかだけ出す。
+        document.getElementById('cash-modal-expected').textContent =
+          'スポット拠点：①残った数（お茶も）②クーポン → 売上を確定 → あるべき現金が出ます';
       }
     } else if (!hasReport) {
       // 報告も無く置き弁でもない＝まだ締めていない拠点。従来どおり断る。
@@ -1706,6 +1911,39 @@ function ccFocus(field) {
   refreshCashModal_();
 }
 
+// ★2026-08-06 スポット拠点：残数とクーポンから売上を確定し、PayPayを取り込んで
+//   「あるべき現金有高」を出す（書き込みはしない）。社長が決めた順番の3〜4番目。
+//   ★実現金はまだ送らない＝差額は返らない。数える前に答えを見せないため。
+async function runSpotPreview() {
+  if (!cashModalLocId || ccSpotBusy) return;
+  const id = cashModalLocId;
+  ccSpotBusy = true;
+  refreshCashModal_();
+  try {
+    const j = await (await fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        action:               'spotPreview',
+        date:                 ccToday_(),
+        locationId:           id,
+        actualResidualDetail: ccResidualDetail_(),
+        spotCoupon:           (ccCoupon === '') ? 0 : (parseInt(ccCoupon, 10) || 0),
+      }),
+      redirect: 'follow',
+    })).json();
+    if (cashModalLocId !== id) return;          // 閉じられていたら何もしない
+    if (!j || !j.ok) throw new Error((j && j.error) || '売上を計算できませんでした');
+    ccSpot  = j.spot;
+    ccField = 'cash';                            // 次に打つのはレジの現金
+  } catch (e) {
+    // ★黙って進めない。ここで止めないと「0円のPayPayで締めた」が起きる。
+    showToast('売上の計算に失敗しました：' + (e && e.message ? e.message : e), 'error', 5000);
+  } finally {
+    ccSpotBusy = false;
+    refreshCashModal_();
+  }
+}
+
 function closeCashModal() {
   document.getElementById('cash-modal-bg').classList.remove('show');
   cashModalLocId = null;
@@ -1714,11 +1952,28 @@ function closeCashModal() {
   ccVals  = {};
   ccField = 'cash';
   ccPlannedTo = [];   // ★2026-08-07 次の拠点に行き先を持ち越さない
+  ccIsSpot = false; ccCoupon = '0'; ccSpot = null; ccSpotBusy = false;   // ★2026-08-06
 }
 // ★2026-08-01 テンキーは「選択中の欄」を編集する／2026-08-03 残数は商品ごと
 function ccPid_()      { return ccField.indexOf('p:') === 0 ? ccField.slice(2) : null; }
-function ccGet_()      { const p = ccPid_(); return p ? (ccVals[p] || '') : cashInput; }
-function ccSet_(v)     { const p = ccPid_(); if (p) ccVals[p] = v; else cashInput = v; }
+function ccGet_()      {
+  const p = ccPid_();
+  if (p) return ccVals[p] || '';
+  return (ccField === 'coupon') ? ccCoupon : cashInput;   // ★2026-08-06 スポットのクーポン欄
+}
+function ccSet_(v) {
+  const p = ccPid_();
+  if (p) {
+    ccVals[p] = v;
+    // ★2026-08-06 残数を触ったら売上の計算はやり直し。古い「あるべき現金」を残さない。
+    if (ccIsSpot) ccSpot = null;
+  } else if (ccField === 'coupon') {
+    ccCoupon = v;
+    if (ccIsSpot) ccSpot = null;
+  } else {
+    cashInput = v;
+  }
+}
 function ccMaxLen_()   { return ccPid_() ? 3 : 9; }
 
 function cashKey(d) {
@@ -1767,26 +2022,73 @@ function renderCashModal_(net) {
   const cv = document.getElementById('cc-val-cash');
   if (cv) cv.textContent = cashInput === '' ? '—' : parseInt(cashInput, 10).toLocaleString();
 
+  // ── ★2026-08-06 スポット拠点：クーポン欄 → 売上確定ボタン → 計算結果 ──
+  const cpF = document.getElementById('cc-field-coupon');
+  if (cpF) {
+    cpF.style.display = ccIsSpot ? '' : 'none';
+    cpF.classList.toggle('active', ccField === 'coupon');
+    const cpV = document.getElementById('cc-val-coupon');
+    if (cpV) cpV.textContent = (ccCoupon === '') ? '—' : (parseInt(ccCoupon, 10) || 0).toLocaleString();
+  }
+  const runBtn = document.getElementById('cc-spot-run');
+  if (runBtn) {
+    runBtn.style.display = (ccIsSpot && !ccSpot) ? '' : 'none';
+    runBtn.disabled = ccSpotBusy || (tot === null && !ccFound);
+    runBtn.textContent = ccSpotBusy ? 'PayPayを取り込み中…' : '💰 売上を確定してPayPayを取り込む';
+  }
+  const calcBox = document.getElementById('cc-spot-calc');
+  if (calcBox) {
+    if (ccIsSpot && ccSpot) {
+      const s = ccSpot;
+      const yen = n => '¥' + (Number(n) || 0).toLocaleString();
+      let h = `<div class="r"><span class="l">売れた数</span><span class="v">${s.soldCount}個</span></div>`
+            + `<div class="r"><span class="l">売上（クーポン値引き後）</span><span class="v">${yen(s.sales)}</span></div>`
+            + `<div class="r"><span class="l">PayPay実績</span><span class="v">− ${yen(s.payPay)}</span></div>`
+            + `<div class="r big"><span class="l">あるべき現金有高</span><span class="v">${yen(s.expectCash)}</span></div>`;
+      if (!s.payPayFound) {
+        // ★黙って0円で進めない（driver v2.7「送信スキップが誰にも見えなかった」の反省）
+        h += `<div class="warn">⚠️ PayPayの実績がまだ取れていません（0円として計算しています）。`
+           + `少し待ってもう一度「売上を確定」を押すか、このまま確定すると夜のバッチで入り直します。</div>`;
+      }
+      if (Array.isArray(s.単価が無い商品) && s.単価が無い商品.length) {
+        h += `<div class="warn">⚠️ 単価が取れない商品があります（${esc_(s.単価が無い商品.join('・'))}）。売上が少なく出ます。</div>`;
+      }
+      calcBox.innerHTML = h;
+      calcBox.style.display = '';
+    } else {
+      calcBox.innerHTML = '';
+      calcBox.style.display = 'none';
+    }
+  }
+
   const fc = document.getElementById('cc-field-cash');
   if (fc) {
     // ★現金会計なしの置き弁では現金欄そのものを出さない
-    fc.style.display = ccNoCash ? 'none' : '';
+    // ★スポットは「あるべき現金」を出してから現金を入れる（社長が決めた順番）
+    fc.style.display = ccNoCash ? 'none' : (ccIsSpot && !ccSpot ? 'none' : '');
     fc.classList.toggle('active', ccField === 'cash');
   }
 
   // ── テンキーの表示（選択中の欄の値）──
   const cur = ccGet_();
   const val = cur === '' ? 0 : parseInt(cur, 10);
+  const isYen = (ccField === 'cash' || ccField === 'coupon');
   document.getElementById('cash-modal-display').textContent =
-    (ccField === 'cash' ? '¥' + val.toLocaleString() : val.toLocaleString() + '個');
+    (isYen ? '¥' + val.toLocaleString() : val.toLocaleString() + '個');
 
   // ── 現金の誤差だけ、現金欄を触っている時に出す ──
   const diffEl = document.getElementById('cash-modal-diff');
   if (ccField === 'cash' && cashInput !== '') {
-    const diff = val - net;
+    // ★2026-08-06 スポットは「報告」が無いので、あるべき現金と突き合わせる。
+    //   差額 ＝ (実現金 − レジ開始金) − あるべき現金
+    const diff = (ccIsSpot && ccSpot)
+      ? ((val - (Number(ccSpot.startCash) || 0)) - (Number(ccSpot.expectCash) || 0))
+      : (val - net);
     const sign = diff >= 0 ? '+' : '−';
-    diffEl.textContent = '報告との差 ' + sign + '¥' + Math.abs(diff).toLocaleString();
-    diffEl.className = 'cash-modal-diff ' + (diff >= 0 ? 'plus' : 'minus');
+    diffEl.textContent = (ccIsSpot && ccSpot ? 'あるべき現金との差 ' : '報告との差 ')
+                       + sign + '¥' + Math.abs(diff).toLocaleString();
+    diffEl.className = 'cash-modal-diff ' + (diff === 0 ? '' : (diff >= 0 ? 'plus' : 'minus'));
+    if (ccIsSpot && ccSpot && diff === 0) diffEl.textContent = '✓ ぴったり合っています';
   } else {
     diffEl.textContent = '';
     diffEl.className = 'cash-modal-diff';
@@ -1795,7 +2097,9 @@ function renderCashModal_(net) {
   // ── 送信ボタン ──
   // 現金は必須。残数は取得できていない拠点（締め前など）では空のままでも進める。
   // ★2026-08-05 現金会計なしの置き弁は現金欄が無いので、残数が入っていれば押せる（従来はここで詰まっていた）。
-  const okDisabled = ccNoCash ? (tot === null) : (cashInput === '');
+  // ★2026-08-06 スポットは「売上を確定」を通してからでないと確定できない（順番を守らせる）
+  const okDisabled = ccNoCash ? (tot === null)
+                   : (ccIsSpot ? (!ccSpot || cashInput === '') : (cashInput === ''));
   // ★2026-08-05 残った弁当があるときは「移動／2次販売」の2択にする（社長要望）。
   //   残数0なら運ぶものが無いので従来どおり「回収済みにする」1つ。
   const hasResidual = (tot !== null && tot > 0);
@@ -1921,6 +2225,9 @@ async function confirmCash(kind) {
             actualCash:     ccNoCash ? '' : amount,   // ★現金会計なしは照合対象外
             kind:           kind,   // ★2026-08-05 '移動' / '2次販売'
             plannedTo:      planned,   // ★2026-08-07 回収時に選んだ行き先
+            // ★2026-08-06 スポット拠点：クーポンは締めと同じ1回の送信に載せる。
+            //   別APIに切ると「回収は通ったのにクーポンだけ落ちる」経路ができる。
+            spotCoupon:     ccIsSpot ? ((ccCoupon === '') ? 0 : (parseInt(ccCoupon, 10) || 0)) : '',
           }),
           redirect: 'follow',
         });
@@ -1928,7 +2235,16 @@ async function confirmCash(kind) {
         if (j3 && j3.ok) {
           residualSaved = true;
           if (j3.moveId) movedOk = true;
-          if (j3.verdict !== '一致') {
+          if (ccIsSpot && j3.spot) {
+            // ★2026-08-06 スポットは残数の一致判定をしない（申告残数＝定数納品なので必ずズレる）。
+            //   見せるのは社長が欲しがっている1行＝レジが合っているか。
+            const d = Number(j3.spot.diff) || 0;
+            residualMsg = (d === 0)
+              ? `✓ レジは合っています（売上 ¥${(Number(j3.spot.sales)||0).toLocaleString()}）`
+              : `⚠️ レジが ${d > 0 ? '¥' + d.toLocaleString() + ' 多い' : '¥' + Math.abs(d).toLocaleString() + ' 足りない'}`
+                + `（売上 ¥${(Number(j3.spot.sales)||0).toLocaleString()} ／ PayPay ¥${(Number(j3.spot.payPay)||0).toLocaleString()}）`;
+            loadSpotToday();
+          } else if (j3.verdict !== '一致') {
             const rr = j3.residual || {};
             residualMsg = `⚠️ 弁当 報告${rr.declared}個→実際${rr.actual}個（販売員に連絡しました）`;
           }
@@ -3786,6 +4102,45 @@ async function cancelMove_(moveId) {
   </div>
 </div>
 
+<!-- ★2026-08-06 スポット拠点：朝のレジ開始金モーダル（driver v2.8）
+     納品数は定数なので入力させない。定数どおり届かなかった日だけ開いて直す。 -->
+<div class="cash-modal-bg" id="sp-modal-bg" onclick="if(event.target===this)closeSpotStartModal()">
+  <div class="cash-modal-card">
+    <div class="cash-modal-title" id="sp-modal-title">拠点</div>
+    <div class="cash-modal-expected" id="sp-modal-sub">スポット</div>
+
+    <div class="cc-field" id="sp-field-cash" onclick="spFocus('cash')">
+      <span class="cc-label">レジ開始金</span>
+      <span class="cc-value" id="sp-val-cash">—</span>
+      <span class="cc-unit">円</span>
+    </div>
+
+    <button class="sp-run" id="sp-qty-toggle" style="background:#EEF0F3;color:var(--ink);font-size:13px;padding:10px;"
+            onclick="spToggleQty()">▼ 定数どおり届かなかった場合はこちら</button>
+    <div class="cc-list" id="sp-qty-box" style="display:none;"></div>
+
+    <div class="cash-modal-display" id="sp-modal-display">¥0</div>
+    <div class="cash-pad">
+      <button class="cash-key" onclick="spKey('7')">7</button>
+      <button class="cash-key" onclick="spKey('8')">8</button>
+      <button class="cash-key" onclick="spKey('9')">9</button>
+      <button class="cash-key" onclick="spKey('4')">4</button>
+      <button class="cash-key" onclick="spKey('5')">5</button>
+      <button class="cash-key" onclick="spKey('6')">6</button>
+      <button class="cash-key" onclick="spKey('1')">1</button>
+      <button class="cash-key" onclick="spKey('2')">2</button>
+      <button class="cash-key" onclick="spKey('3')">3</button>
+      <button class="cash-key util" onclick="spKey('00')">00</button>
+      <button class="cash-key" onclick="spKey('0')">0</button>
+      <button class="cash-key util" onclick="spBackspace()">⌫</button>
+    </div>
+    <div class="cash-modal-btns">
+      <button class="cash-modal-btn cancel" onclick="closeSpotStartModal()">キャンセル</button>
+      <button class="cash-modal-btn ok" id="sp-modal-ok" onclick="submitSpotStart()" disabled>保存する</button>
+    </div>
+  </div>
+</div>
+
 <!-- 現金有高テンキーモーダル（v1.7 NEW） -->
 <div class="cash-modal-bg" id="cash-modal-bg" onclick="if(event.target===this)closeCashModal()">
   <div class="cash-modal-card">
@@ -3800,6 +4155,15 @@ async function cancelMove_(moveId) {
       <span class="cc-value" id="cc-residual-total">—</span>
       <span class="cc-unit">個</span>
     </div>
+    <!-- ★2026-08-06 スポット拠点（driver v2.8）：クーポン → 売上確定 → PayPay → あるべき現金 → 現金
+         社長が決めた順番。あるべき現金が出るまでレジの現金欄は出さない。 -->
+    <div class="cc-field" id="cc-field-coupon" style="display:none;" onclick="ccFocus('coupon')">
+      <span class="cc-label">クーポン値引き 合計</span>
+      <span class="cc-value" id="cc-val-coupon">—</span>
+      <span class="cc-unit">円</span>
+    </div>
+    <button class="sp-run" id="cc-spot-run" style="display:none;" onclick="runSpotPreview()">💰 売上を確定してPayPayを取り込む</button>
+    <div class="sp-calc" id="cc-spot-calc" style="display:none;"></div>
     <div class="cc-field" id="cc-field-cash" onclick="ccFocus('cash')">
       <span class="cc-label">レジの現金</span>
       <span class="cc-value" id="cc-val-cash">—</span>
