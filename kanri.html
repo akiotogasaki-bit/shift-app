@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- kanri.html v3.64 (2026-08-07) 【エリア別の色が出なくなる件を修正】社長報告「配分調整・配分表にエリア別の色が出なくなった」。★調査＝GAS `getLocationsWithAssignment` は正常（8/7・8/10〜8/14 とも33拠点中32拠点に色あり）、デプロイ済みHTMLも正本と同一で、実機で開くと色は出る＝**一度こけると戻らない作り**が原因。`loadDriverColorMap` は取得に失敗すると**空マップ {} をキャッシュに保存して終わり**だったため、以降は全拠点が既定グレー #E9ECEF のままになり、日付を切り替えても再取得せず、ページを完全リロードするまで色が戻らなかった。配分調整タブは開いた瞬間にGASへ最大15本（当日4本＋週の先読み4日×3本）を同時に投げるので、GASが重い時間帯に色の1本だけタイムアウトすると丸ごと色無しに落ちる。★修正＝①`loadDriverColorMap` は**成功（配列で1件以上）した時だけキャッシュ**し、失敗/空はキャッシュせず空を返す（次の描画で自然に取り直す）＋同一呼び出し内で1回だけ自動リトライ（0.6秒後）。②`bmColorCache` も空を入れない（`bmLoadDate`／`bmPrefetchWeek`）。③`bmSetDate` のキャッシュ経路で色だけ欠けている日は、表は待たせず即出しして色は裏で取り直し、届いたら塗り直す。GAS変更なし＝デプロイ枠を消費しない。 -->
 <!-- kanri.html v3.63 (2026-08-04) 【印刷前チェックから置き弁を除外】実機検証で、印刷ボタンのアラートにアスエネ・シビックが「担当者が未割り当てなのに納品数が入っています」として毎回出ることを確認。置き弁は無人販売なので担当者がいないのが正常で、放置すると毎日出続けて本当に見るべき拠点が埋もれる（警告のノイズ化）。メインGAS `_okibenLocsLast_` が `loc.isOkiben` を付けるようにし（置き弁設定シート駆動）、kanri の `bmPrintWithCheck` はその拠点をスキップする。担当者ありなのに0件の判定は元々置き弁に当たらない。要メインGAS @427。 -->
 <!-- kanri.html v3.62 (2026-08-04) 【拠点合計をカテゴリー別合計の上へ】社長指定。配る時に見やすいよう、拠点ごとの持ち出し数（拠点合計）を先に出し、その下に▼カテゴリー別合計・総合計を並べる。行の並び＝拠点合計 → ▼カテゴリー別合計（海苔弁系／満腹系／全六／他社商品）→ 総合計。数字・計算は不変。 -->
 <!-- kanri.html v3.61 (2026-08-04) 【カテゴリー別集計の表示整理】v3.60 は他社ぶんを「他社商品」カテゴリー行と「他社（総数）」行の2か所に出しており、同じ内容が重複して読みにくかった（社長報告）。重複していた「他社（総数）」行を削除し、カテゴリー別の「他社商品」行＋「総合計」行の構成にした。総合計行に「他社は拠点に配らないため拠点合計には含みません」の注記を追加。数字は v3.60 と同じ（8/4：海苔弁系579／満腹系81／全六422／他社商品85／拠点合計1082／総合計1167）。 -->
@@ -2552,34 +2553,42 @@ const GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5A
 const DRIVER_DEFAULT_BG = '#E9ECEF';
 const driverColorCache = {};  // { 'YYYY-MM-DD': { locationId: {color, name, type} } }
 
+// ★2026-08-07 v3.64【失敗をキャッシュしない＋1回だけ自動リトライ】
+//   旧: 取得に失敗すると空マップ {} をキャッシュに保存して終わり → 以降は全拠点が既定グレー
+//       (#E9ECEF) のままになり、日付を切り替えても再取得しない＝ページを完全リロードするまで
+//       色が戻らなかった。配分調整タブは開いた瞬間にGASへ最大15本（当日4本＋週の先読み4日×3本）
+//       を同時に投げるため、GASが重い時間帯に色の1本だけこけると丸ごと色無しに落ちていた。
+//   新: 成功（配列で1件以上）した時だけキャッシュする。失敗/空はキャッシュせず空を返すので、
+//       次の描画で自然に取り直される。加えて同一呼び出し内で1回だけ自動リトライ（0.6秒後）。
 async function loadDriverColorMap(dateStr) {
   if (!dateStr) return {};
   if (driverColorCache[dateStr]) return driverColorCache[dateStr];
-  try {
-    const res  = await fetch(GAS_URL + '?action=getLocationsWithAssignment&date=' + encodeURIComponent(dateStr));
-    const data = await res.json();
-    if (!Array.isArray(data)) {
-      console.warn('[driverColor] unexpected response:', data);
-      driverColorCache[dateStr] = {};
-      return {};
-    }
-    const map = {};
-    data.forEach(item => {
-      if (item && item.locationId) {
-        map[item.locationId] = {
-          color: item.color || '',
-          name:  item.name  || '',
-          type:  item.type  || '',
-        };
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const res  = await fetch(GAS_URL + '?action=getLocationsWithAssignment&date=' + encodeURIComponent(dateStr));
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        const map = {};
+        data.forEach(item => {
+          if (item && item.locationId) {
+            map[item.locationId] = {
+              color: item.color || '',
+              name:  item.name  || '',
+              type:  item.type  || '',
+            };
+          }
+        });
+        driverColorCache[dateStr] = map;   // ★成功した時だけキャッシュ
+        return map;
       }
-    });
-    driverColorCache[dateStr] = map;
-    return map;
-  } catch (e) {
-    console.warn('[driverColor] fetch failed:', e);
-    driverColorCache[dateStr] = {};
-    return {};
+      console.warn('[driverColor] empty/unexpected response (attempt ' + attempt + '):', data);
+    } catch (e) {
+      console.warn('[driverColor] fetch failed (attempt ' + attempt + '):', e);
+    }
+    if (attempt === 1) await new Promise(r => setTimeout(r, 600));
   }
+  // 2回ともダメ → キャッシュせずに空を返す（次の描画・次の日付切替で再取得される）
+  return {};
 }
 
 // 拠点IDからinline style属性文字列を生成（先頭半角スペース含む）
@@ -5754,8 +5763,21 @@ async function bmSetDate(dateStr) {
   else if (bmThisWeekDates.indexOf(dateStr) >= 0) bmCurrentWeek = 'this';
   // v3.41: プリフェッチ済みならキャッシュから即時表示（通信なし）。未取得なら従来どおり取得。
   if (bmDataCache[dateStr]) {
-    bmApplyData(dateStr, bmDataCache[dateStr], bmColorCache[dateStr] || {});
-    bmPrefetchWeek();   // 同週で未取得の日があれば裏で補完
+    const cm = bmColorCache[dateStr];
+    if (cm && Object.keys(cm).length > 0) {
+      bmApplyData(dateStr, bmDataCache[dateStr], cm);
+      bmPrefetchWeek();   // 同週で未取得の日があれば裏で補完
+      return;
+    }
+    // ★v3.64 表のデータはあるが色だけ取れていない日
+    //   → 表は待たせずに即出しし、色は裏で取り直して届いたら塗り直す（色無しのまま固定しない）
+    bmApplyData(dateStr, bmDataCache[dateStr], {});
+    bmPrefetchWeek();
+    loadDriverColorMap(dateStr).then(function (m) {
+      if (!m || Object.keys(m).length === 0) return;
+      bmColorCache[dateStr] = m;
+      if (dateStr === bmCurrentDate) { bmDriverColorMap = m; bmRenderAll(); }
+    });
     return;
   }
   await bmLoadDate(dateStr);
@@ -5807,7 +5829,8 @@ function bmPrefetchWeek() {
         const r = arr[0], colorMap = arr[1], menu = arr[2];
         if (r && r.ok) {
           bmDataCache[ds]  = r;
-          bmColorCache[ds] = colorMap || {};
+          // ★v3.64 色は取れた時だけ入れる（空を入れると、その日は色無しで固定されてしまう）
+          if (colorMap && Object.keys(colorMap).length > 0) bmColorCache[ds] = colorMap;
           if (menu) bmMenuCache[ds] = menu;
         }
       })
@@ -5834,7 +5857,8 @@ async function bmLoadDate(dateStr) {
   }
   // v3.41: キャッシュへ格納（保存/確定/再取得から呼ばれた場合は最新で上書き＝常に新鮮）
   bmDataCache[dateStr]  = r;
-  bmColorCache[dateStr] = colorMap || {};
+  // ★v3.64 色は取れた時だけ入れる（空を入れると、その日は色無しで固定されてしまう）
+  if (colorMap && Object.keys(colorMap).length > 0) bmColorCache[dateStr] = colorMap;
   if (menu) bmMenuCache[dateStr] = menu;
   bmApplyData(dateStr, r, colorMap || {});
   bmPrefetchWeek();   // v3.41: 同週の残り日を裏で先読み
