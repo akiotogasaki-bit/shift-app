@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>お江戸弁当 レジ</title>
+<!-- register v3.20 (2026-08-07) 【配分表の読み込み前に送信できてしまう問題を修正】loadPlannedDelivery は async で GAS から配分の数字を取りに行く（2〜5秒）。その間に送信ボタンが押せるため、全品目0で開始報告が飛び、戻っても+1ずつしか直せない状況が複数拠点で発生。対策2段構え：(A) 配分表の取得完了まで送信ボタンを disabled＋「📋 配分表を読み込み中…」表示。成功・失敗とも finally で再有効化。(B) 全品目0で送信しようとした場合、取得未完了ならブロック、完了後でもconfirmで確認（通常ありえない状況への安全弁）。backToNormalStartReport の即時 btn.disabled=false も削除（loadPlannedDelivery の完了に任せる）。GAS変更なし。 -->
 <!-- register v3.15 (2026-08-06) 【置き弁（アスエネ）のギャラを締め画面に別枠表示し、現金で当日渡す】社長要望「虎ノ門でレジを閉めた時に、虎ノ門分とアスエネの分のインセンティブの金額が別でわかるようにしてね」→「アスエネ分のギャラも合わせて**現金で当日渡す**ので、その仕様に」。★背景＝従来はアスエネ分のギャラを発生させるために**その販売数を虎ノ門②のレジにPayPayで打ち込んで**いた。副作用が3つ ①虎ノ門②の販売数・完売率が過大→**翌週推奨が虎ノ門②に多く配る**二次被害 ②アプリのPayPayが実PayPayより過大→突合で毎回「アプリ過大＝現金抜き疑い」に出る ③アスエネの販売数が取れず増減判断ができない。メインGASに「置き弁ギャラログ」（販売数＝納品数−残数 から算出）を新設したのでレジに混ぜる必要が無くなった。★実装：締め画面「販売実績・ギャラ」に `res-okiben-row`、完了画面に `comp-okiben-row` を追加。`action=okibenGigForStaff` で**未払い分をすべて**取得（`fetchOkibenGig_`／`renderOkibenGig_`）。**『置き弁設定』の報酬対象者に設定された人にだけ出る**。★**当日分は原理的に出せない**（締める14〜16時にはドライバーの回収がまだで残数が入っていない・確定は夜間バッチ23:04）＝出るのは前営業日以前。社長決定「未払い分は全部まとめて渡す」＝休み明けは2〜3日ぶんまとまって出る（1日分ずつだと連休明けに未払いが溜まり続けて渡し切れないため）。★**「本日の合計」に足す**。この人はレジからこの額も一緒に抜いて持ち帰るので、ドライバーが回収時に数える実現金はその分減っている。**実現金＋ギャラ−開始金＝現金売上** が成り立つにはギャラ側に含まれている必要がある（含めないとその額だけ現金売上が過小に出る）。※画面の「現金差異」には影響しない＝あれは registerEnd（ギャラを抜く前）で見ているため。※res-incentive（虎ノ門②のぶん）には足さず**別の行**で見せる。★二重払い防止：渡した対象日を `okibenGigPaid` として **submitReport と同じ送信に載せる**。別APIで投げると締めは通ったのに支払記録だけ落ちる経路ができ、翌日また同じ未払い分が出て二重に渡る。GAS側 `okibenGigMarkPaid_` が「支払済日／支払拠点／支払方法」を立て、以後この人の締め画面にも給与明細（`spOkibenByUid_`）にも出ない。`calcFinal`/`submitFinal` を async 化（await 必須）。要: メインGAS（`getOkibenGigForStaff`／`okibenGigMarkPaid_`／submitReport の okibenGigPaid 受け／置き弁ギャラログ N〜Q列）。 -->
 <!-- register v3.14 (2026-08-05) 【レジ開始金は「後からいつでも直せる」に。不完全な開始ログ行も断つ】社長指示「先に納品数を入れるのは今後も発生するから、それも踏まえた運用に」。★実データで原因を特定：8/3 銀座の開始ログは **10:59:06 に「商品1種・合計1個（{"P001":1}）・開始金0」の行**、その**7秒後の 10:59:13 に「13種74個・開始金0」の行**が同一UIDで立っていた（ソフバン・ダイビルも同型／開始金0だった拠点と完全一致）。出どころは `sendDeliveryUpdate → ensureStartReported → sendStartReport` の経路で、`state.deliveryCount` がまだ1商品しか入っていない状態のまま開始報告が送られたもの。この不完全な行が先に立つと、後から入る販売員が引き継ぎ判定に落ちて開始金を打てなくなる。対応3点：①**在庫モーダルの「開始金庫」が0のとき「未入力 ▸ 入力する」と赤字表示**になり、タップすれば**レジを打っている途中でもいつでも開始金を入れ直せる**（`openRegisterStartFix` → `enterTakeoverStartCash(_, {fromRegister:true})` → `updateRegisterStart`）。引き継ぎ画面に頼らないので、先に納品数が入る運用でも必ず直せる ②`sendStartReport` は**納品数が1〜2種しか入っていない時は送信を中止**してトーストで知らせる（不完全な開始ログ行を作らない） ③開始金を入れたら金庫サマリーを即時再描画。GAS変更なし（`updateRegisterStart` は @452 で追加済み）。 -->
 <!-- register v3.13 (2026-08-04) 【v3.12の穴を塞ぐ：スタート報告のボタンが無反応になる経路をなくす】社長報告「レジのスタート報告の時にレジのスタート金を入力できない」（※同じ症状は8/3にも発生しており v3.12 が原因ではないが、v3.12 に実在の穴があったので塞ぐ）。真因＝`renderDeliveryInputs()` はアプリ全体で `selectLocation` の通常フロー**1箇所からしか呼ばれない**のに、v3.12 で追加した `enterTakeoverStartCash()`（引き継ぎ時の開始金だけ画面）がそれを呼んでいなかった。そのためこの画面を通ったあとスタート報告画面に戻ると `delivery-<商品ID>` が存在せず、送信ボタンが `document.getElementById(...).value` の **null 参照で例外→ボタンを押しても何も起きない**状態になっていた（販売員からは「入力できない」に見える）。修正3点：①`enterTakeoverStartCash` はカードを隠す前に必ず `renderDeliveryInputs()` を呼ぶ ②`btn-start-submit` は入力欄が1つでも無ければ**黙って落ちず、画面を作り直して alert で知らせて中止**する ③`submitTakeoverStartCash` が「本日の開始報告が見つかりません」を受けたら詰まらせず通常のスタート報告へ戻す（`backToNormalStartReport`）。あわせて引き継ぎ画面に「納品数から自分で入力し直す →」の逃げ道リンクを追加し、**どんな理由で詰まっても販売員が自力で通常フローに戻れる**ようにした。GAS変更なし。 -->
@@ -2076,9 +2077,8 @@ function backToNormalStartReport(msg) {
   try { renderDeliveryInputs(); } catch (e) { console.warn('renderDeliveryInputs:', e); }
   document.getElementById('start-card-delivery').style.display = '';
   document.getElementById('takeover-start-note').style.display = 'none';
-  document.getElementById('btn-start-submit').textContent = 'スタート最終確認をする';
-  const btn = document.getElementById('btn-start-submit');
-  if (btn) btn.disabled = false;
+  // ★2026-08-07 v3.20 ボタンの有効化は loadPlannedDelivery 完了時に行う（即有効化しない）。
+  //   renderDeliveryInputs が再度 loadPlannedDelivery を呼ぶので、完了後に自動で有効化される。
   showScreen('start');
   if (msg) alert(msg);
 }
@@ -2149,6 +2149,14 @@ function renderDeliveryInputs() {
       <span class="form-unit">個</span>
     </div>
   `).join('');
+  // ★2026-08-07 v3.20【A案】配分表の取得完了まで送信ボタンを無効化。
+  //   loadPlannedDelivery は async。GAS応答（2〜5秒）を待たずに送信を押すと
+  //   全品目0で開始報告が飛び、戻しても1ずつしか変えられない状態になっていた。
+  state.plannedDeliveryLoaded = false;
+  if (!state.takeoverStartOnly) {
+    const btn = document.getElementById('btn-start-submit');
+    if (btn) { btn.disabled = true; btn.dataset.preloadText = btn.textContent; btn.textContent = '📋 配分表を読み込み中…'; }
+  }
   // ★2026-07-31 Phase B：配分表の個数を既定値として流し込む（取得は非同期・待たせない）
   loadPlannedDelivery();
 }
@@ -2203,6 +2211,18 @@ async function loadPlannedDelivery() {
   } catch (e) {
     console.warn('配分表の取得に失敗（手入力で続行できます）:', e);
     state.plannedDelivery = null;
+    if (note) { note.innerHTML = '⚠️ 配分表の取得に失敗しました。実際に届いた数を手入力してください。'; note.style.display = 'block'; }
+  } finally {
+    // ★2026-08-07 v3.20【A案】読み込み完了（成功・失敗とも）→ 送信ボタンを再有効化
+    //   preloadText がある＝自分が無効化した。無い＝引き継ぎモードなどで無効化していないので触らない。
+    //   無条件で btn.disabled=false にすると、引き継ぎ送信中に再有効化してしまう。
+    state.plannedDeliveryLoaded = true;
+    const btn = document.getElementById('btn-start-submit');
+    if (btn && btn.dataset.preloadText) {
+      btn.textContent = btn.dataset.preloadText;
+      delete btn.dataset.preloadText;
+      btn.disabled = false;
+    }
   }
 }
 
@@ -2234,6 +2254,23 @@ document.getElementById('btn-start-submit').addEventListener('click', () => {
     document.getElementById('start-card-delivery').style.display = '';
     alert('納品数の入力欄が表示されていませんでした。\n画面を作り直しましたので、納品数をご確認のうえ、もう一度送信してください。');
     return;
+  }
+  // ★2026-08-07 v3.20【B案】全品0ガード。
+  //   配分表の読み込み前に送信ボタンを押せた場合（A案をすり抜けた時のフォールバック）、
+  //   全品目が0ということは通常あり得ない。警告して止める。
+  {
+    const excl = state.plannedExcluded || {};
+    const nonExcluded = state.products.filter(p => !excl[String(p.id)] && String(p.name || '').indexOf('お茶') < 0);
+    const allZero = nonExcluded.length > 0 && nonExcluded.every(p => !(state.deliveryCount[p.id] || 0));
+    if (allZero) {
+      if (!state.plannedDeliveryLoaded) {
+        alert('配分表の読み込みがまだ完了していません。\n少し待ってからもう一度お試しください。');
+        return;
+      }
+      if (!confirm('⚠️ すべての納品数が 0 になっています。\n\n配分表の個数が読み込まれていない可能性があります。\n\n本当に0個で開始しますか？')) {
+        return;
+      }
+    }
   }
   // ★2026-07-31 Phase B：配分表と違う数で始めるなら、その場で伝えておく（驚かせない）
   //   実際の承認依頼はGAS側（handleStart）が送る。ここは表示だけ。
