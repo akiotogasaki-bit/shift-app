@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <!-- driver v2.9 (2026-08-07) 【移動の行き先を積んだ時点で決める／置き弁で移動の案内が出なかった不具合】社長「行き先は移動元から弁当を持った時点で確定している。２箇所の時も。ただ出発時点にどこに何を入れるかまで入力するのは面倒。これは最後の回収の時も一緒」。★従来＝行き先は**回収時にも出発登録時にも選べず**、移動タブの搬送中カードは常に「◯◯ → ？」。行き先は到着登録で初めて選ぶ設計だった（2026-08-05 の「移動先が2箇所ある」要望に合わせたもの）。★変更後＝回収モーダルの「🔄 移動」と移動タブの「出発を登録」の両方で、先に**行き先の拠点だけ**を選ぶ（複数タップ可・個数の内訳は入れない）。個数を入れるのは実際に下ろす時だけ。カードは「浜松町 → 田町 → 品川」と出る。到着登録は予定先がボタンで並び、**1箇所なら選択済みなので「ここで下ろす」を押すだけ**。2箇所目は残りが自動で次のカードになり、行き先も引き継ぐので選び直さなくていい（分割の仕組みは 2026-08-05 のまま）。決まっていない時は「行き先はあとで決める」で従来フローに落ちる。現場で変わった時は到着登録の「別の拠点に下ろす」で一覧から選べる。★行き先が**1箇所の時だけ**、出発時点で移動先の担当者へ「◯◯から△△が向かっています」とLINE通知（社長決定 2026-08-07。2箇所以上は内訳が未定なので出さない）。従来は到着登録を押すまで受け取り側に何も伝わらなかった。★あわせて社長報告③を修正：置き弁など残数照合ログに行が無い拠点では submitCollectionCheck が空振りして residualSaved=false になり、**移動タブへ飛ぶだけで案内トーストが一切出なかった**。案内を残数の記録可否から切り離し、必ず出すようにした（残数エラーと重なる時は3秒後に続けて出す＝showToast は前のトーストを置き換えるため）。★実装: 行き先ピッカー openDestPicker_/renderDestGrid_/toggleDest_/submitDestPick_/submitDestPickUndecided_、回収側 openCollectDestPicker_ + ccPlannedTo（confirmCash 冒頭で planned に控えを取る。途中の closeCashModal で空に戻るため）、到着側 renderArriveDest_/pickArriveDest_/arriveShowAll_ + _arriveToId_、出発側 submitDepart→_submitDepart2_。ピッカーは回収モーダル(z-index:1000)の上に出すため #mv-dest-modal を 1100 にしている。要: メインGAS @2026-08-07 以降（拠点間移動ログ23列目「予定先JSON」・startMove の plannedTo と事前通知・completeMove の分割で残りの予定先を引き継ぎ・getOpenMoves が plannedTo を返す・submitCollectionCheck が plannedTo を渡す）。 -->
 <!-- driver v2.8 (2026-08-06) 【残数タップの内訳をエリア別×種別に】社長要望「残数は今は回収時の残りをそのまま足す仕様だと思うけど、残数とタップするとエリア別で種別が出るようにして欲しい」。★従来＝「拠点合計」をタップすると**全社の商品別リスト1本**だけが出ていた（銀しゃけ11／唐揚げ12…）。どのエリアに何が残っているか分からないので、移動の出し手を探すのに使えなかった。★変更後＝エリア行（例「芝エリア 24個 5拠点」）が残数の多い順に並び、**タップでそのエリアの種別が開く**。開いた中に対象拠点名も小さく出す。一番残数が多いエリアだけ最初から開いた状態にする（回収中に真っ先に見たいのがそこなので）。開閉は `_openAreaRows` に保持し、30秒自動更新をまたいでも閉じない。★数字の出どころは従来と同じ（残数照合ログの拠点合算・お茶除外・締め後の持ち出しは差引済み）＝**合計は1個も変わらない**。エリアは拠点マスタの「エリア」列。空欄の拠点は「(エリア未設定)」にまとめる（記入漏れが数字から消えないように）。拠点の入力がまだ0件の時間帯は従来どおり全社の商品別リストに落ちる。★実装: `renderAllBreakdown_` / `toggleAreaDetail(添字)` を新設し `openAllBreakdown` は描画を委譲。エリア名ではなく**添字**で開閉するのは、エリア名に ' が入っても onclick が壊れないようにするため。★「自分の残数（計算上）」のタップ内訳は**従来のまま**（社長判断 2026-08-06）。要: メインGAS @2026-08-06 以降（getResidualSummary の locationAreas / buildResidualAreas_ / _oedoResidualByDate_ の rows.products）。 -->
+<!-- driver v2.9 (2026-08-07) 【スポット拠点：未回収をタップするとリマインド確認が出ていたのを修正】社長報告「未回収をタップすると未報告のリマインドを送るか聞いてきた」。★原因＝`renderLocationItem` の状態判定は報告ログ（`state.reportsByLoc`）だけを見ており、**スポット拠点はレジを使わないので報告が永久に立たない** → 最後の `else`（未報告）に落ちて `handleUnreportedTap`（リマインド送信の確認モーダル）が割り当たっていた。しかも**送る相手が居ない**（当日限りのバイトでLINE連携なし）ので押しても意味がない。★修正＝`spotOf_(loc.id)` の分岐を先に置き、報告済みと同じ扱いで `openCashModal` へ直行させる（リマインド「送信済」バッジも出ない）。金額欄は「スポット」と表示。★あわせて、同じ拠点が「🏪 本日のスポット拠点」と「未回収リスト」の2か所に出て紛らわしいので役割を明記：上は「タップで開始金を入力／直す」＋「残数・クーポンの入力は下の『未回収』から同じ拠点をタップ」。★**置き弁（アスエネ等）も同じ症状だった**（社長「置き弁も一緒」）。無人販売なので同じく報告が立たず、未報告扱いでリマインド確認が出ていた。ドライバー画面は置き弁拠点かどうかを知る手段が無かったので、**`getSpotToday` の応答に `okiben[]` を相乗り**させて（起動時fetchを増やさないため）`okibenOf_()` で判定し、同じく `openCashModal` へ直行させる（ヒント「タップで残数→回収」／金額欄「置き弁」）。取得に失敗した時は置き弁リストを**消さずに前回値を残す**（消すとカードが未報告に戻ってリマインドが復活するため）。**この置き弁対応だけメインGASの変更を含む**（`getSpotToday` に okiben 追加）。 -->
 <!-- driver v2.8 (2026-08-06) 【スポット拠点（当日限りのバイト・レジ非使用）に対応】社長決定：「スポットバイトが入っている拠点は当日のみのバイトなので基本レジを使わせていない。1回しか来ない人にレジの使い方を説明するのは大変だし、スマホがちゃんと使えない人も来る」→ 販売員はレジを打たず紙でチェックし、ドライバーがアプリで代行する。★対象は**シフトの割当が「スポットバイト◯」の拠点**をサーバーが自動判定（拠点を手で登録しない／実在の販売員が1人でも居れば通常拠点のまま）。★納品は**定数**なので入力させない（定数納品マスタ→配分調整＝基本数マスタG列へ自動反映されるので、キッチンの製造数にも乗る）。★①回収タブの先頭に「🏪 本日のスポット拠点」を追加。朝はここで**レジ開始金だけ**を入れる（`updateSpotStart`）。定数どおり届かなかった日だけ商品別に直せる（既定は触らない＝通常は1タップも増えない）。②回収モーダルはスポットのとき社長が決めた順番で動く：残数を入力 → クーポンを入力 → **ここで売上が確定** → PayPay実績を売上から引いて**あるべき現金有高を表示**（`spotPreview`）→ レジの現金を入力して差額をチェック。③**お茶も残数欄に出る**（社長「スポット拠点もお茶はその場でカウントしてもらう」）。通常拠点はレジが実売数を持つので従来どおりお茶は出ない。④**クーポンは枚数で入力**（社長「クーポンは300円引きです。クーポンの使用枚数を正の字で書いて下さい」）。紙が枚数なのにアプリが金額だとドライバーが毎回×300する手間と計算ミスが出るため、枚数だけ打たせて金額はサーバー（`SPOT_COUPON_YEN`=300）が掛ける＝単価が変わってもフロントは直さなくてよい。画面には換算額を併記する。⑤ギャラは0円で通す（別立てで現金支給）・賄いなし・昼の販売ペース通知は対象外。⑥PayPayが取れなかった時は**黙って0円で進めない**（driver v2.7 の「送信スキップが誰にも見えなかった」の反省）。要: メインGAS（スポット拠点設定／スポット定数納品／getSpotToday／updateSpotStart／spotPreview／submitCollectionCheck の spotCoupon）。 -->
 <!-- driver v2.7 (2026-08-06) 【重大バグ修正：完売した拠点の残数が永久に記録されなかった】社長報告「芝エリアは残数確認してボタン押してるらしい」を起点に調査。ドライバーは正しく操作していたが、アプリが送信を丸ごと飛ばしていた。★原因の連鎖：getDeclaredResidual は「申告残数0の商品は items に並べない」（メインGAS `if (d <= 0 && a === null) return;`）→ **完売拠点は items が空** → 入力欄がゼロ → `ccResidualTotal_()` が null → `confirmCash` の `if (ccTotal !== null)` で **submitCollectionCheck を丸ごとスキップ**。②の setCollected は成功するので画面は「回収済み」に変わり、残数照合ログだけが「未回収」のまま残る。失敗表示は console.warn だけで誰も気づけなかった。**一番売れている拠点ほどデータが落ちる**最悪の落ち方。実測：8/5 の未回収9拠点のうち6拠点（芝パーク・京橋・神田スクエア・芝パーク②・パソナ・ソフバン②）が declared=0 / items=0 でこの経路。★修正①`ccFound`（getDeclaredResidual が found:true を返したか）を新設し、**完売＝残数0 は事実なので必ず送る**／取得失敗の時だけスキップ、と区別した（residualLoaded は「欄ができたか」なので両者を区別できない）。②送信が失敗・スキップした時に**必ず知らせる**（ok:false／例外／取得できず の3経路）。ただし `showToast` は前のトーストを消して置き換わるため、ここで出しても関数末尾の「現金有高を記録し回収済みにしました」に**必ず上書きされて見えなかった**（不一致メッセージも同じ理由で消えていた）。`residualSaved` / `residualMsg` に持ち回り、**最後の1回のトーストに集約**して解決。③`showToast` が3つ目の引数 duration を受け取っていなかったのを修正（呼び出し側は以前から 5000/6000 を渡していたが無視され常に2.8秒だった）。★2択ボタン（移動／2次販売）は社長判断で従来どおり変更なし。要: メインGAS @480 以降（getDeclaredResidual が納品商品を0で並べる・okibenNightlyApply が回収行を毎晩用意）。 -->
 <!-- driver v2.6 (2026-08-05) 【残数タブの手入力を廃止】社長指示「ドライバーアプリの残数入力は今は回収時の合計で出しているから、入力できないようにして」。残数は回収モーダルで拠点ごとに商品別入力する方式に一本化されたため、残数タブで打つと二重入力になる。①商品ごとの入力欄を外し「残数の入力は不要になりました／数え直したいときは回収タブでその拠点をタップ」の案内に差し替え ②下部の「報告を送信する」を「🚚 回収へ戻る」に変更（`submitResidual` は画面から呼べなくなった） ③回収タブ下部の導線も「📦 残数入力へ切り替え」→「📦 残数を確認する」 ④入力が無くなり必ず0になる「入力済」欄を消し、「自分の残数」は**計算上だけ**を大きく表示（全体の数字は上の「拠点合計」で見る） ⑤`submitReport()` は誤呼び出しガードを付けて残置。★`RESIDUAL_INPUT_ENABLED = false` の1行を true に戻せば元の入力欄がそのまま復活する＝**2次販売後の最終残数入力へ転用するため**（2026-08-03 の社長決定「残数入力タブは消さない」を維持）。GAS変更なし。 -->
@@ -1433,21 +1434,28 @@ function startDriverStateTimer() {
 //   朝にやることは**レジ開始金を入れる**ことだけ。納品数は定数なので入力しない。
 // ═══════════════════════════════════════════════════════════════
 let spotToday = [];          // [{locationId, locationName, staff, registerStart, deliveryTotal, items[], collected}]
+// ★2026-08-07 置き弁も「レジを使わない＝報告が立たない」拠点。同じ1回のfetchで受け取る。
+let okibenLocs = [];         // [{locationId, locationName, cash}]
 
 async function loadSpotToday(rerender) {
   try {
     const url = `${GAS_URL}?action=getSpotToday&date=${encodeURIComponent(ccToday_())}`;
     const j = await (await fetch(url, { redirect: 'follow' })).json();
-    spotToday = (j && j.ok && Array.isArray(j.items)) ? j.items : [];
+    spotToday  = (j && j.ok && Array.isArray(j.items))  ? j.items  : [];
+    okibenLocs = (j && j.ok && Array.isArray(j.okiben)) ? j.okiben : [];
   } catch (e) {
     console.warn('スポット拠点の取得に失敗:', e);
     spotToday = [];
+    // ★置き弁のリストは前回の値を残す（消すとカードが「未報告」に戻ってリマインドが出る）
   }
   if (rerender !== false) { try { renderCollectionList(); } catch (e) {} }
 }
 
 function spotOf_(locId) {
   return spotToday.find(s => String(s.locationId) === String(locId)) || null;
+}
+function okibenOf_(locId) {
+  return okibenLocs.find(o => String(o.locationId) === String(locId)) || null;
 }
 
 // 回収タブの先頭に出す「本日のスポット拠点」
@@ -1465,13 +1473,17 @@ function renderSpotSection_() {
          +   (set
               ? `<div class="sp-cash">¥${(Number(s.registerStart) || 0).toLocaleString()}</div>`
               : `<div class="sp-cash none">開始金 未入力</div>`)
-         +   `<div class="sp-go">${done ? '回収済み' : (set ? 'タップで直す' : 'タップで入力')}</div>`
+         +   `<div class="sp-go">${done ? '回収済み' : (set ? 'タップで開始金を直す' : 'タップで開始金を入力')}</div>`
          + `</div></div>`;
   }).join('');
   return `<div class="section-label" style="color:#8A6508;">🏪 本日のスポット拠点 `
        + `<span style="background:#B8860B;color:#FFF;font-size:11px;font-weight:700;padding:1px 8px;border-radius:10px;">${spotToday.length}</span></div>`
        + `<div class="list-wrap sp-sec">${cards}`
-       + `<div style="font-size:11px;color:var(--ink-mute);padding:4px 4px 2px;">レジは使いません。朝はレジ開始金だけ入れてください（納品数は定数です）。</div>`
+       // ★2026-08-07 同じ拠点が「ここ」と「下の未回収リスト」の2か所に出るので役割を明記する。
+       //   ここ＝朝のレジ開始金だけ／回収（残数・クーポン・締め）は下からタップ。
+       + `<div style="font-size:11px;color:var(--ink-mute);padding:4px 4px 2px;line-height:1.5;">`
+       +   `ここは<b>朝のレジ開始金</b>だけ（納品数は定数なので入力不要）。<br>`
+       +   `<b>残数・クーポンの入力は、下の「未回収」から同じ拠点をタップ</b>してください。</div>`
        + `</div>`;
 }
 
@@ -1664,6 +1676,25 @@ function renderLocationItem(loc, isCollected) {
       const shown = (r.actualCash !== null && r.actualCash !== undefined) ? r.actualCash : net;
       amountHtml = `<span class="location-amount">¥${Number(shown).toLocaleString()}</span>`;
     }
+  } else if (spotOf_(loc.id)) {
+    // ★2026-08-07【バグ修正】スポット拠点はレジを使わないので報告が永久に立たない。
+    //   そのままでは下の「未報告」分岐に落ち、タップすると**リマインド送信の確認が出る**
+    //   （社長報告 2026-08-07「未回収をタップすると未報告のリマインドを送るか聞いてきた」）。
+    //   しかも送る相手が居ない（当日限りのバイトでLINE連携なし）＝押しても意味がない。
+    //   報告済みと同じ扱いにして回収モーダルへ直行させる。
+    status = 'reported';                            // リマインド「送信済」バッジも出さない
+    onclickAction = `openCashModal('${loc.id}')`;
+    hint = 'タップで残数・クーポン→締め';
+    amountHtml = `<span class="location-amount">スポット</span>`;
+  } else if (okibenOf_(loc.id)) {
+    // ★2026-08-07 置き弁も同じ（社長「置き弁も一緒」）。無人販売なので販売員の締めが無く、
+    //   報告ログに行が立たない → 未報告扱い → タップでリマインド確認、になっていた。
+    //   driver v2.4 で直したのは「モーダルを開けるようにする」ところで、
+    //   **カードのタップ判定は直っていなかった**。
+    status = 'reported';
+    onclickAction = `openCashModal('${loc.id}')`;
+    hint = 'タップで残数→回収';
+    amountHtml = `<span class="location-amount">置き弁</span>`;
   } else if (r && r.status === 'final') {
     status = 'reported';
     onclickAction = `openCashModal('${loc.id}')`;   // v1.7: タップで現金有高入力モーダル
