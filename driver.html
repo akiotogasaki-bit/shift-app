@@ -769,7 +769,7 @@ body {
 /* ── 現金有高テンキーモーダル（v1.7 NEW）── */
 .cash-modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:flex-end;justify-content:center;z-index:1000;}
 .cash-modal-bg.show{display:flex;}
-.cash-modal-card{background:#FFF;width:100%;max-width:480px;border-radius:20px 20px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom));animation:cashUp .18s ease;}
+.cash-modal-card{background:#FFF;width:100%;max-width:480px;border-radius:20px 20px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom));animation:cashUp .18s ease;max-height:calc(100dvh - 20px);overflow-y:auto;-webkit-overflow-scrolling:touch;}
 @keyframes cashUp{from{transform:translateY(100%);}to{transform:translateY(0);}}
 .cash-modal-title{font-size:17px;font-weight:700;color:var(--ink);text-align:center;margin-bottom:2px;}
 .cash-modal-expected{font-size:12px;color:var(--ink-mute);text-align:center;margin-bottom:12px;}
@@ -2036,6 +2036,9 @@ function renderCashModal_(net) {
   // ── ★2026-08-03 残数：商品ごとの行 ──
   const listEl = document.getElementById('cc-residual-list');
   if (listEl) {
+    // ★2026-08-07 スポットは追加UI（クーポン・売上確定・計算結果）で縦が長くなる。
+    //   商品リストの高さを抑えてテンキーが画面内に残るようにする。
+    listEl.style.maxHeight = ccIsSpot ? '20vh' : '';
     if (!ccItems.length) {
       listEl.innerHTML = residualLoaded
         ? '<div class="cc-empty">対象の商品がありません</div>'
