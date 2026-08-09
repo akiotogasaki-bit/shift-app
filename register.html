@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>お江戸弁当 レジ</title>
+<!-- register v3.21 (2026-08-07) 【納品数を＋/−で直すたびにドライバーへ通知が飛ぶ問題を修正】社長報告「レジで納品数の修正をする際に1個づつ通知が来る」。真因＝`ensureStartReported` に多重防止が無い。`goToRegisterFromConfirm` は `startReported=false` にしてから **await せずに** `sendStartReport()` を投げるため、送信が終わるまでの数秒はフラグが false のまま。その間に在庫モーダルで＋/−を押すと 1タップごとに `sendDeliveryUpdate → ensureStartReported → sendStartReport` が走り、GAS の `handleStart` が毎回 `_recordDeliveryChange_` を通して **担当ドライバーへ「📦 納品数の確認をお願いします」を押した個数だけ送っていた**。v3.20 で「全品0のまま開始 → +1ずつ直す」運用が現に起きていたので、症状が表に出た。※8/3 銀座の開始ログが7秒差で2行立っていたのも同じ経路（v3.14 では「1〜2種のみ」のケースだけ塞いでいた）。修正2点：①`ensureStartReported` を**単一飛行（single-flight）**にし、送信中なら同じ Promise を待たせて開始報告を必ず1回に畳む ②`goToRegisterFromConfirm` も `sendStartReport()` 直呼びをやめ `ensureStartReported()` 経由にする（飛行中フラグを立てるため。ここが直呼びのままだと①が効かない）。あわせてGAS側に保険（同じ拠点・同じ差分の承認依頼は10分以内なら LINE を投げ直さない＝`DAP_RENOTIFY_MIN`）。 -->
 <!-- register v3.20 (2026-08-07) 【配分表の読み込み前に送信できてしまう問題を修正】loadPlannedDelivery は async で GAS から配分の数字を取りに行く（2〜5秒）。その間に送信ボタンが押せるため、全品目0で開始報告が飛び、戻っても+1ずつしか直せない状況が複数拠点で発生。対策2段構え：(A) 配分表の取得完了まで送信ボタンを disabled＋「📋 配分表を読み込み中…」表示。成功・失敗とも finally で再有効化。(B) 全品目0で送信しようとした場合、取得未完了ならブロック、完了後でもconfirmで確認（通常ありえない状況への安全弁）。backToNormalStartReport の即時 btn.disabled=false も削除（loadPlannedDelivery の完了に任せる）。GAS変更なし。 -->
 <!-- register v3.15 (2026-08-06) 【置き弁（アスエネ）のギャラを締め画面に別枠表示し、現金で当日渡す】社長要望「虎ノ門でレジを閉めた時に、虎ノ門分とアスエネの分のインセンティブの金額が別でわかるようにしてね」→「アスエネ分のギャラも合わせて**現金で当日渡す**ので、その仕様に」。★背景＝従来はアスエネ分のギャラを発生させるために**その販売数を虎ノ門②のレジにPayPayで打ち込んで**いた。副作用が3つ ①虎ノ門②の販売数・完売率が過大→**翌週推奨が虎ノ門②に多く配る**二次被害 ②アプリのPayPayが実PayPayより過大→突合で毎回「アプリ過大＝現金抜き疑い」に出る ③アスエネの販売数が取れず増減判断ができない。メインGASに「置き弁ギャラログ」（販売数＝納品数−残数 から算出）を新設したのでレジに混ぜる必要が無くなった。★実装：締め画面「販売実績・ギャラ」に `res-okiben-row`、完了画面に `comp-okiben-row` を追加。`action=okibenGigForStaff` で**未払い分をすべて**取得（`fetchOkibenGig_`／`renderOkibenGig_`）。**『置き弁設定』の報酬対象者に設定された人にだけ出る**。★**当日分は原理的に出せない**（締める14〜16時にはドライバーの回収がまだで残数が入っていない・確定は夜間バッチ23:04）＝出るのは前営業日以前。社長決定「未払い分は全部まとめて渡す」＝休み明けは2〜3日ぶんまとまって出る（1日分ずつだと連休明けに未払いが溜まり続けて渡し切れないため）。★**「本日の合計」に足す**。この人はレジからこの額も一緒に抜いて持ち帰るので、ドライバーが回収時に数える実現金はその分減っている。**実現金＋ギャラ−開始金＝現金売上** が成り立つにはギャラ側に含まれている必要がある（含めないとその額だけ現金売上が過小に出る）。※画面の「現金差異」には影響しない＝あれは registerEnd（ギャラを抜く前）で見ているため。※res-incentive（虎ノ門②のぶん）には足さず**別の行**で見せる。★二重払い防止：渡した対象日を `okibenGigPaid` として **submitReport と同じ送信に載せる**。別APIで投げると締めは通ったのに支払記録だけ落ちる経路ができ、翌日また同じ未払い分が出て二重に渡る。GAS側 `okibenGigMarkPaid_` が「支払済日／支払拠点／支払方法」を立て、以後この人の締め画面にも給与明細（`spOkibenByUid_`）にも出ない。`calcFinal`/`submitFinal` を async 化（await 必須）。要: メインGAS（`getOkibenGigForStaff`／`okibenGigMarkPaid_`／submitReport の okibenGigPaid 受け／置き弁ギャラログ N〜Q列）。 -->
 <!-- register v3.14 (2026-08-05) 【レジ開始金は「後からいつでも直せる」に。不完全な開始ログ行も断つ】社長指示「先に納品数を入れるのは今後も発生するから、それも踏まえた運用に」。★実データで原因を特定：8/3 銀座の開始ログは **10:59:06 に「商品1種・合計1個（{"P001":1}）・開始金0」の行**、その**7秒後の 10:59:13 に「13種74個・開始金0」の行**が同一UIDで立っていた（ソフバン・ダイビルも同型／開始金0だった拠点と完全一致）。出どころは `sendDeliveryUpdate → ensureStartReported → sendStartReport` の経路で、`state.deliveryCount` がまだ1商品しか入っていない状態のまま開始報告が送られたもの。この不完全な行が先に立つと、後から入る販売員が引き継ぎ判定に落ちて開始金を打てなくなる。対応3点：①**在庫モーダルの「開始金庫」が0のとき「未入力 ▸ 入力する」と赤字表示**になり、タップすれば**レジを打っている途中でもいつでも開始金を入れ直せる**（`openRegisterStartFix` → `enterTakeoverStartCash(_, {fromRegister:true})` → `updateRegisterStart`）。引き継ぎ画面に頼らないので、先に納品数が入る運用でも必ず直せる ②`sendStartReport` は**納品数が1〜2種しか入っていない時は送信を中止**してトーストで知らせる（不完全な開始ログ行を作らない） ③開始金を入れたら金庫サマリーを即時再描画。GAS変更なし（`updateRegisterStart` は @452 で追加済み）。 -->
@@ -2320,8 +2321,11 @@ function showConfirm() {
 function goToRegisterFromConfirm() {
   try {
     // ★v3.1 開始報告を送信（await せず画面遷移。失敗時はバナー＋自動リトライで確実化）
+    // ★2026-08-07 v3.21 ここは ensureStartReported で投げる。直に sendStartReport を呼ぶと
+    //   飛行中フラグ（_startReportInFlight）が立たず、送信が終わる前に在庫モーダルで
+    //   ＋/−を押した分だけ開始報告が二重に飛ぶ（＝ドライバーへの承認依頼が連投される）。
     state.startReported = false;
-    sendStartReport();
+    ensureStartReported();
     renderCategoryTabs();
     renderProducts();
     showScreen('register');
@@ -2434,9 +2438,24 @@ async function sendStartReport() {
 }
 
 // 在庫更新の前に開始ログ行が確実に存在するよう保証
+// ★2026-08-07 v3.21【重要】単一飛行（single-flight）にする。
+//   goToRegisterFromConfirm は startReported=false にしてから **await せずに**
+//   sendStartReport() を投げる。送信が終わるまでの数秒は startReported が false のままで、
+//   その間に在庫モーダルで＋/−を押すと **1タップごとに開始報告が飛ぶ**。
+//   GAS側は handleStart のたびに _recordDeliveryChange_ を通すので、
+//   担当ドライバーへ「📦 納品数の確認をお願いします」が**押した個数だけ**届いていた
+//   （社長報告 2026-08-07「納品数の修正をする際に1個づつ通知が来る」）。
+//   8/3 銀座の開始ログが7秒差で2行立っていたのも同じ経路（v3.14 では1〜2種のケースだけ塞いだ）。
+//   送信中なら同じ Promise を待たせて、開始報告は必ず1回に畳む。
+let _startReportInFlight = null;
 async function ensureStartReported() {
   if (state.startReported) return true;
-  return await sendStartReport();
+  if (_startReportInFlight) return await _startReportInFlight;
+  _startReportInFlight = (async () => {
+    try { return await sendStartReport(); }
+    finally { _startReportInFlight = null; }
+  })();
+  return await _startReportInFlight;
 }
 
 // ═══════════════════════════════════════════════════════════════
