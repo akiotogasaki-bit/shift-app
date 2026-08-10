@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>お江戸弁当 レジ</title>
+<!-- register v3.22 (2026-08-10) 【配分表の取り込み中は次の画面へ行かせない／納品数10個以下ではレジを開始させない】社長指示「レジアプリの納品数の取り込みをしている間は次の画面に行けないように、また納品数0、もしくは10個以下でレジをスタートできないようにして欲しい」。★①v3.20 で送信ボタンを disabled にしたが、**ボタンの状態だけが頼り**だと Enter キー・二度押し・画面を作り直した直後などですり抜ける経路が残る。`btn-start-submit` のハンドラ**入口**でも `state.plannedDeliveryLoaded` を見て、未完了ならアラートで止めて確認画面へ行かせない（引き継ぎモードはこのガードの手前で return するので影響なし）。★②スタートの下限を新設。**お茶を除いた納品数の合計が `START_MIN_DELIVERY`(=10) 以下ならレジを開始できない**。v3.20 の「全品0なら confirm で確認」を置き換えた＝ダイアログは押して通せてしまい、現に「全品0のまま開始 → ＋1ずつ直す」が起きていたため、確認ではなく**完全に止める**。止めた時は最初の商品欄へフォーカス＋スクロールする。他社弁当（メンチカツ等）は配分表の既定値こそ入らないが実際に届くので合計に入れる。お茶を除くのは開始・締めの既存規則（v3.9 / v3.10）に揃えたもの。少数納品の日が出てきたら `START_MIN_DELIVERY` の数字だけ下げれば効く。★③あわせて `loadPlannedDelivery` の**デッドロック経路**を塞いだ：拠点未選択の時に try の手前で return しており finally が走らず、`plannedDeliveryLoaded` が false のまま固定＝送信ボタンが「📋 配分表を読み込み中…」で永久に押せなくなる（①のガードが入ると確実に詰まる）。ここで拾って「読み込み完了・配分表なし」に倒す。GAS変更なし。 -->
 <!-- register v3.21 (2026-08-07) 【納品数を＋/−で直すたびにドライバーへ通知が飛ぶ問題を修正】社長報告「レジで納品数の修正をする際に1個づつ通知が来る」。真因＝`ensureStartReported` に多重防止が無い。`goToRegisterFromConfirm` は `startReported=false` にしてから **await せずに** `sendStartReport()` を投げるため、送信が終わるまでの数秒はフラグが false のまま。その間に在庫モーダルで＋/−を押すと 1タップごとに `sendDeliveryUpdate → ensureStartReported → sendStartReport` が走り、GAS の `handleStart` が毎回 `_recordDeliveryChange_` を通して **担当ドライバーへ「📦 納品数の確認をお願いします」を押した個数だけ送っていた**。v3.20 で「全品0のまま開始 → +1ずつ直す」運用が現に起きていたので、症状が表に出た。※8/3 銀座の開始ログが7秒差で2行立っていたのも同じ経路（v3.14 では「1〜2種のみ」のケースだけ塞いでいた）。修正2点：①`ensureStartReported` を**単一飛行（single-flight）**にし、送信中なら同じ Promise を待たせて開始報告を必ず1回に畳む ②`goToRegisterFromConfirm` も `sendStartReport()` 直呼びをやめ `ensureStartReported()` 経由にする（飛行中フラグを立てるため。ここが直呼びのままだと①が効かない）。あわせてGAS側に保険（同じ拠点・同じ差分の承認依頼は10分以内なら LINE を投げ直さない＝`DAP_RENOTIFY_MIN`）。 -->
 <!-- register v3.20 (2026-08-07) 【配分表の読み込み前に送信できてしまう問題を修正】loadPlannedDelivery は async で GAS から配分の数字を取りに行く（2〜5秒）。その間に送信ボタンが押せるため、全品目0で開始報告が飛び、戻っても+1ずつしか直せない状況が複数拠点で発生。対策2段構え：(A) 配分表の取得完了まで送信ボタンを disabled＋「📋 配分表を読み込み中…」表示。成功・失敗とも finally で再有効化。(B) 全品目0で送信しようとした場合、取得未完了ならブロック、完了後でもconfirmで確認（通常ありえない状況への安全弁）。backToNormalStartReport の即時 btn.disabled=false も削除（loadPlannedDelivery の完了に任せる）。GAS変更なし。 -->
 <!-- register v3.15 (2026-08-06) 【置き弁（アスエネ）のギャラを締め画面に別枠表示し、現金で当日渡す】社長要望「虎ノ門でレジを閉めた時に、虎ノ門分とアスエネの分のインセンティブの金額が別でわかるようにしてね」→「アスエネ分のギャラも合わせて**現金で当日渡す**ので、その仕様に」。★背景＝従来はアスエネ分のギャラを発生させるために**その販売数を虎ノ門②のレジにPayPayで打ち込んで**いた。副作用が3つ ①虎ノ門②の販売数・完売率が過大→**翌週推奨が虎ノ門②に多く配る**二次被害 ②アプリのPayPayが実PayPayより過大→突合で毎回「アプリ過大＝現金抜き疑い」に出る ③アスエネの販売数が取れず増減判断ができない。メインGASに「置き弁ギャラログ」（販売数＝納品数−残数 から算出）を新設したのでレジに混ぜる必要が無くなった。★実装：締め画面「販売実績・ギャラ」に `res-okiben-row`、完了画面に `comp-okiben-row` を追加。`action=okibenGigForStaff` で**未払い分をすべて**取得（`fetchOkibenGig_`／`renderOkibenGig_`）。**『置き弁設定』の報酬対象者に設定された人にだけ出る**。★**当日分は原理的に出せない**（締める14〜16時にはドライバーの回収がまだで残数が入っていない・確定は夜間バッチ23:04）＝出るのは前営業日以前。社長決定「未払い分は全部まとめて渡す」＝休み明けは2〜3日ぶんまとまって出る（1日分ずつだと連休明けに未払いが溜まり続けて渡し切れないため）。★**「本日の合計」に足す**。この人はレジからこの額も一緒に抜いて持ち帰るので、ドライバーが回収時に数える実現金はその分減っている。**実現金＋ギャラ−開始金＝現金売上** が成り立つにはギャラ側に含まれている必要がある（含めないとその額だけ現金売上が過小に出る）。※画面の「現金差異」には影響しない＝あれは registerEnd（ギャラを抜く前）で見ているため。※res-incentive（虎ノ門②のぶん）には足さず**別の行**で見せる。★二重払い防止：渡した対象日を `okibenGigPaid` として **submitReport と同じ送信に載せる**。別APIで投げると締めは通ったのに支払記録だけ落ちる経路ができ、翌日また同じ未払い分が出て二重に渡る。GAS側 `okibenGigMarkPaid_` が「支払済日／支払拠点／支払方法」を立て、以後この人の締め画面にも給与明細（`spOkibenByUid_`）にも出ない。`calcFinal`/`submitFinal` を async 化（await 必須）。要: メインGAS（`getOkibenGigForStaff`／`okibenGigMarkPaid_`／submitReport の okibenGigPaid 受け／置き弁ギャラログ N〜Q列）。 -->
@@ -1558,6 +1559,12 @@ html, body { overscroll-behavior-y: contain; }
 <div class="toast" id="toast"></div>
 
 <script>
+// ★2026-08-10 v3.22【社長指示】この個数「以下」ではレジをスタートできない（お茶を除いた納品数の合計）。
+//   10 = 「納品数0、もしくは10個以下でレジをスタートできないように」。
+//   配分表が読めていない／入力が途中のまま開始してしまう事故を、確認ダイアログではなく完全に止める。
+//   本当に少数納品の日が出てきたらこの数字だけ下げる。
+const START_MIN_DELIVERY = 10;
+
 // ═══════════════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════════════
@@ -2173,7 +2180,20 @@ function renderDeliveryInputs() {
 // ═══════════════════════════════════════════════════════════════
 async function loadPlannedDelivery() {
   const note = document.getElementById('delivery-plan-note');
-  if (!state.location || !state.location.id) return;
+  // ★2026-08-10 v3.22 拠点が未選択の時は try の**手前**で return していたため finally が走らず、
+  //   plannedDeliveryLoaded が false のまま固定＝送信ボタンが「📋 配分表を読み込み中…」で
+  //   永久に押せなくなる経路があった（v3.22 で入口ガードも同じフラグを見るので確実に詰まる）。
+  //   ここで拾って「読み込みは終わった（配分表は無い）」に倒す。
+  if (!state.location || !state.location.id) {
+    state.plannedDeliveryLoaded = true;
+    const btn0 = document.getElementById('btn-start-submit');
+    if (btn0 && btn0.dataset.preloadText) {
+      btn0.textContent = btn0.dataset.preloadText;
+      delete btn0.dataset.preloadText;
+      btn0.disabled = false;
+    }
+    return;
+  }
   try {
     const url = `${state.GAS_URL}?action=getPlannedDelivery`
               + `&date=${encodeURIComponent(ppToday())}`
@@ -2231,6 +2251,15 @@ document.getElementById('btn-start-submit').addEventListener('click', () => {
   // ★2026-08-04 v3.12 引き継ぎモード＝開始金だけを送って終わり（納品数は前の人のものを使う）
   if (state.takeoverStartOnly) { submitTakeoverStartCash(); return; }
 
+  // ★2026-08-10 v3.22【社長指示】配分表の取り込み中は、次の画面へ絶対に行かせない。
+  //   v3.20 で送信ボタンを disabled にしたが、ボタンの状態だけが頼りだと
+  //   （Enterキー・二度押し・画面を作り直した直後など）すり抜ける経路が残る。
+  //   ハンドラの入口でも同じ条件を見て確実に止める。
+  if (!state.plannedDeliveryLoaded) {
+    alert('📋 配分表の納品数をまだ読み込み中です。\n\n数秒お待ちください。\n読み込みが終わると送信できるようになります。');
+    return;
+  }
+
   state.registerStart = parseInt(document.getElementById('register-start').value) || 0;
   // ★2026-08-04 v3.12 開始金0のまま開始させない。
   //   空欄で送ると0で通り、その日ずっと0が引き継がれて誰も直せなくなっていた。
@@ -2256,21 +2285,24 @@ document.getElementById('btn-start-submit').addEventListener('click', () => {
     alert('納品数の入力欄が表示されていませんでした。\n画面を作り直しましたので、納品数をご確認のうえ、もう一度送信してください。');
     return;
   }
-  // ★2026-08-07 v3.20【B案】全品0ガード。
-  //   配分表の読み込み前に送信ボタンを押せた場合（A案をすり抜けた時のフォールバック）、
-  //   全品目が0ということは通常あり得ない。警告して止める。
+  // ★2026-08-10 v3.22【社長指示】納品数が0、または合計10個以下ではレジをスタートさせない。
+  //   （v3.20 の「全品0なら confirm で確認」を置き換え。確認で通せると押して進んでしまうため
+  //     ダイアログではなく完全に止める＝社長決定「10個以下でスタートできないように」）
+  //   ・数えるのはお茶を除いた合計。お茶は配分調整の対象外で、レジの納品数としても
+  //     開始・締めの両方で除外している（v3.9 / v3.10）ので、ここでも同じ規則に揃える。
+  //   ・他社弁当（メンチカツ等）は配分表の既定値こそ入らないが実際に届く商品なので合計に入れる。
   {
-    const excl = state.plannedExcluded || {};
-    const nonExcluded = state.products.filter(p => !excl[String(p.id)] && String(p.name || '').indexOf('お茶') < 0);
-    const allZero = nonExcluded.length > 0 && nonExcluded.every(p => !(state.deliveryCount[p.id] || 0));
-    if (allZero) {
-      if (!state.plannedDeliveryLoaded) {
-        alert('配分表の読み込みがまだ完了していません。\n少し待ってからもう一度お試しください。');
-        return;
-      }
-      if (!confirm('⚠️ すべての納品数が 0 になっています。\n\n配分表の個数が読み込まれていない可能性があります。\n\n本当に0個で開始しますか？')) {
-        return;
-      }
+    const teaOf   = p => String(p.name || '').indexOf('お茶') >= 0;
+    const nonTea  = state.products.filter(p => !teaOf(p));
+    const total   = nonTea.reduce((s, p) => s + (Number(state.deliveryCount[p.id]) || 0), 0);
+    if (total <= START_MIN_DELIVERY) {
+      alert('⚠️ 納品数が ' + total + '個 しか入っていません。\n\n'
+          + '合計 ' + (START_MIN_DELIVERY + 1) + '個以上でないとレジを開始できません。\n\n'
+          + '実際に届いた個数を種類別に入力してください。\n'
+          + '（配分表の個数が入っていない場合は、画面を下まで確認してください）');
+      const first = nonTea[0] && document.getElementById(`delivery-${nonTea[0].id}`);
+      if (first) { first.focus(); first.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+      return;
     }
   }
   // ★2026-07-31 Phase B：配分表と違う数で始めるなら、その場で伝えておく（驚かせない）

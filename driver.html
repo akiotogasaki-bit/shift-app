@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v3.0 (2026-08-10) 【残数の内訳が全商品0個で出ていたのを修正】社長報告「残数の集計ができていない。種別の残数表示が全て0で表示されている」。★原因＝残数タブの「自分の残数（お茶除く）」をタップして開く『残数内訳』モーダル（`openBreakdown`）が、**残数タブの手入力欄 `res-<商品ID>` の value を読んでいた**。ところがその入力欄は v2.6（2026-08-05・社長指示「残数は回収時の合計で出しているから入力できないように」）で画面から削除済み。以後 `document.getElementById('res-…')` は常に null を返し、`?.value || 0` で**全商品が必ず0個**になっていた。上の大きい数字（`calculateMyExpectedResidual_`）は別ロジックなので正しく、**タップした内訳だけが0を並べる**状態。v2.8 の「自分の残数のタップ内訳は従来のまま（社長判断）」で据え置いた箇所がこれ。★修正＝内訳を上の数字と同じ材料から作り直した。拠点ごとに **納品数 ＋拠点間移動± −販売数** を商品単位で計算して足し上げる（`calcMyResidualDetail_` / 商品別の移動± `getMyMoveAdjustmentByLocProduct_` を新設）。マイナスはその商品だけ0で止める＝売れ過ぎの商品が他商品の残数を食わない。`calculateMyExpectedResidual_` もこの商品別合計に統一したので、**大きい数字と内訳の合計が必ず一致する**（従来は拠点単位で0止めしており過小に出る場合があった）。販売数の商品別内訳（productSalesJson）が無い拠点は商品別に割れないので、従来式の拠点合計を「内訳が取れない拠点」の1行にまとめて出す＝合計だけは必ず合う。全商品0の時は「担当拠点のレジ開始報告が入ると出ます」と理由を添える（0が並ぶだけだと故障に見えるため）。★あわせて「ドライバー別の回収入力（参考）」を非表示にした。出どころが同じく廃止済みの残数ログなので**全員が永久に0個**で並ぶだけで、社長の画面でも0が3行並んでいた。要素は残してあるので `#driver-list-wrap` の display:none を外せば復活する。GAS変更なし。 -->
 <!-- driver v2.9 (2026-08-07) 【移動の行き先を積んだ時点で決める／置き弁で移動の案内が出なかった不具合】社長「行き先は移動元から弁当を持った時点で確定している。２箇所の時も。ただ出発時点にどこに何を入れるかまで入力するのは面倒。これは最後の回収の時も一緒」。★従来＝行き先は**回収時にも出発登録時にも選べず**、移動タブの搬送中カードは常に「◯◯ → ？」。行き先は到着登録で初めて選ぶ設計だった（2026-08-05 の「移動先が2箇所ある」要望に合わせたもの）。★変更後＝回収モーダルの「🔄 移動」と移動タブの「出発を登録」の両方で、先に**行き先の拠点だけ**を選ぶ（複数タップ可・個数の内訳は入れない）。個数を入れるのは実際に下ろす時だけ。カードは「浜松町 → 田町 → 品川」と出る。到着登録は予定先がボタンで並び、**1箇所なら選択済みなので「ここで下ろす」を押すだけ**。2箇所目は残りが自動で次のカードになり、行き先も引き継ぐので選び直さなくていい（分割の仕組みは 2026-08-05 のまま）。決まっていない時は「行き先はあとで決める」で従来フローに落ちる。現場で変わった時は到着登録の「別の拠点に下ろす」で一覧から選べる。★行き先が**1箇所の時だけ**、出発時点で移動先の担当者へ「◯◯から△△が向かっています」とLINE通知（社長決定 2026-08-07。2箇所以上は内訳が未定なので出さない）。従来は到着登録を押すまで受け取り側に何も伝わらなかった。★あわせて社長報告③を修正：置き弁など残数照合ログに行が無い拠点では submitCollectionCheck が空振りして residualSaved=false になり、**移動タブへ飛ぶだけで案内トーストが一切出なかった**。案内を残数の記録可否から切り離し、必ず出すようにした（残数エラーと重なる時は3秒後に続けて出す＝showToast は前のトーストを置き換えるため）。★実装: 行き先ピッカー openDestPicker_/renderDestGrid_/toggleDest_/submitDestPick_/submitDestPickUndecided_、回収側 openCollectDestPicker_ + ccPlannedTo（confirmCash 冒頭で planned に控えを取る。途中の closeCashModal で空に戻るため）、到着側 renderArriveDest_/pickArriveDest_/arriveShowAll_ + _arriveToId_、出発側 submitDepart→_submitDepart2_。ピッカーは回収モーダル(z-index:1000)の上に出すため #mv-dest-modal を 1100 にしている。要: メインGAS @2026-08-07 以降（拠点間移動ログ23列目「予定先JSON」・startMove の plannedTo と事前通知・completeMove の分割で残りの予定先を引き継ぎ・getOpenMoves が plannedTo を返す・submitCollectionCheck が plannedTo を渡す）。 -->
 <!-- driver v2.8 (2026-08-06) 【残数タップの内訳をエリア別×種別に】社長要望「残数は今は回収時の残りをそのまま足す仕様だと思うけど、残数とタップするとエリア別で種別が出るようにして欲しい」。★従来＝「拠点合計」をタップすると**全社の商品別リスト1本**だけが出ていた（銀しゃけ11／唐揚げ12…）。どのエリアに何が残っているか分からないので、移動の出し手を探すのに使えなかった。★変更後＝エリア行（例「芝エリア 24個 5拠点」）が残数の多い順に並び、**タップでそのエリアの種別が開く**。開いた中に対象拠点名も小さく出す。一番残数が多いエリアだけ最初から開いた状態にする（回収中に真っ先に見たいのがそこなので）。開閉は `_openAreaRows` に保持し、30秒自動更新をまたいでも閉じない。★数字の出どころは従来と同じ（残数照合ログの拠点合算・お茶除外・締め後の持ち出しは差引済み）＝**合計は1個も変わらない**。エリアは拠点マスタの「エリア」列。空欄の拠点は「(エリア未設定)」にまとめる（記入漏れが数字から消えないように）。拠点の入力がまだ0件の時間帯は従来どおり全社の商品別リストに落ちる。★実装: `renderAllBreakdown_` / `toggleAreaDetail(添字)` を新設し `openAllBreakdown` は描画を委譲。エリア名ではなく**添字**で開閉するのは、エリア名に ' が入っても onclick が壊れないようにするため。★「自分の残数（計算上）」のタップ内訳は**従来のまま**（社長判断 2026-08-06）。要: メインGAS @2026-08-06 以降（getResidualSummary の locationAreas / buildResidualAreas_ / _oedoResidualByDate_ の rows.products）。 -->
 <!-- driver v2.9 (2026-08-07) 【スポット拠点：未回収をタップするとリマインド確認が出ていたのを修正】社長報告「未回収をタップすると未報告のリマインドを送るか聞いてきた」。★原因＝`renderLocationItem` の状態判定は報告ログ（`state.reportsByLoc`）だけを見ており、**スポット拠点はレジを使わないので報告が永久に立たない** → 最後の `else`（未報告）に落ちて `handleUnreportedTap`（リマインド送信の確認モーダル）が割り当たっていた。しかも**送る相手が居ない**（当日限りのバイトでLINE連携なし）ので押しても意味がない。★修正＝`spotOf_(loc.id)` の分岐を先に置き、報告済みと同じ扱いで `openCashModal` へ直行させる（リマインド「送信済」バッジも出ない）。金額欄は「スポット」と表示。★あわせて、同じ拠点が「🏪 本日のスポット拠点」と「未回収リスト」の2か所に出て紛らわしいので役割を明記：上は「タップで開始金を入力／直す」＋「残数・クーポンの入力は下の『未回収』から同じ拠点をタップ」。★**置き弁（アスエネ等）も同じ症状だった**（社長「置き弁も一緒」）。無人販売なので同じく報告が立たず、未報告扱いでリマインド確認が出ていた。ドライバー画面は置き弁拠点かどうかを知る手段が無かったので、**`getSpotToday` の応答に `okiben[]` を相乗り**させて（起動時fetchを増やさないため）`okibenOf_()` で判定し、同じく `openCashModal` へ直行させる（ヒント「タップで残数→回収」／金額欄「置き弁」）。取得に失敗した時は置き弁リストを**消さずに前回値を残す**（消すとカードが未報告に戻ってリマインドが復活するため）。**この置き弁対応だけメインGASの変更を含む**（`getSpotToday` に okiben 追加）。 -->
@@ -918,8 +919,15 @@ body {
         </div>
       </div>
       <!-- ★2026-08-03 下は「ドライバーが回収時に入力した数」。上の拠点合計とは別の数字なので明示する -->
-      <div style="color:rgba(255,255,255,.45);font-size:10px;margin-bottom:4px;">ドライバー別の回収入力（参考）</div>
-      <div id="driver-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+      <!-- ★2026-08-10 非表示にした。この行の出どころは「残数ログ」＝残数タブの手入力で、
+           v2.6（2026-08-05）でその入力欄を廃止したため**全員が永久に0個**で並ぶだけになっていた。
+           数字が0で並ぶと「集計が壊れている」ようにしか見えないので隠す。
+           要素そのものは loadResidualSummary が innerHTML を書くので残す（消すと例外になる）。
+           2次販売後の最終残数入力に転用する時は、この display:none を外せば復活する。 -->
+      <div id="driver-list-wrap" style="display:none;">
+        <div style="color:rgba(255,255,255,.45);font-size:10px;margin-bottom:4px;">ドライバー別の回収入力（参考）</div>
+        <div id="driver-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+      </div>
     </div>
 
     <div class="residual-summary" onclick="openBreakdown()" style="cursor:pointer;">
@@ -2648,28 +2656,83 @@ function getNonTeaSoldCount_(r) {
   return Number(r.soldCount) || 0;
 }
 
+// ★2026-08-10 商品別の納品数／販売数を素の {商品ID:個数} で取り出す。
+//   従来はお茶除外の**合計**しか作っておらず、種別の内訳が出せなかった。
+//   （getNonTeaDeliveryCount_ / getNonTeaSoldCount_ は合計版として従来どおり残す）
+function getDeliveryObj_(r) {
+  if (!r) return null;
+  if (r.deliveryCount && typeof r.deliveryCount === 'object') return r.deliveryCount;
+  if (r.deliveryCountJson) {
+    try { const o = JSON.parse(r.deliveryCountJson); if (o && typeof o === 'object') return o; } catch (e) {}
+  }
+  return null;
+}
+function getSoldObj_(r) {
+  if (!r || !r.productSalesJson) return null;   // 無い＝商品別に割れない（古いデータ）
+  try { const o = JSON.parse(r.productSalesJson); if (o && typeof o === 'object') return o; } catch (e) {}
+  return null;
+}
+
 /**
- * 「自分の」計算上残数 = Σ(納品 - 販売) お茶除外
- *   - スタート報告未の拠点はスキップ
- *   - 自分が当日担当（主担当/応援/代理いずれか優先表示されているドライバー）の拠点のみ集計
- *   - userIdで照合（state.todayAssignment.userId が一致するもの）
+ * ★2026-08-10 「自分の」計算上残数を**商品別**に出す。
+ *   拠点ごとに 納品数 ＋移動± −販売数 を商品単位で計算し、担当拠点ぶんを足し上げる。
+ *   ・マイナスはその商品だけ0で止める（他の商品の残数を食わないように）
+ *   ・お茶も byProduct には入れる（画面では「※合計外」として出し、合計には足さない）
+ *   ・productSalesJson が無い拠点は商品別に割れないので、従来式の拠点合計を unknown に積む
+ *     （合計だけは必ず合うようにする。内訳の末尾に「内訳が取れない拠点」として出す）
+ *   @return {{byProduct:Object, unknown:number, unknownLocs:Array}}
  */
-function calculateMyExpectedResidual_() {
+function calcMyResidualDetail_() {
+  const out = { byProduct: {}, unknown: 0, unknownLocs: [] };
   const myUid = String(state.userId || '');
-  if (!myUid) return 0;
-  const moveAdj = getMyMoveAdjustmentByLoc_();   // ★ v1.5：拠点移動の±を反映
-  let total = 0;
+  if (!myUid) return out;
+  const moveAdj    = getMyMoveAdjustmentByLocProduct_();
+  const moveAdjSum = getMyMoveAdjustmentByLoc_();
   (state.locations || []).forEach(loc => {
     const assign = state.todayAssignment[loc.id];
     if (!assign) return;
     if (String(assign.userId || '') !== myUid) return;
     const r = state.reportsByLoc[loc.id];
-    if (!r) return; // スタート報告未 → スキップ
-    const deliv = getNonTeaDeliveryCount_(r);
-    if (deliv <= 0) return;
-    const sold  = getNonTeaSoldCount_(r);
-    const mv    = moveAdj[loc.id] || 0;          // ★ v1.5：移動先+/移動元-
-    total += Math.max(0, deliv + mv - sold);
+    if (!r) return;                              // スタート報告未 → スキップ
+    if (getNonTeaDeliveryCount_(r) <= 0) return; // 納品0の拠点は従来どおり数えない
+
+    const deliv = getDeliveryObj_(r);
+    const sold  = getSoldObj_(r);
+    const mv    = moveAdj[loc.id] || {};
+
+    if (!deliv || !sold) {
+      // 商品別に割れない拠点は従来式（拠点合計）で積む
+      out.unknown += Math.max(0, getNonTeaDeliveryCount_(r) + (moveAdjSum[loc.id] || 0) - getNonTeaSoldCount_(r));
+      out.unknownLocs.push(loc.name || loc.id);
+      return;
+    }
+    const pids = {};
+    Object.keys(deliv).forEach(pid => { pids[String(pid)] = true; });
+    Object.keys(mv).forEach(pid => { pids[String(pid)] = true; });
+    Object.keys(pids).forEach(pid => {
+      const n = (Number(deliv[pid]) || 0) + (Number(mv[pid]) || 0) - (Number(sold[pid]) || 0);
+      if (n > 0) out.byProduct[pid] = (out.byProduct[pid] || 0) + n;
+    });
+  });
+  return out;
+}
+
+/**
+ * 「自分の」計算上残数 = Σ(納品 ＋移動± −販売) お茶除外
+ *   - スタート報告未の拠点はスキップ
+ *   - 自分が当日担当（主担当/応援/代理いずれか優先表示されているドライバー）の拠点のみ集計
+ *   - userIdで照合（state.todayAssignment.userId が一致するもの）
+ *   ★2026-08-10 商品別（calcMyResidualDetail_）の合計に統一した。
+ *     タップした内訳と大きい数字が必ず一致する。従来は拠点単位でまとめてマイナスを
+ *     0止めしていたので、売れ過ぎの商品が他商品の残数を食って過小に出ることがあった。
+ */
+function calculateMyExpectedResidual_() {
+  const det    = calcMyResidualDetail_();
+  const teaIds = getTeaIdSet_();
+  let total = det.unknown;
+  Object.keys(det.byProduct).forEach(pid => {
+    if (teaIds.has(String(pid))) return;         // お茶は合計に入れない
+    total += det.byProduct[pid];
   });
   return total;
 }
@@ -3122,21 +3185,49 @@ function restart() {
 // ═══════════════════════════════════════════════════════════════
 // 内訳モーダル
 // ═══════════════════════════════════════════════════════════════
+// ★2026-08-10【バグ修正】残数内訳が全商品0個で出ていた。
+//   原因＝ここは残数タブの手入力欄 `res-<商品ID>` の value を読んでいたが、
+//   その入力欄は v2.6（2026-08-05・社長指示「残数は入力できないように」）で
+//   画面から削除済み。以後 getElementById が常に null を返し、全品0が並んでいた。
+//   （v2.8 で「自分の残数のタップ内訳は従来のまま」と据え置いたのがここ）
+//   → 上に出ている「計算上 ◯個」と同じ材料＝納品数 ＋移動± −販売数 を
+//     商品別に計算して並べる。合計は必ず上の数字と一致する。
 function openBreakdown() {
-  const teaIds = state.products.filter(p => p.name.includes('お茶')).map(p => p.id);
-  const rows = state.products.map(p => {
-    const val    = parseInt(document.getElementById(`res-${p.id}`)?.value) || 0;
-    const isTea  = teaIds.includes(p.id);
-    return { name: p.name, val, isTea };
-  });
+  const teaIds = getTeaIdSet_();
+  const det    = calcMyResidualDetail_();
+  const list   = document.getElementById('breakdown-list');
 
-  document.getElementById('breakdown-list').innerHTML = rows.map(r => `
-    <div class="breakdown-row">
-      <span class="breakdown-name">${r.name}${r.isTea ? ' <small style="color:var(--ink-mute);font-size:11px;">※合計外</small>' : ''}</span>
-      <span class="${r.val > 0 ? 'breakdown-val' : 'breakdown-zero'}">${r.val}個</span>
-    </div>
-  `).join('');
+  let html = (state.products || []).map(p => {
+    const val   = Number(det.byProduct[String(p.id)]) || 0;
+    const isTea = teaIds.has(String(p.id));
+    return '<div class="breakdown-row">'
+      + '<span class="breakdown-name">' + esc_(p.name)
+      + (isTea ? ' <small style="color:var(--ink-mute);font-size:11px;">※合計外</small>' : '')
+      + '</span>'
+      + '<span class="' + (val > 0 ? 'breakdown-val' : 'breakdown-zero') + '">' + val + '個</span>'
+      + '</div>';
+  }).join('');
 
+  // 商品別に割れない拠点（販売数の商品別内訳が無い古いデータ）は、合計だけ別行で見せる。
+  // 黙って落とすと内訳の合計が上の数字と合わなくなるため。
+  if (det.unknown > 0) {
+    html += '<div class="breakdown-row">'
+      + '<span class="breakdown-name">内訳が取れない拠点'
+      + '<small style="color:var(--ink-mute);font-size:11px;"><br>' + esc_(det.unknownLocs.join(' / ')) + '</small>'
+      + '</span>'
+      + '<span class="breakdown-val">' + det.unknown + '個</span></div>';
+  }
+
+  // 全部0＝担当拠点の開始報告がまだ無い／既に全部売り切れ。理由が分からないと故障に見えるので添える。
+  const hasAny = det.unknown > 0 || Object.keys(det.byProduct).some(pid => det.byProduct[pid] > 0);
+  if (!hasAny) {
+    html = '<div style="padding:14px 2px;color:var(--ink-mute);font-size:12px;line-height:1.8;">'
+      + 'まだ数字が出ていません。<br>'
+      + '担当拠点の<b>レジ開始報告</b>が入ると、納品数から販売数を引いた残数がここに出ます。'
+      + '</div>' + html;
+  }
+
+  list.innerHTML = html;
   document.getElementById('breakdown-modal').classList.add('show');
 }
 
@@ -3813,6 +3904,27 @@ function getMyMoveAdjustmentByLoc_() {
     if (m.fromLocationId) adj[m.fromLocationId] = (adj[m.fromLocationId] || 0) - dq;
     const aq = sumQtyObj_(m.arriveQty);
     if (m.toLocationId && aq > 0) adj[m.toLocationId] = (adj[m.toLocationId] || 0) + aq;
+  });
+  return adj;
+}
+// ★2026-08-10 上の**商品別**版。残数の内訳（種別）を出すのに要る。
+//   拠点ID → { 商品ID: ±個数 }（移動元は −出発数／移動先は ＋到着数）。
+//   合計版と同じ規則で作る＝2つの数字がズレない。
+function getMyMoveAdjustmentByLocProduct_() {
+  const adj = {};
+  const add = (locId, obj, sign) => {
+    if (!locId || !obj || typeof obj !== 'object') return;
+    if (!adj[locId]) adj[locId] = {};
+    Object.keys(obj).forEach(pid => {
+      const q = Number(obj[pid]) || 0;
+      if (q <= 0) return;
+      adj[locId][String(pid)] = (adj[locId][String(pid)] || 0) + sign * q;
+    });
+  };
+  ((state.move && state.move.todayMoves) ? state.move.todayMoves : []).forEach(m => {
+    if (!m || m.status === '取消') return;
+    add(m.fromLocationId, m.departQty, -1);
+    add(m.toLocationId,   m.arriveQty, +1);
   });
   return adj;
 }
