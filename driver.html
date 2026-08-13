@@ -4886,12 +4886,23 @@ let svPickedLoc = '';
 function _svVehicle_() {
   return (state.locations || []).filter(l => l && String(l.area || '').trim() === '車載')[0] || null;
 }
+
+// ★2026-08-13 昼の画面（実況・補充先）に出してはいけない拠点。エリア列で見分ける。
+//   車載     … 巡回補充テスト用の仮想拠点。レジが無いので永久に「未報告」で居座る（v3.3）。
+//   二次販売 … **回収が終わったあとに売る拠点**（register.html?mode=2nd）。
+//              昼の時点で報告が無いのは当たり前なのに、そのままだと実況の一覧に
+//              「未報告」で3拠点並び、KPI「報告完了 n/N」の分母も3増えて**絶対に埋まらない**。
+//              車載と同じ理由なので同じ扱いにする。
+const RT_HIDDEN_AREAS = ['車載', '二次販売'];
+function rtHiddenLoc_(loc) {
+  return RT_HIDDEN_AREAS.indexOf(String((loc && loc.area) || '').trim()) >= 0;
+}
 // 補充先はピーク中に片手で押すので、自分の担当拠点だけに絞る（全30拠点を並べると押し間違える）。
 // 主担当が取れない時だけ全拠点に落とす＝ボタンが空になって詰むのを防ぐ。
 function _svTargets_() {
   const veh = _svVehicle_();
   const all = (state.locations || []).filter(l =>
-    l && l.id && l.name && String(l.area || '').trim() !== '車載' && (!veh || l.id !== veh.id));
+    l && l.id && l.name && !rtHiddenLoc_(l) && (!veh || l.id !== veh.id));   // ★2026-08-13 二次販売拠点にも補充しない
   const mine = all.filter(l => l.defaultDriverId && l.defaultDriverId === state.userId);
   return mine.length ? mine : all;
 }
@@ -5482,7 +5493,7 @@ function renderRealtime() {
   const reported   = rtAllData.filter(r => r.reported);
   // ★2026-08-13 v3.3 KPI「報告完了 n/N」の分母から車載（仮想拠点）を外す。
   //   車載にはレジが無いので永久に報告されず、入れたままだと n/N が絶対に埋まらない。
-  const totalLocs  = (rtMasterData.locations || []).filter(l => String(l.area || '').trim() !== '車載').length;
+  const totalLocs  = (rtMasterData.locations || []).filter(l => !rtHiddenLoc_(l)).length;   // ★2026-08-13 二次販売も分母から外す
   const totalSold  = reported.reduce((s, r) => s + (r.soldCount || 0), 0);
   const totalSales = reported.reduce((s, r) => s + (r.totalSales || 0), 0);
   const avgRate    = reported.length > 0
@@ -5621,7 +5632,7 @@ function renderRanking(reported) {
 function renderLocationTable() {
   // ★2026-08-13 v3.3 車載（巡回補充テスト用の仮想拠点）は販売しないので一覧から外す。
   //   残したままだと「未報告」が1行ずっと居座り、KPI の分母（報告完了 n/N）も1つ多く出る。
-  const locations = (rtMasterData.locations || []).filter(l => String(l.area || '').trim() !== '車載');
+  const locations = (rtMasterData.locations || []).filter(l => !rtHiddenLoc_(l));   // ★2026-08-13 二次販売も一覧から外す
   const dataMap   = {};
   rtAllData.forEach(r => { if (r.locationId) dataMap[r.locationId] = r; });
 
@@ -5822,7 +5833,7 @@ function renderAreaMatrix() {
   const areaMap = {};
   locations.forEach(loc => {
     const area = (loc.area || '').trim();
-    if (!area || area === '車載') return;
+    if (!area || rtHiddenLoc_(loc)) return;   // ★2026-08-13 車載に加えて二次販売も出さない
     if (!areaMap[area]) areaMap[area] = { locs: [], minOrder: 99999 };
     areaMap[area].locs.push(loc);
     areaMap[area].minOrder = Math.min(areaMap[area].minOrder, (loc.order != null ? loc.order : 9999));
