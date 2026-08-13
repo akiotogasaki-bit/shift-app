@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v3.2 (2026-08-13) 【回収を2段階に：①残った弁当を確認 → ②金庫を確認／金庫は必ず空から入力】社長指示（ミーティング）「回収時の残数確認の時、今は残数入力画面とレジ金入力画面が一緒に出ているのを、まず残数を入力して確認・次に金庫を入力して確認の2段階にしたい。金庫の金額は今はデフォルトで販売員の入力した数字が入っているけど、そこは0で確認してドライバーが数字を入れる仕様にする」。★従来＝1つのモーダルに商品別の残数リスト・レジの現金欄・テンキーが同居し、現金には**販売員の報告値（レジ最終金額−ギャラ）または前回のドライバー入力値が既定で入っていた**（v2.1 の「報告値を既定表示し違うときだけ直す」方式）。数える前に答えが見えているので、実際には**合わせて押すだけ**になり現金の食い違いが見つからない。★変更後＝`ccStep`（1=残った弁当／2=金庫）を新設。①では**金庫の欄そのものを出さない**。②では残数リストを畳んで合計だけ残し、合計行が「◀ 直す」＝①に戻る入口になる（数え直せる）。**確定（回収済み／🔄 移動／🛒 2次販売）は②でしか押せない**＝①で締められると2段階にした意味が無い。上部に「① 残った弁当 ▶ ② 金庫」の見出しを出して今どちらに居るかを示す。★`cashInput` の既定値を撤廃し**必ず空**にした。報告値は②で金額を打った時点で「報告との差」として出る（先に見せない・入れたあとに突き合わせる）。★例外2つ：**現金会計なしの置き弁（ccNoCash）は段階を分けない**（数える現金が無いので従来どおり1画面＝`step 0`）。**スポット拠点は「💰 売上を確定」を押した時点で自動的に②へ進む**（残数→クーポン→売上確定→あるべき現金→現金 という 2026-08-06 の社長決定の順番をそのまま維持。①では「先に売上を確定してください」と出して次へ進ませない）。★残数が取れなかった拠点は①で打つものが無いのでテンキーを隠す（出したままだと `ccField` が 'cash' のまま残り、金庫の額を①で打ててしまう）。実装: `ccStep` / `ccGoStep1()` / `ccGoStep2()` を新設、`renderCashModal_` の各要素に段階の出し分けを追加、HTML に `#cc-step-head` / `#cc-step1-btns` / `#cc-confirm-btns` / `#cc-total-back` を追加。GAS変更なし（送信する中身は従来と同じ）。 -->
 <!-- driver v3.1 (2026-08-13) 【車から補充】芝エリアの巡回補充テスト（8/17開始）用。社長設計＝各拠点にはほぼ確実に売れる数だけ置き、残りはドライバーが車に積んで巡回し、切れた拠点に刻みで足す。★通常の移動（出発→到着の2段階）と分けた理由＝補充が起きるのは12:00〜12:45＝全拠点が同時にピークを迎える時間帯で、2段階にすると現場で使われない。目の前で手渡すので「出発したが未着」が原理的に存在しない。→ **移動タブの「🚚 車から補充」から、拠点を1つ選ぶ→個数を入れる→送信の1画面で完結**。★記録は拠点間移動ログにそのまま書く（出発＝車載の仮想拠点／到着＝拠点／ステータス＝完結／登録経路='車載補充'）。こうすると `getMoveAdjByLocProduct_` が 車載− / 到着拠点+ を自動で合流するので、在庫・残数照合・PayPay突合の既存の仕組みが一切の改修なしで効く。車載の残りも「朝の積み込み（基本数マスタG列）− 出した分」で自動的に出る。★LINE通知は出さない（通常の移動は受け取り側への予告が要るが、ここは目の前で渡すので邪魔になる）。★ボタンは**車載の仮想拠点（拠点マスタのエリア列＝「車載」）を持つ人にだけ**表示。補充先は自分の担当拠点だけに絞る（全30拠点を並べるとピーク中に押し間違える／主担当が取れない時だけ全拠点に落とす）。拠点ボタンには設計で出した刻み（芝パーク10・浜松町スクエア5・ソフバン5・芝パーク②5・ソフバン②3）を出す。★モーダルは既存 `.modal-bg`（opacity制御・.show必須）と作りが違うので `.sv-modal-bg` を自前で持つ。要: メインGAS @2026-08-13 以降（`supplyFromVehicle` / `getVehicleStock` / `_vehicleLocationOf_` / `_vehicleRemaining_` / `setupVehicleLocation`）＋**拠点マスタに車載の行**（GASエディタで `setupVehicleLocation()` を1回実行）＋配分調整で車載に朝の積み込み数を入れること。→ [[芝エリア_巡回補充テスト_設計_2026-08-17]] -->
 <!-- driver v3.0 (2026-08-10)【残数の内訳が全商品0個で出ていたのを修正】社長報告「残数の集計ができていない。種別の残数表示が全て0で表示されている」。★原因＝残数タブの「自分の残数（お茶除く）」をタップして開く『残数内訳』モーダル（`openBreakdown`）が、**残数タブの手入力欄 `res-<商品ID>` の value を読んでいた**。ところがその入力欄は v2.6（2026-08-05・社長指示「残数は回収時の合計で出しているから入力できないように」）で画面から削除済み。以後 `document.getElementById('res-…')` は常に null を返し、`?.value || 0` で**全商品が必ず0個**になっていた。上の大きい数字（`calculateMyExpectedResidual_`）は別ロジックなので正しく、**タップした内訳だけが0を並べる**状態。v2.8 の「自分の残数のタップ内訳は従来のまま（社長判断）」で据え置いた箇所がこれ。★修正＝内訳を上の数字と同じ材料から作り直した。拠点ごとに **納品数 ＋拠点間移動± −販売数** を商品単位で計算して足し上げる（`calcMyResidualDetail_` / 商品別の移動± `getMyMoveAdjustmentByLocProduct_` を新設）。マイナスはその商品だけ0で止める＝売れ過ぎの商品が他商品の残数を食わない。`calculateMyExpectedResidual_` もこの商品別合計に統一したので、**大きい数字と内訳の合計が必ず一致する**（従来は拠点単位で0止めしており過小に出る場合があった）。販売数の商品別内訳（productSalesJson）が無い拠点は商品別に割れないので、従来式の拠点合計を「内訳が取れない拠点」の1行にまとめて出す＝合計だけは必ず合う。全商品0の時は「担当拠点のレジ開始報告が入ると出ます」と理由を添える（0が並ぶだけだと故障に見えるため）。★あわせて「ドライバー別の回収入力（参考）」を非表示にした。出どころが同じく廃止済みの残数ログなので**全員が永久に0個**で並ぶだけで、社長の画面でも0が3行並んでいた。要素は残してあるので `#driver-list-wrap` の display:none を外せば復活する。GAS変更なし。 -->
 <!-- driver v2.9 (2026-08-07) 【移動の行き先を積んだ時点で決める／置き弁で移動の案内が出なかった不具合】社長「行き先は移動元から弁当を持った時点で確定している。２箇所の時も。ただ出発時点にどこに何を入れるかまで入力するのは面倒。これは最後の回収の時も一緒」。★従来＝行き先は**回収時にも出発登録時にも選べず**、移動タブの搬送中カードは常に「◯◯ → ？」。行き先は到着登録で初めて選ぶ設計だった（2026-08-05 の「移動先が2箇所ある」要望に合わせたもの）。★変更後＝回収モーダルの「🔄 移動」と移動タブの「出発を登録」の両方で、先に**行き先の拠点だけ**を選ぶ（複数タップ可・個数の内訳は入れない）。個数を入れるのは実際に下ろす時だけ。カードは「浜松町 → 田町 → 品川」と出る。到着登録は予定先がボタンで並び、**1箇所なら選択済みなので「ここで下ろす」を押すだけ**。2箇所目は残りが自動で次のカードになり、行き先も引き継ぐので選び直さなくていい（分割の仕組みは 2026-08-05 のまま）。決まっていない時は「行き先はあとで決める」で従来フローに落ちる。現場で変わった時は到着登録の「別の拠点に下ろす」で一覧から選べる。★行き先が**1箇所の時だけ**、出発時点で移動先の担当者へ「◯◯から△△が向かっています」とLINE通知（社長決定 2026-08-07。2箇所以上は内訳が未定なので出さない）。従来は到着登録を押すまで受け取り側に何も伝わらなかった。★あわせて社長報告③を修正：置き弁など残数照合ログに行が無い拠点では submitCollectionCheck が空振りして residualSaved=false になり、**移動タブへ飛ぶだけで案内トーストが一切出なかった**。案内を残数の記録可否から切り離し、必ず出すようにした（残数エラーと重なる時は3秒後に続けて出す＝showToast は前のトーストを置き換えるため）。★実装: 行き先ピッカー openDestPicker_/renderDestGrid_/toggleDest_/submitDestPick_/submitDestPickUndecided_、回収側 openCollectDestPicker_ + ccPlannedTo（confirmCash 冒頭で planned に控えを取る。途中の closeCashModal で空に戻るため）、到着側 renderArriveDest_/pickArriveDest_/arriveShowAll_ + _arriveToId_、出発側 submitDepart→_submitDepart2_。ピッカーは回収モーダル(z-index:1000)の上に出すため #mv-dest-modal を 1100 にしている。要: メインGAS @2026-08-07 以降（拠点間移動ログ23列目「予定先JSON」・startMove の plannedTo と事前通知・completeMove の分割で残りの予定先を引き継ぎ・getOpenMoves が plannedTo を返す・submitCollectionCheck が plannedTo を渡す）。 -->
@@ -834,6 +835,15 @@ body {
 .cash-modal-btn.second{background:#D97706;color:#FFF;}
 .cash-modal-btn.move:disabled,.cash-modal-btn.second:disabled{opacity:.45;}
 .cc-kind-hint{font-size:11px;color:var(--ink-mute);text-align:center;margin-top:8px;line-height:1.5;}
+/* ★2026-08-13 回収を2段階に（①残った弁当 → ②金庫）※社長指示 */
+.cash-modal-btn.next{background:var(--blue);color:#FFF;}
+.cash-modal-btn.next:disabled{opacity:.45;}
+.cc-step-head{display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:10px;font-size:12px;font-weight:700;}
+.cc-step-head .cc-step-on{color:#FFF;background:var(--blue);border-radius:999px;padding:4px 12px;}
+.cc-step-head .cc-step-off{color:var(--ink-mute);background:#EEF0F3;border-radius:999px;padding:4px 12px;}
+.cc-step-head .cc-step-arrow{color:var(--ink-mute);font-size:11px;}
+.cc-total.tappable{cursor:pointer;border:2px solid #BFD8C4;}
+.cc-total .cc-total-back{font-size:11px;font-weight:700;color:var(--green);margin-left:6px;}
 /* 搬送中カードのボタン（持ち帰り） */
 .mv-card-btn.takeback{background:#FDE8D0;color:#8A4B00;}
 /* ★2026-08-13 車から補充（芝エリアの巡回補充テスト）
@@ -1893,6 +1903,11 @@ let ccCouponYen = 300;    // 1枚あたりの値引き額。サーバーが返�
 let ccSpot     = null;    // spotPreview の結果 {sales, payPay, payPayFound, expectCash, ...}
 let ccSpotBusy = false;
 
+// ★2026-08-13 回収は2段階（社長指示）。①残数を入力して確認 → ②金庫を入力して確認。
+//   1 = 残った弁当を数える／2 = 金庫の現金を数える。
+//   現金会計なしの置き弁（ccNoCash）は数える現金が無いので段階を分けない（従来どおり1画面）。
+let ccStep = 1;
+
 function ccToday_() {
   const d = new Date();
   const p = n => String(n).padStart(2, '0');
@@ -1911,10 +1926,11 @@ async function openCashModal(id) {
   cashModalLocId = id;
   const net = hasReport ? ((r.registerEnd || 0) - (r.totalSalary || 0)) : 0;
 
-  // 現金：既に実額があればそれ、無ければ報告からの想定額を既定値にする
-  cashInput = hasReport
-    ? ((r.actualCash !== null && r.actualCash !== undefined) ? String(r.actualCash) : String(net))
-    : '';
+  // ★2026-08-13 金庫は**必ず空**から始める（社長指示「0で確認してドライバーが数字を入れる」）。
+  //   従来は販売員の報告値（レジ最終金額−ギャラ）や前回のドライバー入力値を既定値で入れていたが、
+  //   数える前に答えが見えていると「合わせて押すだけ」になり、現金の食い違いが見つからない。
+  //   報告値は残数を確認したあと（②の画面で金額を入れた時点）に「報告との差」として出る。
+  cashInput = '';
   // 残数：まず空。既定値（申告残数／置き弁は納品数）を取りに行って入れる
   ccItems = [];
   ccVals  = {};
@@ -1927,9 +1943,10 @@ async function openCashModal(id) {
   ccSpot     = null;
   ccSpotBusy = false;
   ccField = 'cash';
+  ccStep  = 1;             // ★2026-08-13 必ず①残数から始める
 
   document.getElementById('cash-modal-title').textContent = loc.name;
-  document.getElementById('cash-modal-expected').textContent = '報告の数字が入っています。違う場合だけ直してください。';
+  document.getElementById('cash-modal-expected').textContent = '報告の残数が入っています。違う場合だけ直してください。';
   const listEl0 = document.getElementById('cc-residual-list');
   if (listEl0) listEl0.innerHTML = '<div class="cc-empty">読み込み中…</div>';
   renderCashModal_(net);
@@ -2028,6 +2045,9 @@ async function runSpotPreview() {
     if (!j || !j.ok) throw new Error((j && j.error) || '売上を計算できませんでした');
     ccSpot  = j.spot;
     ccField = 'cash';                            // 次に打つのはレジの現金
+    // ★2026-08-13 スポットは「売上を確定」が①の締めくくり＝そのまま②（金庫）へ進める。
+    //   社長が決めた順番（残数→クーポン→売上確定→あるべき現金→現金）と一致する。
+    ccStep  = 2;
   } catch (e) {
     // ★黙って進めない。ここで止めないと「0円のPayPayで締めた」が起きる。
     showToast('売上の計算に失敗しました：' + (e && e.message ? e.message : e), 'error', 5000);
@@ -2046,6 +2066,27 @@ function closeCashModal() {
   ccField = 'cash';
   ccPlannedTo = [];   // ★2026-08-07 次の拠点に行き先を持ち越さない
   ccIsSpot = false; ccCoupon = '0'; ccSpot = null; ccSpotBusy = false;   // ★2026-08-06
+  ccStep = 1;         // ★2026-08-13 次に開く拠点も①残数から
+}
+
+// ★2026-08-13 ①残数 → ②金庫 の行き来（社長指示：まず残数を確認、次に金庫を確認）
+function ccGoStep2() {
+  // スポットは「売上を確定」を通さないと、あるべき現金が出ないので進ませない（2026-08-06 の順番を維持）
+  if (ccIsSpot && !ccSpot) { showToast('先に「売上を確定」を押してください', 'error'); return; }
+  ccStep  = 2;
+  ccField = 'cash';
+  refreshCashModal_();
+  // 金庫の欄が画面に入るように先頭へ戻す（残数リストが長いと下に隠れるため）
+  const card = document.querySelector('#cash-modal-bg .cash-modal-card');
+  if (card) card.scrollTop = 0;
+}
+function ccGoStep1() {
+  ccStep = 1;
+  // 残数の1品目に戻す。品目が無い拠点（取得できなかった等）は編集対象なし。
+  ccField = (ccItems.length ? 'p:' + ccItems[0].productId : 'cash');
+  refreshCashModal_();
+  const card = document.querySelector('#cash-modal-bg .cash-modal-card');
+  if (card) card.scrollTop = 0;
 }
 // ★2026-08-01 テンキーは「選択中の欄」を編集する／2026-08-03 残数は商品ごと
 function ccPid_()      { return ccField.indexOf('p:') === 0 ? ccField.slice(2) : null; }
@@ -2088,9 +2129,27 @@ function refreshCashModal_() {
   renderCashModal_(net);
 }
 function renderCashModal_(net) {
+  // ── ★2026-08-13 段階（社長指示：まず残数を入力して確認、次に金庫を入力して確認）──
+  //   step 0 … 段階を分けない。現金会計なしの置き弁は数える現金が無いので従来どおり1画面。
+  //   step 1 … 残った弁当を数える（金庫の欄は出さない）
+  //   step 2 … 金庫の現金を数える（残数はリストを畳んで合計だけ残す）
+  const step    = ccNoCash ? 0 : ccStep;
+  const onStep1 = (step === 1);
+  const onStep2 = (step === 2);
+
+  const headEl = document.getElementById('cc-step-head');
+  if (headEl) {
+    headEl.style.display = (step === 0) ? 'none' : '';
+    headEl.innerHTML = onStep1
+      ? '<span class="cc-step-on">① 残った弁当</span><span class="cc-step-arrow">▶</span><span class="cc-step-off">② 金庫</span>'
+      : '<span class="cc-step-off">① 残った弁当</span><span class="cc-step-arrow">▶</span><span class="cc-step-on">② 金庫</span>';
+  }
+
   // ── ★2026-08-03 残数：商品ごとの行 ──
   const listEl = document.getElementById('cc-residual-list');
   if (listEl) {
+    // ★2026-08-13 ②金庫の画面では残数リストを畳む（合計だけ残す＝数え直したい時は合計をタップ）
+    listEl.style.display = onStep2 ? 'none' : '';
     // ★2026-08-07 スポットは追加UI（クーポン・売上確定・計算結果）で縦が長くなる。
     //   商品リストの高さを抑えてテンキーが画面内に残るようにする。
     listEl.style.maxHeight = ccIsSpot ? '20vh' : '';
@@ -2114,6 +2173,14 @@ function renderCashModal_(net) {
   const tot = ccResidualTotal_();
   const tv = document.getElementById('cc-residual-total');
   if (tv) tv.textContent = (tot === null) ? '—' : tot.toLocaleString();
+  // ★2026-08-13 ②の画面では合計行が「①に戻る」入口になる（数え直したい時のため）
+  const totBox = document.getElementById('cc-total-box');
+  if (totBox) {
+    totBox.classList.toggle('tappable', onStep2);
+    totBox.onclick = onStep2 ? ccGoStep1 : null;
+  }
+  const totBack = document.getElementById('cc-total-back');
+  if (totBack) totBack.style.display = onStep2 ? '' : 'none';
 
   const cv = document.getElementById('cc-val-cash');
   if (cv) cv.textContent = cashInput === '' ? '—' : parseInt(cashInput, 10).toLocaleString();
@@ -2121,7 +2188,8 @@ function renderCashModal_(net) {
   // ── ★2026-08-06 スポット拠点：クーポン欄 → 売上確定ボタン → 計算結果 ──
   const cpF = document.getElementById('cc-field-coupon');
   if (cpF) {
-    cpF.style.display = ccIsSpot ? '' : 'none';
+    // ★2026-08-13 クーポンは残数と同じ①の作業（②は金庫だけに絞る）
+    cpF.style.display = (ccIsSpot && !onStep2) ? '' : 'none';
     cpF.classList.toggle('active', ccField === 'coupon');
     const n = (ccCoupon === '') ? 0 : (parseInt(ccCoupon, 10) || 0);
     const cpV = document.getElementById('cc-val-coupon');
@@ -2134,7 +2202,7 @@ function renderCashModal_(net) {
   }
   const runBtn = document.getElementById('cc-spot-run');
   if (runBtn) {
-    runBtn.style.display = (ccIsSpot && !ccSpot) ? '' : 'none';
+    runBtn.style.display = (ccIsSpot && !ccSpot && !onStep2) ? '' : 'none';
     runBtn.disabled = ccSpotBusy || (tot === null && !ccFound);
     runBtn.textContent = ccSpotBusy ? 'PayPayを取り込み中…' : '💰 売上を確定してPayPayを取り込む';
   }
@@ -2168,7 +2236,8 @@ function renderCashModal_(net) {
   if (fc) {
     // ★現金会計なしの置き弁では現金欄そのものを出さない
     // ★スポットは「あるべき現金」を出してから現金を入れる（社長が決めた順番）
-    fc.style.display = ccNoCash ? 'none' : (ccIsSpot && !ccSpot ? 'none' : '');
+    // ★2026-08-13 ①残数の画面では金庫の欄を出さない（先に残数だけを確定させる）
+    fc.style.display = (ccNoCash || onStep1) ? 'none' : (ccIsSpot && !ccSpot ? 'none' : '');
     fc.classList.toggle('active', ccField === 'cash');
   }
 
@@ -2181,9 +2250,18 @@ function renderCashModal_(net) {
   : (ccField === 'coupon') ? val.toLocaleString() + '枚（−¥' + (val * ccCouponYen).toLocaleString() + '）'
   :                          val.toLocaleString() + '個';
 
+  // ★2026-08-13 ①の画面で打つものが無い拠点（残数が取れなかった等）はテンキーを隠す。
+  //   出したままだと ccField が 'cash' のまま残っており、金庫の額を①で打ててしまう。
+  const padHidden = onStep1 && !ccItems.length && !ccIsSpot;
+  const padEl  = document.querySelector('#cash-modal-bg .cash-pad');
+  const dispEl = document.getElementById('cash-modal-display');
+  if (padEl)  padEl.style.display  = padHidden ? 'none' : '';
+  if (dispEl) dispEl.style.display = padHidden ? 'none' : '';
+
   // ── 現金の誤差だけ、現金欄を触っている時に出す ──
+  // ★2026-08-13 ①の画面では出さない（金庫はまだ数えていない）
   const diffEl = document.getElementById('cash-modal-diff');
-  if (ccField === 'cash' && cashInput !== '') {
+  if (!onStep1 && ccField === 'cash' && cashInput !== '') {
     // ★2026-08-06 スポットは「報告」が無いので、あるべき現金と突き合わせる。
     //   差額 ＝ (実現金 − レジ開始金) − あるべき現金
     const diff = (ccIsSpot && ccSpot)
@@ -2208,12 +2286,32 @@ function renderCashModal_(net) {
   // ★2026-08-05 残った弁当があるときは「移動／2次販売」の2択にする（社長要望）。
   //   残数0なら運ぶものが無いので従来どおり「回収済みにする」1つ。
   const hasResidual = (tot !== null && tot > 0);
+
+  // ★2026-08-13 ①の画面は「残数を確認 ▶」だけ。確定（回収済み／移動／2次販売）は②で押す。
+  //   ①で確定できてしまうと2段階にした意味が無くなる（金庫を数えずに締められる）。
+  const step1Box = document.getElementById('cc-step1-btns');
+  if (step1Box) step1Box.style.display = onStep1 ? '' : 'none';
+  const nextBtn = document.getElementById('cc-btn-next');
+  if (nextBtn) {
+    // スポットは「売上を確定」を通してからでないと、あるべき現金が出ない（2026-08-06 の順番）
+    nextBtn.disabled = (ccIsSpot && !ccSpot);
+    nextBtn.textContent = (ccIsSpot && !ccSpot) ? '先に売上を確定' : '残数を確認 ▶';
+  }
+  const confirmBox = document.getElementById('cc-confirm-btns');
+  if (confirmBox) confirmBox.style.display = onStep1 ? 'none' : '';
+  // ②では「キャンセル」を「◀ 残数に戻る」に変える（数え直しの導線）
+  const cancelBtn = document.getElementById('cc-btn-cancel');
+  if (cancelBtn) {
+    cancelBtn.textContent = onStep2 ? '◀ 残数に戻る' : 'キャンセル';
+    cancelBtn.onclick     = onStep2 ? ccGoStep1 : closeCashModal;
+  }
+
   const okBtn = document.getElementById('cash-modal-ok');
-  if (okBtn) { okBtn.style.display = hasResidual ? 'none' : ''; okBtn.disabled = okDisabled; }
+  if (okBtn) { okBtn.style.display = (onStep1 || hasResidual) ? 'none' : ''; okBtn.disabled = okDisabled; }
   const kindBox  = document.getElementById('cc-kind-btns');
   const kindHint = document.getElementById('cc-kind-hint');
-  if (kindBox)  kindBox.style.display  = hasResidual ? '' : 'none';
-  if (kindHint) kindHint.style.display = hasResidual ? '' : 'none';
+  if (kindBox)  kindBox.style.display  = (!onStep1 && hasResidual) ? '' : 'none';
+  if (kindHint) kindHint.style.display = (!onStep1 && hasResidual) ? '' : 'none';
   ['cc-btn-move', 'cc-btn-second'].forEach(function (bid) {
     const b = document.getElementById(bid);
     if (b) b.disabled = okDisabled;
@@ -4474,15 +4572,17 @@ async function cancelMove_(moveId) {
 <div class="cash-modal-bg" id="cash-modal-bg" onclick="if(event.target===this)closeCashModal()">
   <div class="cash-modal-card">
     <div class="cash-modal-title" id="cash-modal-title">拠点</div>
-    <div class="cash-modal-expected" id="cash-modal-expected">報告の数字が入っています。違う場合だけ直してください。</div>
-    <!-- ★2026-08-01 残数と現金を1画面で確認する（社長決定：報告値を既定表示し、違うときだけ直す）
-         欄をタップすると、その欄をテンキーで直せる。 -->
+    <div class="cash-modal-expected" id="cash-modal-expected">報告の残数が入っています。違う場合だけ直してください。</div>
+    <!-- ★2026-08-13 回収は2段階（社長指示）：①残数を入力して確認 → ②金庫を入力して確認。
+         金庫は必ず空から始める（報告値を既定で入れない）。 -->
+    <div class="cc-step-head" id="cc-step-head"></div>
     <!-- ★2026-08-03 残った弁当は商品ごとに入力する（行をタップして数字を打つ） -->
     <div class="cc-list" id="cc-residual-list"></div>
-    <div class="cc-total">
+    <div class="cc-total" id="cc-total-box">
       <span class="cc-label">残った弁当 合計</span>
       <span class="cc-value" id="cc-residual-total">—</span>
       <span class="cc-unit">個</span>
+      <span class="cc-total-back" id="cc-total-back" style="display:none;">◀ 直す</span>
     </div>
     <!-- ★2026-08-06 スポット拠点（driver v2.8）：クーポン → 売上確定 → PayPay → あるべき現金 → 現金
          社長が決めた順番。あるべき現金が出るまでレジの現金欄は出さない。 -->
@@ -4514,8 +4614,13 @@ async function cancelMove_(moveId) {
       <button class="cash-key" onclick="cashKey('0')">0</button>
       <button class="cash-key util" onclick="cashBackspace()">⌫</button>
     </div>
-    <div class="cash-modal-btns">
+    <!-- ★2026-08-13 ①残った弁当の画面：ここでは確定させない（次へ進むだけ） -->
+    <div class="cash-modal-btns" id="cc-step1-btns" style="display:none;">
       <button class="cash-modal-btn cancel" onclick="closeCashModal()">キャンセル</button>
+      <button class="cash-modal-btn next" id="cc-btn-next" onclick="ccGoStep2()">残数を確認 ▶</button>
+    </div>
+    <div class="cash-modal-btns" id="cc-confirm-btns">
+      <button class="cash-modal-btn cancel" id="cc-btn-cancel" onclick="closeCashModal()">キャンセル</button>
       <button class="cash-modal-btn ok" id="cash-modal-ok" onclick="confirmCash('')" disabled>回収済みにする</button>
     </div>
     <!-- ★2026-08-05 残った弁当があるときは行き先を選んで送る（社長要望：報告ではなく「移動」「2次販売」の2種類）
