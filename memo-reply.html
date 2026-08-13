@@ -689,8 +689,23 @@ document.getElementById('complete-modal').addEventListener('click', function(e) 
 // 戻る
 // ─────────────────────────────────────────
 function goBack() {
-  // dashboard.htmlに戻る（同じLIFF内なので普通に遷移）
-  window.location.href = 'dashboard.html#tab=memos';
+  // 呼び出し元に戻る（同じLIFF内なので普通に遷移）
+  window.location.href = resolveBackTarget();
+}
+
+// v2026-08-13 ⑤dashboard解体：戻り先を呼び出し元で切り替える
+// sales-report から来た時（?from=sales-report）は営業アプリの申し送りタブへ。
+// 付いていなければ従来どおり dashboard.html へ戻る（＝既存の挙動は変わらない）。
+function resolveBackTarget() {
+  const hashParams  = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  const queryParams = new URLSearchParams(window.location.search);
+  const liffState   = queryParams.get('liff.state') || hashParams.get('liff.state');
+  const params = liffState
+    ? new URLSearchParams(liffState.startsWith('?') ? liffState.substring(1) : liffState)
+    : queryParams;
+  return params.get('from') === 'sales-report'
+    ? 'sales-report.html#tab=memos'
+    : 'dashboard.html#tab=memos';
 }
 
 // ─────────────────────────────────────────
