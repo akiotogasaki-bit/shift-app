@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<!-- お江戸弁当 PWA検証ページ pwa-test.html v1.0 (2026-08-13)
+     【アプリ再編⑥ PWA化の前に、iOSで白黒つけるためだけの使い捨てページ】
+     ★何を確かめるか＝「ホーム画面から起動したスタンドアロンのPWAの中で、
+       LINEログインの外部リダイレクトが行って帰ってこれるか」。
+       ホーム画面PWAは外部サイトへ飛ぶとSafariに抜け出して戻ってこない挙動が過去にあり、
+       liff.login() はまさにその外部リダイレクト。ここが通らないと方針A（外部ブラウザ＋PWA）は成立しない。
+     ★なぜ専用ページが要るか＝driver/register/sales-report には
+       `apple-mobile-web-app-capable` も manifest も**入っていない**（2026-08-13 実測）。
+       そのままホーム画面に追加してもiOSはただのSafariショートカットとして開くので、
+       危ないところを一通りもせずに必ず「動いた」に見えてしまう（＝偽の合格）。
+       このページはスタンドアロン宣言を持つので、本物の入れ物の中で試せる。
+     ★本番アプリは1バイトも触っていない。検証が終わったらこの3ファイルは消してよい
+       （pwa-test.html / pwa-test.webmanifest / pwa-test-icon.png）。
+     ★LIFFのログイン自体は driver.html に任せる。liff.login() の redirectUri は
+       「LIFFのエンドポイントURLで始まること」という制約があり、このページを戻り先には指定できないため。
+       driver.html は自分自身がエンドポイントなので確実に通る。＝**本物のLIFF・本物のドライバーアプリで試す。** -->
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PWA検証 - お江戸弁当</title>
+
+<!-- ★これが本体。iOSはこのメタタグを見てスタンドアロン（Safari のUIが消えた状態）で開く -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="PWA検証">
+<link rel="apple-touch-icon" href="pwa-test-icon.png">
+<!-- Android/Chrome 用。iOS 15.4以降はこちらの display:standalone も見る -->
+<link rel="manifest" href="pwa-test.webmanifest">
+<meta name="theme-color" content="#C0392B">
+
+<style>
+:root{
+  --red:#C0392B; --green:#27AE60; --gold:#B8860B;
+  --ink:#1C1C1C; --ink-soft:#4A4A4A; --ink-mute:#8A8A8A;
+  --cream:#FDF8F0; --white:#fff; --border:#E0D5C5;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{
+  font-family:'Hiragino Sans','Hiragino Kaku Gothic ProN',sans-serif;
+  background:var(--cream); color:var(--ink);
+  padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+  -webkit-text-size-adjust:100%;
+}
+.wrap{max-width:520px;margin:0 auto;padding:18px 16px 40px;}
+h1{font-size:17px;font-weight:700;margin-bottom:4px;}
+.sub{font-size:12px;color:var(--ink-mute);margin-bottom:18px;line-height:1.5;}
+
+.step{font-size:11px;font-weight:700;color:var(--ink-mute);letter-spacing:.1em;margin:22px 0 8px;display:flex;align-items:center;gap:8px;}
+.step::after{content:'';flex:1;height:1px;background:var(--border);}
+
+.verdict{border-radius:14px;padding:20px 18px;text-align:center;color:#fff;margin-bottom:10px;}
+.verdict .big{font-size:26px;font-weight:700;line-height:1.2;}
+.verdict .small{font-size:12px;margin-top:8px;opacity:.9;line-height:1.5;}
+.verdict.ok{background:var(--green);}
+.verdict.ng{background:var(--red);}
+.verdict.wait{background:#8A8A8A;}
+
+.card{background:var(--white);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:10px;}
+.card h2{font-size:13px;font-weight:700;margin-bottom:8px;}
+.card p{font-size:13px;color:var(--ink-soft);line-height:1.65;}
+.card p + p{margin-top:8px;}
+.card ol{font-size:13px;color:var(--ink-soft);line-height:1.7;padding-left:1.3em;}
+.card ol li + li{margin-top:6px;}
+b{font-weight:700;color:var(--ink);}
+
+.btn{
+  display:block;width:100%;padding:16px;border:none;border-radius:12px;
+  background:var(--red);color:#fff;font-size:16px;font-weight:700;
+  font-family:inherit;cursor:pointer;margin-top:4px;
+}
+.btn:disabled{background:#C9C9C2;cursor:default;}
+.btn.sub2{background:var(--white);color:var(--ink-soft);border:1px solid var(--border);font-size:13px;font-weight:500;padding:11px;margin-top:8px;}
+
+.kv{display:flex;justify-content:space-between;gap:10px;font-size:12px;padding:7px 0;border-bottom:1px dashed var(--border);}
+.kv:last-child{border-bottom:none;}
+.kv .k{color:var(--ink-mute);flex:none;}
+.kv .v{font-family:'Courier New',monospace;text-align:right;word-break:break-all;}
+
+.warn{background:#F9F0D0;border-left:3px solid var(--gold);border-radius:0 8px 8px 0;padding:11px 14px;font-size:12px;color:var(--ink-soft);line-height:1.6;margin-bottom:10px;}
+.judge{background:var(--ink);color:#fff;border-radius:12px;padding:16px;font-size:13px;line-height:1.7;}
+.judge .t{font-size:12px;color:rgba(255,255,255,.55);letter-spacing:.08em;margin-bottom:10px;}
+.judge .row{display:flex;gap:10px;align-items:flex-start;margin-top:8px;}
+.judge .mark{flex:none;font-weight:700;}
+.judge .mark.o{color:#6EE7A0;}
+.judge .mark.x{color:#F09A93;}
+/* ★ 上の b{color:var(--ink)} が効くと黒背景に黒文字で消えるので打ち消す */
+.judge b{color:#fff;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>PWA検証（アプリ再編⑥）</h1>
+  <p class="sub">
+    確かめることは1つだけ。<b>ホーム画面から起動したアプリの中で、LINEログインが行って帰ってこれるか。</b><br>
+    5分で終わります。本番のアプリには一切影響しません。
+  </p>
+
+  <!-- ───────── ステップ1 ───────── -->
+  <div class="step">STEP 1　いまの起動モード</div>
+
+  <div class="verdict wait" id="mode-card">
+    <div class="big" id="mode-big">判定中…</div>
+    <div class="small" id="mode-small">&nbsp;</div>
+  </div>
+
+  <div class="card" id="howto" style="display:none;">
+    <h2>ホーム画面に追加してから開いてください</h2>
+    <ol>
+      <li>この画面の下（または上）の<b>共有ボタン</b>（□に↑）をタップ</li>
+      <li><b>「ホーム画面に追加」</b>を選ぶ → 追加</li>
+      <li><b>Safariを閉じて</b>、ホーム画面にできた赤いアイコンから開き直す</li>
+    </ol>
+    <p style="margin-top:10px;color:var(--ink-mute);font-size:12px;">
+      ※ Safariのまま進めても意味がありません。Safariの中ではリダイレクトは必ず成功するので、
+      危ないところを通らずに「動いた」に見えてしまいます。
+    </p>
+  </div>
+
+  <!-- ───────── ステップ2 ───────── -->
+  <div class="step">STEP 2　LINEログインの往復</div>
+
+  <div class="warn" id="once-warn">
+    ⚠ <b>本番は最初の1回だけです。</b>一度ログインすると次からは素通りしてしまい、判定になりません。<br>
+    やり直したい時は、<b>ホーム画面のアイコンを削除して STEP 1 からやり直して</b>ください（ホーム画面PWAはSafariとログイン情報が別管理です）。
+  </div>
+
+  <button class="btn" id="go" disabled>LINEログインを試す</button>
+  <button class="btn sub2" id="reset" style="display:none;">この端末の記録を消してやり直す</button>
+
+  <div class="card" style="margin-top:12px;">
+    <h2>押すとどうなるか</h2>
+    <p>
+      本物のドライバーアプリ（<b>driver.html</b>）へ移動します。ログインしていなければ
+      LINEのログイン画面へ飛び、承認するとドライバーアプリに戻ってきます。
+    </p>
+    <p style="color:var(--ink-mute);font-size:12px;">
+      ※ 検証用の偽物ではなく、現場で使っている本物のアプリ・本物のLIFFで試します。
+      回収の操作は何もしないで大丈夫です（開くだけ）。
+    </p>
+  </div>
+
+  <!-- ───────── 判定基準 ───────── -->
+  <div class="step">これが判定</div>
+
+  <div class="judge">
+    <div class="t">戻ってきた画面を見て、どちらか教えてください</div>
+    <div class="row">
+      <span class="mark o">合格</span>
+      <span>ドライバーアプリが<b>アドレスバーの無い全画面</b>で出た（＝ホーム画面アプリの中に戻れた）</span>
+    </div>
+    <div class="row">
+      <span class="mark x">不合格</span>
+      <span><b>Safariが開いて</b>その中にドライバーアプリが出た／白画面で止まる／ログインが終わらない</span>
+    </div>
+  </div>
+
+  <!-- ───────── 参考情報 ───────── -->
+  <div class="step">参考（読まなくて大丈夫）</div>
+  <div class="card">
+    <div class="kv"><span class="k">display-mode</span><span class="v" id="d-dm">—</span></div>
+    <div class="kv"><span class="k">navigator.standalone</span><span class="v" id="d-ns">—</span></div>
+    <div class="kv"><span class="k">前回テストした時刻</span><span class="v" id="d-last">—</span></div>
+    <div class="kv"><span class="k">UA</span><span class="v" id="d-ua">—</span></div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+'use strict';
+
+var LAST_KEY = 'oedo_pwatest_last';
+
+// ── スタンドアロン判定 ──
+// iOSは navigator.standalone / 標準は matchMedia('(display-mode: standalone)')
+var mqStandalone = window.matchMedia && window.matchMedia('(display-mode: standalone)').matches;
+var iosStandalone = (window.navigator.standalone === true);
+var isStandalone = !!(mqStandalone || iosStandalone);
+
+var card  = document.getElementById('mode-card');
+var big   = document.getElementById('mode-big');
+var small = document.getElementById('mode-small');
+var go    = document.getElementById('go');
+
+if (isStandalone) {
+  card.className = 'verdict ok';
+  big.textContent = '✓ スタンドアロン';
+  small.textContent = 'ホーム画面のアイコンから起動できています。STEP 2 へ進んでください。';
+  go.disabled = false;
+} else {
+  card.className = 'verdict ng';
+  big.textContent = 'ブラウザで開いています';
+  small.textContent = 'このままではテストになりません。下の手順でホーム画面に追加してから開き直してください。';
+  document.getElementById('howto').style.display = 'block';
+  go.disabled = true;
+}
+
+// ── 参考情報 ──
+function fmt(ts){
+  if(!ts) return 'なし（今回が初回）';
+  var d = new Date(Number(ts));
+  return d.getFullYear() + '/' + ('0'+(d.getMonth()+1)).slice(-2) + '/' + ('0'+d.getDate()).slice(-2)
+       + ' ' + ('0'+d.getHours()).slice(-2) + ':' + ('0'+d.getMinutes()).slice(-2);
+}
+var last = null;
+try { last = localStorage.getItem(LAST_KEY); } catch(e) {}
+document.getElementById('d-dm').textContent   = mqStandalone ? 'standalone' : 'browser';
+document.getElementById('d-ns').textContent   = (window.navigator.standalone === undefined) ? 'undefined' : String(window.navigator.standalone);
+document.getElementById('d-last').textContent = fmt(last);
+document.getElementById('d-ua').textContent   = navigator.userAgent;
+
+if (last) {
+  document.getElementById('reset').style.display = 'block';
+}
+
+// ── STEP 2：本物のドライバーアプリへ ──
+// liff.login() の redirectUri は「LIFFのエンドポイントURLで始まること」という制約があるため、
+// このページを戻り先には指定できない。driver.html は自分自身がエンドポイントなので確実に通る。
+document.getElementById('go').addEventListener('click', function(){
+  try { localStorage.setItem(LAST_KEY, String(Date.now())); } catch(e) {}
+  window.location.href = 'driver.html';
+});
+
+document.getElementById('reset').addEventListener('click', function(){
+  try { localStorage.removeItem(LAST_KEY); } catch(e) {}
+  document.getElementById('d-last').textContent = 'なし（今回が初回）';
+  document.getElementById('reset').style.display = 'none';
+  alert('このページの記録は消しました。\n\nただしLINEのログイン状態は消えていません。\n本当の初回に戻すには、ホーム画面のアイコンを削除して\nSTEP 1 からやり直してください。');
+});
+
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "name": "PWA検証 - お江戸弁当",
+  "short_name": "PWA検証",
+  "start_url": "./pwa-test.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#FDF8F0",
+  "theme_color": "#C0392B",
+  "icons": [
+    { "src": "./pwa-test-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" }
+  ]
+}
