@@ -1,5 +1,6 @@
 <!DOCTYPE html>
-<!-- driver v3.0 (2026-08-10) 【残数の内訳が全商品0個で出ていたのを修正】社長報告「残数の集計ができていない。種別の残数表示が全て0で表示されている」。★原因＝残数タブの「自分の残数（お茶除く）」をタップして開く『残数内訳』モーダル（`openBreakdown`）が、**残数タブの手入力欄 `res-<商品ID>` の value を読んでいた**。ところがその入力欄は v2.6（2026-08-05・社長指示「残数は回収時の合計で出しているから入力できないように」）で画面から削除済み。以後 `document.getElementById('res-…')` は常に null を返し、`?.value || 0` で**全商品が必ず0個**になっていた。上の大きい数字（`calculateMyExpectedResidual_`）は別ロジックなので正しく、**タップした内訳だけが0を並べる**状態。v2.8 の「自分の残数のタップ内訳は従来のまま（社長判断）」で据え置いた箇所がこれ。★修正＝内訳を上の数字と同じ材料から作り直した。拠点ごとに **納品数 ＋拠点間移動± −販売数** を商品単位で計算して足し上げる（`calcMyResidualDetail_` / 商品別の移動± `getMyMoveAdjustmentByLocProduct_` を新設）。マイナスはその商品だけ0で止める＝売れ過ぎの商品が他商品の残数を食わない。`calculateMyExpectedResidual_` もこの商品別合計に統一したので、**大きい数字と内訳の合計が必ず一致する**（従来は拠点単位で0止めしており過小に出る場合があった）。販売数の商品別内訳（productSalesJson）が無い拠点は商品別に割れないので、従来式の拠点合計を「内訳が取れない拠点」の1行にまとめて出す＝合計だけは必ず合う。全商品0の時は「担当拠点のレジ開始報告が入ると出ます」と理由を添える（0が並ぶだけだと故障に見えるため）。★あわせて「ドライバー別の回収入力（参考）」を非表示にした。出どころが同じく廃止済みの残数ログなので**全員が永久に0個**で並ぶだけで、社長の画面でも0が3行並んでいた。要素は残してあるので `#driver-list-wrap` の display:none を外せば復活する。GAS変更なし。 -->
+<!-- driver v3.1 (2026-08-13) 【車から補充】芝エリアの巡回補充テスト（8/17開始）用。社長設計＝各拠点にはほぼ確実に売れる数だけ置き、残りはドライバーが車に積んで巡回し、切れた拠点に刻みで足す。★通常の移動（出発→到着の2段階）と分けた理由＝補充が起きるのは12:00〜12:45＝全拠点が同時にピークを迎える時間帯で、2段階にすると現場で使われない。目の前で手渡すので「出発したが未着」が原理的に存在しない。→ **移動タブの「🚚 車から補充」から、拠点を1つ選ぶ→個数を入れる→送信の1画面で完結**。★記録は拠点間移動ログにそのまま書く（出発＝車載の仮想拠点／到着＝拠点／ステータス＝完結／登録経路='車載補充'）。こうすると `getMoveAdjByLocProduct_` が 車載− / 到着拠点+ を自動で合流するので、在庫・残数照合・PayPay突合の既存の仕組みが一切の改修なしで効く。車載の残りも「朝の積み込み（基本数マスタG列）− 出した分」で自動的に出る。★LINE通知は出さない（通常の移動は受け取り側への予告が要るが、ここは目の前で渡すので邪魔になる）。★ボタンは**車載の仮想拠点（拠点マスタのエリア列＝「車載」）を持つ人にだけ**表示。補充先は自分の担当拠点だけに絞る（全30拠点を並べるとピーク中に押し間違える／主担当が取れない時だけ全拠点に落とす）。拠点ボタンには設計で出した刻み（芝パーク10・浜松町スクエア5・ソフバン5・芝パーク②5・ソフバン②3）を出す。★モーダルは既存 `.modal-bg`（opacity制御・.show必須）と作りが違うので `.sv-modal-bg` を自前で持つ。要: メインGAS @2026-08-13 以降（`supplyFromVehicle` / `getVehicleStock` / `_vehicleLocationOf_` / `_vehicleRemaining_` / `setupVehicleLocation`）＋**拠点マスタに車載の行**（GASエディタで `setupVehicleLocation()` を1回実行）＋配分調整で車載に朝の積み込み数を入れること。→ [[芝エリア_巡回補充テスト_設計_2026-08-17]] -->
+<!-- driver v3.0 (2026-08-10)【残数の内訳が全商品0個で出ていたのを修正】社長報告「残数の集計ができていない。種別の残数表示が全て0で表示されている」。★原因＝残数タブの「自分の残数（お茶除く）」をタップして開く『残数内訳』モーダル（`openBreakdown`）が、**残数タブの手入力欄 `res-<商品ID>` の value を読んでいた**。ところがその入力欄は v2.6（2026-08-05・社長指示「残数は回収時の合計で出しているから入力できないように」）で画面から削除済み。以後 `document.getElementById('res-…')` は常に null を返し、`?.value || 0` で**全商品が必ず0個**になっていた。上の大きい数字（`calculateMyExpectedResidual_`）は別ロジックなので正しく、**タップした内訳だけが0を並べる**状態。v2.8 の「自分の残数のタップ内訳は従来のまま（社長判断）」で据え置いた箇所がこれ。★修正＝内訳を上の数字と同じ材料から作り直した。拠点ごとに **納品数 ＋拠点間移動± −販売数** を商品単位で計算して足し上げる（`calcMyResidualDetail_` / 商品別の移動± `getMyMoveAdjustmentByLocProduct_` を新設）。マイナスはその商品だけ0で止める＝売れ過ぎの商品が他商品の残数を食わない。`calculateMyExpectedResidual_` もこの商品別合計に統一したので、**大きい数字と内訳の合計が必ず一致する**（従来は拠点単位で0止めしており過小に出る場合があった）。販売数の商品別内訳（productSalesJson）が無い拠点は商品別に割れないので、従来式の拠点合計を「内訳が取れない拠点」の1行にまとめて出す＝合計だけは必ず合う。全商品0の時は「担当拠点のレジ開始報告が入ると出ます」と理由を添える（0が並ぶだけだと故障に見えるため）。★あわせて「ドライバー別の回収入力（参考）」を非表示にした。出どころが同じく廃止済みの残数ログなので**全員が永久に0個**で並ぶだけで、社長の画面でも0が3行並んでいた。要素は残してあるので `#driver-list-wrap` の display:none を外せば復活する。GAS変更なし。 -->
 <!-- driver v2.9 (2026-08-07) 【移動の行き先を積んだ時点で決める／置き弁で移動の案内が出なかった不具合】社長「行き先は移動元から弁当を持った時点で確定している。２箇所の時も。ただ出発時点にどこに何を入れるかまで入力するのは面倒。これは最後の回収の時も一緒」。★従来＝行き先は**回収時にも出発登録時にも選べず**、移動タブの搬送中カードは常に「◯◯ → ？」。行き先は到着登録で初めて選ぶ設計だった（2026-08-05 の「移動先が2箇所ある」要望に合わせたもの）。★変更後＝回収モーダルの「🔄 移動」と移動タブの「出発を登録」の両方で、先に**行き先の拠点だけ**を選ぶ（複数タップ可・個数の内訳は入れない）。個数を入れるのは実際に下ろす時だけ。カードは「浜松町 → 田町 → 品川」と出る。到着登録は予定先がボタンで並び、**1箇所なら選択済みなので「ここで下ろす」を押すだけ**。2箇所目は残りが自動で次のカードになり、行き先も引き継ぐので選び直さなくていい（分割の仕組みは 2026-08-05 のまま）。決まっていない時は「行き先はあとで決める」で従来フローに落ちる。現場で変わった時は到着登録の「別の拠点に下ろす」で一覧から選べる。★行き先が**1箇所の時だけ**、出発時点で移動先の担当者へ「◯◯から△△が向かっています」とLINE通知（社長決定 2026-08-07。2箇所以上は内訳が未定なので出さない）。従来は到着登録を押すまで受け取り側に何も伝わらなかった。★あわせて社長報告③を修正：置き弁など残数照合ログに行が無い拠点では submitCollectionCheck が空振りして residualSaved=false になり、**移動タブへ飛ぶだけで案内トーストが一切出なかった**。案内を残数の記録可否から切り離し、必ず出すようにした（残数エラーと重なる時は3秒後に続けて出す＝showToast は前のトーストを置き換えるため）。★実装: 行き先ピッカー openDestPicker_/renderDestGrid_/toggleDest_/submitDestPick_/submitDestPickUndecided_、回収側 openCollectDestPicker_ + ccPlannedTo（confirmCash 冒頭で planned に控えを取る。途中の closeCashModal で空に戻るため）、到着側 renderArriveDest_/pickArriveDest_/arriveShowAll_ + _arriveToId_、出発側 submitDepart→_submitDepart2_。ピッカーは回収モーダル(z-index:1000)の上に出すため #mv-dest-modal を 1100 にしている。要: メインGAS @2026-08-07 以降（拠点間移動ログ23列目「予定先JSON」・startMove の plannedTo と事前通知・completeMove の分割で残りの予定先を引き継ぎ・getOpenMoves が plannedTo を返す・submitCollectionCheck が plannedTo を渡す）。 -->
 <!-- driver v2.8 (2026-08-06) 【残数タップの内訳をエリア別×種別に】社長要望「残数は今は回収時の残りをそのまま足す仕様だと思うけど、残数とタップするとエリア別で種別が出るようにして欲しい」。★従来＝「拠点合計」をタップすると**全社の商品別リスト1本**だけが出ていた（銀しゃけ11／唐揚げ12…）。どのエリアに何が残っているか分からないので、移動の出し手を探すのに使えなかった。★変更後＝エリア行（例「芝エリア 24個 5拠点」）が残数の多い順に並び、**タップでそのエリアの種別が開く**。開いた中に対象拠点名も小さく出す。一番残数が多いエリアだけ最初から開いた状態にする（回収中に真っ先に見たいのがそこなので）。開閉は `_openAreaRows` に保持し、30秒自動更新をまたいでも閉じない。★数字の出どころは従来と同じ（残数照合ログの拠点合算・お茶除外・締め後の持ち出しは差引済み）＝**合計は1個も変わらない**。エリアは拠点マスタの「エリア」列。空欄の拠点は「(エリア未設定)」にまとめる（記入漏れが数字から消えないように）。拠点の入力がまだ0件の時間帯は従来どおり全社の商品別リストに落ちる。★実装: `renderAllBreakdown_` / `toggleAreaDetail(添字)` を新設し `openAllBreakdown` は描画を委譲。エリア名ではなく**添字**で開閉するのは、エリア名に ' が入っても onclick が壊れないようにするため。★「自分の残数（計算上）」のタップ内訳は**従来のまま**（社長判断 2026-08-06）。要: メインGAS @2026-08-06 以降（getResidualSummary の locationAreas / buildResidualAreas_ / _oedoResidualByDate_ の rows.products）。 -->
 <!-- driver v2.9 (2026-08-07) 【スポット拠点：未回収をタップするとリマインド確認が出ていたのを修正】社長報告「未回収をタップすると未報告のリマインドを送るか聞いてきた」。★原因＝`renderLocationItem` の状態判定は報告ログ（`state.reportsByLoc`）だけを見ており、**スポット拠点はレジを使わないので報告が永久に立たない** → 最後の `else`（未報告）に落ちて `handleUnreportedTap`（リマインド送信の確認モーダル）が割り当たっていた。しかも**送る相手が居ない**（当日限りのバイトでLINE連携なし）ので押しても意味がない。★修正＝`spotOf_(loc.id)` の分岐を先に置き、報告済みと同じ扱いで `openCashModal` へ直行させる（リマインド「送信済」バッジも出ない）。金額欄は「スポット」と表示。★あわせて、同じ拠点が「🏪 本日のスポット拠点」と「未回収リスト」の2か所に出て紛らわしいので役割を明記：上は「タップで開始金を入力／直す」＋「残数・クーポンの入力は下の『未回収』から同じ拠点をタップ」。★**置き弁（アスエネ等）も同じ症状だった**（社長「置き弁も一緒」）。無人販売なので同じく報告が立たず、未報告扱いでリマインド確認が出ていた。ドライバー画面は置き弁拠点かどうかを知る手段が無かったので、**`getSpotToday` の応答に `okiben[]` を相乗り**させて（起動時fetchを増やさないため）`okibenOf_()` で判定し、同じく `openCashModal` へ直行させる（ヒント「タップで残数→回収」／金額欄「置き弁」）。取得に失敗した時は置き弁リストを**消さずに前回値を残す**（消すとカードが未報告に戻ってリマインドが復活するため）。**この置き弁対応だけメインGASの変更を含む**（`getSpotToday` に okiben 追加）。 -->
@@ -835,6 +836,33 @@ body {
 .cc-kind-hint{font-size:11px;color:var(--ink-mute);text-align:center;margin-top:8px;line-height:1.5;}
 /* 搬送中カードのボタン（持ち帰り） */
 .mv-card-btn.takeback{background:#FDE8D0;color:#8A4B00;}
+/* ★2026-08-13 車から補充（芝エリアの巡回補充テスト）
+   ピークの真っ最中に片手で押すので、ボタンは大きく・タップ数は最小にする。 */
+.sv-open-btn{display:block;width:100%;padding:16px;margin:0 0 14px;border:0;border-radius:12px;
+  background:#0f7b3f;color:#fff;font-size:17px;font-weight:700;letter-spacing:.02em;}
+.sv-open-btn:active{background:#0b6032;}
+.sv-open-btn .sv-left{display:block;margin-top:4px;font-size:13px;font-weight:500;opacity:.9;}
+/* 既存の .modal-bg は opacity 制御（.show が要る）で作りが違うため、ここは自前で持つ。 */
+.sv-modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;
+  align-items:center;justify-content:center;z-index:1200;padding:12px;}
+.sv-modal-bg.show{display:flex;}
+.sv-box{background:#fff;border-radius:14px;padding:16px;max-width:520px;width:100%;
+  max-height:88vh;overflow-y:auto;}
+.sv-close{width:100%;margin-top:8px;padding:12px;border:1px solid #d5d8dd;border-radius:10px;
+  background:#fff;font-size:15px;color:#555;}
+.sv-stock{background:#eef7f1;border:1px solid #cfe6d8;border-radius:10px;padding:10px 12px;
+  font-size:14px;color:#14532d;margin-bottom:12px;}
+.sv-stock b{font-size:18px;}
+.sv-sec{font-size:13px;font-weight:700;color:#555;margin:14px 0 8px;}
+.sv-loc-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
+.sv-loc-btn{padding:14px 8px;border:2px solid #d5d8dd;border-radius:10px;background:#fff;
+  font-size:15px;font-weight:700;color:#333;text-align:center;line-height:1.3;}
+.sv-loc-btn .sv-step{display:block;margin-top:3px;font-size:12px;font-weight:600;color:#0f7b3f;}
+.sv-loc-btn.on{border-color:#0f7b3f;background:#0f7b3f;color:#fff;}
+.sv-loc-btn.on .sv-step{color:#d8f3e3;}
+.sv-send{width:100%;padding:16px;border:0;border-radius:12px;background:#0f7b3f;color:#fff;
+  font-size:17px;font-weight:700;margin-top:14px;}
+.sv-send:disabled{background:#b9c2bc;}
 </style>
 </head>
 <body>
@@ -1034,6 +1062,11 @@ body {
       <div class="mv-title">🔄 拠点移動</div>
       <div class="mv-date" id="mv-date">--</div>
     </div>
+    <!-- ★2026-08-13 車から補充。車載の仮想拠点がある人にだけ出す（芝エリアのテスト中は戸賀崎さんだけ）。 -->
+    <button class="sv-open-btn" id="sv-open-btn" style="display:none;" onclick="openSupplyModal()">
+      🚚 車から補充
+      <span class="sv-left" id="sv-open-left">車載の残り 読み込み中…</span>
+    </button>
     <div class="mv-form">
       <div class="mv-section-title">出発登録（このトラックから持ち出す分）</div>
       <div class="mv-field">
@@ -1050,6 +1083,20 @@ body {
     <div class="mv-list">
       <div class="mv-list-title">本日の移動</div>
       <div id="mv-today-list"><p class="mv-empty">なし</p></div>
+    </div>
+  </div>
+
+  <!-- ★2026-08-13 車から補充のモーダル。拠点を1つ選ぶ → 個数を入れる → 送信の1画面で終わる。 -->
+  <div class="sv-modal-bg" id="sv-modal" onclick="if(event.target===this)closeSupplyModal()">
+    <div class="sv-box">
+      <div class="mv-title">🚚 車から補充</div>
+      <div class="sv-stock" id="sv-stock">車載の残り …</div>
+      <div class="sv-sec">どこに置く？</div>
+      <div class="sv-loc-grid" id="sv-loc-grid"></div>
+      <div class="sv-sec">何を何個？</div>
+      <div id="sv-products"><p class="mv-empty">商品を読み込み中…</p></div>
+      <button class="sv-send" id="sv-send-btn" onclick="submitSupply()">この内容で置く</button>
+      <button class="sv-close" onclick="closeSupplyModal()">閉じる</button>
     </div>
   </div>
 
@@ -3938,6 +3985,7 @@ function initMoveTab_() {
     state.move.inited = true;
   }
   loadTodayMoves_();
+  refreshSupplyButton_();   // ★2026-08-13 車載を持っている人にだけ「車から補充」を出す
 }
 // ★2026-08-07 出発の前に行き先を選ぶ（積んだ時点で決まっているため）。
 //   選ばなくても「行き先はあとで決める」で従来どおり進める。
@@ -3980,6 +4028,124 @@ async function _submitDepart2_(fromId, qty, plannedTo) {
     if (btn) { btn.disabled = false; btn.textContent = '出発を登録'; }
   }
 }
+/* ══════════════════════════════════════════════════════════════
+   車から補充（2026-08-13・芝エリアの巡回補充テスト）
+   ══════════════════════════════════════════════════════════════
+   通常の移動と違い「出発→到着」を分けない。目の前で手渡すので未着が存在せず、
+   操作するのが12:00〜12:45＝ピークの真っ最中だから、2段階にすると使われない。
+   サーバー側は supplyFromVehicle が移動ログに完結行を1本書くだけ（→ メインGAS）。 */
+
+// 拠点ごとの刻み（1回に置く個数の目安）。ボタンに出すだけで、入力は自由に変えられる。
+// → [[芝エリア_巡回補充テスト_設計_2026-08-17]]
+const SUPPLY_STEP = { L001: 10, L002: 5, L003: 5, L019: 5, L033: 3 };
+let svPickedLoc = '';
+
+function _svVehicle_() {
+  return (state.locations || []).filter(l => l && String(l.area || '').trim() === '車載')[0] || null;
+}
+// 補充先はピーク中に片手で押すので、自分の担当拠点だけに絞る（全30拠点を並べると押し間違える）。
+// 主担当が取れない時だけ全拠点に落とす＝ボタンが空になって詰むのを防ぐ。
+function _svTargets_() {
+  const veh = _svVehicle_();
+  const all = (state.locations || []).filter(l =>
+    l && l.id && l.name && String(l.area || '').trim() !== '車載' && (!veh || l.id !== veh.id));
+  const mine = all.filter(l => l.defaultDriverId && l.defaultDriverId === state.userId);
+  return mine.length ? mine : all;
+}
+
+// 移動タブを開いた時に、車載を持っている人にだけボタンを出す。
+async function refreshSupplyButton_() {
+  const btn = document.getElementById('sv-open-btn');
+  if (!btn) return;
+  if (!_svVehicle_()) { btn.style.display = 'none'; return; }
+  btn.style.display = 'block';
+  const left = await loadVehicleStock_();
+  const el = document.getElementById('sv-open-left');
+  if (el) el.textContent = (left && left.remaining)
+    ? ('車載の残り ' + left.remaining.total + '個')
+    : '車載の残りが取れませんでした';
+}
+
+async function loadVehicleStock_() {
+  try {
+    const url = `${GAS_URL}?action=getVehicleStock&date=${getDateStrOffset_(0)}`
+      + `&driverUserId=${encodeURIComponent(state.userId || '')}`;
+    const data = await fetch(url, { redirect: 'follow' }).then(r => r.json());
+    if (!data || !data.ok) return null;
+    state.move.vehicle = data;
+    return data;
+  } catch (e) { console.warn('getVehicleStock', e); return null; }
+}
+
+async function openSupplyModal() {
+  svPickedLoc = '';
+  const m = document.getElementById('sv-modal');
+  if (m) m.classList.add('show');
+  renderMoveProducts_('sv-products', {});
+  renderSupplyLocs_();
+  const st = await loadVehicleStock_();
+  const box = document.getElementById('sv-stock');
+  if (box) {
+    box.innerHTML = st && st.remaining
+      ? ('車載の残り <b>' + st.remaining.total + '個</b>　（' + _esc(st.vehicle.name) + '）')
+      : '車載の残りが取れませんでした。補充の登録はできます。';
+  }
+}
+function closeSupplyModal() {
+  const m = document.getElementById('sv-modal');
+  if (m) m.classList.remove('show');
+}
+function renderSupplyLocs_() {
+  const box = document.getElementById('sv-loc-grid');
+  if (!box) return;
+  box.innerHTML = _svTargets_().map(l => {
+    const step = SUPPLY_STEP[l.id];
+    return `<button class="sv-loc-btn${svPickedLoc === l.id ? ' on' : ''}"
+      onclick="pickSupplyLoc('${_esc(l.id)}')">${_esc(l.name)}
+      ${step ? `<span class="sv-step">刻み ${step}個</span>` : ''}</button>`;
+  }).join('');
+}
+// 拠点を押したら、その拠点の刻みを既定値として入れておく（そのまま送信できるように）。
+// 商品の内訳までは決められないので、数字は入れずに刻みだけ見せる。
+function pickSupplyLoc(id) {
+  svPickedLoc = (svPickedLoc === id) ? '' : id;
+  renderSupplyLocs_();
+}
+
+async function submitSupply() {
+  if (!svPickedLoc) { showToast('置く拠点を選んでください', 'error'); return; }
+  const qty = collectMoveQtys_('sv-products');
+  if (Object.keys(qty).length === 0) { showToast('個数を入れてください', 'error'); return; }
+
+  const btn = document.getElementById('sv-send-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '送信中…'; }
+  try {
+    const veh = _svVehicle_();
+    const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({
+      action: 'supplyFromVehicle',
+      date: getDateStrOffset_(0),
+      driverUserId: state.userId,
+      driverName: state.userName,
+      vehicleLocationId: veh ? veh.id : '',
+      toLocationId: svPickedLoc,
+      toLocationName: _moveLocName_(svPickedLoc),
+      qty: qty,
+    })});
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || '登録に失敗しました');
+    const left = (data.remaining && typeof data.remaining.total === 'number')
+      ? '　車載の残り' + data.remaining.total + '個' : '';
+    showToast(_moveLocName_(svPickedLoc) + ' に ' + _fmtQtyObj_(qty) + ' を置きました。' + left, 'success', 4000);
+    closeSupplyModal();
+    await loadTodayMoves_();
+    await refreshSupplyButton_();
+  } catch (e) {
+    showToast('エラー：' + (e.message || e), 'error', 6000);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'この内容で置く'; }
+  }
+}
+
 async function loadTodayMoves_() {
   const date = getDateStrOffset_(0);
   try {
