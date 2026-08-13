@@ -431,12 +431,18 @@ window.addEventListener('load', async function() {
 
     const profile = await liff.getProfile();
 
-    // 属性チェック（社員のみ）
+    // 属性チェック
+    // v2026-08-13 ⑤dashboard解体：**ドライバーにも開放**（社長判断A）。
+    //   申し送りタブが dashboard（社員限定）から sales-report（社員＋ドライバー）へ移り、
+    //   タブは全員に見せる方針にしたため、返信画面だけ社員限定だと行き止まりになっていた。
+    //   ※ ALLOWED_ROLES は 営業GAS(sales-report-api) の同名定数と合わせてある。
+    //   ※ GAS側の submitMemoReply / markMemoComplete に権限チェックは無い（＝ここが唯一のゲート）。
+    const ALLOWED_ROLES = ['社員', 'ドライバー'];
     const roleRes = await fetchJSON(GAS_URL + '?action=getRole&userId=' + encodeURIComponent(profile.userId));
     const role = (roleRes && roleRes.role) || '';
 
-    if (role !== '社員') {
-      showError('このページは社員専用です。\n（あなたの属性：' + (role || '未登録') + '）');
+    if (ALLOWED_ROLES.indexOf(role) < 0) {
+      showError('このページは社員・ドライバー専用です。\n（あなたの属性：' + (role || '未登録') + '）');
       return;
     }
 
