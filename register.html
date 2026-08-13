@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>お江戸弁当 レジ</title>
+<!-- register v3.23 (2026-08-13) 【二次販売レジ（セカンドセール）を新設】社長指示（ミーティング）「セカンドセール用のレジを用意する。商品としての品目は300円・500円の2種類で大丈夫。それ以外は全て通常時のレジと一緒で大丈夫」。★入口は **`register.html?mode=2nd`**（LINEリッチメニューに「🛒 二次販売」を1つ足して、そのURLを開く）。**同じファイルのまま入口だけ分ける**のが要点。理由＝二次販売を打つのは**その日どこかの拠点で売っていた販売員**が多い（社長 2026-08-13「1が多い。たまに2時販売だけ入る人もいる」）のに、通常レジは「同じ人・同じ日」なら**確認なしで前の拠点のレジ画面へ自動復帰**し（`restoreState` の `isSamePerson`）、しかも `clearSavedState` は「別人が引き継ぎを断った時」しか呼ばれない＝**締めても localStorage は残る**。つまり拠点を足すだけでは、二次販売のときに拠点選択画面までたどり着けない。→ `STATE_KEY` を `oedo_register_state_2nd` に分け、**通常レジと完全に独立した別レジ**として動かす（通常レジを打っている途中でも壊さない）。★対象の見分けは**既存のマスタ列だけ**で済ませた＝**GAS改修なし**：拠点は拠点マスタ「エリア」列＝`二次販売`（`getLocations` が `area` で返す）、商品は単価マスタ「カテゴリー」列＝`二次販売`（`getProducts` が `category` で返す）。通常レジ側は逆に**この2つを必ず除外**する（拠点一覧に並んで押し間違えるのを防ぐ）。★通常レジと違うのはここだけ：①商品は300円・500円の2品 ②**納品数は入力しない**（社長「一旦3で」＝売れた数だけ記録）→ 納品数カードを隠し、`plannedDeliveryLoaded` を最初から true にして配分表を取りに行かない（取りに行くと「📋 配分表を読み込み中…」で永久に押せない）。あわせて**入力欄の存在チェックと「10個以下は開始できない」下限チェック（v3.22）を通さない**＝通すと必ず止まってレジを開始できない ③ギャラは**1500円ぴったり**（社長「2次販売は1500円のギャラ」）＝拠点マスタの基本ギャラをそのまま使い、インセンティブ・賄い補填・遅刻控除は付けない（締め画面から賄い/遅刻カードごと隠す）。社員・ドライバー・スポット名乗りは従来どおり0円 ④納品数を入れないので納品数・完売率は「—」表示（0個/0%だと故障に見える）。★**必ず踏む地雷を1つ潰した**：`checkTodayReport` は「その日・その人の報告」を**拠点に関係なく**返すため、拠点を締めた人が二次販売レジを開くと毎回「本日すでに報告が提出されています（拠点：浜松町…）」が出て入れない（逆に通常レジも二次販売の報告で塞がる）。→ **今のモードの拠点一覧に無い拠点の報告は別レジのものとして無視**する（`state.locations` は既にモードで絞ってあるのでこれだけで判定できる）。★同日に複数か所でやる日は**場所ごとに販売員が別**（社長「販売拠点が増えれば販売員も増える」）なので、1台で場所を渡り歩く導線は作っていない。★交通費（日によって違う・ドライバーが入力）は**このアプリでは扱わない**＝別途ドライバーアプリ側で対応する。★**社長の準備が3つ必要**：①拠点マスタに二次販売3拠点（エリア列＝二次販売／基本ギャラ＝1500）②単価マスタに300円・500円の2品（カテゴリー列＝二次販売）③リッチメニューに「🛒 二次販売」。★検証：headless Chrome に偽マスタを食わせ、通常レジ／二次販売レジの両方で商品・拠点の絞り込み、保存キー、当日報告ダイアログの有無、納品数カード、ギャラ計算まで実際に動かして確認済み。GAS変更なし。 -->
 <!-- register v3.22 (2026-08-10) 【配分表の取り込み中は次の画面へ行かせない／納品数10個以下ではレジを開始させない】社長指示「レジアプリの納品数の取り込みをしている間は次の画面に行けないように、また納品数0、もしくは10個以下でレジをスタートできないようにして欲しい」。★①v3.20 で送信ボタンを disabled にしたが、**ボタンの状態だけが頼り**だと Enter キー・二度押し・画面を作り直した直後などですり抜ける経路が残る。`btn-start-submit` のハンドラ**入口**でも `state.plannedDeliveryLoaded` を見て、未完了ならアラートで止めて確認画面へ行かせない（引き継ぎモードはこのガードの手前で return するので影響なし）。★②スタートの下限を新設。**お茶を除いた納品数の合計が `START_MIN_DELIVERY`(=10) 以下ならレジを開始できない**。v3.20 の「全品0なら confirm で確認」を置き換えた＝ダイアログは押して通せてしまい、現に「全品0のまま開始 → ＋1ずつ直す」が起きていたため、確認ではなく**完全に止める**。止めた時は最初の商品欄へフォーカス＋スクロールする。他社弁当（メンチカツ等）は配分表の既定値こそ入らないが実際に届くので合計に入れる。お茶を除くのは開始・締めの既存規則（v3.9 / v3.10）に揃えたもの。少数納品の日が出てきたら `START_MIN_DELIVERY` の数字だけ下げれば効く。★③あわせて `loadPlannedDelivery` の**デッドロック経路**を塞いだ：拠点未選択の時に try の手前で return しており finally が走らず、`plannedDeliveryLoaded` が false のまま固定＝送信ボタンが「📋 配分表を読み込み中…」で永久に押せなくなる（①のガードが入ると確実に詰まる）。ここで拾って「読み込み完了・配分表なし」に倒す。GAS変更なし。 -->
 <!-- register v3.21 (2026-08-07) 【納品数を＋/−で直すたびにドライバーへ通知が飛ぶ問題を修正】社長報告「レジで納品数の修正をする際に1個づつ通知が来る」。真因＝`ensureStartReported` に多重防止が無い。`goToRegisterFromConfirm` は `startReported=false` にしてから **await せずに** `sendStartReport()` を投げるため、送信が終わるまでの数秒はフラグが false のまま。その間に在庫モーダルで＋/−を押すと 1タップごとに `sendDeliveryUpdate → ensureStartReported → sendStartReport` が走り、GAS の `handleStart` が毎回 `_recordDeliveryChange_` を通して **担当ドライバーへ「📦 納品数の確認をお願いします」を押した個数だけ送っていた**。v3.20 で「全品0のまま開始 → +1ずつ直す」運用が現に起きていたので、症状が表に出た。※8/3 銀座の開始ログが7秒差で2行立っていたのも同じ経路（v3.14 では「1〜2種のみ」のケースだけ塞いでいた）。修正2点：①`ensureStartReported` を**単一飛行（single-flight）**にし、送信中なら同じ Promise を待たせて開始報告を必ず1回に畳む ②`goToRegisterFromConfirm` も `sendStartReport()` 直呼びをやめ `ensureStartReported()` 経由にする（飛行中フラグを立てるため。ここが直呼びのままだと①が効かない）。あわせてGAS側に保険（同じ拠点・同じ差分の承認依頼は10分以内なら LINE を投げ直さない＝`DAP_RENOTIFY_MIN`）。 -->
 <!-- register v3.20 (2026-08-07) 【配分表の読み込み前に送信できてしまう問題を修正】loadPlannedDelivery は async で GAS から配分の数字を取りに行く（2〜5秒）。その間に送信ボタンが押せるため、全品目0で開始報告が飛び、戻っても+1ずつしか直せない状況が複数拠点で発生。対策2段構え：(A) 配分表の取得完了まで送信ボタンを disabled＋「📋 配分表を読み込み中…」表示。成功・失敗とも finally で再有効化。(B) 全品目0で送信しようとした場合、取得未完了ならブロック、完了後でもconfirmで確認（通常ありえない状況への安全弁）。backToNormalStartReport の即時 btn.disabled=false も削除（loadPlannedDelivery の完了に任せる）。GAS変更なし。 -->
@@ -1285,7 +1286,7 @@ html, body { overscroll-behavior-y: contain; }
       </div>
     </div>
 
-    <div class="form-card">
+    <div class="form-card" id="card-makanai">
       <div class="form-card-title">賄い</div>
       <div class="form-row">
         <span class="form-label">本日の賄い</span>
@@ -1304,7 +1305,7 @@ html, body { overscroll-behavior-y: contain; }
         </div>
       </div>
     </div>
-    <div class="form-card">
+    <div class="form-card" id="card-late">
       <div class="form-card-title">遅刻</div>
       <div class="form-row">
         <span class="form-label">遅刻時間</span>
@@ -1566,6 +1567,34 @@ html, body { overscroll-behavior-y: contain; }
 const START_MIN_DELIVERY = 10;
 
 // ═══════════════════════════════════════════════════════════════
+// ★2026-08-13 二次販売レジ（社長指示：セカンドセール用のレジを用意する）
+//   `register.html?mode=2nd` で開くと二次販売レジになる。
+//
+//   ★なぜ同じファイルで、入口（URL）だけ分けるのか
+//     二次販売を打つのは**その日どこかの拠点で売っていた販売員**が多い（社長 2026-08-13）。
+//     ところが通常レジは「同じ人・同じ日」なら確認なしで前の拠点のレジ画面へ自動復帰する
+//     （restoreState → isSamePerson の分岐）。しかも clearSavedState は「別人が引き継ぎを
+//     断った時」しか呼ばれないので、**締めても localStorage は残ったまま**。
+//     つまり拠点を増やすだけでは、二次販売のときに拠点選択画面までたどり着けない。
+//     → 保存キーを分けて別レジとして動かす。通常レジを打っている途中でも壊さない。
+//
+//   ★対象の見分け方は既存のマスタ列だけで済ませる（GAS改修なし）
+//     拠点 … 拠点マスタ「エリア」列 ＝ 二次販売   → getLocations が area で返す
+//     商品 … 単価マスタ「カテゴリー」列 ＝ 二次販売 → getProducts が category で返す
+//     通常レジ側では逆に**この2つを必ず除外**する（誤って選ばれないように）。
+//
+//   ★通常レジと違うのはここだけ（社長「それ以外は全て通常時のレジと一緒で大丈夫」）
+//     ①商品は300円・500円の2品だけ ②納品数は入力しない ③ギャラは1500円ぴったり
+//     （インセンティブ・賄い補填・遅刻控除なし＝拠点マスタの基本ギャラをそのまま使う）
+//     ④交通費はドライバーが回収時に入力する（このアプリでは扱わない）
+// ═══════════════════════════════════════════════════════════════
+const IS_2ND        = new URLSearchParams(location.search).get('mode') === '2nd';
+const SECOND_TAG    = '二次販売';   // 拠点マスタ「エリア」／単価マスタ「カテゴリー」に入れる目印
+const STATE_KEY     = IS_2ND ? 'oedo_register_state_2nd' : 'oedo_register_state';
+function is2ndLoc_(l)  { return String((l && l.area)     || '').trim() === SECOND_TAG; }
+function is2ndProd_(p) { return String((p && p.category) || '').trim() === SECOND_TAG; }
+
+// ═══════════════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════════════
 const state = {
@@ -1605,7 +1634,24 @@ const state = {
 // ═══════════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════════
+// ★2026-08-13 二次販売レジの見た目。通常レジと同じ画面なので、一目で見分けが付くようにする
+//   （通常のつもりで打たれると、300円・500円で通常商品を売ったことになってしまう）。
+function apply2ndSaleUi_() {
+  if (!IS_2ND) return;
+  document.title = 'お江戸弁当 二次販売レジ';
+  // 賄い補填・遅刻控除はギャラに効かない（1500円ぴったり）ので締め画面から外す
+  ['card-makanai', 'card-late'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+  // どの画面に居ても分かるよう、ヘッダー下段の全部に印を付ける
+  document.querySelectorAll('.header-sub').forEach(function (el) {
+    el.textContent = '🛒 二次販売 ／ ' + el.textContent;
+  });
+}
+
 async function init() {
+  apply2ndSaleUi_();   // ★2026-08-13 画面を作る前に二次販売の見た目にしておく
   // ── テストモード（Safari等でLIFF経由せずに表示確認するため） ──
   // URLに ?test=1 をつけるとLIFFをバイパス
   const isTestMode = new URLSearchParams(location.search).get('test') === '1';
@@ -1658,7 +1704,8 @@ async function init() {
     //   - キャッシュなし：このPromise.all完了待ちで初描画
     //   - キャッシュあり：既に描画は進める。Promise.all 結果で差分検出
     // ─────────────────────────────────────────────────────────
-    const [masterData, _switchesData, todayReport] = await Promise.all([
+    // ★2026-08-13 todayReport は下で「別レジの報告なら無視」に差し替えるので let
+    let [masterData, _switchesData, todayReport] = await Promise.all([
       loadMasterData(),
       applyProductSwitches(),
       checkTodayReport(),
@@ -1701,6 +1748,17 @@ async function init() {
       }
     }
 
+    // ★2026-08-13【二次販売レジで必ず起きる問題への対応】
+    //   checkTodayReport は「その日・その人の報告」を拠点に関係なく返す。
+    //   二次販売を打つのは**その日どこかの拠点で売っていた販売員**が多い（社長 2026-08-13）ので、
+    //   そのままだと二次販売レジを開いた瞬間に「本日すでに報告が提出されています（拠点：浜松町…）」
+    //   が出て、二次販売に入れない。逆に通常レジ側も二次販売の報告で塞がれる。
+    //   → **今のモードの拠点一覧に無い拠点の報告は、別レジのものとして無視する**。
+    //     state.locations は既にモードで絞ってあるので、これだけで判定できる。
+    if (todayReport && !(state.locations || []).some(l => l.id === todayReport.locationId)) {
+      console.log('[報告] 別レジの拠点の報告なので無視:', todayReport.locationName);
+      todayReport = null;
+    }
     if (todayReport) {
       const msg = `本日すでに報告が提出されています。\n\n拠点：${todayReport.locationName}\n販売数：${todayReport.soldCount}個\n完売率：${todayReport.sellRate}%\n\n報告内容を修正しますか？`;
       if (confirm(msg)) {
@@ -1826,13 +1884,16 @@ function applyMasterToState(data) {
   const rawProducts = data.products || [];
   const normalized = rawProducts
     .map(p => ({ ...p, price: Number(p.price) }))
-    .filter(p => !isNaN(p.price) && p.price >= 0);
+    .filter(p => !isNaN(p.price) && p.price >= 0)
+    // ★2026-08-13 二次販売レジは300円・500円の2品だけ／通常レジにはその2品を出さない
+    .filter(p => IS_2ND ? is2ndProd_(p) : !is2ndProd_(p));
   // ★2026-08-04 絞り込み前の原本を必ず持つ。
   //   商品スイッチの絞り込み（filterStoppedProducts）が state.products を破壊的に上書きしていたため、
   //   一度絞られると元に戻す手段が無く、古いキャッシュで欠けた商品リストのまま営業していた。
   state.allProducts   = normalized;
   state.products      = normalized.slice();
-  state.locations     = data.locations || [];
+  // ★2026-08-13 拠点も同じ規則で分ける。通常レジに二次販売拠点が並ぶと押し間違えるため。
+  state.locations     = (data.locations || []).filter(l => IS_2ND ? is2ndLoc_(l) : !is2ndLoc_(l));
   state.incentiveUnit = data.incentiveUnit || 10;
   state.incentiveRate = data.incentiveRate || 100;
   state.couponDefault = data.couponDefault || 300;
@@ -1947,8 +2008,17 @@ function showScreen(name) {
 // ═══════════════════════════════════════════════════════════════
 function renderLocations() {
   const select = document.getElementById('location-select');
+  const locs = state.locations || [];
+  // ★2026-08-13 二次販売の拠点がまだ登録されていない時は、黙って空の一覧を出さない。
+  //   （拠点マスタの「エリア」列に 二次販売 と入れた行が対象。登録前は必ずここに来る）
+  if (IS_2ND && !locs.length) {
+    select.innerHTML = '<option value="">二次販売の拠点が登録されていません</option>';
+    const sub = document.querySelector('#screen-location .header-sub');
+    if (sub) sub.textContent = '🛒 二次販売 ／ 拠点マスタの「エリア」列に 二次販売 と入れてください';
+    return;
+  }
   select.innerHTML = '<option value="">拠点を選択してください</option>' +
-    (state.locations || []).map(loc => `<option value="${loc.id}">${loc.name}</option>`).join('');
+    locs.map(loc => `<option value="${loc.id}">${loc.name}</option>`).join('');
 }
 function showSpotInput() { document.getElementById('spot-input-area').style.display = 'block'; }
 function cancelSpot() {
@@ -2149,6 +2219,19 @@ async function submitTakeoverStartCash() {
 // START REPORT
 // ═══════════════════════════════════════════════════════════════
 function renderDeliveryInputs() {
+  // ★2026-08-13 二次販売は納品数を入力しない（社長決定：売れた数だけ記録する）。
+  //   配分表も無いので取りに行かない。取りに行くと `plannedDeliveryLoaded` が立たず
+  //   「📋 配分表を読み込み中…」のまま送信ボタンが永久に押せなくなる（v3.22 のガード）。
+  if (IS_2ND) {
+    const card = document.getElementById('start-card-delivery');
+    if (card) card.style.display = 'none';
+    const box = document.getElementById('delivery-inputs');
+    if (box) box.innerHTML = '';
+    state.deliveryCount = {};
+    state.plannedDelivery = null;
+    state.plannedDeliveryLoaded = true;
+    return;
+  }
   const container = document.getElementById('delivery-inputs');
   container.innerHTML = state.products.map(p => `
     <div class="form-row">
@@ -2272,6 +2355,9 @@ document.getElementById('btn-start-submit').addEventListener('click', () => {
   // ★2026-08-04 v3.13 入力欄が無いまま送ろうとしたら、黙って落ちずに画面を作り直して知らせる。
   //   従来は `document.getElementById(...).value` が null で例外になり、
   //   **ボタンを押しても何も起きない**状態になっていた（販売員からは「入力できない」に見える）。
+  // ★2026-08-13 二次販売は納品数を入力しない＝入力欄の存在チェックも下限チェックも通さない。
+  //   通すと「入力欄が無い」で必ず止まり、そもそもレジを開始できない。
+  if (!IS_2ND) {
   state.deliveryCount = {};
   let _missingInputs = 0;
   state.products.forEach(p => {
@@ -2305,6 +2391,7 @@ document.getElementById('btn-start-submit').addEventListener('click', () => {
       return;
     }
   }
+  }   // ← ★2026-08-13 if (!IS_2ND) ここまで
   // ★2026-07-31 Phase B：配分表と違う数で始めるなら、その場で伝えておく（驚かせない）
   //   実際の承認依頼はGAS側（handleStart）が送る。ここは表示だけ。
   try {
@@ -2335,6 +2422,13 @@ function showConfirm() {
 
   const teaIds = state.products.filter(p => p.name.includes('お茶')).map(p => p.id);
   const list = document.getElementById('confirm-delivery-list');
+  // ★2026-08-13 二次販売は納品数を入れないので、確認する数字が無い（0個が並ぶだけ）
+  if (IS_2ND) {
+    list.innerHTML = '<div class="form-row" style="color:var(--ink-mute);font-size:13px;line-height:1.7;">'
+                   + '二次販売は納品数を入力しません。<br>売れた数だけ記録します。</div>';
+    showScreen('confirm');
+    return;
+  }
   list.innerHTML = state.products.map(p => {
     const count = state.deliveryCount[p.id] || 0;
     const isTea = teaIds.includes(p.id);
@@ -3288,18 +3382,18 @@ function saveState() {
       makanaiAri:    state['makanaiあり'],
       savedAt:       new Date().toISOString(),
     };
-    localStorage.setItem('oedo_register_state', JSON.stringify(save));
+    localStorage.setItem(STATE_KEY, JSON.stringify(save));   // ★2026-08-13 二次販売レジは別キー
   } catch(e) { console.warn('saveState error:', e); }
 }
 
 function restoreState() {
   try {
-    const raw = localStorage.getItem('oedo_register_state');
+    const raw = localStorage.getItem(STATE_KEY);
     if (!raw) return null;
     const save = JSON.parse(raw);
     const savedDate = new Date(save.savedAt).toLocaleDateString('ja-JP');
     const today     = new Date().toLocaleDateString('ja-JP');
-    if (savedDate !== today) { localStorage.removeItem('oedo_register_state'); return null; }
+    if (savedDate !== today) { localStorage.removeItem(STATE_KEY); return null; }
     const loc = state.locations.find(l => l.id === save.locationId);
     if (!loc) return null;
     state.location       = loc;
@@ -3329,7 +3423,7 @@ function restoreState() {
   } catch(e) { return null; }
 }
 
-function clearSavedState() { localStorage.removeItem('oedo_register_state'); }
+function clearSavedState() { localStorage.removeItem(STATE_KEY); }
 
 function sendIntermediateSale(method, amount, items, paypayReceived) {
   const payload = {
@@ -3428,13 +3522,21 @@ async function calcFinal() {
     .reduce((sum, [, v]) => sum + v, 0);
   const nonTeaSold   = state.soldCount - (state.teaSoldCount || 0);
   const sellRate     = totalDelivery > 0 ? Math.round(nonTeaSold / totalDelivery * 1000) / 10 : 0;
-  const makanaiBonus = state['makanaiあり'] ? 0 : 300;
+  // ★2026-08-13 二次販売は 1500円ぴったり（社長決定）＝賄い補填も遅刻控除も付けない
+  const makanaiBonus = IS_2ND ? 0 : (state['makanaiあり'] ? 0 : 300);
   const lateMinutes  = parseInt(document.getElementById('late-minutes').value) || 0;
-  const latePenalty  = calcLatePenalty(lateMinutes);
+  const latePenalty  = IS_2ND ? 0 : calcLatePenalty(lateMinutes);
   const role         = state.staffRole || '販売員';
   let incentive      = 0;
   let totalSalary    = 0;
-  if (state.isSpot || role === '社員' || role === 'ドライバー') {
+  if (IS_2ND) {
+    // ★2026-08-13 二次販売のギャラ（社長決定「2次販売は1500円のギャラ。別途交通費も渡している」）。
+    //   金額は拠点マスタの「基本ギャラ」に入れた1500円をそのまま使う＝単価が変わってもここは直さない。
+    //   インセンティブ（完売率連動）は付けない。交通費はドライバーが回収時に入力する（このアプリでは扱わない）。
+    //   社員・ドライバー・スポット名乗りは従来どおり0円（別立てで給与がある人）。
+    incentive   = 0;
+    totalSalary = (state.isSpot || role === '社員' || role === 'ドライバー') ? 0 : state.baseGigSalary;
+  } else if (state.isSpot || role === '社員' || role === 'ドライバー') {
     totalSalary = 0;
   } else if (state.fixedSalary > 0) {
     totalSalary = state.fixedSalary + makanaiBonus - latePenalty;
@@ -3462,10 +3564,13 @@ async function calcFinal() {
 
   document.getElementById('res-cash').textContent     = `¥${state.cashSales.toLocaleString()}`;
   document.getElementById('res-paypay').textContent   = `¥${state.paypayAmount.toLocaleString()}`;
-  document.getElementById('res-delivery').textContent = `${totalDelivery}個`;
+  // ★2026-08-13 二次販売は納品数を入れないので、納品数・完売率は数字が出ない（0個/0%だと故障に見える）
+  document.getElementById('res-delivery').textContent = IS_2ND ? '—（入力なし）' : `${totalDelivery}個`;
   document.getElementById('res-sold').textContent     = `${state.soldCount}個（お茶除く：${nonTeaSold}個）`;
-  document.getElementById('res-rate').textContent     = `${sellRate}%`;
-  document.getElementById('res-incentive').textContent = `¥${incentive.toLocaleString()}（${nonTeaSold}個）`;
+  document.getElementById('res-rate').textContent     = IS_2ND ? '—' : `${sellRate}%`;
+  document.getElementById('res-incentive').textContent = IS_2ND
+    ? '¥0（二次販売はギャラのみ）'
+    : `¥${incentive.toLocaleString()}（${nonTeaSold}個）`;
   document.getElementById('res-base').textContent     = `¥${state.baseGigSalary.toLocaleString()}`;
   document.getElementById('res-total').textContent    = `¥${totalSalary.toLocaleString()}`;
 
