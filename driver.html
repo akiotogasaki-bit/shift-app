@@ -1,4 +1,6 @@
 <!DOCTYPE html>
+<!-- driver v3.4 (2026-08-13) 【二次販売の交通費をドライバーが入れられるようにした】社長決定「1500円のギャラと交通費、どちらもレジから抜く。ただ交通費は日によって違うから今はわからない。ドライバーが入力できるようにしておいてくれればいいかな」。★背景＝二次販売の販売員は**ギャラ1500円＋交通費**をレジの金庫から抜いて持ち帰る。現金売上は `実現金＋ギャラ−開始金` で出しているので、交通費を式に入れないと**抜いた額のぶんだけ現金売上が過小に出る**（毎回マイナスのズレとしてPayPay突合に出続ける）。置き弁ギャラを締めに含めた register v3.15 と同じ理屈。★UI＝v3.2 で作った**②金庫の画面**に「渡した交通費」欄を追加。**二次販売拠点でだけ出す**（拠点マスタの「エリア」列＝`二次販売` で判定。`getMaster` の locations が `area` を返すので追加のfetchは不要）。0のままでも確定できる（交通費が無い日もあるため）。入れると「報告との差」の想定額から自動で引かれ、`報告との差 +¥0（交通費 ¥1,000 を抜いた後）` のように根拠を併記する。①残数の画面には出さない。★送信＝`saveActualCash` に `transportFee` を相乗り（**二次販売拠点のときだけ載せる**＝他拠点は列に一切触らない）。サーバー側は「想定額＝レジ最終金額−ギャラ−交通費」で突き合わせ、報告ログ39列目に保存し、現金売上（`実現金＋ギャラ＋交通費−開始金`）にも足す。要: メインGAS @2026-08-13 以降（`COL['報告ログ'].交通費`=38／`ensureTransportFeeColumn_`／`saveActualCash` の transportFee／PayPay突合と拠点別明細の現金売上／`runfix&name=feecol`）。★検証：headless Chrome で通常拠点（欄が出ない・transportFee を送らない）と二次販売拠点（欄が出る・交通費1000で想定額が18500→17500へ下がり、実額17500でぴったり合う）を実際に操作して確認済み。 -->
+<!-- driver v3.3 (2026-08-13) 【リアルタイムを移設：dashboard の「リアルタイム」タブを driver に持ってくる】アプリ再編④（→ [[設計_アプリ再編_振り分け確定_2026-08-10]]・お盆の窓 8/16まで）。★狙い＝リアルタイムは「今どこが切れそうか」を見る画面で、それを見て動くのはドライバー。ところが置き場は事務所アプリ（dashboard）で、現場からは開かれていなかった。**場面で切る**という再編の第1軸に従い、driver へ移す。dashboard 側は⑤の解体で落とす。★移設したもの＝サマリー（天気・KPI・完売率ランキング・全拠点一覧）／エリア別マトリクス／拠点タップの商品別完売率モーダル。**ロジックは dashboard.html のものをそのまま持ってきており、数字も見た目も変えていない**（再編ルール「移設は機能を移すだけ・UIは元のまま」）。★衝突対策＝CSSは全セレクタを `#tab-realtime` にスコープした。driver と dashboard は `--blue` `--gold` `--cream` `--border` `--ink-mute` の値が違い、`.modal-bg` `.loader` `.tab-panel` `.active` `.done` `.inactive` は同名で中身が違う。スコープしたうえで **dashboard の配色変数を `#tab-realtime` 配下だけで再定義**したので、リアルタイムの見た目は dashboard と1pxも変わらず、driver 既存6タブにも一切影響しない。拠点詳細モーダルも `#tab-realtime` の**中**に置いてある（スコープを効かせるため）。★JSは driver と名前がぶつかる／汎用すぎるものだけ `rt*` へ寄せた（`loadAll`→`rtLoadAll` / `fetchJSON`→`rtFetchJSON` / `updateTime`→`rtUpdateTime` / `escapeHtml`→`rtEscapeHtml` / `openModal`→`rtOpenModal` / `closeModal`→`rtCloseModal` / `sortLocations`→`rtSortLocations` / `refreshArea`→`rtRefreshArea` / `allData`→`rtAllData` / `masterData`→`rtMasterData` / `currentSort`→`rtCurrentSort` / `inactiveLocationIds`→`rtInactiveLocationIds` / `moveAdjMap`→`rtMoveAdjMap` / `isFirstLoad`→`rtIsFirstLoad`）。dashboard にあった「現金有高タブの連動描画」は driver に該当タブが無いので落とした。★**5分ポーリングはタブを開いている間だけ回す**（`startRealtime_` / `stopRealtime_`）。dashboard は起動時から回しっぱなしだったが、driver は回収中ずっと開いているアプリなので、裏で `getTodayIntermediate` を叩き続けさせない。★localStorage のキーは dashboard と共通のまま＝両方開いても同じキャッシュを使う。★タブ幅の都合で表記は「📊 実況」。GAS変更なし（叩くのは既存の getMaster / getTodayReports / getTodayIntermediate / getDriverState / getMoveAdjByLoc）。 -->
 <!-- driver v3.2 (2026-08-13) 【回収を2段階に：①残った弁当を確認 → ②金庫を確認／金庫は必ず空から入力】社長指示（ミーティング）「回収時の残数確認の時、今は残数入力画面とレジ金入力画面が一緒に出ているのを、まず残数を入力して確認・次に金庫を入力して確認の2段階にしたい。金庫の金額は今はデフォルトで販売員の入力した数字が入っているけど、そこは0で確認してドライバーが数字を入れる仕様にする」。★従来＝1つのモーダルに商品別の残数リスト・レジの現金欄・テンキーが同居し、現金には**販売員の報告値（レジ最終金額−ギャラ）または前回のドライバー入力値が既定で入っていた**（v2.1 の「報告値を既定表示し違うときだけ直す」方式）。数える前に答えが見えているので、実際には**合わせて押すだけ**になり現金の食い違いが見つからない。★変更後＝`ccStep`（1=残った弁当／2=金庫）を新設。①では**金庫の欄そのものを出さない**。②では残数リストを畳んで合計だけ残し、合計行が「◀ 直す」＝①に戻る入口になる（数え直せる）。**確定（回収済み／🔄 移動／🛒 2次販売）は②でしか押せない**＝①で締められると2段階にした意味が無い。上部に「① 残った弁当 ▶ ② 金庫」の見出しを出して今どちらに居るかを示す。★`cashInput` の既定値を撤廃し**必ず空**にした。報告値は②で金額を打った時点で「報告との差」として出る（先に見せない・入れたあとに突き合わせる）。★例外2つ：**現金会計なしの置き弁（ccNoCash）は段階を分けない**（数える現金が無いので従来どおり1画面＝`step 0`）。**スポット拠点は「💰 売上を確定」を押した時点で自動的に②へ進む**（残数→クーポン→売上確定→あるべき現金→現金 という 2026-08-06 の社長決定の順番をそのまま維持。①では「先に売上を確定してください」と出して次へ進ませない）。★残数が取れなかった拠点は①で打つものが無いのでテンキーを隠す（出したままだと `ccField` が 'cash' のまま残り、金庫の額を①で打ててしまう）。実装: `ccStep` / `ccGoStep1()` / `ccGoStep2()` を新設、`renderCashModal_` の各要素に段階の出し分けを追加、HTML に `#cc-step-head` / `#cc-step1-btns` / `#cc-confirm-btns` / `#cc-total-back` を追加。GAS変更なし（送信する中身は従来と同じ）。 -->
 <!-- driver v3.1 (2026-08-13) 【車から補充】芝エリアの巡回補充テスト（8/17開始）用。社長設計＝各拠点にはほぼ確実に売れる数だけ置き、残りはドライバーが車に積んで巡回し、切れた拠点に刻みで足す。★通常の移動（出発→到着の2段階）と分けた理由＝補充が起きるのは12:00〜12:45＝全拠点が同時にピークを迎える時間帯で、2段階にすると現場で使われない。目の前で手渡すので「出発したが未着」が原理的に存在しない。→ **移動タブの「🚚 車から補充」から、拠点を1つ選ぶ→個数を入れる→送信の1画面で完結**。★記録は拠点間移動ログにそのまま書く（出発＝車載の仮想拠点／到着＝拠点／ステータス＝完結／登録経路='車載補充'）。こうすると `getMoveAdjByLocProduct_` が 車載− / 到着拠点+ を自動で合流するので、在庫・残数照合・PayPay突合の既存の仕組みが一切の改修なしで効く。車載の残りも「朝の積み込み（基本数マスタG列）− 出した分」で自動的に出る。★LINE通知は出さない（通常の移動は受け取り側への予告が要るが、ここは目の前で渡すので邪魔になる）。★ボタンは**車載の仮想拠点（拠点マスタのエリア列＝「車載」）を持つ人にだけ**表示。補充先は自分の担当拠点だけに絞る（全30拠点を並べるとピーク中に押し間違える／主担当が取れない時だけ全拠点に落とす）。拠点ボタンには設計で出した刻み（芝パーク10・浜松町スクエア5・ソフバン5・芝パーク②5・ソフバン②3）を出す。★モーダルは既存 `.modal-bg`（opacity制御・.show必須）と作りが違うので `.sv-modal-bg` を自前で持つ。要: メインGAS @2026-08-13 以降（`supplyFromVehicle` / `getVehicleStock` / `_vehicleLocationOf_` / `_vehicleRemaining_` / `setupVehicleLocation`）＋**拠点マスタに車載の行**（GASエディタで `setupVehicleLocation()` を1回実行）＋配分調整で車載に朝の積み込み数を入れること。→ [[芝エリア_巡回補充テスト_設計_2026-08-17]] -->
 <!-- driver v3.0 (2026-08-10)【残数の内訳が全商品0個で出ていたのを修正】社長報告「残数の集計ができていない。種別の残数表示が全て0で表示されている」。★原因＝残数タブの「自分の残数（お茶除く）」をタップして開く『残数内訳』モーダル（`openBreakdown`）が、**残数タブの手入力欄 `res-<商品ID>` の value を読んでいた**。ところがその入力欄は v2.6（2026-08-05・社長指示「残数は回収時の合計で出しているから入力できないように」）で画面から削除済み。以後 `document.getElementById('res-…')` は常に null を返し、`?.value || 0` で**全商品が必ず0個**になっていた。上の大きい数字（`calculateMyExpectedResidual_`）は別ロジックなので正しく、**タップした内訳だけが0を並べる**状態。v2.8 の「自分の残数のタップ内訳は従来のまま（社長判断）」で据え置いた箇所がこれ。★修正＝内訳を上の数字と同じ材料から作り直した。拠点ごとに **納品数 ＋拠点間移動± −販売数** を商品単位で計算して足し上げる（`calcMyResidualDetail_` / 商品別の移動± `getMyMoveAdjustmentByLocProduct_` を新設）。マイナスはその商品だけ0で止める＝売れ過ぎの商品が他商品の残数を食わない。`calculateMyExpectedResidual_` もこの商品別合計に統一したので、**大きい数字と内訳の合計が必ず一致する**（従来は拠点単位で0止めしており過小に出る場合があった）。販売数の商品別内訳（productSalesJson）が無い拠点は商品別に割れないので、従来式の拠点合計を「内訳が取れない拠点」の1行にまとめて出す＝合計だけは必ず合う。全商品0の時は「担当拠点のレジ開始報告が入ると出ます」と理由を添える（0が並ぶだけだと故障に見えるため）。★あわせて「ドライバー別の回収入力（参考）」を非表示にした。出どころが同じく廃止済みの残数ログなので**全員が永久に0個**で並ぶだけで、社長の画面でも0が3行並んでいた。要素は残してあるので `#driver-list-wrap` の display:none を外せば復活する。GAS変更なし。 -->
@@ -165,6 +167,16 @@ body {
 
 /* ── 取り置きタブ（v1.3 NEW）── */
 .tab-btn { white-space: nowrap; padding-left: 4px; padding-right: 4px; min-width: 0; }
+/* ★2026-08-13 v3.3 タブが7本になり 375px 幅で1本=54px に狭まった。
+   14px のままだと「🚚 回収」が63px・「📅 ルート」が58px で絵文字が見切れる。
+   ①文字を13pxに落とし ②バッジを右上へ絶対配置（バッジが幅を食っていたのが「回収」の原因）。
+   これで6本中5本が収まる。「ルート」だけ3文字ぶん4px溢れるが、
+   **6タブ時代も「回収」は65px対62.5pxで溢れていた**ので、むしろ詰まりは軽くなっている。
+   配色・高さ・下線は据え置き（再編ルール「UIは元のまま」）。 */
+.tab-bar .tab-btn { font-size: 13px; gap: 2px; position: relative;
+  padding-left: 2px; padding-right: 2px; letter-spacing: -.02em; }
+.tab-bar .tab-badge { position: absolute; top: 2px; right: 2px;
+  padding: 0 3px; font-size: 9px; line-height: 1.4; }
 
 .tk-header {
   padding: 12px 16px 8px;
@@ -873,6 +885,580 @@ body {
 .sv-send{width:100%;padding:16px;border:0;border-radius:12px;background:#0f7b3f;color:#fff;
   font-size:17px;font-weight:700;margin-top:14px;}
 .sv-send:disabled{background:#b9c2bc;}
+/* ★2026-08-13 v3.3 車へ回収（引き上げ）。補充＝緑／回収＝橙で、逆向きの操作だと一目で分かるようにする。
+   ピーク中に押し間違えると在庫が逆に動くので、色だけは必ず分ける。 */
+.sv-open-btn.cv{background:#b45309;}
+.sv-open-btn.cv:active{background:#8f4207;}
+.sv-send.cv{background:#b45309;}
+#cv-modal .sv-stock{background:#fdf3e7;border-color:#f0d9bb;color:#7c3d09;}
+#cv-modal .sv-loc-btn.on{border-color:#b45309;background:#b45309;color:#fff;}
+
+  /* ═══ ★2026-08-13 v3.3 ④driver作り替え：dashboard「リアルタイム」タブを移設 ═══
+     見た目を変えないため dashboard の配色変数を #tab-realtime 配下だけで再定義する
+     （driver と dashboard は --blue / --gold / --cream / --border / --ink-mute の値が違う）。
+     以下のセレクタは全て #tab-realtime にスコープしてあるので、driver 既存の
+     .modal-bg / .loader / .tab-panel / .active などと同名でも一切干渉しない。
+     ＝拠点詳細モーダル(#rt-detail-modal)も #tab-realtime の中に置いてある。 */
+  #tab-realtime {
+    --red: #C0392B; --red-dark: #922B21;
+    --gold: #B8860B; --gold-light: #F9F0D0;
+    --ink: #1C1C1C; --ink-soft: #4A4A4A; --ink-mute: #8A8A8A;
+    --cream: #FDF8F0; --cream-dark: #F0E8D8; --white: #FFFFFF;
+    --border: #E0D5C5;
+    --green: #27AE60; --green-light: #D5F5E3;
+    --orange: #E67E22;
+    --blue: #2980B9; --blue-light: #D6EAF8;
+  }
+
+  #tab-realtime .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  #tab-realtime .kpi-card {
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  #tab-realtime .kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+  }
+  #tab-realtime .kpi-card.red::before {
+    background: var(--red);
+  }
+  #tab-realtime .kpi-card.gold::before {
+    background: var(--gold);
+  }
+  #tab-realtime .kpi-card.green::before {
+    background: var(--green);
+  }
+  #tab-realtime .kpi-card.blue::before {
+    background: var(--blue);
+  }
+  #tab-realtime .kpi-label {
+    font-size: 11px; color: var(--ink-mute); letter-spacing: .08em; margin-bottom: 6px;
+  }
+  #tab-realtime .kpi-value {
+    font-size: 24px; font-weight: 700; color: var(--ink); line-height: 1;
+  }
+  #tab-realtime .kpi-value span {
+    font-size: 13px; font-weight: 400; color: var(--ink-mute);
+  }
+  #tab-realtime .kpi-sub {
+    font-size: 11px; color: var(--ink-mute); margin-top: 4px;
+  }
+  #tab-realtime .section-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--ink-mute);
+    letter-spacing: .1em;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  #tab-realtime .section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+  #tab-realtime .rank-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  @media(max-width: 480px) {
+    #tab-realtime .rank-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+  #tab-realtime .rank-card {
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  #tab-realtime .rank-card-header {
+    padding: 10px 14px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .05em;
+  }
+  #tab-realtime .rank-card-header.best {
+    background: var(--green-light); color: #1A7A42;
+  }
+  #tab-realtime .rank-card-header.worst {
+    background: #FDEDEC; color: var(--red-dark);
+  }
+  #tab-realtime .rank-item {
+    display: flex;
+    align-items: center;
+    padding: 10px 14px;
+    border-bottom: 1px solid #F5F0E8;
+    cursor: pointer;
+    transition: background .1s;
+  }
+  #tab-realtime .rank-item:last-child {
+    border-bottom: none;
+  }
+  #tab-realtime .rank-item:hover {
+    background: var(--cream);
+  }
+  #tab-realtime .rank-num {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    margin-right: 10px;
+    flex-shrink: 0;
+  }
+  #tab-realtime .rank-num.gold {
+    background: #FFF0B3; color: #7D6500;
+  }
+  #tab-realtime .rank-num.silver {
+    background: #F0F0F0; color: #555;
+  }
+  #tab-realtime .rank-num.bronze {
+    background: #FFE8D6; color: #8B4513;
+  }
+  #tab-realtime .rank-num.bad {
+    background: #FDEDEC; color: var(--red);
+  }
+  #tab-realtime .rank-name {
+    font-size: 14px; flex: 1;
+  }
+  #tab-realtime .rank-staff {
+    font-size: 11px; color: var(--ink-mute);
+  }
+  #tab-realtime .rank-rate {
+    font-size: 16px;
+    font-weight: 700;
+    min-width: 50px;
+    text-align: right;
+  }
+  #tab-realtime .rank-rate.high {
+    color: var(--green);
+  }
+  #tab-realtime .rank-rate.low {
+    color: var(--red);
+  }
+  #tab-realtime .rate-bar-wrap {
+    width: 60px; height: 4px; background: #EEE; border-radius: 2px; margin-left: 8px;
+  }
+  #tab-realtime .rate-bar {
+    height: 100%; border-radius: 2px;
+  }
+  #tab-realtime .rate-bar.high {
+    background: var(--green);
+  }
+  #tab-realtime .rate-bar.low {
+    background: var(--red);
+  }
+  #tab-realtime .list-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  #tab-realtime .sort-btns {
+    display: flex; gap: 6px;
+  }
+  #tab-realtime .sort-btn {
+    padding: 5px 12px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--white);
+    font-size: 12px;
+    cursor: pointer;
+    font-family: inherit;
+    color: var(--ink-soft);
+  }
+  #tab-realtime .sort-btn.active {
+    background: var(--red); color: #FFF; border-color: var(--red);
+  }
+  #tab-realtime .location-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    font-size: 13px;
+  }
+  #tab-realtime .location-table th {
+    background: var(--ink);
+    color: #FFF;
+    padding: 10px 12px;
+    text-align: left;
+    font-weight: 500;
+    font-size: 12px;
+  }
+  #tab-realtime .location-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #F0EDE5;
+    cursor: pointer;
+  }
+  #tab-realtime .location-table tr:last-child td {
+    border-bottom: none;
+  }
+  #tab-realtime .location-table tr:hover td {
+    background: var(--cream);
+  }
+  #tab-realtime .location-table .rate-cell {
+    font-weight: 700;
+  }
+  #tab-realtime .location-table .rate-cell.high {
+    color: var(--green);
+  }
+  #tab-realtime .location-table .rate-cell.low {
+    color: var(--red);
+  }
+  #tab-realtime .location-table .not-reported {
+    color: var(--ink-mute); font-style: italic;
+  }
+  #tab-realtime .location-table tr.inactive td {
+    background: #F5F2EC;
+    color: var(--ink-mute);
+  }
+  #tab-realtime .location-table tr.inactive td:first-child {
+    text-decoration: line-through;
+    text-decoration-color: var(--ink-mute);
+  }
+  #tab-realtime .status-badge.inactive {
+    background: #E8E3D8; color: #6B6258;
+  }
+  #tab-realtime .rank-item.inactive {
+    opacity: .45;
+  }
+  #tab-realtime .modal-bg {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.5);
+    z-index: 200;
+    display: flex;
+    align-items: flex-end;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .2s;
+  }
+  #tab-realtime .modal-bg.show {
+    opacity: 1; pointer-events: all;
+  }
+  #tab-realtime .modal-sheet {
+    background: var(--white);
+    width: 100%;
+    max-width: 600px;
+    margin: 0 auto;
+    border-radius: 16px 16px 0 0;
+    max-height: 85vh;
+    overflow-y: auto;
+    transform: translateY(100%);
+    transition: transform .25s cubic-bezier(.32,0,.15,1);
+  }
+  #tab-realtime .modal-bg.show .modal-sheet {
+    transform: translateY(0);
+  }
+  #tab-realtime .modal-header {
+    background: var(--red);
+    color: #FFF;
+    padding: 16px 20px;
+    position: sticky;
+    top: 0;
+  }
+  #tab-realtime .modal-header h2 {
+    font-size: 16px; font-weight: 700;
+  }
+  #tab-realtime .modal-header p {
+    font-size: 12px; opacity: .75; margin-top: 2px;
+  }
+  #tab-realtime .modal-close {
+    position: absolute;
+    top: 16px; right: 16px;
+    background: rgba(255,255,255,.2);
+    border: none;
+    color: #FFF;
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    font-size: 16px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #tab-realtime .modal-body {
+    padding: 16px;
+  }
+  #tab-realtime .product-row {
+    display: flex;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    gap: 10px;
+  }
+  #tab-realtime .product-row:last-child {
+    border-bottom: none;
+  }
+  #tab-realtime .product-row-name {
+    font-size: 13px; flex: 1; color: var(--ink-soft);
+  }
+  #tab-realtime .product-row-nums {
+    font-size: 12px; color: var(--ink-mute); white-space: nowrap;
+  }
+  #tab-realtime .product-row-rate {
+    font-size: 14px; font-weight: 700; min-width: 45px; text-align: right;
+  }
+  #tab-realtime .product-rate-bar {
+    flex: 1; max-width: 100px; height: 6px; background: #EEE; border-radius: 3px;
+  }
+  #tab-realtime .product-rate-fill {
+    height: 100%; border-radius: 3px; background: var(--green);
+  }
+  #tab-realtime .daily-summary {
+    background: var(--ink);
+    color: #FFF;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  #tab-realtime .daily-summary-title {
+    font-size: 12px;
+    color: rgba(255,255,255,.5);
+    letter-spacing: .1em;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  #tab-realtime .daily-summary-title::after {
+    content: ''; flex: 1; height: 1px; background: rgba(255,255,255,.1);
+  }
+  #tab-realtime .daily-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+  @media(min-width: 600px) {
+    #tab-realtime .daily-kpi-grid {
+      grid-template-columns: repeat(4, 1fr);
+    }
+  }
+  #tab-realtime .daily-kpi {
+    background: rgba(255,255,255,.08);
+    border-radius: 8px;
+    padding: 12px;
+    text-align: center;
+  }
+  #tab-realtime .daily-kpi-label {
+    font-size: 10px; color: rgba(255,255,255,.5); margin-bottom: 6px; letter-spacing: .08em;
+  }
+  #tab-realtime .daily-kpi-value {
+    font-size: 20px; font-weight: 700;
+  }
+  #tab-realtime .daily-kpi-value.gold {
+    color: #F4C430;
+  }
+  #tab-realtime .daily-kpi-value.green {
+    color: #58D68D;
+  }
+  #tab-realtime .daily-kpi-value.red {
+    color: #EC7063;
+  }
+  #tab-realtime .daily-kpi-value.blue {
+    color: #85C1E9;
+  }
+  #tab-realtime .weather-bar {
+    background: var(--blue-light);
+    border: 1px solid #AED6F1;
+    border-radius: 10px;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 16px;
+    font-size: 13px;
+    color: var(--blue);
+  }
+  #tab-realtime .weather-item {
+    display: flex; align-items: center; gap: 4px;
+  }
+  #tab-realtime .status-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 10px;
+  }
+  #tab-realtime .status-badge.done {
+    background: var(--green-light); color: #1A7A42;
+  }
+  #tab-realtime .status-badge.pending {
+    background: #FEF9E7; color: #7D6608;
+  }
+  #tab-realtime .status-badge.none {
+    background: #F5F5F5; color: var(--ink-mute);
+  }
+  #tab-realtime .loading-wrap {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--ink-mute);
+  }
+  #tab-realtime .loader {
+    width: 32px; height: 32px;
+    border: 3px solid var(--border);
+    border-top-color: var(--red);
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+    margin: 0 auto 16px;
+  }
+  #tab-realtime .memo-card-reply-count.zero {
+    background: rgba(255,255,255,.15);
+    color: rgba(255,255,255,.7);
+  }
+  #tab-realtime .profit-table td.rate-cell {
+    font-weight: 700;
+  }
+  #tab-realtime .profit-table td.rate-cell.minus {
+    color: var(--red);
+  }
+  #tab-realtime .rt-subtabs {
+    display: flex; gap: 6px; margin-bottom: 16px;
+    background: var(--cream-dark); padding: 4px; border-radius: 10px;
+  }
+  #tab-realtime .rt-subtab {
+    flex: 1; padding: 9px 8px; border: none; border-radius: 7px;
+    background: transparent; color: var(--ink-mute);
+    font-size: 13px; font-weight: 700; cursor: pointer;
+    font-family: inherit; transition: .15s;
+  }
+  #tab-realtime .rt-subtab.active {
+    background: var(--white); color: var(--red); box-shadow: 0 1px 3px rgba(0,0,0,.12);
+  }
+  #tab-realtime .area-block {
+    background: var(--white); border: 1px solid var(--border);
+    border-radius: 12px; padding: 14px; margin-bottom: 18px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.04);
+  }
+  #tab-realtime .area-block-head {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px;
+  }
+  #tab-realtime .area-name {
+    font-size: 15px; font-weight: 800; color: var(--ink); letter-spacing: .04em;
+  }
+  #tab-realtime .area-name::before {
+    content: ''; display: inline-block; width: 4px; height: 16px;
+    background: var(--red); border-radius: 2px; margin-right: 8px; vertical-align: -2px;
+  }
+  #tab-realtime .area-loc-count {
+    font-size: 11px; color: var(--ink-mute); font-weight: 600;
+  }
+  #tab-realtime .area-updated {
+    font-size: 11px; color: var(--green); font-weight: 700; white-space: nowrap;
+  }
+  #tab-realtime .area-refresh-btn {
+    margin-left: auto; padding: 6px 12px; border: 1px solid var(--border);
+    border-radius: 8px; background: var(--cream); color: var(--ink-soft);
+    font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit;
+    transition: .15s; white-space: nowrap;
+  }
+  #tab-realtime .area-refresh-btn:hover {
+    background: var(--gold-light); border-color: var(--gold);
+  }
+  #tab-realtime .area-refresh-btn:disabled {
+    opacity: .5; cursor: default;
+  }
+  #tab-realtime .matrix-scroll {
+    overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 8px;
+  }
+  #tab-realtime .matrix-table {
+    border-collapse: separate; border-spacing: 0; font-size: 12px; min-width: 100%;
+  }
+  #tab-realtime .matrix-table th, #tab-realtime .matrix-table td {
+    padding: 8px 10px; text-align: center; white-space: nowrap; border-bottom: 1px solid var(--border);
+  }
+  #tab-realtime .matrix-table thead th {
+    background: var(--cream-dark); color: var(--ink-soft);
+    font-weight: 700; vertical-align: top; min-width: 80px;
+  }
+  #tab-realtime .matrix-table thead th:first-child, #tab-realtime .matrix-table tbody th:first-child {
+    position: sticky; left: 0; z-index: 2;
+    background: var(--cream); text-align: left;
+    border-right: 2px solid var(--border);
+    font-weight: 700; color: var(--ink); min-width: 122px;
+  }
+  #tab-realtime .matrix-table thead th:first-child {
+    z-index: 3;
+  }
+  #tab-realtime .matrix-loc-name {
+    font-size: 12px; font-weight: 800; color: var(--ink);
+  }
+  #tab-realtime .matrix-loc-rate {
+    font-size: 11px; font-weight: 700; margin-top: 3px;
+  }
+  #tab-realtime .matrix-loc-rate.high {
+    color: var(--green);
+  }
+  #tab-realtime .matrix-loc-rate.mid {
+    color: var(--gold);
+  }
+  #tab-realtime .matrix-loc-rate.low {
+    color: var(--red);
+  }
+  #tab-realtime .matrix-loc-rate.none {
+    color: var(--ink-mute);
+  }
+  #tab-realtime .matrix-table tbody tr:last-child th, #tab-realtime .matrix-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+  #tab-realtime .matrix-cell {
+    color: var(--ink-soft); font-variant-numeric: tabular-nums;
+  }
+  #tab-realtime .matrix-cell .sold {
+    font-weight: 800; color: var(--ink);
+  }
+  #tab-realtime .matrix-cell.soldout {
+    background: var(--green-light);
+  }
+  #tab-realtime .matrix-cell.soldout .sold {
+    color: #1A7A42;
+  }
+  #tab-realtime .matrix-cell.zero {
+    color: var(--ink-mute);
+  }
+  #tab-realtime .matrix-cell.minus, #tab-realtime .matrix-total-cell.minus {
+    background: #FDECEC; color: var(--red);
+  }
+  #tab-realtime .matrix-cell.minus .sold, #tab-realtime .matrix-total-cell.minus .sold {
+    color: var(--red);
+  }
+  #tab-realtime .matrix-table tbody tr.matrix-total-row th, #tab-realtime .matrix-table tbody tr.matrix-total-row td {
+    background: var(--cream-dark); border-top: 2px solid var(--border);
+    font-variant-numeric: tabular-nums;
+  }
+  #tab-realtime .matrix-table tbody tr.matrix-total-row th:first-child {
+    background: var(--cream-dark); color: var(--ink);
+  }
+  #tab-realtime .matrix-total-cell .sold {
+    font-weight: 800; color: var(--red);
+  }
+  #tab-realtime .matrix-total-cell {
+    color: var(--ink-soft); font-weight: 700;
+  }
+  #tab-realtime .matrix-empty {
+    padding: 20px; text-align: center; color: var(--ink-mute); font-size: 13px;
+  }
+
 </style>
 </head>
 <body>
@@ -917,6 +1503,10 @@ body {
     <button class="tab-btn" id="tab-btn-approval" onclick="switchTab('approval')">
       📦 承認
       <span class="tab-badge red" id="approval-badge" style="display:none;">0</span>
+    </button>
+    <!-- ★v3.3 dashboard から移設したリアルタイム。タブ幅の都合で表記は「実況」 -->
+    <button class="tab-btn" id="tab-btn-realtime" onclick="switchTab('realtime')">
+      📊 実況
     </button>
   </div>
 
@@ -1077,6 +1667,11 @@ body {
       🚚 車から補充
       <span class="sv-left" id="sv-open-left">車載の残り 読み込み中…</span>
     </button>
+    <!-- ★2026-08-13 v3.3 車へ回収（引き上げ）。補充の逆。社長決定「ルートで動いているので途中余りそうなら引き上げる」。 -->
+    <button class="sv-open-btn cv" id="cv-open-btn" style="display:none;" onclick="openCollectModal()">
+      📥 車へ回収
+      <span class="sv-left">余りそうな拠点から引き上げる</span>
+    </button>
     <div class="mv-form">
       <div class="mv-section-title">出発登録（このトラックから持ち出す分）</div>
       <div class="mv-field">
@@ -1110,6 +1705,110 @@ body {
     </div>
   </div>
 
+  <!-- ★2026-08-13 v3.3 車へ回収のモーダル。補充と同じ作り（拠点を選ぶ → 個数 → 送信の1画面）。
+       刻みは出さない：置く時は「何個足すか」が決まっているが、引き上げは余っている数そのものなので現場判断。 -->
+  <div class="sv-modal-bg" id="cv-modal" onclick="if(event.target===this)closeCollectModal()">
+    <div class="sv-box">
+      <div class="mv-title">📥 車へ回収</div>
+      <div class="sv-stock" id="cv-stock">車載の残り …</div>
+      <div class="sv-sec">どこから引き上げる？</div>
+      <div class="sv-loc-grid" id="cv-loc-grid"></div>
+      <div class="sv-sec">何を何個？</div>
+      <div id="cv-products"><p class="mv-empty">商品を読み込み中…</p></div>
+      <button class="sv-send cv" id="cv-send-btn" onclick="submitCollect()">この内容で引き上げる</button>
+      <button class="sv-close" onclick="closeCollectModal()">閉じる</button>
+    </div>
+  </div>
+
+<!-- ═══ ★v3.3 (2026-08-13) リアルタイム（dashboard から移設・アプリ再編④） ═══
+     HTML は dashboard.html の #tab-realtime をそのまま持ってきている。
+     CSS は全て #tab-realtime にスコープ済みなので driver 既存の見た目に影響しない。 -->
+<div id="tab-realtime" class="tab-panel">
+  <div class="loading-wrap" id="rt-loading">
+    <div class="loader"></div>
+    <p>データを読み込み中...</p>
+  </div>
+  <div id="rt-content" style="display:none;">
+    <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-bottom:10px;">
+      <span style="font-size:11px;color:var(--ink-mute);" id="rt-update-time">--:-- 更新</span>
+      <button onclick="rtLoadAll()" style="background:var(--blue);border:none;color:#FFF;font-size:11px;padding:4px 12px;border-radius:10px;cursor:pointer;font-family:inherit;">🔄 更新</button>
+    </div>
+
+    <!-- ───────── リアルタイム サブ切替（v5 新規） ───────── -->
+    <div class="rt-subtabs">
+      <button class="rt-subtab active" id="rtsub-summary" onclick="switchRtView('summary')">サマリー</button>
+      <button class="rt-subtab" id="rtsub-area" onclick="switchRtView('area')">エリア別マトリクス</button>
+    </div>
+
+    <!-- ───────── サマリービュー（既存一式） ───────── -->
+    <div id="rt-view-summary">
+
+    <!-- 天気 -->
+    <div class="weather-bar" id="weather-bar">
+      <span>🌤</span>
+      <span class="weather-item" id="w-condition">--</span>
+      <span class="weather-item">🌡 <span id="w-temp">--</span>℃</span>
+      <span class="weather-item">💨 <span id="w-wind">--</span>m/s</span>
+    </div>
+
+    <!-- KPI -->
+    <div class="kpi-grid" id="kpi-grid"></div>
+
+    <!-- 16時以降のまとめ -->
+    <div id="daily-summary-wrap" style="display:none;">
+      <div class="daily-summary" id="daily-summary"></div>
+    </div>
+
+    <!-- ベスト・ワースト -->
+    <div class="section-title">完売率ランキング</div>
+    <div class="rank-grid" id="rank-grid"></div>
+
+    <!-- 全拠点一覧 -->
+    <div class="section-title">全拠点一覧</div>
+    <div class="list-controls">
+      <div class="sort-btns">
+        <button class="sort-btn active" onclick="sortLocations('rate_desc')" id="sort-best">ベスト順</button>
+        <button class="sort-btn" onclick="sortLocations('rate_asc')" id="sort-worst">ワースト順</button>
+        <button class="sort-btn" onclick="sortLocations('id')" id="sort-id">ID順</button>
+      </div>
+      <span style="font-size:12px;color:var(--ink-mute);" id="reported-count"></span>
+    </div>
+    <table class="location-table" id="location-table">
+      <thead>
+        <tr>
+          <th>拠点名</th>
+          <th>担当者</th>
+          <th>販売数</th>
+          <th>完売率</th>
+          <th>売上</th>
+          <th>状況</th>
+        </tr>
+      </thead>
+      <tbody id="location-tbody"></tbody>
+    </table>
+    </div><!-- /#rt-view-summary -->
+
+    <!-- ───────── エリア別ビュー（v5 新規） ───────── -->
+    <div id="rt-view-area" style="display:none;">
+      <div id="area-matrix-wrap"></div>
+    </div>
+
+  </div>
+
+  <!-- ★v3.3 拠点タップの詳細。#tab-realtime の中に置くことで移設したCSSがそのまま効く -->
+  <div class="modal-bg" id="rt-detail-modal">
+    <div class="modal-sheet">
+      <div class="modal-header" style="position:relative;">
+        <h2 id="rt-modal-location-name">拠点名</h2>
+        <p id="rt-modal-location-sub">担当者</p>
+        <button class="modal-close" onclick="rtCloseModal()">✕</button>
+      </div>
+      <div class="modal-body" id="rt-modal-body"></div>
+    </div>
+  </div>
+</div>
+
+
   <div class="sticky-bottom" id="sticky-collection">
     <button class="btn-primary" onclick="switchTab('residual')">
       📦 残数を確認する
@@ -1140,6 +1839,7 @@ body {
   <div id="complete-collection-card" class="complete-card"></div>
   <button class="btn-restart" onclick="restart()">続けて報告する</button>
 </div>
+
 
 <script>
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5AawPDc7aluPokONkYz6f2ikwl0S487JvhKdKh6QSp1xhEhA/exec';
@@ -1908,6 +2608,18 @@ let ccSpotBusy = false;
 //   現金会計なしの置き弁（ccNoCash）は数える現金が無いので段階を分けない（従来どおり1画面）。
 let ccStep = 1;
 
+// ★2026-08-13 二次販売の交通費（社長決定「交通費は日によって違うから、ドライバーが入力できるように」）。
+//   販売員はギャラ1500円と一緒に交通費もレジから抜いて持ち帰るので、ドライバーが数える現金は
+//   その分だけ減っている。入力しないと「交通費のぶんだけ足りない」が毎回ズレとして出続ける。
+//   二次販売拠点（拠点マスタの「エリア」列＝二次販売）でだけ②の画面に出す。
+const SECOND_SALE_AREA = '二次販売';
+let ccTransport = '';     // 円（文字列）
+let ccIs2nd     = false;  // 二次販売拠点か
+function is2ndLoc_(locId) {
+  const l = (state.locations || []).find(x => String(x.id) === String(locId));
+  return String((l && l.area) || '').trim() === SECOND_SALE_AREA;
+}
+
 function ccToday_() {
   const d = new Date();
   const p = n => String(n).padStart(2, '0');
@@ -1944,6 +2656,8 @@ async function openCashModal(id) {
   ccSpotBusy = false;
   ccField = 'cash';
   ccStep  = 1;             // ★2026-08-13 必ず①残数から始める
+  ccTransport = '';        // ★2026-08-13 交通費は毎回空から（拠点ごとに違う）
+  ccIs2nd     = is2ndLoc_(id);
 
   document.getElementById('cash-modal-title').textContent = loc.name;
   document.getElementById('cash-modal-expected').textContent = '報告の残数が入っています。違う場合だけ直してください。';
@@ -2067,6 +2781,7 @@ function closeCashModal() {
   ccPlannedTo = [];   // ★2026-08-07 次の拠点に行き先を持ち越さない
   ccIsSpot = false; ccCoupon = '0'; ccSpot = null; ccSpotBusy = false;   // ★2026-08-06
   ccStep = 1;         // ★2026-08-13 次に開く拠点も①残数から
+  ccTransport = ''; ccIs2nd = false;   // ★2026-08-13 交通費を次の拠点へ持ち越さない
 }
 
 // ★2026-08-13 ①残数 → ②金庫 の行き来（社長指示：まず残数を確認、次に金庫を確認）
@@ -2093,6 +2808,7 @@ function ccPid_()      { return ccField.indexOf('p:') === 0 ? ccField.slice(2) :
 function ccGet_()      {
   const p = ccPid_();
   if (p) return ccVals[p] || '';
+  if (ccField === 'transport') return ccTransport;        // ★2026-08-13 二次販売の交通費
   return (ccField === 'coupon') ? ccCoupon : cashInput;   // ★2026-08-06 スポットのクーポン欄
 }
 function ccSet_(v) {
@@ -2104,11 +2820,13 @@ function ccSet_(v) {
   } else if (ccField === 'coupon') {
     ccCoupon = v;
     if (ccIsSpot) ccSpot = null;
+  } else if (ccField === 'transport') {
+    ccTransport = v;                                      // ★2026-08-13
   } else {
     cashInput = v;
   }
 }
-function ccMaxLen_()   { return ccPid_() ? 3 : (ccField === 'coupon' ? 3 : 9); }
+function ccMaxLen_()   { return ccPid_() ? 3 : (ccField === 'coupon' ? 3 : (ccField === 'transport' ? 6 : 9)); }
 
 function cashKey(d) {
   let cur = ccGet_();
@@ -2241,14 +2959,26 @@ function renderCashModal_(net) {
     fc.classList.toggle('active', ccField === 'cash');
   }
 
+  // ── ★2026-08-13 二次販売の交通費（②の画面・二次販売拠点だけ）──
+  //   販売員がギャラと一緒にレジから抜いて持ち帰った額。0のままでも確定できる（無い日もあるため）。
+  const tf = document.getElementById('cc-field-transport');
+  if (tf) {
+    const showTransport = ccIs2nd && !ccNoCash && !onStep1;
+    tf.style.display = showTransport ? '' : 'none';
+    tf.classList.toggle('active', ccField === 'transport');
+    const tv2 = document.getElementById('cc-val-transport');
+    if (tv2) tv2.textContent = ccTransport === '' ? '0' : (parseInt(ccTransport, 10) || 0).toLocaleString();
+  }
+
   // ── テンキーの表示（選択中の欄の値）──
   const cur = ccGet_();
   const val = cur === '' ? 0 : parseInt(cur, 10);
   // ★2026-08-06 クーポンは枚数。¥ではなく「枚」で出す（紙が枚数なので単位を揃える）
   document.getElementById('cash-modal-display').textContent =
-    (ccField === 'cash')   ? '¥' + val.toLocaleString()
-  : (ccField === 'coupon') ? val.toLocaleString() + '枚（−¥' + (val * ccCouponYen).toLocaleString() + '）'
-  :                          val.toLocaleString() + '個';
+    (ccField === 'cash')      ? '¥' + val.toLocaleString()
+  : (ccField === 'transport') ? '¥' + val.toLocaleString() + '（交通費）'   // ★2026-08-13
+  : (ccField === 'coupon')    ? val.toLocaleString() + '枚（−¥' + (val * ccCouponYen).toLocaleString() + '）'
+  :                             val.toLocaleString() + '個';
 
   // ★2026-08-13 ①の画面で打つものが無い拠点（残数が取れなかった等）はテンキーを隠す。
   //   出したままだと ccField が 'cash' のまま残っており、金庫の額を①で打ててしまう。
@@ -2264,12 +2994,16 @@ function renderCashModal_(net) {
   if (!onStep1 && ccField === 'cash' && cashInput !== '') {
     // ★2026-08-06 スポットは「報告」が無いので、あるべき現金と突き合わせる。
     //   差額 ＝ (実現金 − レジ開始金) − あるべき現金
+    // ★2026-08-13 二次販売は交通費もレジから抜かれているので、想定額から引いて突き合わせる
+    //   （引かないと必ず「交通費のぶん足りない」と出る）。
+    const fee  = (ccIs2nd && ccTransport !== '') ? (parseInt(ccTransport, 10) || 0) : 0;
     const diff = (ccIsSpot && ccSpot)
       ? ((val - (Number(ccSpot.startCash) || 0)) - (Number(ccSpot.expectCash) || 0))
-      : (val - net);
+      : (val - (net - fee));
     const sign = diff >= 0 ? '+' : '−';
     diffEl.textContent = (ccIsSpot && ccSpot ? 'あるべき現金との差 ' : '報告との差 ')
-                       + sign + '¥' + Math.abs(diff).toLocaleString();
+                       + sign + '¥' + Math.abs(diff).toLocaleString()
+                       + (fee > 0 ? '（交通費 ¥' + fee.toLocaleString() + ' を抜いた後）' : '');
     diffEl.className = 'cash-modal-diff ' + (diff === 0 ? '' : (diff >= 0 ? 'plus' : 'minus'));
     if (ccIsSpot && ccSpot && diff === 0) diffEl.textContent = '✓ ぴったり合っています';
   } else {
@@ -2370,6 +3104,10 @@ async function confirmCash(kind) {
           operatorName: state.userName,
           notifyDiff:   false,              // ★ ドライバー入力は誤差通知しない
           timestamp:    new Date().toISOString(),
+          // ★2026-08-13 二次販売の交通費。二次販売拠点のときだけ送る（他拠点は列に触らない）。
+          //   サーバー側は「想定額 = レジ最終金額 − ギャラ − 交通費」で突き合わせ、
+          //   現金売上（実現金＋ギャラ＋交通費−開始金）にも足す。
+          ...(ccIs2nd ? { transportFee: (ccTransport === '' ? 0 : (parseInt(ccTransport, 10) || 0)) } : {}),
         }),
         redirect: 'follow',
       });
@@ -3192,6 +3930,9 @@ function switchTab(tab) {
   document.getElementById('tab-approval').classList.toggle('active', tab === 'approval');
   document.getElementById('tab-btn-approval').classList.toggle('active', tab === 'approval');
   if (tab === 'approval') loadDeliveryApprovals();
+  // ★v3.3 リアルタイム（dashboard から移設）
+  document.getElementById('tab-realtime').classList.toggle('active', tab === 'realtime');
+  document.getElementById('tab-btn-realtime').classList.toggle('active', tab === 'realtime');
   document.getElementById('sticky-collection').style.display = tab === 'collection' ? 'block' : 'none';
   document.getElementById('sticky-residual').style.display   = tab === 'residual'   ? 'block' : 'none';
   document.getElementById('sticky-nextroute').style.display  = tab === 'nextroute'  ? 'block' : 'none';
@@ -3216,6 +3957,10 @@ function switchTab(tab) {
   if (tab === 'residual') {
     loadTodayMoves_().then(updateCalculatedResidualTotal).catch(function(){});
   }
+
+  // ★v3.3 リアルタイムは開いている間だけ動かす（回収中に裏で5分ポーリングを回さない）
+  if (tab === 'realtime') startRealtime_();
+  else stopRealtime_();
 
   window.scrollTo(0, 0);
 }
@@ -4154,9 +4899,15 @@ function _svTargets_() {
 // 移動タブを開いた時に、車載を持っている人にだけボタンを出す。
 async function refreshSupplyButton_() {
   const btn = document.getElementById('sv-open-btn');
+  const cbt = document.getElementById('cv-open-btn');   // ★v3.3 車へ回収（引き上げ）
   if (!btn) return;
-  if (!_svVehicle_()) { btn.style.display = 'none'; return; }
+  if (!_svVehicle_()) {
+    btn.style.display = 'none';
+    if (cbt) cbt.style.display = 'none';
+    return;
+  }
   btn.style.display = 'block';
+  if (cbt) cbt.style.display = 'block';
   const left = await loadVehicleStock_();
   const el = document.getElementById('sv-open-left');
   if (el) el.textContent = (left && left.remaining)
@@ -4241,6 +4992,81 @@ async function submitSupply() {
     showToast('エラー：' + (e.message || e), 'error', 6000);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = 'この内容で置く'; }
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   車へ回収（2026-08-13 v3.3・引き上げ）
+   ══════════════════════════════════════════════════════════════
+   社長決定「ルートで動いているので途中余りそうなら引き上げる」。
+   設計書 §4 の「下げる動きはしない」を撤回した。
+   補充の**出発と到着を入れ替えただけ**で、画面も同じ作り。
+   サーバー側は collectToVehicle が移動ログに完結行を1本書く（→ メインGAS）。
+   刻み（SUPPLY_STEP）は出さない：置く数は決まっているが、
+   引き上げる数は「余っている分」＝その場で数えるものだから。 */
+let cvPickedLoc = '';
+
+async function openCollectModal() {
+  cvPickedLoc = '';
+  const m = document.getElementById('cv-modal');
+  if (m) m.classList.add('show');
+  renderMoveProducts_('cv-products', {});
+  renderCollectLocs_();
+  const st = await loadVehicleStock_();
+  const box = document.getElementById('cv-stock');
+  if (box) {
+    box.innerHTML = st && st.remaining
+      ? ('車載の残り <b>' + st.remaining.total + '個</b>　（' + _esc(st.vehicle.name) + '）引き上げるとここに戻ります')
+      : '車載の残りが取れませんでした。回収の登録はできます。';
+  }
+}
+function closeCollectModal() {
+  const m = document.getElementById('cv-modal');
+  if (m) m.classList.remove('show');
+}
+function renderCollectLocs_() {
+  const box = document.getElementById('cv-loc-grid');
+  if (!box) return;
+  box.innerHTML = _svTargets_().map(l =>
+    `<button class="sv-loc-btn${cvPickedLoc === l.id ? ' on' : ''}"
+      onclick="pickCollectLoc('${_esc(l.id)}')">${_esc(l.name)}</button>`).join('');
+}
+function pickCollectLoc(id) {
+  cvPickedLoc = (cvPickedLoc === id) ? '' : id;
+  renderCollectLocs_();
+}
+
+async function submitCollect() {
+  if (!cvPickedLoc) { showToast('引き上げる拠点を選んでください', 'error'); return; }
+  const qty = collectMoveQtys_('cv-products');
+  if (Object.keys(qty).length === 0) { showToast('個数を入れてください', 'error'); return; }
+
+  const btn = document.getElementById('cv-send-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '送信中…'; }
+  try {
+    const veh = _svVehicle_();
+    const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({
+      action: 'collectToVehicle',
+      date: getDateStrOffset_(0),
+      driverUserId: state.userId,
+      driverName: state.userName,
+      vehicleLocationId: veh ? veh.id : '',
+      fromLocationId: cvPickedLoc,
+      fromLocationName: _moveLocName_(cvPickedLoc),
+      qty: qty,
+    })});
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || '登録に失敗しました');
+    const left = (data.remaining && typeof data.remaining.total === 'number')
+      ? '　車載の残り' + data.remaining.total + '個' : '';
+    showToast(_moveLocName_(cvPickedLoc) + ' から ' + _fmtQtyObj_(qty) + ' を引き上げました。' + left, 'success', 4000);
+    closeCollectModal();
+    await loadTodayMoves_();
+    await refreshSupplyButton_();
+  } catch (e) {
+    showToast('エラー：' + (e.message || e), 'error', 6000);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'この内容で引き上げる'; }
   }
 }
 
@@ -4427,6 +5253,825 @@ async function cancelMove_(moveId) {
   }
 }
 
+
+// ══════════════════════════════════════════════════════════════════════════
+// ★ v3.3 (2026-08-13) リアルタイム — dashboard「リアルタイム」タブを丸ごと移設
+//   アプリ再編④（→ [[設計_アプリ再編_振り分け確定_2026-08-10]]）。
+//   ロジックは dashboard.html のものをそのまま持ってきている（見た目・数字とも同じ）。
+//   driver 側と名前がぶつかる／汎用すぎるものだけ rt* へ寄せた：
+//     loadAll→rtLoadAll / fetchJSON→rtFetchJSON / updateTime→rtUpdateTime /
+//     escapeHtml→rtEscapeHtml / openModal→rtOpenModal / closeModal→rtCloseModal /
+//     sortLocations→rtSortLocations / refreshArea→rtRefreshArea /
+//     allData→rtAllData / masterData→rtMasterData / currentSort→rtCurrentSort /
+//     inactiveLocationIds→rtInactiveLocationIds / moveAdjMap→rtMoveAdjMap / isFirstLoad→rtIsFirstLoad
+//   dashboard にあった「現金有高タブの連動描画」は driver に該当タブが無いので落とした。
+//   localStorage のキーは dashboard と共通のまま＝両方を開いても同じキャッシュを使う。
+// ══════════════════════════════════════════════════════════════════════════
+let rtAllData    = [];
+let rtMasterData = { locations: [], products: [] };
+let rtCurrentSort = 'rate_desc';
+let rtInactiveLocationIds = new Set();  // 本日の休止拠点ID
+let rtMoveAdjMap = {};                  // 拠点間移動の純増減 { 拠点ID: { 商品ID: 純増減 } }
+let rtIsFirstLoad = true;               // 初回のみキャッシュから先描画
+let rtTimer = null;                     // 5分ごとの自動更新（タブを開いている間だけ回す）
+let rtBooted = false;
+
+/* タブを開いた時だけ動かす。閉じたら止める（回収中に裏で回り続けないように）。 */
+function startRealtime_() {
+  if (!rtBooted) {
+    rtBooted = true;
+    document.getElementById('rt-detail-modal').addEventListener('click', function(e) {
+      if (e.target === this) rtCloseModal();
+    });
+  }
+  rtLoadAll();
+  if (!rtTimer) rtTimer = setInterval(rtLoadAll, 5 * 60 * 1000);
+}
+function stopRealtime_() {
+  if (rtTimer) { clearInterval(rtTimer); rtTimer = null; }
+}
+
+const DASH_MASTER_CACHE_KEY    = 'oedo_dashboard_master_cache_v1';
+const DASH_REALTIME_CACHE_KEY  = 'oedo_dashboard_realtime_cache_v1';
+const DASH_MASTER_TTL_MS       = 24 * 60 * 60 * 1000;  // 24時間
+const DASH_REALTIME_TTL_MS     = 5 * 60 * 1000;        // 5分
+
+function loadDashMasterCache() {
+  try {
+    const raw = localStorage.getItem(DASH_MASTER_CACHE_KEY);
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
+    if (!obj || !obj.savedAt) return null;
+    if (Date.now() - obj.savedAt > DASH_MASTER_TTL_MS) {
+      localStorage.removeItem(DASH_MASTER_CACHE_KEY);
+      return null;
+    }
+    return obj.data || null;
+  } catch(e) {
+    console.warn('loadDashMasterCache error:', e);
+    return null;
+  }
+}
+
+function saveDashMasterCache(data) {
+  try {
+    localStorage.setItem(DASH_MASTER_CACHE_KEY, JSON.stringify({
+      savedAt: Date.now(),
+      data: data,
+    }));
+  } catch(e) { console.warn('saveDashMasterCache error:', e); }
+}
+
+function loadDashRealtimeCache() {
+  try {
+    const raw = localStorage.getItem(DASH_REALTIME_CACHE_KEY);
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
+    if (!obj || !obj.savedAt) return null;
+    if (Date.now() - obj.savedAt > DASH_REALTIME_TTL_MS) {
+      localStorage.removeItem(DASH_REALTIME_CACHE_KEY);
+      return null;
+    }
+    return obj.data || null;
+  } catch(e) {
+    console.warn('loadDashRealtimeCache error:', e);
+    return null;
+  }
+}
+
+function saveDashRealtimeCache(data) {
+  try {
+    localStorage.setItem(DASH_REALTIME_CACHE_KEY, JSON.stringify({
+      savedAt: Date.now(),
+      data: data,
+    }));
+  } catch(e) { console.warn('saveDashRealtimeCache error:', e); }
+}
+
+async function rtLoadAll() {
+  rtUpdateTime();
+
+  // ─────────────────────────────────────────────────────────
+  // Phase A：初回のみ localStorage キャッシュから先描画（v2026-05-18 案B Phase-2）
+  //   2回目以降（5分間隔の自動更新）はキャッシュ無視で素通り
+  // ─────────────────────────────────────────────────────────
+  let prevSnapshot = null;
+  if (rtIsFirstLoad) {
+    const cachedMaster   = loadDashMasterCache();
+    const cachedRealtime = loadDashRealtimeCache();
+    let renderedFromCache = false;
+
+    if (cachedMaster) {
+      rtMasterData = cachedMaster;
+    }
+    if (cachedRealtime) {
+      rtAllData = cachedRealtime.allData || [];
+      rtInactiveLocationIds = new Set(cachedRealtime.inactiveIds || []);
+      if (rtAllData.length > 0) {
+        try {
+          renderRealtime();
+          renderedFromCache = true;
+        } catch(e) { console.warn('cache render error:', e); }
+      }
+    }
+
+    if (renderedFromCache) {
+      prevSnapshot = {
+        masterJson:   JSON.stringify(rtMasterData || {}),
+        allDataJson:  JSON.stringify(rtAllData || []),
+        inactiveJson: JSON.stringify(Array.from(rtInactiveLocationIds || [])),
+      };
+    }
+  }
+
+  try {
+    const [master, reports, intermediate, driverState, moveAdj] = await Promise.all([
+      rtFetchJSON(`${GAS_URL}?action=getMaster`),
+      rtFetchJSON(`${GAS_URL}?action=getTodayReports`),
+      rtFetchJSON(`${GAS_URL}?action=getTodayIntermediate`),
+      rtFetchJSON(`${GAS_URL}?action=getDriverState`).catch(() => ({ inactive: [] })),
+      rtFetchJSON(`${GAS_URL}?action=getMoveAdjByLoc`).catch(() => ({ adj: {} })),  // v7
+    ]);
+    rtMasterData = master;
+    rtMoveAdjMap = (moveAdj && moveAdj.adj) ? moveAdj.adj : {};  // v7
+    // 本日の休止拠点IDをSetで保持
+    rtInactiveLocationIds = new Set(
+      (driverState.inactive || []).map(x => String(x.locationId || '').trim())
+    );
+    const finalMap = {};
+    (reports.data || []).forEach(r => { finalMap[r.locationId] = r; });
+    const merged = [...(reports.data || [])];
+    (intermediate.data || []).forEach(r => {
+      if (!finalMap[r.locationId]) merged.push(r);
+    });
+    rtAllData = merged;
+
+    // ─────────────────────────────────────────────────────────
+    // キャッシュ保存（マスタ・リアルタイム両方）
+    // ─────────────────────────────────────────────────────────
+    saveDashMasterCache(master);
+    saveDashRealtimeCache({
+      rtAllData: merged,
+      inactiveIds: Array.from(rtInactiveLocationIds),
+    });
+
+    // ─────────────────────────────────────────────────────────
+    // Phase C：差分検出して silent 再描画（先描画していた場合のみ）
+    //   先描画していない場合は通常通り renderRealtime を呼ぶ
+    // ─────────────────────────────────────────────────────────
+    if (prevSnapshot) {
+      const newSnapshot = {
+        masterJson:   JSON.stringify(rtMasterData || {}),
+        allDataJson:  JSON.stringify(rtAllData || []),
+        inactiveJson: JSON.stringify(Array.from(rtInactiveLocationIds || [])),
+      };
+      const changed = (
+        prevSnapshot.masterJson   !== newSnapshot.masterJson   ||
+        prevSnapshot.allDataJson  !== newSnapshot.allDataJson  ||
+        prevSnapshot.inactiveJson !== newSnapshot.inactiveJson
+      );
+      if (changed) {
+        console.log('[案B] ダッシュボード差分検出 → 再描画');
+        renderRealtime();
+      }
+    } else {
+      renderRealtime();
+    }
+
+    rtIsFirstLoad = false;
+  } catch (e) {
+    // キャッシュから既に描画済みなら、エラー画面に塗りつぶさず警告のみ
+    if (prevSnapshot) {
+      console.warn('rtLoadAll error (cache fallback):', e);
+      return;
+    }
+    document.getElementById('rt-loading').innerHTML =
+      `<p style="color:var(--red);">データ取得エラー：${e.message}</p>`;
+  }
+}
+
+async function rtFetchJSON(url) {
+  const res  = await fetch(url, { redirect: 'follow' });
+  const text = await res.text();
+  return JSON.parse(text);
+}
+
+function rtUpdateTime() {
+  const now = new Date();
+  document.getElementById('rt-update-time').textContent =
+    `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')} 更新`;
+}
+
+// ─────────────────────────────────────
+// REALTIME
+// ─────────────────────────────────────
+function renderRealtime() {
+  document.getElementById('rt-loading').style.display = 'none';
+  document.getElementById('rt-content').style.display = 'block';
+
+  const now = new Date();
+  const isAfter16 = now.getHours() >= 16;
+
+  const latestWithWeather = rtAllData.find(r => r.weather);
+  if (latestWithWeather) {
+    document.getElementById('w-condition').textContent = latestWithWeather.weather;
+    document.getElementById('w-temp').textContent      = latestWithWeather.temperature;
+    document.getElementById('w-wind').textContent      = latestWithWeather.windspeed;
+  }
+
+  const reported   = rtAllData.filter(r => r.reported);
+  // ★2026-08-13 v3.3 KPI「報告完了 n/N」の分母から車載（仮想拠点）を外す。
+  //   車載にはレジが無いので永久に報告されず、入れたままだと n/N が絶対に埋まらない。
+  const totalLocs  = (rtMasterData.locations || []).filter(l => String(l.area || '').trim() !== '車載').length;
+  const totalSold  = reported.reduce((s, r) => s + (r.soldCount || 0), 0);
+  const totalSales = reported.reduce((s, r) => s + (r.totalSales || 0), 0);
+  const avgRate    = reported.length > 0
+    ? Math.round(reported.reduce((s, r) => s + (_effSellRate_(r) || 0), 0) / reported.length * 10) / 10
+    : 0;
+
+  document.getElementById('kpi-grid').innerHTML = `
+    <div class="kpi-card red">
+      <div class="kpi-label">報告完了</div>
+      <div class="kpi-value">${reported.length}<span> / ${totalLocs}</span></div>
+      <div class="kpi-sub">拠点</div>
+    </div>
+    <div class="kpi-card gold">
+      <div class="kpi-label">総販売数</div>
+      <div class="kpi-value">${totalSold}<span> 個</span></div>
+    </div>
+    <div class="kpi-card green">
+      <div class="kpi-label">平均完売率</div>
+      <div class="kpi-value">${avgRate}<span> %</span></div>
+    </div>
+    <div class="kpi-card blue">
+      <div class="kpi-label">売上合計</div>
+      <div class="kpi-value" style="font-size:18px;">¥${totalSales.toLocaleString()}</div>
+    </div>
+  `;
+
+  if (isAfter16 && reported.length > 0) {
+    renderDailySummary(reported);
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // ランキング対象（v2026-05-18 修正）
+  //   最終報告 + 中間販売中で完売率が数値のものを含める
+  //   （販売中の進捗もベスト/ワーストに反映するため）
+  // ─────────────────────────────────────────────────────────
+  const rankingTargets = rtAllData.filter(r => {
+    if (!r) return false;
+    if (r.reported) return true;                    // 最終報告
+    if (r.isIntermediate) {
+      const rateNum = Number(r.sellRate);
+      return !isNaN(rateNum) && r.sellRate !== '—'; // 中間販売中で完売率が数値
+    }
+    return false;
+  });
+  renderRanking(rankingTargets);
+  renderLocationTable();
+
+  document.getElementById('reported-count').textContent = `${reported.length}/${totalLocs}拠点 報告済み`;
+
+  // v5: エリア別マトリクスも同時更新（5分自動更新・グローバル更新ボタンと連動）
+  renderAreaMatrix();
+}
+
+function renderDailySummary(reported) {
+  const wrap = document.getElementById('daily-summary-wrap');
+  wrap.style.display = 'block';
+
+  const cashTotal   = reported.reduce((s, r) => s + (r.cashSales || 0), 0);
+  const paypayTotal = reported.reduce((s, r) => s + (r.paypayAmount || 0), 0);
+  const couponTotal = reported.reduce((s, r) => s + (r.couponCount || 0), 0);
+  const laborTotal  = reported.reduce((s, r) => s + (r.totalSalary || 0), 0);
+
+  document.getElementById('daily-summary').innerHTML = `
+    <div class="daily-summary-title">本日の最終集計</div>
+    <div class="daily-kpi-grid">
+      <div class="daily-kpi">
+        <div class="daily-kpi-label">現金売上</div>
+        <div class="daily-kpi-value gold">¥${cashTotal.toLocaleString()}</div>
+      </div>
+      <div class="daily-kpi">
+        <div class="daily-kpi-label">PayPay売上</div>
+        <div class="daily-kpi-value blue">¥${paypayTotal.toLocaleString()}</div>
+      </div>
+      <div class="daily-kpi">
+        <div class="daily-kpi-label">クーポン使用</div>
+        <div class="daily-kpi-value green">${couponTotal}<span style="font-size:14px;"> 枚</span></div>
+      </div>
+      <div class="daily-kpi">
+        <div class="daily-kpi-label">人件費合計</div>
+        <div class="daily-kpi-value red">¥${laborTotal.toLocaleString()}</div>
+      </div>
+    </div>
+  `;
+}
+
+function renderRanking(reported) {
+  // 休止拠点は完売率ランキングから除外
+  const activeReported = reported.filter(r =>
+    !rtInactiveLocationIds.has(String(r.locationId || '').trim())
+  );
+
+  if (activeReported.length === 0) {
+    document.getElementById('rank-grid').innerHTML =
+      '<p style="color:var(--ink-mute);font-size:13px;grid-column:1/-1;">まだ報告がありません</p>';
+    return;
+  }
+
+  // v7: 実効完売率（移動±込）で並べ替え
+  const sorted = [...activeReported].sort(
+    (a, b) => (Number(_effSellRate_(b)) || 0) - (Number(_effSellRate_(a)) || 0)
+  );
+  const best3  = sorted.slice(0, 3);
+  const worst3 = [...sorted].reverse().slice(0, 3);
+
+  const rankNumClass = (i) => i === 0 ? 'gold' : i === 1 ? 'silver' : 'bronze';
+
+  const renderItems = (items, isBest) => items.map((r, i) => {
+    const rate = Number(_effSellRate_(r)) || 0;  // v7: 実効完売率
+    return `
+      <div class="rank-item" onclick="rtOpenModal('${r.locationId}')">
+        <div class="rank-num ${isBest ? rankNumClass(i) : 'bad'}">${i + 1}</div>
+        <div>
+          <div class="rank-name">${r.locationName}</div>
+          <div class="rank-staff">${r.userName}</div>
+        </div>
+        <div class="rate-bar-wrap">
+          <div class="rate-bar ${isBest ? 'high' : 'low'}" style="width:${rate}%"></div>
+        </div>
+        <div class="rank-rate ${isBest ? 'high' : 'low'}">${rate}%</div>
+      </div>
+    `;
+  }).join('');
+
+  document.getElementById('rank-grid').innerHTML = `
+    <div class="rank-card">
+      <div class="rank-card-header best">🏆 完売率ベスト3</div>
+      ${renderItems(best3, true)}
+    </div>
+    <div class="rank-card">
+      <div class="rank-card-header worst">⚠️ 完売率ワースト3</div>
+      ${renderItems(worst3, false)}
+    </div>
+  `;
+}
+
+function renderLocationTable() {
+  // ★2026-08-13 v3.3 車載（巡回補充テスト用の仮想拠点）は販売しないので一覧から外す。
+  //   残したままだと「未報告」が1行ずっと居座り、KPI の分母（報告完了 n/N）も1つ多く出る。
+  const locations = (rtMasterData.locations || []).filter(l => String(l.area || '').trim() !== '車載');
+  const dataMap   = {};
+  rtAllData.forEach(r => { if (r.locationId) dataMap[r.locationId] = r; });
+
+  // 各行に sellRate(数値化済)と休止フラグを付与してから並び替え
+  let rows = locations.map(loc => {
+    const r = dataMap[loc.id];
+    const isInactive = rtInactiveLocationIds.has(String(loc.id || '').trim());
+    const rateNum = r ? _effSellRate_(r) : null;  // v7: 実効完売率（移動±込）。null=未報告/分母0
+    return { loc, r, isInactive, rateNum };
+  });
+
+  // 並び替え（未報告は常に末尾、休止拠点はその更に下）
+  if (rtCurrentSort === 'rate_desc') {
+    rows.sort((a, b) => {
+      if (a.isInactive !== b.isInactive) return a.isInactive ? 1 : -1;
+      if (a.rateNum === null && b.rateNum === null) return 0;
+      if (a.rateNum === null) return 1;
+      if (b.rateNum === null) return -1;
+      return b.rateNum - a.rateNum;
+    });
+  } else if (rtCurrentSort === 'rate_asc') {
+    rows.sort((a, b) => {
+      if (a.isInactive !== b.isInactive) return a.isInactive ? 1 : -1;
+      if (a.rateNum === null && b.rateNum === null) return 0;
+      if (a.rateNum === null) return 1;
+      if (b.rateNum === null) return -1;
+      return a.rateNum - b.rateNum;
+    });
+  } else {
+    // ID順（自然順：L02 < L9 < L10 を正しく並べる）
+    rows.sort((a, b) =>
+      String(a.loc.id).localeCompare(String(b.loc.id), 'ja', { numeric: true })
+    );
+  }
+
+  document.getElementById('location-tbody').innerHTML = rows.map(({ loc, r, isInactive }) => {
+    // 休止拠点（営業しない設定あり）
+    if (isInactive) {
+      return `
+        <tr class="inactive">
+          <td>${loc.name}</td>
+          <td class="not-reported">—</td>
+          <td class="not-reported">—</td>
+          <td class="not-reported">—</td>
+          <td class="not-reported">—</td>
+          <td><span class="status-badge inactive">営業休止</span></td>
+        </tr>`;
+    }
+    if (!r) {
+      return `
+        <tr>
+          <td>${loc.name}</td>
+          <td class="not-reported">未報告</td>
+          <td class="not-reported">—</td>
+          <td class="not-reported">—</td>
+          <td class="not-reported">—</td>
+          <td><span class="status-badge none">未報告</span></td>
+        </tr>`;
+    }
+    const totalSales = r.isIntermediate
+      ? (r.cashSales || 0) + (r.paypayAmount || 0)
+      : (r.totalSales || 0);
+    // v7: 実効完売率（移動±込・お茶抜き）で確定/中間とも統一
+    const effRate   = _effSellRate_(r);                 // number | null
+    const sellRate  = (effRate === null) ? '—' : effRate;
+    const rateClass = (effRate === null) ? '' : (effRate >= 80 ? 'high' : effRate >= 50 ? '' : 'low');
+    const rateStr   = (effRate === null) ? '—' : effRate + '%';
+    const badge    = r.isIntermediate
+      ? '<span class="status-badge pending">販売中</span>'
+      : '<span class="status-badge done">報告済</span>';
+    return `
+      <tr onclick="rtOpenModal('${loc.id}')">
+        <td>${loc.name}</td>
+        <td>${r.userName || '—'}</td>
+        <td>${r.soldCount || 0}個</td>
+        <td class="rate-cell ${typeof sellRate === 'number' ? rateClass : ''}">${rateStr}</td>
+        <td>¥${totalSales.toLocaleString()}</td>
+        <td>${badge}</td>
+      </tr>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// エリア別マトリクス（v2026-06-06 v5）
+//   - リアルタイムタブ内サブビュー。rtMasterData + rtAllData から描画
+//   - 行: そのエリアで納品>0 の商品（お茶除外） / 列: 拠点（表示順）
+//   - セル: 販売数/納品数, 列ヘッダー下: 完売率(お茶抜き)
+//   - v6: 最下部に拠点別「合計」行（販売合計/納品合計・お茶除外）
+//   - GAS 変更なし（getMaster の area, deliveryCountJson, productSalesJson を使用）
+// ═══════════════════════════════════════════════════════════════
+let rtCurrentView = 'summary';
+
+function switchRtView(view) {
+  rtCurrentView = view;
+  document.getElementById('rt-view-summary').style.display = (view === 'summary') ? 'block' : 'none';
+  document.getElementById('rt-view-area').style.display    = (view === 'area')    ? 'block' : 'none';
+  document.getElementById('rtsub-summary').classList.toggle('active', view === 'summary');
+  document.getElementById('rtsub-area').classList.toggle('active', view === 'area');
+  if (view === 'area') renderAreaMatrix();
+}
+
+// お茶商品ID一覧
+function _teaIds_() {
+  return (rtMasterData.products || []).filter(p => p.name.includes('お茶')).map(p => p.id);
+}
+
+// ── v7: 拠点間移動±の共通ヘルパー（全ビュー同一基準） ──────────────
+// 実効納品オブジェクト（商品ID→数）= 生納品 ＋ rtMoveAdjMap[locId]（商品別）。
+//   deliveryCount（object）/ deliveryCountJson（string）両対応。
+// ★2026-08-07 商品ごとの 0止め（Math.max(0,…)）をやめた。
+//   受け取った数より多く出した商品は納品が0に潰れ、「販売3/納品0」のような表示になっていた。
+//   マイナスは実態（出しすぎ・未着の持ち出し）なので、そのまま -1 と出して気づけるようにする。
+//   例：出発済のまま未着の便があると、移動元は出発時点で − されるので一時的にマイナスが出る。
+function _effDeliveryObj_(r) {
+  if (!r) return {};
+  let base = {};
+  if (r.deliveryCount && typeof r.deliveryCount === 'object') {
+    base = r.deliveryCount;
+  } else {
+    try { base = JSON.parse(r.deliveryCountJson || '{}'); } catch (e) { base = {}; }
+  }
+  const out = {};
+  Object.entries(base).forEach(([id, v]) => { out[id] = Number(v) || 0; });
+  const adj = rtMoveAdjMap[r.locationId] || rtMoveAdjMap[String(r.locationId)] || {};
+  Object.entries(adj).forEach(([id, v]) => {
+    out[id] = (Number(out[id]) || 0) + (Number(v) || 0);
+  });
+  return out;
+}
+
+// 実効納品の非お茶合計
+function _effDeliveryTotal_(r) {
+  const teaIds = _teaIds_();
+  let sum = 0;
+  Object.entries(_effDeliveryObj_(r)).forEach(([id, v]) => {
+    if (!teaIds.includes(id)) sum += Number(v) || 0;
+  });
+  return sum;
+}
+
+// 実効完売率（お茶抜き・%）。確定/中間とも実効納品を分母に統一。分母0以下は null。
+// ★2026-08-07 分子の出どころをマトリクスのセルと同じ productSalesJson に統一した。
+//   従来は分子が soldCount（＝別集計）で、セルは productSalesJson。両者がズレると
+//   「ヘッダーの完売率」と「合計行の 販売/納品」が一致せず、どちらが正しいか分からなかった。
+//   productSalesJson が空の拠点だけ、従来どおり soldCount−お茶販売 に落とす
+//   （中間報告など商品別内訳を持たない拠点で完売率が 0% に化けるのを防ぐ）。
+function _effSellRate_(r) {
+  if (!r) return null;
+  const teaIds = _teaIds_();
+  const delivery = _effDeliveryTotal_(r);
+  let sold = 0, hasDetail = false, teaSold = 0;
+  try {
+    const sObj = JSON.parse(r.productSalesJson || '{}');
+    Object.entries(sObj).forEach(([id, v]) => {
+      hasDetail = true;
+      if (teaIds.includes(id)) teaSold += Number(v) || 0;
+      else sold += Number(v) || 0;
+    });
+  } catch (e) {}
+  if (!hasDetail) sold = Math.max(0, (Number(r.soldCount) || 0) - teaSold);
+  return delivery > 0 ? Math.round(sold / delivery * 1000) / 10 : null;
+}
+
+// 1拠点の 完売率(お茶抜き)。v7: 確定/中間とも実効納品(移動±込)基準に統一
+function _locSelloutRate_(r) {
+  return _effSellRate_(r);
+}
+
+function _rateClass_(rate) {
+  if (rate === null) return 'none';
+  if (rate >= 80) return 'high';
+  if (rate >= 50) return 'mid';
+  return 'low';
+}
+
+// エリア名 → DOM ID 用キー（日本語/記号を安全化）
+function _areaKey_(area) {
+  return 'a' + Array.from(String(area)).map(c => c.charCodeAt(0).toString(16)).join('');
+}
+
+// メイン描画
+function renderAreaMatrix() {
+  const wrap = document.getElementById('area-matrix-wrap');
+  if (!wrap) return;
+
+  const locations = rtMasterData.locations || [];
+  const products  = rtMasterData.products  || [];
+  const teaIds    = _teaIds_();
+
+  // 拠点ID → 本日データ
+  const dataById = {};
+  rtAllData.forEach(r => { if (r.locationId) dataById[r.locationId] = r; });
+
+  // エリア → 拠点[]（表示順）。エリア未設定は除外
+  // ★2026-08-13 v3.3 「車載」も除外する。車載は 8/13 に足した仮想拠点（巡回補充テスト用）で
+  //   レジが無く販売しない。マトリクスに1ブロック出ても中身が全部「—」になるだけで、
+  //   ピーク中に見るドライバーの邪魔になる。車載の残りは移動タブの「🚚 車から補充」に出る。
+  const areaMap = {};
+  locations.forEach(loc => {
+    const area = (loc.area || '').trim();
+    if (!area || area === '車載') return;
+    if (!areaMap[area]) areaMap[area] = { locs: [], minOrder: 99999 };
+    areaMap[area].locs.push(loc);
+    areaMap[area].minOrder = Math.min(areaMap[area].minOrder, (loc.order != null ? loc.order : 9999));
+  });
+
+  // エリア順: 内拠点の最小表示順 → 同値はエリア名
+  const areaNames = Object.keys(areaMap).sort((a, b) => {
+    if (areaMap[a].minOrder !== areaMap[b].minOrder) return areaMap[a].minOrder - areaMap[b].minOrder;
+    return a.localeCompare(b, 'ja');
+  });
+
+  if (areaNames.length === 0) {
+    wrap.innerHTML = '<div class="matrix-empty">エリアが設定された拠点がありません（拠点マスタ C列「エリア」をご確認ください）</div>';
+    return;
+  }
+
+  const areaNameByKey = {};
+  let html = '';
+
+  areaNames.forEach(area => {
+    const key  = _areaKey_(area);
+    areaNameByKey[key] = area;
+    const locs = areaMap[area].locs; // 表示順済み
+
+    // 各拠点の納品/販売を解析
+    const perLoc = locs.map(loc => {
+      const r = dataById[loc.id];
+      const inactive = rtInactiveLocationIds.has(String(loc.id).trim());
+      let delivery = {}, sales = {};
+      if (r) {
+        delivery = _effDeliveryObj_(r);  // v7: 生納品＋移動±（商品別）
+        try { sales = JSON.parse(r.productSalesJson || '{}'); } catch (e) {}
+      }
+      const rate   = r ? _locSelloutRate_(r) : null;
+      const status = inactive ? 'inactive' : (!r ? 'none' : (r.isIntermediate ? 'selling' : 'done'));
+      return { loc, delivery, sales, rate, status };
+    });
+
+    // 行に出す商品 = このエリアで 実効納品≠0 **または 販売>0**（お茶除外）。商品マスタ順を保持
+    // ★2026-08-07 従来は「実効納品>0」だけで絞っていたため、
+    //   移動で入ったが未完結（＝実効納品が増えていない）商品は**行ごと消え**、
+    //   その販売数がマトリクスのどこにも出ないまま合計行にだけ乗っていた。
+    //   販売があるなら必ず行を出す。納品がマイナスの商品も出す（0止めをやめたため）。
+    const rowProducts = products.filter(p => {
+      if (teaIds.includes(p.id)) return false;
+      return perLoc.some(pl => (Number(pl.delivery[p.id] || 0) !== 0)
+                            || (Number(pl.sales[p.id]    || 0) >  0));
+    });
+
+    // ヘッダー
+    let head = '<th>商品 \\ 拠点</th>';
+    perLoc.forEach(pl => {
+      const rateStr = pl.status === 'inactive' ? '休止'
+                    : pl.status === 'none'     ? '未報告'
+                    : (pl.rate === null ? '—' : pl.rate + '%');
+      const rc = (pl.status === 'inactive' || pl.status === 'none') ? 'none' : _rateClass_(pl.rate);
+      const nm = pl.loc.displayName ? pl.loc.displayName : pl.loc.name;
+      head += `<th><div class="matrix-loc-name">${rtEscapeHtml(nm)}</div><div class="matrix-loc-rate ${rc}">${rateStr}</div></th>`;
+    });
+
+    // ボディ
+    let body = '';
+    if (rowProducts.length === 0) {
+      body = `<tr><td class="matrix-empty" colspan="${perLoc.length + 1}">本日の納品データがありません</td></tr>`;
+    } else {
+      rowProducts.forEach(p => {
+        let tr = `<th>${rtEscapeHtml(p.name)}</th>`;
+        perLoc.forEach(pl => {
+          const d = Number(pl.delivery[p.id] || 0);
+          const s = Number(pl.sales[p.id]    || 0);
+          if (d === 0 && s === 0) {
+            tr += `<td class="matrix-cell zero">—</td>`;
+          } else {
+            // ★2026-08-07 納品がマイナス＝出しすぎ／未着の持ち出しがある。色で気づけるようにする
+            const cls = (d < 0) ? 'matrix-cell minus'
+                      : (d > 0 && s >= d) ? 'matrix-cell soldout' : 'matrix-cell';
+            tr += `<td class="${cls}"><span class="sold">${s}</span>/${d}</td>`;
+          }
+        });
+        body += `<tr>${tr}</tr>`;
+      });
+
+      // v6: 拠点別 合計行（列＝拠点ごとに 販売合計/納品合計。お茶除外）
+      // ★2026-08-07 合計は **表示している行（rowProducts）だけ** で足す。
+      //   従来は全商品を合算していたため、行に出ていない商品の販売数が合計にだけ乗り、
+      //   「セルを縦に足した数」と「合計行」が合わなかった（社長報告①の直接の原因）。
+      //   rowProducts はお茶を除いてあるので、ここで teaIds を見る必要はない。
+      let totRow = '<th>合計</th>';
+      perLoc.forEach(pl => {
+        let dTot = 0, sTot = 0;
+        rowProducts.forEach(p => {
+          dTot += Number(pl.delivery[p.id] || 0);
+          sTot += Number(pl.sales[p.id]    || 0);
+        });
+        if (dTot === 0 && sTot === 0) {
+          totRow += `<td class="matrix-total-cell zero">—</td>`;
+        } else {
+          const tcls = (dTot < 0) ? 'matrix-total-cell minus' : 'matrix-total-cell';
+          totRow += `<td class="${tcls}"><span class="sold">${sTot}</span>/${dTot}</td>`;
+        }
+      });
+      body += `<tr class="matrix-total-row">${totRow}</tr>`;
+    }
+
+    html += `
+      <div class="area-block" id="area-block-${key}">
+        <div class="area-block-head">
+          <span class="area-name">${rtEscapeHtml(area)}</span>
+          <span class="area-loc-count">${perLoc.length}拠点</span>
+          <span class="area-updated" id="area-stamp-${key}"></span>
+          <button class="area-refresh-btn" id="area-btn-${key}" onclick="rtRefreshArea('${key}')">🔄 更新</button>
+        </div>
+        <div class="matrix-scroll">
+          <table class="matrix-table">
+            <thead><tr>${head}</tr></thead>
+            <tbody>${body}</tbody>
+          </table>
+        </div>
+      </div>`;
+  });
+
+  window._areaNameByKey = areaNameByKey;
+  wrap.innerHTML = html;
+}
+
+// 単一エリアの更新ボタン:
+//   本日データを全取得 → 全マトリクス再描画 → 押下エリアのみ「✓ HH:MM 更新」表示
+async function rtRefreshArea(key) {
+  const btn = document.getElementById('area-btn-' + key);
+  if (btn) { btn.disabled = true; btn.textContent = '更新中…'; }
+  try {
+    const [reports, intermediate, driverState, moveAdj] = await Promise.all([
+      rtFetchJSON(`${GAS_URL}?action=getTodayReports`),
+      rtFetchJSON(`${GAS_URL}?action=getTodayIntermediate`),
+      rtFetchJSON(`${GAS_URL}?action=getDriverState`).catch(() => ({ inactive: [] })),
+      rtFetchJSON(`${GAS_URL}?action=getMoveAdjByLoc`).catch(() => ({ adj: {} })),  // v7
+    ]);
+    rtMoveAdjMap = (moveAdj && moveAdj.adj) ? moveAdj.adj : {};  // v7
+    rtInactiveLocationIds = new Set(
+      (driverState.inactive || []).map(x => String(x.locationId || '').trim())
+    );
+    const finalMap = {};
+    (reports.data || []).forEach(r => { finalMap[r.locationId] = r; });
+    const merged = [...(reports.data || [])];
+    (intermediate.data || []).forEach(r => { if (!finalMap[r.locationId]) merged.push(r); });
+    rtAllData = merged;
+    saveDashRealtimeCache({ rtAllData: merged, inactiveIds: Array.from(rtInactiveLocationIds) });
+
+    // 全マトリクス再描画（データは全エリア最新化）＋ サマリー側も整合
+    renderAreaMatrix();
+    try { renderLocationTable(); } catch (e) {}
+
+    // 押したエリアだけ「✓ HH:MM 更新」を表示
+    const now  = new Date();
+    const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const stamp = document.getElementById('area-stamp-' + key);
+    if (stamp) { stamp.style.color = 'var(--green)'; stamp.textContent = '✓ ' + hhmm + ' 更新'; }
+  } catch (e) {
+    const stamp = document.getElementById('area-stamp-' + key);
+    if (stamp) { stamp.style.color = 'var(--red)'; stamp.textContent = '更新失敗'; }
+    console.error('rtRefreshArea error:', e);
+  } finally {
+    const btn2 = document.getElementById('area-btn-' + key);
+    if (btn2) { btn2.disabled = false; btn2.textContent = '🔄 更新'; }
+  }
+}
+
+function rtSortLocations(type) {
+  rtCurrentSort = type;
+  ['best','worst','id'].forEach(k => {
+    document.getElementById(`sort-${k}`)?.classList.toggle('active',
+      (k === 'best' && type === 'rate_desc') ||
+      (k === 'worst' && type === 'rate_asc') ||
+      (k === 'id' && type === 'id')
+    );
+  });
+  renderLocationTable();
+}
+
+// ─────────────────────────────────────
+// CASH TABLE
+// ─────────────────────────────────────
+
+function rtOpenModal(locationId) {
+  const loc = (rtMasterData.locations || []).find(l => l.id === locationId);
+  const r   = rtAllData.find(d => d.locationId === locationId);
+  if (!loc || !r) return;
+
+  document.getElementById('rt-modal-location-name').textContent = loc.name;
+  document.getElementById('rt-modal-location-sub').textContent  = `担当：${r.userName || '—'}`;
+
+  const products = rtMasterData.products || [];
+  const delivery = _effDeliveryObj_(r);  // v7: 生納品＋移動±（商品別）
+  const sales    = JSON.parse(r.productSalesJson  || '{}');
+  const soldOutTimes = JSON.parse(r.soldOutTimesJson || '{}');
+  const effRate  = _effSellRate_(r);     // v7: 実効完売率
+
+  let bodyHtml = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+      <div class="kpi-card green"><div class="kpi-label">販売数</div><div class="kpi-value">${r.soldCount || 0}<span> 個</span></div></div>
+      <div class="kpi-card gold"><div class="kpi-label">完売率</div><div class="kpi-value">${effRate === null ? 0 : effRate}<span> %</span></div></div>
+      <div class="kpi-card red"><div class="kpi-label">売上合計</div><div class="kpi-value" style="font-size:16px;">¥${(r.totalSales||0).toLocaleString()}</div></div>
+      <div class="kpi-card blue"><div class="kpi-label">本日ギャラ</div><div class="kpi-value" style="font-size:16px;">¥${(r.totalSalary||0).toLocaleString()}</div></div>
+    </div>
+    <div style="font-size:12px;font-weight:700;color:var(--ink-mute);letter-spacing:.1em;margin-bottom:10px;">商品別完売率</div>
+  `;
+
+  const modalTeaIds = (rtMasterData.products || []).filter(p => p.name.includes('お茶')).map(p => p.id);
+  products.filter(p => !modalTeaIds.includes(p.id)).forEach(p => {
+    const d    = Number(delivery[p.id] || 0);
+    const s    = Number(sales[p.id]    || 0);
+    const rate = d > 0 ? Math.round(s / d * 100) : null;
+    const rateStr = rate !== null ? `${rate}%` : '—';
+    const barW    = rate !== null ? rate : 0;
+    const soldOutTime = soldOutTimes[p.id];
+    const soldOutBadge = soldOutTime
+      ? `<span style="display:inline-block;background:var(--red);color:#FFF;font-size:10px;font-weight:700;padding:2px 6px;border-radius:6px;margin-left:6px;white-space:nowrap;">完売 ${soldOutTime}</span>`
+      : '';
+    bodyHtml += `
+      <div class="product-row">
+        <div class="product-row-name">${p.name}${soldOutBadge}</div>
+        <div class="product-row-nums">${s}/${d}個</div>
+        <div class="product-rate-bar"><div class="product-rate-fill" style="width:${barW}%"></div></div>
+        <div class="product-row-rate" style="color:${barW >= 80 ? 'var(--green)' : barW > 0 ? 'var(--gold)' : 'var(--ink-mute)'}">${rateStr}</div>
+      </div>`;
+  });
+
+  if (r.memo) {
+    bodyHtml += `
+      <div style="margin-top:16px;background:var(--gold-light);border-left:3px solid var(--gold);padding:10px 14px;border-radius:0 8px 8px 0;font-size:13px;color:var(--ink-soft);">
+        <div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:4px;">申し送り</div>
+        ${rtEscapeHtml(r.memo)}
+      </div>`;
+  }
+
+  document.getElementById('rt-modal-body').innerHTML = bodyHtml;
+  document.getElementById('rt-detail-modal').classList.add('show');
+}
+
+function rtCloseModal() {
+  document.getElementById('rt-detail-modal').classList.remove('show');
+}
+
+function rtEscapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])
+  );
+}
+
 </script>
 
 <!-- BREAKDOWN MODAL -->
@@ -4596,6 +6241,13 @@ async function cancelMove_(moveId) {
     <div class="cc-field" id="cc-field-cash" onclick="ccFocus('cash')">
       <span class="cc-label">レジの現金</span>
       <span class="cc-value" id="cc-val-cash">—</span>
+      <span class="cc-unit">円</span>
+    </div>
+    <!-- ★2026-08-13 二次販売の交通費（二次販売拠点でだけ出る）。社長決定：日によって違うのでドライバーが入れる。
+         ギャラと一緒にレジから抜かれているので、想定額から引いて突き合わせる。 -->
+    <div class="cc-field" id="cc-field-transport" style="display:none;" onclick="ccFocus('transport')">
+      <span class="cc-label">渡した交通費</span>
+      <span class="cc-value" id="cc-val-transport">0</span>
       <span class="cc-unit">円</span>
     </div>
     <div class="cash-modal-display" id="cash-modal-display">¥0</div>
