@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v3.6 (2026-08-14) 【ホーム画面に置ける本物のPWAにする＋入口パスワード】アプリ再編⑥。★経緯＝社長の狙いは「現場アプリをホーム画面から一発で開きたい」。方針A（外部ブラウザ＋PWA）で進める前に **iOS実機で liff.login() の往復を検証したところ不合格**（2026-08-14）。ホーム画面のPWAから `access.line.me` へ出た瞬間 iOS が Safari に投げ出し、**戻り先もSafariのまま**になる。しかもログイン情報はSafari側に入るので **PWAからは何度やってもログインできない**。回避策なし。★よってPWAでは **LINEログインを使わず「入口パスワード」で本人を特定する**（社長決定：人ごとに違うパスワード）。入れた時点で本人が確定するので名前を選ばせない＝なりすまし不可。照合はGAS側 `driverPwLogin`（**POST**。/exec のURLはログに残りうるのでクエリに載せない）。パスワードは スタッフ設定 **N列**（`?action=runfix&name=drvpw&run=1&token=…` で8桁を自動発行・冪等）。対象は属性が社員/ドライバーでLINE IDのある人（2026-08-14時点で社員8名）。★**入口は2本になった**＝LINE内（リッチメニュー）で開いたら従来どおりLIFF認証・**今までの運用は1つも変わらない**／ホーム画面や外部ブラウザで開いたらパスワード。`liff.isInClient()` で分ける。liff.init が失敗してもパスワード側には入れる（LINE SDKが落ちても現場が止まらない）。★一度入れたら `localStorage` に userId と名前を保存し次から素通り。ヘッダーの名前に下線が付き、**タップ→確認→別の人に切り替え**（押し間違いで他人の名前のまま記録するのを防ぐためパスワード再入力が要る）。★PWA化＝`apple-mobile-web-app-capable` / `driver.webmanifest`（display:standalone）/ `driver-icon.png`（180・512）を追加。★**レジ(register)はリッチメニュー運用のまま。今回は触っていない**（社長決定）。⚠ **入口パスワードは「URLを知っているだけの人にアプリを開かれない」ための関所であって、データの防御ではない。**GASのAPIは元々無認証で userId を知っていれば直接叩ける（今までも同じ）。 -->
 <!-- driver v3.5 (2026-08-13) 【二次販売の拠点を昼の画面から外す】二次販売レジ（register v3.23）に合わせた後片付け。★二次販売拠点は**回収が終わったあとに売る**拠点なので、昼の時点で報告が無いのが当たり前。ところが「📊 実況」はレジの報告だけを見ているため、そのままだと ①全拠点一覧に「未報告」で3拠点が居座る ②エリア別マトリクスに中身が全部「—」のブロックが増える ③KPI「報告完了 n/N」の分母が3増えて**絶対に埋まらない**、が起きる。**8/13 に車載（仮想拠点）で直したのと同じ症状**なので同じ扱いにした。★実装＝`RT_HIDDEN_AREAS = ['車載','二次販売']` と `rtHiddenLoc_()` を新設し、車載を弾いていた4箇所（KPI分母／拠点一覧／エリア別マトリクス／車から補充の補充先）をこれに寄せた。判定は拠点マスタの「エリア」列＝二次販売レジ・交通費と同じ目印を使う。★**回収タブからは外さない**。二次販売でも現金は回収するので、ここに出ないとドライバーが回収できない。★拠点IDは L801/L802/L803（社長決定 2026-08-13。車載=L901 に倣い、特殊枠は800〜900番台）。GAS変更なし。 -->
 <!-- driver v3.4 (2026-08-13) 【二次販売の交通費をドライバーが入れられるようにした】社長決定「1500円のギャラと交通費、どちらもレジから抜く。ただ交通費は日によって違うから今はわからない。ドライバーが入力できるようにしておいてくれればいいかな」。★背景＝二次販売の販売員は**ギャラ1500円＋交通費**をレジの金庫から抜いて持ち帰る。現金売上は `実現金＋ギャラ−開始金` で出しているので、交通費を式に入れないと**抜いた額のぶんだけ現金売上が過小に出る**（毎回マイナスのズレとしてPayPay突合に出続ける）。置き弁ギャラを締めに含めた register v3.15 と同じ理屈。★UI＝v3.2 で作った**②金庫の画面**に「渡した交通費」欄を追加。**二次販売拠点でだけ出す**（拠点マスタの「エリア」列＝`二次販売` で判定。`getMaster` の locations が `area` を返すので追加のfetchは不要）。0のままでも確定できる（交通費が無い日もあるため）。入れると「報告との差」の想定額から自動で引かれ、`報告との差 +¥0（交通費 ¥1,000 を抜いた後）` のように根拠を併記する。①残数の画面には出さない。★送信＝`saveActualCash` に `transportFee` を相乗り（**二次販売拠点のときだけ載せる**＝他拠点は列に一切触らない）。サーバー側は「想定額＝レジ最終金額−ギャラ−交通費」で突き合わせ、報告ログ39列目に保存し、現金売上（`実現金＋ギャラ＋交通費−開始金`）にも足す。要: メインGAS @2026-08-13 以降（`COL['報告ログ'].交通費`=38／`ensureTransportFeeColumn_`／`saveActualCash` の transportFee／PayPay突合と拠点別明細の現金売上／`runfix&name=feecol`）。★検証：headless Chrome で通常拠点（欄が出ない・transportFee を送らない）と二次販売拠点（欄が出る・交通費1000で想定額が18500→17500へ下がり、実額17500でぴったり合う）を実際に操作して確認済み。 -->
 <!-- driver v3.3 (2026-08-13) 【リアルタイムを移設：dashboard の「リアルタイム」タブを driver に持ってくる】アプリ再編④（→ [[設計_アプリ再編_振り分け確定_2026-08-10]]・お盆の窓 8/16まで）。★狙い＝リアルタイムは「今どこが切れそうか」を見る画面で、それを見て動くのはドライバー。ところが置き場は事務所アプリ（dashboard）で、現場からは開かれていなかった。**場面で切る**という再編の第1軸に従い、driver へ移す。dashboard 側は⑤の解体で落とす。★移設したもの＝サマリー（天気・KPI・完売率ランキング・全拠点一覧）／エリア別マトリクス／拠点タップの商品別完売率モーダル。**ロジックは dashboard.html のものをそのまま持ってきており、数字も見た目も変えていない**（再編ルール「移設は機能を移すだけ・UIは元のまま」）。★衝突対策＝CSSは全セレクタを `#tab-realtime` にスコープした。driver と dashboard は `--blue` `--gold` `--cream` `--border` `--ink-mute` の値が違い、`.modal-bg` `.loader` `.tab-panel` `.active` `.done` `.inactive` は同名で中身が違う。スコープしたうえで **dashboard の配色変数を `#tab-realtime` 配下だけで再定義**したので、リアルタイムの見た目は dashboard と1pxも変わらず、driver 既存6タブにも一切影響しない。拠点詳細モーダルも `#tab-realtime` の**中**に置いてある（スコープを効かせるため）。★JSは driver と名前がぶつかる／汎用すぎるものだけ `rt*` へ寄せた（`loadAll`→`rtLoadAll` / `fetchJSON`→`rtFetchJSON` / `updateTime`→`rtUpdateTime` / `escapeHtml`→`rtEscapeHtml` / `openModal`→`rtOpenModal` / `closeModal`→`rtCloseModal` / `sortLocations`→`rtSortLocations` / `refreshArea`→`rtRefreshArea` / `allData`→`rtAllData` / `masterData`→`rtMasterData` / `currentSort`→`rtCurrentSort` / `inactiveLocationIds`→`rtInactiveLocationIds` / `moveAdjMap`→`rtMoveAdjMap` / `isFirstLoad`→`rtIsFirstLoad`）。dashboard にあった「現金有高タブの連動描画」は driver に該当タブが無いので落とした。★**5分ポーリングはタブを開いている間だけ回す**（`startRealtime_` / `stopRealtime_`）。dashboard は起動時から回しっぱなしだったが、driver は回収中ずっと開いているアプリなので、裏で `getTodayIntermediate` を叩き続けさせない。★localStorage のキーは dashboard と共通のまま＝両方開いても同じキャッシュを使う。★タブ幅の都合で表記は「📊 実況」。GAS変更なし（叩くのは既存の getMaster / getTodayReports / getTodayIntermediate / getDriverState / getMoveAdjByLoc）。 -->
@@ -27,6 +28,17 @@
 <!-- driver.html v1.6 (2026-06-27) — タブ並び替え（回収/残数/移動/ルート/取置）・ラベル短縮・はみ出し対策／拠点移動タブ（±移動・商品別・LINE確認ボタン・残数反映）／取り置き / 商品名B列表示 -->
 <!-- driver.html v1.7 (2026-07-06) — 回収チェックのテンキー現金有高入力（報告済拠点タップ→現金有高必須入力→saveActualCash(notifyDiff:false)＋setCollected） -->
 <!-- driver.html v1.8 (2026-07-24) — 残数タブ：ドライバー行タップで回収弁当の商品別内訳を展開（getResidualSummary の drivers[].products を使用・開閉状態は30秒自動更新をまたいで保持） -->
+<!-- ★2026-08-14 v3.6 ホーム画面に置ける本物のPWAにする（アプリ再編⑥）
+     iOS実機検証（2026-08-14）で、ホーム画面のPWAから liff.login() の外部リダイレクトに出ると
+     Safariに投げ出されPWAに戻ってこないことが確定した（しかもログインはSafari側に入るので
+     PWAからは永久にログインできない）。よってPWAでは LINEログインを使わず「入口パスワード」で本人を特定する。
+     LINE（リッチメニュー）からの入口は今まで通り残す＝入口が2本ある。 -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ドライバー">
+<link rel="apple-touch-icon" href="driver-icon.png">
+<link rel="manifest" href="driver.webmanifest">
+<meta name="theme-color" content="#1a1a2e">
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
 :root {
@@ -74,6 +86,30 @@ body {
 .header-user { font-size: 12px; opacity: .8; }
 
 #screen-loading { align-items: center; justify-content: center; background: var(--blue); }
+
+/* ★2026-08-14 v3.6 入口パスワード画面（ローディングと同じ配色で揃える） */
+#screen-pwgate { align-items: center; justify-content: center; background: var(--blue); padding: 24px; }
+.pwg-wrap { width: 100%; max-width: 320px; text-align: center; color: #FFF; }
+.pwg-logo { font-size: 46px; line-height: 1; margin-bottom: 12px; }
+.pwg-title { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+.pwg-sub { font-size: 13px; opacity: .75; margin-bottom: 22px; }
+.pwg-input {
+  width: 100%; padding: 15px 16px; font-size: 17px;   /* 16px以上＝iOSで自動ズームしない */
+  border: none; border-radius: 12px; font-family: inherit;
+  text-align: center; letter-spacing: .12em; background: #FFF; color: var(--ink);
+}
+.pwg-input:focus { outline: 3px solid rgba(255,255,255,.55); }
+.pwg-err { min-height: 20px; font-size: 12px; color: #FFD5D0; margin: 8px 0 4px; line-height: 1.5; }
+.pwg-btn {
+  width: 100%; padding: 15px; border: none; border-radius: 12px;
+  background: #FFF; color: var(--blue); font-size: 16px; font-weight: 700;
+  font-family: inherit; cursor: pointer;
+}
+.pwg-btn:disabled { opacity: .55; cursor: default; }
+.pwg-note { font-size: 11px; opacity: .7; line-height: 1.7; margin-top: 20px; }
+/* ホーム画面から開いた時だけ「名前をタップで切替」と分かるようにする */
+.header-user.switchable { text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+
 .loading-logo { color: #FFF; text-align: center; }
 .loading-logo h1 { font-size: 26px; font-weight: 700; margin-bottom: 8px; }
 .loading-logo p { font-size: 13px; opacity: .7; margin-bottom: 40px; }
@@ -1473,6 +1509,27 @@ body {
   </div>
 </div>
 
+<!-- ★2026-08-14 v3.6 入口パスワード（ホーム画面から開いた時だけ出る。LINEから開いた時は出ない） -->
+<div id="screen-pwgate" class="screen">
+  <div class="pwg-wrap">
+    <div class="pwg-logo">🚚</div>
+    <h1 class="pwg-title">ドライバー報告</h1>
+    <p class="pwg-sub">パスワードを入れてください</p>
+
+    <input type="password" id="pwg-input" class="pwg-input"
+           inputmode="text" autocomplete="current-password"
+           autocapitalize="off" autocorrect="off" spellcheck="false"
+           placeholder="パスワード">
+    <div class="pwg-err" id="pwg-err"></div>
+    <button class="pwg-btn" id="pwg-btn">開く</button>
+
+    <p class="pwg-note">
+      パスワードは社長から各自に伝えられています。<br>
+      <b>一度入れれば、次からは入力なしで開きます。</b>
+    </p>
+  </div>
+</div>
+
 <!-- MAIN -->
 <div id="screen-main" class="screen">
   <div class="app-header">
@@ -1996,13 +2053,116 @@ function showToast(message, type = 'success', duration = 2800) {
 // ═══════════════════════════════════════════════════════════════
 // 初期化
 // ═══════════════════════════════════════════════════════════════
-async function init() {
+// ═══════════════════════════════════════════════════════════════
+// ★2026-08-14 v3.6 入口が2本になった（アプリ再編⑥）
+// ═══════════════════════════════════════════════════════════════
+//   ① LINE内（リッチメニュー）で開いた → 従来どおりLIFF認証。**今までの運用は1つも変わらない**
+//   ② ホーム画面のPWA／外部ブラウザで開いた → 入口パスワード
+//
+//   なぜ②が要るか：iOS実機検証（2026-08-14）で、ホーム画面のPWAから liff.login() の
+//   外部リダイレクトに出ると Safari に投げ出され、**PWAに戻ってこない**ことが確定した。
+//   しかもログイン情報はSafari側に入るので、PWAからは何度やってもログインできない。
+//
+//   パスワードは人ごとに違う（スタッフ設定 N列）。入れた時点で本人が確定するので
+//   名前を選ばせない＝なりすましができない。照合はGAS側（`driverPwLogin`・POST）。
+const DRV_IDENTITY_KEY = 'oedo_driver_identity_v1';
+
+function loadDrvIdentity_() {
+  try {
+    const raw = localStorage.getItem(DRV_IDENTITY_KEY);
+    if (!raw) return null;
+    const o = JSON.parse(raw);
+    return (o && o.userId) ? o : null;
+  } catch (e) { return null; }
+}
+function saveDrvIdentity_(o) {
+  try { localStorage.setItem(DRV_IDENTITY_KEY, JSON.stringify(o)); } catch (e) {}
+}
+function clearDrvIdentity_() {
+  try { localStorage.removeItem(DRV_IDENTITY_KEY); } catch (e) {}
+}
+
+// パスワード入口を通ってきた（＝LINEの外で動いている）かどうか
+let drvViaPassword = false;
+
+async function resolveIdentity_() {
   try {
     await liff.init({ liffId: '2009637457-eprpSUWd' });
-    if (!liff.isLoggedIn()) { liff.login(); return; }
-    const profile = await liff.getProfile();
-    state.userId   = profile.userId;
-    state.userName = profile.displayName;
+    if (liff.isInClient()) {
+      // ── ① LINE内。従来どおり ──
+      if (!liff.isLoggedIn()) { liff.login(); return null; }
+      const profile = await liff.getProfile();
+      return { userId: profile.userId, name: profile.displayName };
+    }
+  } catch (e) {
+    // LIFFが初期化できなくても②には入れるようにする（LINE SDKが落ちていても現場が止まらない）
+    console.warn('liff.init 失敗 → パスワード入口へ:', e);
+  }
+  // ── ② ホーム画面PWA／外部ブラウザ ──
+  drvViaPassword = true;
+  const saved = loadDrvIdentity_();
+  if (saved) return saved;
+  showPwGate_();
+  return null;   // パスワードが通ったら init() をやり直す
+}
+
+function showPwGate_() {
+  showScreen('pwgate');
+  document.getElementById('pwg-err').textContent = '';
+  const input = document.getElementById('pwg-input');
+  input.value = '';
+  setTimeout(() => input.focus(), 120);
+}
+
+async function submitPwGate_() {
+  const input = document.getElementById('pwg-input');
+  const btn   = document.getElementById('pwg-btn');
+  const err   = document.getElementById('pwg-err');
+  const pw    = String(input.value || '').trim();
+  if (!pw) { err.textContent = 'パスワードを入れてください'; return; }
+
+  btn.disabled = true;
+  btn.textContent = '確認中…';
+  err.textContent = '';
+  try {
+    // GETだとパスワードがURLに載ってログに残るのでPOSTで送る
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      body: new URLSearchParams({ action: 'driverPwLogin', password: pw }),
+      redirect: 'follow',
+    });
+    const json = await res.json();
+    if (!json || !json.ok) {
+      err.textContent = (json && json.error) || 'パスワードが違います';
+      btn.disabled = false;
+      btn.textContent = '開く';
+      input.select();
+      return;
+    }
+    saveDrvIdentity_({ userId: json.userId, name: json.name });
+    showScreen('loading');
+    init();
+  } catch (e) {
+    err.textContent = '通信できませんでした。電波を確認してもう一度お試しください。';
+    btn.disabled = false;
+    btn.textContent = '開く';
+  }
+}
+
+// 別の人に切り替える（ヘッダーの名前をタップ）。LINEから開いている時は何もしない
+function switchDrvUser_() {
+  if (!drvViaPassword) return;
+  if (!confirm('別の人に切り替えますか？\nもう一度パスワードの入力が必要になります。')) return;
+  clearDrvIdentity_();
+  location.reload();
+}
+
+async function init() {
+  try {
+    const ident = await resolveIdentity_();
+    if (!ident) return;   // パスワード入口を出した／LINEログインへ飛んだ
+    state.userId   = ident.userId;
+    state.userName = ident.name;
 
     // ─────────────────────────────────────────────────────────
     // Phase A：localStorage キャッシュから先描画（v2026-05-18 案B Phase-2 C案フル）
@@ -2030,6 +2190,8 @@ async function init() {
       restoreReminders();
       const now = new Date();
       document.getElementById('driver-name').textContent = state.userName;
+      // ★2026-08-14 v3.6 パスワード入口で入った時だけ「タップで切替」を出す
+      document.getElementById('driver-name').classList.toggle('switchable', drvViaPassword);
       document.getElementById('main-date').textContent =
         `${now.getMonth()+1}/${now.getDate()}（${['日','月','火','水','木','金','土'][now.getDay()]}）`;
       try {
@@ -2100,6 +2262,8 @@ async function init() {
 
     const now = new Date();
     document.getElementById('driver-name').textContent = state.userName;
+    // ★2026-08-14 v3.6 パスワード入口で入った時だけ「タップで切替」を出す
+    document.getElementById('driver-name').classList.toggle('switchable', drvViaPassword);
     document.getElementById('main-date').textContent =
       `${now.getMonth()+1}/${now.getDate()}（${['日','月','火','水','木','金','土'][now.getDay()]}）`;
 
@@ -4336,6 +4500,13 @@ async function saveNextDayRoute() {
     updateSaveRouteButton();
   }
 }
+
+// ★2026-08-14 v3.6 入口パスワードのボタン／Enterキー／名前タップで切替
+document.getElementById('pwg-btn').addEventListener('click', submitPwGate_);
+document.getElementById('pwg-input').addEventListener('keydown', function (ev) {
+  if (ev.key === 'Enter') { ev.preventDefault(); submitPwGate_(); }
+});
+document.getElementById('driver-name').addEventListener('click', switchDrvUser_);
 
 init();
 
