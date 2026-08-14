@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<!-- お江戸弁当 配達アプリ delivery.html v1.0 (2026-08-14)
+     【dashboard の「配達」タブを独立アプリにした：アプリ再編⑥-2】
+     → [[設計_アプリ再編_振り分け確定_2026-08-10]]（第2軸＝業務内容で分ける／配達は独立）
+
+     ★経緯＝配達は元々「お盆明けに回す」と決めていた（お盆中も配達が動くため）。
+       社長判断で前倒し。**新規ファイルを足すだけで dashboard の配達タブには一切触っていない**ので、
+       現場は今までどおり dashboard からも使える＝お盆中の配達にリスクなし。
+       切り替え（dashboardから配達タブを外す・リッチメニュー差し替え）は⑦でまとめてやる。
+
+     ★中身は dashboard.html の配達タブを**そのまま**持ってきた（再編ルール「移設は機能を移すだけ・UIは元のまま」）。
+       配達カードはほぼ全部インラインstyleで書かれていたため、CSSの持ち出しはローディングの回転だけで済んだ。
+       **計算・表示ロジックは変えていない。**元のコードにあった未使用の変数（`dt` / `dayNames`）と、
+       `hasAddr`/`encAddr`/`mapBtn` が二重に宣言されていた箇所だけ落とした（どちらも動きに影響しない）。
+       **GAS変更なし**（叩くのは既存の getDeliveryOrders 1本だけ）。
+
+     ★入口は driver v3.6 と同じ「入口パスワード」（社長決定 2026-08-14）。
+       - LINE内（リッチメニュー）で開いたら → 従来どおりLIFF認証（dashboard と同じ LIFF ID を流用。memo-reply.html と同じやり方）
+       - ホーム画面のPWA／外部ブラウザで開いたら → 入口パスワード
+       - 照合は driver と**同じ** `driverPwLogin`（メインGAS）。**同じシート「ドライバー入口パスワード」・8名とも発行済み**
+         ＝配達用に新しく発行するものは無い。覚えるパスワードも1つだけ。
+       - iOSのホーム画面PWAからは liff.login() の往復が戻ってこない（2026-08-14 実機で確定）ため、
+         PWAではLINEログインを使わない。詳細は [[現場アプリ_PWA化_ホーム画面から起動_2026-08-10]]
+
+     ⚠ 入口パスワードは「URLを知っているだけの人に開かれない」ための関所であって、データの防御ではない。
+       GASのAPIは元々無認証（今までも同じ）。 -->
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>お江戸弁当 配達</title>
+
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="配達">
+<link rel="apple-touch-icon" href="delivery-icon.png">
+<link rel="manifest" href="delivery.webmanifest">
+<meta name="theme-color" content="#1A3C5E">
+
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<style>
+:root {
+  --navy: #1A3C5E;
+  --ink: #1C1C1C;
+  --ink-soft: #4A4A4A;
+  --ink-mute: #9A9A9A;
+  --cream: #F4F6F9;
+  --white: #FFFFFF;
+  --border: #D5D8DC;
+  --red: #C0392B;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+body {
+  font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', sans-serif;
+  background: var(--cream);
+  color: var(--ink);
+  min-height: 100vh;
+  -webkit-text-size-adjust: 100%;
+}
+.screen { display: none; min-height: 100vh; flex-direction: column; }
+.screen.active { display: flex; }
+
+/* ── ヘッダー ── */
+.app-header {
+  background: var(--navy); color: #FFF;
+  padding: calc(14px + env(safe-area-inset-top, 0px)) 16px 14px;
+  display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top: 0; z-index: 50;
+  box-shadow: 0 2px 10px rgba(0,0,0,.15);
+}
+.header-title { font-size: 16px; font-weight: 700; }
+.header-sub { font-size: 11px; opacity: .75; margin-top: 2px; }
+.header-user { font-size: 12px; opacity: .85; }
+.header-user.switchable { text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+
+.body { padding: 14px 14px calc(20px + var(--safe-bottom)); flex: 1; max-width: 620px; margin: 0 auto; width: 100%; }
+
+/* ── ローディング ── */
+#screen-loading { align-items: center; justify-content: center; background: var(--navy); }
+.loading-logo { color: #FFF; text-align: center; }
+.loading-logo h1 { font-size: 24px; font-weight: 700; margin-bottom: 8px; }
+.loading-logo p { font-size: 13px; opacity: .7; margin-bottom: 34px; }
+.loader {
+  width: 40px; height: 40px;
+  border: 3px solid rgba(255,255,255,.3);
+  border-top-color: #FFF; border-radius: 50%;
+  animation: spin .8s linear infinite; margin: 0 auto;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-wrap { text-align: center; padding: 40px 20px; color: var(--ink-mute); }
+.loading-wrap .loader { border-color: rgba(0,0,0,.12); border-top-color: var(--navy); }
+
+/* ── 入口パスワード（driver v3.6 と同じ作り） ── */
+#screen-pwgate { align-items: center; justify-content: center; background: var(--navy); padding: 24px; }
+.pwg-wrap { width: 100%; max-width: 320px; text-align: center; color: #FFF; }
+.pwg-logo { font-size: 46px; line-height: 1; margin-bottom: 12px; }
+.pwg-title { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+.pwg-sub { font-size: 13px; opacity: .75; margin-bottom: 22px; }
+.pwg-input {
+  width: 100%; padding: 15px 16px; font-size: 17px;   /* 16px以上＝iOSで自動ズームしない */
+  border: none; border-radius: 12px; font-family: inherit;
+  text-align: center; letter-spacing: .12em; background: #FFF; color: var(--ink);
+}
+.pwg-input:focus { outline: 3px solid rgba(255,255,255,.55); }
+.pwg-err { min-height: 20px; font-size: 12px; color: #FFD5D0; margin: 8px 0 4px; line-height: 1.5; }
+.pwg-btn {
+  width: 100%; padding: 15px; border: none; border-radius: 12px;
+  background: #FFF; color: var(--navy); font-size: 16px; font-weight: 700;
+  font-family: inherit; cursor: pointer;
+}
+.pwg-btn:disabled { opacity: .55; cursor: default; }
+.pwg-note { font-size: 11px; opacity: .7; line-height: 1.7; margin-top: 20px; }
+</style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div id="screen-loading" class="screen active">
+  <div class="loading-logo">
+    <h1>🚚 配達</h1>
+    <p>お江戸弁当 配達予定</p>
+    <div class="loader"></div>
+  </div>
+</div>
+
+<!-- 入口パスワード（ホーム画面から開いた時だけ出る） -->
+<div id="screen-pwgate" class="screen">
+  <div class="pwg-wrap">
+    <div class="pwg-logo">🚚</div>
+    <h1 class="pwg-title">配達</h1>
+    <p class="pwg-sub">パスワードを入れてください</p>
+
+    <input type="password" id="pwg-input" class="pwg-input"
+           inputmode="text" autocomplete="current-password"
+           autocapitalize="off" autocorrect="off" spellcheck="false"
+           placeholder="パスワード">
+    <div class="pwg-err" id="pwg-err"></div>
+    <button class="pwg-btn" id="pwg-btn">開く</button>
+
+    <p class="pwg-note">
+      <b>ドライバーアプリと同じパスワード</b>です。<br>
+      一度入れれば、次からは入力なしで開きます。
+    </p>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div id="screen-main" class="screen">
+  <div class="app-header">
+    <div>
+      <div class="header-title">🚚 配達</div>
+      <div class="header-sub" id="main-date">--</div>
+    </div>
+    <div class="header-user" id="user-name">--</div>
+  </div>
+
+  <div class="body">
+    <div class="loading-wrap" id="dv-loading" style="display:none;">
+      <div class="loader"></div>
+      <p style="margin-top:14px;font-size:13px;">読み込み中...</p>
+    </div>
+    <div id="dv-content"></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5AawPDc7aluPokONkYz6f2ikwl0S487JvhKdKh6QSp1xhEhA/exec';
+// dashboard と同じ LIFF（新規発行は不要。memo-reply.html も同じやり方で流用している）
+const LIFF_ID = '2009637457-gAFKfT6y';
+
+// ═══════════════════════════════════════════════════════════════
+// 入口（driver v3.6 と同じ2本立て）
+//   ① LINE内（リッチメニュー）→ 従来どおりLIFF認証
+//   ② ホーム画面PWA／外部ブラウザ → 入口パスワード
+//   ※ パスワードは driver と共通（同じシート「ドライバー入口パスワード」・同じ `driverPwLogin`）
+// ═══════════════════════════════════════════════════════════════
+const DLV_IDENTITY_KEY = 'oedo_driver_identity_v1';   // driver と同じキー＝片方で入れれば両方入れる
+
+let user = { userId: '', name: '' };
+let viaPassword = false;
+
+function loadIdentity_() {
+  try {
+    const raw = localStorage.getItem(DLV_IDENTITY_KEY);
+    if (!raw) return null;
+    const o = JSON.parse(raw);
+    return (o && o.userId) ? o : null;
+  } catch (e) { return null; }
+}
+function saveIdentity_(o) {
+  try { localStorage.setItem(DLV_IDENTITY_KEY, JSON.stringify(o)); } catch (e) {}
+}
+function clearIdentity_() {
+  try { localStorage.removeItem(DLV_IDENTITY_KEY); } catch (e) {}
+}
+
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + name).classList.add('active');
+  window.scrollTo(0, 0);
+}
+
+async function resolveIdentity_() {
+  try {
+    await liff.init({ liffId: LIFF_ID });
+    if (liff.isInClient()) {
+      if (!liff.isLoggedIn()) { liff.login(); return null; }
+      const p = await liff.getProfile();
+      // LINE内は dashboard と同じく属性「社員」で絞る
+      const roleRes = await fetchJSON(GAS_URL + '?action=getRole&userId=' + encodeURIComponent(p.userId));
+      const role = (roleRes && roleRes.role) || '';
+      if (role !== '社員' && role !== 'ドライバー') {
+        document.getElementById('screen-loading').innerHTML =
+          '<div style="color:#fff;padding:40px;text-align:center;font-size:13px;line-height:1.7;">'
+          + '<p style="font-size:18px;margin-bottom:14px;">🚫 権限がありません</p>'
+          + '<p>この画面は社員専用です。<br>（あなたの属性：' + (role || '未登録') + '）</p></div>';
+        return null;
+      }
+      return { userId: p.userId, name: p.displayName };
+    }
+  } catch (e) {
+    // LIFFが初期化できなくてもパスワード側には入れる（LINE SDKが落ちても現場が止まらない）
+    console.warn('liff.init 失敗 → パスワード入口へ:', e);
+  }
+  viaPassword = true;
+  const saved = loadIdentity_();
+  if (saved) return saved;
+  showPwGate_();
+  return null;
+}
+
+function showPwGate_() {
+  showScreen('pwgate');
+  document.getElementById('pwg-err').textContent = '';
+  const input = document.getElementById('pwg-input');
+  input.value = '';
+  setTimeout(() => input.focus(), 120);
+}
+
+async function submitPwGate_() {
+  const input = document.getElementById('pwg-input');
+  const btn   = document.getElementById('pwg-btn');
+  const err   = document.getElementById('pwg-err');
+  const pw    = String(input.value || '').trim();
+  if (!pw) { err.textContent = 'パスワードを入れてください'; return; }
+
+  btn.disabled = true; btn.textContent = '確認中…'; err.textContent = '';
+  try {
+    // GETだとパスワードがURLに載ってログに残るのでPOSTで送る
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      body: new URLSearchParams({ action: 'driverPwLogin', password: pw }),
+      redirect: 'follow',
+    });
+    const json = await res.json();
+    if (!json || !json.ok) {
+      err.textContent = (json && json.error) || 'パスワードが違います';
+      btn.disabled = false; btn.textContent = '開く'; input.select();
+      return;
+    }
+    saveIdentity_({ userId: json.userId, name: json.name });
+    showScreen('loading');
+    init();
+  } catch (e) {
+    err.textContent = '通信できませんでした。電波を確認してもう一度お試しください。';
+    btn.disabled = false; btn.textContent = '開く';
+  }
+}
+
+function switchUser_() {
+  if (!viaPassword) return;
+  if (!confirm('別の人に切り替えますか？\nもう一度パスワードの入力が必要になります。')) return;
+  clearIdentity_();
+  location.reload();
+}
+
+async function fetchJSON(url) {
+  const res  = await fetch(url, { redirect: 'follow' });
+  const text = await res.text();
+  return JSON.parse(text);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 起動
+// ═══════════════════════════════════════════════════════════════
+async function init() {
+  const ident = await resolveIdentity_();
+  if (!ident) return;   // パスワード入口を出した／LINEログインへ飛んだ／権限なし
+  user = ident;
+
+  const now = new Date();
+  document.getElementById('user-name').textContent = user.name;
+  document.getElementById('user-name').classList.toggle('switchable', viaPassword);
+  document.getElementById('main-date').textContent =
+    `${now.getMonth()+1}/${now.getDate()}（${['日','月','火','水','木','金','土'][now.getDay()]}）`;
+
+  showScreen('main');
+  initDelivery();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 配達（dashboard.html から移設。ロジックは1行も変えていない）
+// ═══════════════════════════════════════════════════════════════
+let deliveryDates    = [];
+let selectedDelivery = '';
+const deliveryCache  = {};
+
+// 住所をGoogleマップで開く（LIFFブラウザ内では外部アプリ起動）
+function openMapByEncoded(encodedAddr) {
+  if (!encodedAddr) return;
+  const url = 'https://www.google.com/maps/search/?api=1&query=' + encodedAddr;
+  try {
+    if (typeof liff !== 'undefined' && liff.openWindow) {
+      liff.openWindow({ url: url, external: true });
+    } else {
+      window.open(url, '_blank');
+    }
+  } catch(e) {
+    window.open(url, '_blank');
+  }
+}
+
+async function initDelivery() {
+  const loadingEl = document.getElementById('dv-loading');
+  const contentEl = document.getElementById('dv-content');
+  loadingEl.style.display = 'block';
+  contentEl.innerHTML = '';
+  try {
+    const res  = await fetchJSON(GAS_URL + '?action=getDeliveryOrders');
+    deliveryDates = res.availableDates || [];
+    if (deliveryDates.length > 0) {
+      const now      = new Date();
+      const todayStr = now.getFullYear() + '/' + String(now.getMonth()+1).padStart(2,'0') + '/' + String(now.getDate()).padStart(2,'0');
+      const future   = deliveryDates.filter(function(d){ return d >= todayStr; });
+      const defaultDate = future.length > 0 ? future[0] : deliveryDates[deliveryDates.length - 1];
+      await selectDeliveryDate(defaultDate);
+    } else {
+      contentEl.innerHTML = '<p style="color:#9A9A9A;font-size:13px;padding:20px;">配達データがありません</p>';
+    }
+  } catch(e) {
+    contentEl.innerHTML = '<p style="color:#C0392B;font-size:13px;padding:20px;">取得エラー：' + e.message + '</p>';
+  }
+  loadingEl.style.display = 'none';
+}
+
+function renderDeliveryDateSelector() {
+  const sel = document.getElementById('delivery-date-selector');
+  if (!sel) return;
+  sel.innerHTML = deliveryDates.map(d => {
+    const dt = new Date(d.replace(/\//g, '-'));
+    const dayNames = ['日','月','火','水','木','金','土'];
+    const label = `${d.slice(5)}（${dayNames[dt.getDay()]}）`;
+    return `<option value="${d}">${label}</option>`;
+  }).join('');
+  if (selectedDelivery) sel.value = selectedDelivery;
+}
+
+async function selectDeliveryDate(date) {
+  selectedDelivery = date;
+  const sel = document.getElementById('delivery-date-selector');
+  if (sel) sel.value = date;
+
+  if (deliveryCache[date]) {
+    renderDeliveryOrders(deliveryCache[date], date);
+    return;
+  }
+
+  document.getElementById('dv-loading').style.display = 'block';
+  try {
+    const res    = await fetchJSON(`${GAS_URL}?action=getDeliveryOrders&date=${encodeURIComponent(date)}`);
+    const orders = res.orders || [];
+    deliveryCache[date] = orders;
+    renderDeliveryOrders(orders, date);
+  } catch(e) {
+    document.getElementById('dv-content').innerHTML = `<p style="color:var(--red);">取得エラー：${e.message}</p>`;
+  }
+  document.getElementById('dv-loading').style.display = 'none';
+}
+
+function renderDeliveryOrders(orders, date) {
+  let html = '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">'
+    + '<select id="delivery-date-selector" onchange="selectDeliveryDate(this.value)" style="flex:1;padding:10px 12px;border:1.5px solid #D5D8DC;border-radius:10px;font-size:14px;font-family:inherit;background:white;color:#1C1C1C;"></select>'
+    + '<span style="font-size:13px;color:#9A9A9A;white-space:nowrap;">' + orders.length + '件</span>'
+    + '</div>';
+
+  setTimeout(() => renderDeliveryDateSelector(), 0);
+
+  if (orders.length === 0) {
+    html += '<p style="color:#9A9A9A;font-size:13px;text-align:center;padding:30px 0;">この日の配達はありません</p>';
+    document.getElementById('dv-content').innerHTML = html;
+    return;
+  }
+
+  orders.sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+
+  orders.forEach(function(o) {
+    var card = document.createElement('div');
+    card.style.cssText = 'background:white;border:1px solid #D5D8DC;border-radius:12px;overflow:hidden;margin-bottom:12px;';
+
+    var hdr = document.createElement('div');
+    hdr.style.cssText = 'background:#1A3C5E;color:white;padding:10px 14px;';
+    var hasAddr = o.address && String(o.address).trim() !== '';
+    var encAddr = hasAddr ? encodeURIComponent(o.address) : '';
+    var mapBtn  = hasAddr
+      ? '<button onclick="openMapByEncoded(\'' + encAddr + '\')" style="background:rgba(255,255,255,0.25);border:none;color:white;padding:3px 9px;border-radius:8px;font-size:11px;font-family:inherit;cursor:pointer;flex-shrink:0;line-height:1.4;" aria-label="Googleマップで開く">🗺 マップ</button>'
+      : '';
+    hdr.innerHTML = '<div style="font-size:13px;font-weight:bold;margin-bottom:2px;">' + (o.time || '時間未定') + '</div>'
+      + '<div style="font-size:12px;opacity:0.85;display:flex;align-items:center;gap:8px;"><span style="flex:1;min-width:0;">' + (o.address || '住所未定') + '</span>' + mapBtn + '</div>'
+      + '<div style="font-size:10px;opacity:0.6;margin-top:2px;">' + (o.orderNo || '') + '</div>';
+    card.appendChild(hdr);
+
+    if (o.detail) {
+      var det = document.createElement('div');
+      det.style.cssText = 'padding:8px 14px;background:#F8F4EE;font-size:12px;color:#4A4A4A;';
+      det.textContent = '📍 ' + o.detail;
+      card.appendChild(det);
+    }
+
+    var body = document.createElement('div');
+    body.style.cssText = 'padding:6px 14px;';
+    var rows = [
+      ['受取担当者', o.contact, false],
+      ['当日連絡先', o.phone, true],
+      ['注文内容', o.order, false],
+      ['会計種別', o.payment, false],
+      ['当日帳票', o.doc, false],
+    ];
+    rows.forEach(function(r) {
+      if (!r[1]) return;
+      var row = document.createElement('div');
+      row.style.cssText = 'display:flex;gap:8px;padding:5px 0;border-bottom:1px solid #F5F0E8;font-size:13px;align-items:flex-start;';
+      var label = document.createElement('span');
+      label.style.cssText = 'color:#9A9A9A;min-width:80px;flex-shrink:0;padding-top:2px;font-size:12px;';
+      label.textContent = r[0];
+      row.appendChild(label);
+      var val = document.createElement('span');
+      val.style.cssText = 'color:#1C1C1C;flex:1;';
+      if (r[0] === '注文内容') {
+        val.innerHTML = r[1].split(/\n|\r\n|\r/).filter(function(l){return l.trim();}).map(function(l){return '<div>' + l.trim() + '</div>';}).join('');
+      } else if (r[2]) {
+        val.innerHTML = '<a href="tel:' + r[1] + '" style="color:#2471A3;font-weight:bold;">' + r[1] + '</a>';
+      } else {
+        val.textContent = r[1];
+      }
+      row.appendChild(val);
+      body.appendChild(row);
+    });
+
+    if (o.note) {
+      var noteDiv = document.createElement('div');
+      noteDiv.style.cssText = 'margin-top:6px;background:#FFF8DC;border-left:3px solid #B8860B;padding:8px 10px;border-radius:0 6px 6px 0;font-size:12px;color:#666;';
+      noteDiv.innerHTML = '<span style="font-size:10px;font-weight:bold;color:#B8860B;display:block;margin-bottom:2px;">備考</span>' + o.note;
+      body.appendChild(noteDiv);
+    }
+
+    if (o.collectYN || o.collect) {
+      var colDiv = document.createElement('div');
+      colDiv.style.cssText = 'margin-top:6px;background:#F0FAF4;border-left:3px solid #27AE60;padding:8px 10px;border-radius:0 6px 6px 0;font-size:12px;color:#1A7A42;';
+      colDiv.innerHTML = '<span style="font-size:10px;font-weight:bold;display:block;margin-bottom:2px;">回収</span>' + (o.collectYN || '') + (o.collect ? '　' + o.collect : '');
+      body.appendChild(colDiv);
+    }
+
+    body.style.paddingBottom = '8px';
+    card.appendChild(body);
+    html += card.outerHTML;
+  });
+
+  document.getElementById('dv-content').innerHTML = html;
+}
+
+// ── 起動 ──
+document.getElementById('pwg-btn').addEventListener('click', submitPwGate_);
+document.getElementById('pwg-input').addEventListener('keydown', function (ev) {
+  if (ev.key === 'Enter') { ev.preventDefault(); submitPwGate_(); }
+});
+document.getElementById('user-name').addEventListener('click', switchUser_);
+
+init();
+</script>
+</body>
+</html>
