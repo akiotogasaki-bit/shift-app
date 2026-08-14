@@ -560,6 +560,74 @@ body {
 .tabbar-btn.active { color: var(--primary); }
 .tabbar-btn:active { opacity: .7; }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   ★2026-08-14 ⑦統合：kitchen-shift.html（確定シフト閲覧）をここへ取り込む
+   ─────────────────────────────────────────────────────────────────────────
+   ④driver・⑤sales-report と同じやり方。**全セレクタを `#screen-kshift` にスコープ**し、
+   そのうえで kitchen-shift 側の配色変数をその中だけで再定義する。
+   （index は --bg=#F5F5F0 だが kitchen-shift は --bg=#f4f6f9。`.status` `.empty` `.seg`
+     `header` `footer` も index 側に同名・別内容のものがある）
+   ＝取り込んだ画面の見た目は kitchen-shift.html と同じまま／index 既存画面は無傷。
+   元の `<header>` タグだけは index のグローバルな指定を避けるため `.ks-head` に変えた。
+   ══════════════════════════════════════════════════════════════════════════ */
+#screen-kshift {
+  --navy: #1A3C5E; --navy-d: #122c46; --green: #0E7C66;
+  --ksbg: #f4f6f9; --line: #e2e7ec; --off: #b6bcc4;
+  background: var(--ksbg);
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", sans-serif;
+  color: #1c2733; line-height: 1.5;
+  display: none;
+}
+#screen-kshift.active { display: block; }
+#screen-kshift .ks-app { max-width: 720px; margin: 0 auto; min-height: 100vh; background: var(--ksbg); }
+#screen-kshift .ks-head {
+  background: linear-gradient(135deg, var(--navy), var(--navy-d));
+  color: #fff; padding: calc(16px + env(safe-area-inset-top,0px)) 16px 14px;
+  position: sticky; top: 0; z-index: 5; box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+}
+#screen-kshift .ks-head .brand { font-size: 12px; opacity: 0.82; letter-spacing: 0.04em; }
+#screen-kshift .ks-head h1 { margin: 2px 0 0; font-size: 19px; font-weight: 800; letter-spacing: 0.02em; }
+#screen-kshift .toolbar { display: flex; align-items: center; gap: 8px; padding: 12px 12px 4px; flex-wrap: wrap; }
+#screen-kshift .seg { display: inline-flex; background: #e7ecf2; border-radius: 999px; padding: 3px; }
+#screen-kshift .seg button {
+  border: 0; background: transparent; color: #4a5a6b;
+  font-size: 13px; font-weight: 700; padding: 7px 16px; border-radius: 999px; cursor: pointer;
+}
+#screen-kshift .seg button.active { background: #fff; color: var(--navy); box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+#screen-kshift .reload {
+  margin-left: auto; border: 1px solid var(--line); background: #fff; color: var(--navy);
+  font-size: 13px; font-weight: 700; padding: 7px 12px; border-radius: 8px; cursor: pointer;
+}
+#screen-kshift .reload:active { background: #eef2f6; }
+#screen-kshift .weekrange { padding: 4px 14px 0; font-size: 13px; font-weight: 700; color: var(--navy); }
+#screen-kshift .status { padding: 6px 14px; font-size: 12px; color: #7a8694; min-height: 18px; }
+#screen-kshift .status.err { color: #c0392b; }
+/* ── 時間×日付グリッド（v2.0） ── */
+#screen-kshift .tablewrap { overflow-x: auto; padding: 4px 12px 24px; }
+#screen-kshift table.kgrid { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 560px; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+#screen-kshift table.kgrid th, #screen-kshift table.kgrid td { border-bottom: 1px solid var(--line); border-right: 1px solid #eef1f4; vertical-align: top; }
+#screen-kshift table.kgrid th:last-child, #screen-kshift table.kgrid td:last-child { border-right: 0; }
+#screen-kshift table.kgrid tbody tr:last-child td { border-bottom: 0; }
+#screen-kshift table.kgrid thead th { background: linear-gradient(135deg, var(--navy), var(--navy-d)); color: #fff; font-weight: 700; font-size: 12.5px; padding: 9px 6px; text-align: center; position: sticky; top: 0; white-space: nowrap; }
+#screen-kshift table.kgrid thead th .dow { display: block; font-size: 13px; }
+#screen-kshift table.kgrid thead th .md { display: block; font-size: 11px; color: #cfd8e3; font-weight: 700; }
+#screen-kshift table.kgrid th.tcol { width: 62px; min-width: 56px; }
+#screen-kshift table.kgrid td.tcol { width: 62px; min-width: 56px; text-align: center; background: #f8fafc; font-weight: 800; color: var(--navy); font-size: 13px; padding: 9px 4px; white-space: nowrap; }
+#screen-kshift table.kgrid td.tcol.prep { color: #7b3fa0; background: #f6f1fb; }
+#screen-kshift td.kcell { min-width: 96px; padding: 6px 5px; text-align: center; }
+#screen-kshift .chip { display: block; background: #e8f0f7; color: #1f3b53; font-size: 12px; font-weight: 700; border-radius: 7px; padding: 3px 7px; margin: 3px 0; white-space: nowrap; }
+#screen-kshift .chip .endt { color: #5a6b7d; font-weight: 600; margin-left: 3px; }
+#screen-kshift .kcell .none { display: block; color: #d3d9df; font-size: 13px; }
+#screen-kshift tr.sumrow td { background: #eef3f8; font-weight: 800; color: var(--navy); border-bottom: 0; }
+#screen-kshift tr.sumrow td.tcol { background: #eef3f8; color: var(--navy); }
+#screen-kshift .empty {
+  margin: 24px 14px; padding: 32px 18px; background: #fff; border-radius: 12px;
+  text-align: center; color: #7a8694; font-size: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+#screen-kshift .empty .ico { font-size: 34px; margin-bottom: 8px; }
+#screen-kshift .ks-foot { text-align: center; padding: 8px 16px 28px; font-size: 11px; color: #9aa5b1; }
+body.with-tabbar #screen-kshift .ks-foot { padding-bottom: calc(84px + var(--safe-bottom)); }
+
 /* タブバー表示時は下部余白と送信ボタン位置を調整 */
 body.with-tabbar .body-area { padding-bottom: 156px; }
 body.with-tabbar .btn-area { bottom: calc(56px + var(--safe-bottom)); }
@@ -861,6 +929,34 @@ body.with-tabbar .btn-area { bottom: calc(56px + var(--safe-bottom)); }
   </div>
 </div>
 
+<!-- ====== 確定シフト閲覧（★2026-08-14 kitchen-shift.html を統合／⑦） ======
+     中身は kitchen-shift.html v2.0 のまま。CSSは #screen-kshift にスコープ済み。
+     元の <header>/<footer> だけ index のグローバル指定を避けて .ks-head/.ks-foot に変えた。
+     IDは ks 接頭辞（index 側と重複させないため）。 -->
+<div id="screen-kshift" class="screen">
+  <div class="ks-app">
+    <div class="ks-head">
+      <div class="brand">お江戸弁当</div>
+      <h1>🍳 キッチンシフト</h1>
+    </div>
+
+    <div class="toolbar">
+      <div class="seg">
+        <button id="ksSegThis" class="active" onclick="ksvSwitchWeek('this')">今週</button>
+        <button id="ksSegNext" onclick="ksvSwitchWeek('next')">来週</button>
+      </div>
+      <button class="reload" onclick="ksvLoad()">🔄 更新</button>
+    </div>
+
+    <div class="weekrange" id="ksWeekRange">　</div>
+    <div class="status" id="ksStatus">読み込み中...</div>
+
+    <div id="ksContent"></div>
+
+    <div class="ks-foot">お江戸弁当 キッチンシフト（閲覧用）v2.0</div>
+  </div>
+</div>
+
 <!-- ====== PAYSLIP (給与明細／ギャラ明細) 2026-07-03 追加 ====== -->
 <div id="screen-payslip" class="screen">
   <div class="header">
@@ -932,6 +1028,10 @@ body.with-tabbar .btn-area { bottom: calc(56px + var(--safe-bottom)); }
   <button type="button" class="tabbar-btn" id="tab-shift" onclick="switchTab('shift')">
     <span class="tabbar-ico">🗓️</span><span>シフト</span>
   </button>
+  <!-- ★2026-08-14 ⑦統合：確定シフト閲覧。調理／兼任の人にだけ出す（既定は非表示） -->
+  <button type="button" class="tabbar-btn" id="tab-kshift" onclick="switchTab('kshift')" style="display:none;">
+    <span class="tabbar-ico">📅</span><span>確定シフト</span>
+  </button>
   <button type="button" class="tabbar-btn" id="tab-payslip" onclick="switchTab('payslip')">
     <span class="tabbar-ico">💰</span><span>給与明細</span>
   </button>
@@ -966,7 +1066,7 @@ const GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5A
 const KITCHEN_SHIFT_URL = 'https://akiotogasaki-bit.github.io/shift-app/kitchen-shift.html';
 
 // タブバーを表示する画面（この3画面のみ下部タブバーを出す）
-const TAB_SCREENS = ['select', 'kitchen-submit', 'payslip'];
+const TAB_SCREENS = ['select', 'kitchen-submit', 'payslip', 'kshift'];
 
 // キッチン提出フォーム
 //   入り（開始）：0:00〜10:00 の11項目（'HH:MM' padded）。
@@ -1126,8 +1226,12 @@ function showScreen(name) {
     document.body.classList.add('with-tabbar');
     const tabShift = document.getElementById('tab-shift');
     const tabPay = document.getElementById('tab-payslip');
-    if (tabShift) tabShift.classList.toggle('active', name !== 'payslip');
+    const tabKs = document.getElementById('tab-kshift');   // ★2026-08-14 確定シフト
+    if (tabShift) tabShift.classList.toggle('active', name !== 'payslip' && name !== 'kshift');
+    if (tabKs)    tabKs.classList.toggle('active', name === 'kshift');
     if (tabPay)   tabPay.classList.toggle('active', name === 'payslip');
+    // ★2026-08-14 確定シフトのタブは調理／兼任の人にだけ出す
+    if (tabKs) tabKs.style.display = (state.role === '調理' || state.kennin) ? '' : 'none';
   } else {
     if (tb) tb.style.display = 'none';
     document.body.classList.remove('with-tabbar');
@@ -1158,14 +1262,12 @@ function closeApp() {
   window.location.href = 'https://line.me/';
 }
 
+// ★2026-08-14 ⑦統合：外部の kitchen-shift.html を開いていたのを、アプリ内の画面に変えた。
+//   （旧＝liff.openWindow で別タブ。行って戻る導線が無く、LINEに戻るしかなかった）
+//   KITCHEN_SHIFT_URL は消していない＝取り込みで問題が出た時にすぐ戻せるようにしてある。
 function openKitchenShift() {
-  try {
-    if (typeof liff !== 'undefined' && liff.isInClient && liff.isInClient() && liff.openWindow) {
-      liff.openWindow({ url: KITCHEN_SHIFT_URL, external: true });
-      return;
-    }
-  } catch (e) { console.warn('openKitchenShift liff error:', e); }
-  window.open(KITCHEN_SHIFT_URL, '_blank');
+  showScreen('kshift');
+  if (window.ksvLoad) ksvLoad();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1913,6 +2015,7 @@ function goBackToKitchenSubmit() {
 // 下部タブバーの切り替え
 function switchTab(tab) {
   if (tab === 'payslip') { openPayslip(); return; }
+  if (tab === 'kshift')  { openKitchenShift(); return; }   // ★2026-08-14 ⑦統合
   // 'shift' タブ：ロールに応じたホーム画面へ戻す
   const home = homeShiftScreen();
   if (home === 'kitchen-submit') {
@@ -2436,6 +2539,260 @@ function escapeHtml(s) {
 // BOOT
 // ═══════════════════════════════════════════════════════════════
 init();
+</script>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     ★2026-08-14 ⑦統合：kitchen-shift.html（確定シフト閲覧 v2.0）のJS
+     ─────────────────────────────────────────────────────────────────────────
+     **IIFEで丸ごと囲ってある。**上の既存スクリプトは素のグローバルで、`state` と
+     `GAS_URL` の2つが kitchen-shift 側と衝突していた（他は衝突なし）。
+     IIFEにすれば中の名前は全部ローカルになるので、**衝突はゼロになり、元のコードを
+     1行も書き換えずに済む**（`load`/`render`/`esc` のような汎用名もそのまま使える）。
+     外へ出すのは `ksvLoad` と `ksvSwitchWeek` の2つだけ（HTMLのonclickから呼ぶため）。
+     元コードからの変更は **getElementById のIDに ks 接頭辞を付けた5箇所だけ**。
+     ロジック・生成HTML・クラス名は kitchen-shift.html v2.0 のまま。
+     ══════════════════════════════════════════════════════════════════════════ -->
+<script>
+(function () {
+'use strict';
+
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5AawPDc7aluPokONkYz6f2ikwl0S487JvhKdKh6QSp1xhEhA/exec';
+const DAYS = ['月', '火', '水', '木', '金'];
+
+// 固定9時間行（＋仕込み行）。kitchen-admin v3.4 / kanri v3.38 と同一。
+const FIXED_TIMES = ['0:00', '2:00', '3:00', '4:00', '5:00', '6:00', '6:30', '7:00', '8:00'];
+const PREP_LABEL = '仕込み';
+
+const state = { week: 'this', weekTarget: null, dates: [], staff: [], req: [] };
+
+// ── 週解決（client側でISO週を算出）──
+function isoWeekTargetOfDate(d) {
+  const tmp = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = tmp.getUTCDay() || 7;
+  tmp.setUTCDate(tmp.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(tmp.getUTCFullYear(), 0, 1));
+  const weekNum = Math.ceil((((tmp - yearStart) / 86400000) + 1) / 7);
+  return tmp.getUTCFullYear() + '-W' + String(weekNum).padStart(2, '0');
+}
+function thisWeekTarget() {
+  const today = new Date();
+  const dow = today.getDay();
+  const hour = today.getHours();
+  const isNext = (dow === 5 && hour >= 18) || dow === 6 || dow === 0;
+  let mon;
+  if (isNext) {
+    const add = dow === 0 ? 1 : 8 - dow;
+    mon = new Date(today); mon.setDate(today.getDate() + add);
+  } else {
+    const sub = dow - 1;
+    mon = new Date(today); mon.setDate(today.getDate() - sub);
+  }
+  return isoWeekTargetOfDate(mon);
+}
+function mondayOfWeekTarget(wt) {
+  const m = String(wt || '').match(/^(\d{4})-W(\d{1,2})$/);
+  if (!m) return null;
+  const year = parseInt(m[1], 10), week = parseInt(m[2], 10);
+  const jan4 = new Date(year, 0, 4);
+  const dow = jan4.getDay() || 7;
+  const w1mon = new Date(jan4);
+  w1mon.setDate(jan4.getDate() - dow + 1);
+  const mon = new Date(w1mon);
+  mon.setDate(w1mon.getDate() + (week - 1) * 7);
+  return mon;
+}
+function resolveWeekTarget() {
+  const thisWt = thisWeekTarget();
+  if (state.week === 'this') return thisWt;
+  const mon = mondayOfWeekTarget(thisWt);
+  if (!mon) return thisWt;
+  const t = new Date(mon);
+  t.setDate(mon.getDate() + 7);
+  return isoWeekTargetOfDate(t);
+}
+
+function switchWeek(w) {
+  if (state.week === w) return;
+  state.week = w;
+  document.getElementById('ksSegThis').classList.toggle('active', w === 'this');
+  document.getElementById('ksSegNext').classList.toggle('active', w === 'next');
+  load();
+}
+
+function setStatus(msg, isErr) {
+  const el = document.getElementById('ksStatus');
+  el.textContent = msg || '';
+  el.className = 'status' + (isErr ? ' err' : '');
+}
+
+// ── ユーティリティ（kanri svRenderKitchen 準拠）──
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+function pad2(n) { n = parseInt(n, 10) || 0; return (n < 10 ? '0' : '') + n; }
+function padTime(t) { const p = String(t || '').split(':'); if (p.length < 2) return ''; const h = parseInt(p[0], 10), m = parseInt(p[1], 10); if (isNaN(h) || isNaN(m)) return ''; return pad2(h) + ':' + pad2(m); }
+function dispTime(t) { const c = padTime(t); if (!c) return String(t || ''); const p = c.split(':'); return (parseInt(p[0], 10)) + ':' + p[1]; }
+function toMin(t) { const p = String(t).split(':'); return (parseInt(p[0], 10) || 0) * 60 + (parseInt(p[1], 10) || 0); }
+function stripDow(s) { return String(s == null ? '' : s).replace(/[（(][^）)]*[）)]/, '').trim(); }
+// 確定セル値：'' / '休' → off ／ 'HH:MM-HH:MM' or 'HH:MM' → time(start, end?) ／ それ以外（'仕込み'等） → prep(label)
+function parseCell(v) {
+  v = String(v || '').trim();
+  if (v === '' || v === '休') return { off: true };
+  if (v.indexOf('-') > 0) { const p = v.split('-'); const s = padTime(p[0]); const e = padTime(p[1]); if (s) return { time: true, start: s, end: (e || '') }; }
+  if (/^\d{1,2}:\d{2}$/.test(v)) return { time: true, start: padTime(v), end: '' };
+  return { prep: true, label: v };
+}
+// 希望値からの終了抽出：'HH:MM-HH:MM' → 'HH:MM' ／ それ以外 → ''
+function cellEnd(v) {
+  v = String(v || '').trim();
+  if (v.indexOf('-') > 0) { const p = v.split('-'); const e = padTime(p[1]); return e || ''; }
+  return '';
+}
+
+async function load() {
+  setStatus('読み込み中...');
+  document.getElementById('ksWeekRange').innerHTML = '　';
+  document.getElementById('ksContent').innerHTML = '';
+  try {
+    const wt = resolveWeekTarget();
+    function getJson(action) {
+      const qs = new URLSearchParams({ action: action, weekTarget: wt }).toString();
+      return fetch(GAS_URL + '?' + qs, { redirect: 'follow' })
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
+    }
+    // 確定（キッチンシフト＝開始のみ／'仕込み'）＋希望（終了補完用レンジ）を並列取得。希望は失敗しても致命でない（終了が出ないだけ）。
+    const reqP = getJson('getKitchenRequests').catch(function () { return {}; });
+    const arr = await Promise.all([getJson('getKitchenShift'), reqP]);
+    const shiftData = arr[0] || {};
+    const reqData = arr[1] || {};
+    if (shiftData.ok === false || shiftData.success === false) throw new Error(shiftData.error || '取得失敗');
+
+    state.weekTarget = shiftData.weekTarget || wt;
+    state.dates = shiftData.dates || [];
+    state.staff = shiftData.staff || [];
+    state.req = (reqData && reqData.staff) || [];
+
+    const ds = state.dates;
+    document.getElementById('ksWeekRange').textContent =
+      (ds.length >= 5 ? stripDow(ds[0]) + ' 〜 ' + stripDow(ds[4]) : state.weekTarget);
+
+    render();
+    setStatus('');
+  } catch (e) {
+    state.staff = [];
+    document.getElementById('ksContent').innerHTML = '';
+    setStatus('読み込みに失敗しました：' + e.message + '（通信環境を確認して「更新」を押してください）', true);
+  }
+}
+
+// キッチン：時間(行)×月〜金・セル=出勤スタッフ名（＋終了時刻）。終了は確定レンジ優先→無ければ希望シートから補完。
+function render() {
+  const host = document.getElementById('ksContent');
+  const staff = state.staff;
+  const dates = state.dates;
+
+  if (!staff.length) {
+    const label = state.week === 'this' ? '今週' : '来週';
+    host.innerHTML =
+      '<div class="empty"><div class="ico">🍳</div>' +
+      '<div>' + label + 'のキッチンシフトはまだ公開されていません。</div></div>';
+    return;
+  }
+
+  // 希望シートから「名前→[終了×5]」を作成（終了補完用）
+  const reqEnd = {};
+  (state.req || []).forEach(function (s) {
+    const rd = s.days || [];
+    const a = [];
+    for (let i = 0; i < 5; i++) a.push(cellEnd(rd[i]));
+    reqEnd[s.name] = a;
+  });
+
+  // 固定9時間行（＋仕込み）を用意
+  const rows = [];
+  for (let t = 0; t < FIXED_TIMES.length; t++) {
+    rows.push({ type: 'time', time: FIXED_TIMES[t], cells: [[], [], [], [], []] });
+  }
+  const prepRow = { type: 'prep', label: PREP_LABEL, cells: [[], [], [], [], []] };
+
+  function exactRow(start) { for (let i = 0; i < rows.length; i++) { if (toMin(rows[i].time) === toMin(start)) return rows[i]; } return null; }
+  function nearestRow(start) { const m = toMin(start); let best = null, bd = Infinity; for (let i = 0; i < rows.length; i++) { const diff = Math.abs(toMin(rows[i].time) - m); if (diff < bd) { bd = diff; best = rows[i]; } } return best; }
+
+  staff.forEach(function (s) {
+    const dys = s.days || [];
+    const ends = reqEnd[s.name] || ['', '', '', '', ''];
+    for (let d = 0; d < 5; d++) {
+      const pc = parseCell(dys[d]);
+      if (pc.off) continue;
+      if (pc.time) {
+        const endT = pc.end || ends[d] || '';   // 確定にレンジがあればそれ優先・無ければ希望から
+        const row = exactRow(pc.start) || nearestRow(pc.start);
+        if (row) row.cells[d].push({ name: s.name, end: endT });
+      } else {
+        prepRow.cells[d].push({ name: s.name, end: '' });
+      }
+    }
+  });
+
+  // コンパクト：出勤者がいる時間行のみ＋仕込み行（配置があれば末尾）
+  const visible = rows.filter(function (r) { return r.cells.some(function (a) { return a.length > 0; }); });
+  if (prepRow.cells.some(function (a) { return a.length > 0; })) visible.push(prepRow);
+
+  if (!visible.length) {
+    const label2 = state.week === 'this' ? '今週' : '来週';
+    host.innerHTML =
+      '<div class="empty"><div class="ico">🍳</div>' +
+      '<div>' + label2 + 'は出勤予定のスタッフがいません（全員休）。</div></div>';
+    return;
+  }
+
+  // 曜日別 出勤人数
+  const counts = [0, 0, 0, 0, 0];
+  visible.forEach(function (r) { for (let d = 0; d < 5; d++) counts[d] += r.cells[d].length; });
+
+  let html = '<div class="tablewrap"><table class="kgrid"><thead><tr>';
+  html += '<th class="tcol">時間</th>';
+  for (let c = 0; c < 5; c++) {
+    html += '<th><span class="dow">' + DAYS[c] + '</span><span class="md">' + esc(stripDow(dates[c] || '')) + '</span></th>';
+  }
+  html += '</tr></thead><tbody>';
+
+  visible.forEach(function (r) {
+    const isPrep = (r.type === 'prep');
+    html += '<tr>';
+    html += '<td class="tcol' + (isPrep ? ' prep' : '') + '">' + (isPrep ? esc(r.label) : esc(dispTime(r.time))) + '</td>';
+    for (let d2 = 0; d2 < 5; d2++) {
+      html += '<td class="kcell">';
+      const a = r.cells[d2];
+      if (!a.length) {
+        html += '<span class="none">—</span>';
+      } else {
+        a.forEach(function (ch) {
+          const endHtml = ch.end ? ('<span class="endt">〜' + esc(dispTime(ch.end)) + '</span>') : '';
+          html += '<span class="chip">' + esc(ch.name) + endHtml + '</span>';
+        });
+      }
+      html += '</td>';
+    }
+    html += '</tr>';
+  });
+
+  html += '<tr class="sumrow"><td class="tcol">出勤</td>';
+  for (let d = 0; d < 5; d++) html += '<td>' + counts[d] + '</td>';
+  html += '</tr>';
+
+  html += '</tbody></table></div>';
+  host.innerHTML = html;
+}
+
+// ── 外に出すのはこの2つだけ（HTMLのonclickから呼ぶ） ──
+// 元は読み込み時に load() を即実行していたが、ここではタブを開いた時に呼ぶ
+window.ksvLoad = load;
+window.ksvSwitchWeek = switchWeek;
+
+})();
 </script>
 
 </body>
