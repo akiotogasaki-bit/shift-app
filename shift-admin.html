@@ -1,6 +1,23 @@
 <!DOCTYPE html>
 <!--
   お江戸弁当 shift-admin.html
+  v2026-08-14 「🍳 キッチン」を外部リンク → 本物のタブに統合（アプリ再編⑦-b）
+    - これまで kitchen-admin.html を window.open していたため、同じパスワード 1115 を
+      2回打たされていた。745行を丸ごと取り込み、ログインを1回に集約
+    - JSは IIFE で囲った（GAS_URL / PASSWORD / state / apiGet / apiPost / toast /
+      setStatus / showLoading / hideLoading / openSheet / closeSheet / switchWeek の
+      12個が衝突するため。囲えば元コードを触らずに済む＝⑦-a の index 統合と同じ手）
+    - toast() / showLoading() / hideLoading() は宣言せず shift-admin のものを共用
+      （引数が 'ok'|'err' で完全に同じ）。キッチン側の #toast / #overlay は削除
+    - CSSは全ルールを #panel-kitchen 配下にスコープし、クラスは ka-、id は ka… を付けた
+      （status / chip / sheet-head / sheet-body / sheet-foot / sub / ico / active /
+        show / save / diff / err / ok / warn / spinner など18個が衝突するため）
+    - キッチンタブ表示中はヘッダの週ナビ（前週/今週/来週）を隠す（キッチンは自前の
+      今週／来週を持っており、別々の週を指すと混乱するため）
+    - 初回にタブを開いたときだけ KA.load()（3並列APIを毎回は叩かない）
+    - 検証＝元 kitchen-admin と統合版に同じ入力を流し、renderGrid / renderSheet /
+      updateMeta / 通知バー / 保存ペイロード / 通知対象の14項目が完全一致することを確認
+    - kitchen-admin.html は削除していない（再編ルール）。導線を切っただけ
   v2026-08-03 週切替に「来週 ▶」を追加（前週／今週／来週の3つ）
     - 従来は「今週」＝GASの calculateWeekTarget_ 依存で、金18:00を過ぎるまで
       画面が運用中の週から動かず、木・金に提出された翌週分の希望を確認できなかった
@@ -1330,6 +1347,122 @@ input { font-family: inherit; }
   cursor: pointer;
 }
 .bulk-base-item:active { background: var(--cream); }
+
+/* ═══════════════════════════════════════════════════════════════
+   🍳 キッチンタブ（2026-08-14／kitchen-admin.html v3.5 を統合）
+   ・全ルールを #panel-kitchen 配下にスコープし、クラス名は ka- を付けた
+     （素のままだと status / chip / sheet-head / sheet-body / sheet-foot /
+       sub / ico / active / show / save / diff / err / ok / warn / spinner
+       の18個が shift-admin 側と衝突するため）
+   ・CSS変数は #panel-kitchen に再定義（子孫はキッチン要素だけなので改名不要）
+   ・パスワード画面／トースト／ローディングは shift-admin のものを共用＝削除
+   ・元の <header> は sticky だったが、shift-admin のヘッダ＋タブバーが既に
+     sticky なので static にした（三重に貼り付くのを避けるため）
+   ・.app と追加シートの幅は 760px → shift-admin の body に合わせて 480px
+     （枠だけ広くはみ出すのを避ける。グリッドは元どおり横スクロールする）
+   ═══════════════════════════════════════════════════════════════ */
+#panel-kitchen{
+  --navy:#1A3C5E; --navy-d:#122c46; --green:#0E7C66; --green-d:#0a5f4e;
+  --blue:#2471A3; --orange:#E67E22; --red:#C0392B; --purple:#6A4C93;
+  --bg:#f4f6f9; --card:#ffffff; --line:#e2e7ec; --off:#b6bcc4; --ink:#1c2733; --mute:#7a8694;
+  background:var(--bg); color:var(--ink); line-height:1.5;
+}
+#panel-kitchen .ka-app{margin:0 auto;}
+#panel-kitchen .ka-header{background:linear-gradient(135deg,var(--navy),var(--navy-d));color:#fff;padding:15px 16px 13px;box-shadow:0 2px 8px rgba(0,0,0,.12);}
+#panel-kitchen .ka-header .ka-brand{font-size:12px;opacity:.82;letter-spacing:.04em;}
+#panel-kitchen .ka-header h1{margin:2px 0 0;font-size:18px;font-weight:800;letter-spacing:.02em;}
+
+#panel-kitchen .ka-toolbar{display:flex;align-items:center;gap:8px;padding:11px 12px 4px;flex-wrap:wrap;}
+#panel-kitchen .ka-seg{display:inline-flex;background:#e7ecf2;border-radius:999px;padding:3px;}
+#panel-kitchen .ka-seg button{border:0;background:transparent;color:#4a5a6b;font-size:13px;font-weight:700;padding:7px 16px;border-radius:999px;cursor:pointer;}
+#panel-kitchen .ka-seg button.ka-active{background:#fff;color:var(--navy);box-shadow:0 1px 3px rgba(0,0,0,.12);}
+#panel-kitchen .ka-reload{margin-left:auto;border:1px solid var(--line);background:#fff;color:var(--navy);font-size:13px;font-weight:700;padding:7px 12px;border-radius:8px;cursor:pointer;}
+#panel-kitchen .ka-reload:active{background:#eef2f6;}
+
+#panel-kitchen .ka-weekrange{padding:4px 14px 0;font-size:13px;font-weight:700;color:var(--navy);}
+#panel-kitchen .ka-status{padding:5px 14px;font-size:12px;color:var(--mute);min-height:16px;}
+#panel-kitchen .ka-status.ka-err{color:var(--red);}
+#panel-kitchen .ka-status.ka-ok{color:var(--green-d);}
+
+/* ── 出勤人数ストリップ ── */
+#panel-kitchen .ka-coverage{margin:6px 12px 0;background:#eef3f8;border:1px solid var(--line);border-radius:10px;padding:8px 6px;display:flex;}
+#panel-kitchen .ka-coverage .ka-cv{flex:1;text-align:center;font-size:11px;color:var(--mute);}
+#panel-kitchen .ka-coverage .ka-cv b{display:block;font-size:16px;color:var(--navy);font-weight:800;}
+
+#panel-kitchen .ka-copyall{margin:8px 12px 0;width:calc(100% - 24px);border:1.5px dashed var(--green);background:#eafaf4;color:var(--green-d);border-radius:10px;padding:10px;font-size:13px;font-weight:800;cursor:pointer;}
+#panel-kitchen .ka-copyall:active{background:#dcf3ea;}
+#panel-kitchen .ka-hint-line{margin:6px 14px 0;font-size:11px;color:var(--mute);}
+
+/* ── 通知状況バー（v3.5） ── */
+#panel-kitchen .ka-nbar{margin:8px 12px 0;border-radius:10px;padding:9px 11px;font-size:12px;font-weight:700;border:1px solid;display:none;}
+#panel-kitchen .ka-nbar .ka-nb-t{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+#panel-kitchen .ka-nbar .ka-nb-sub{margin-top:4px;font-size:11px;font-weight:600;line-height:1.5;}
+#panel-kitchen .ka-nbar.ka-ok{background:#eafaf4;border-color:#9fdcc9;color:var(--green-d);}
+#panel-kitchen .ka-nbar.ka-warn{background:#fdf0e4;border-color:#f0c48f;color:#8a4b0f;}
+#panel-kitchen .ka-nbar.ka-none{background:#fdecea;border-color:#f0b3ad;color:#8e2a20;}
+#panel-kitchen .ka-nbar.ka-load{background:#eef3f8;border-color:var(--line);color:var(--mute);}
+
+/* ── 時間×曜日グリッド ── */
+#panel-kitchen .ka-gridwrap{margin:8px 12px 4px;overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:12px;background:var(--card);}
+#panel-kitchen table.ka-grid{border-collapse:separate;border-spacing:0;width:100%;min-width:580px;}
+#panel-kitchen table.ka-grid th,#panel-kitchen table.ka-grid td{border-bottom:1px solid var(--line);border-right:1px solid var(--line);vertical-align:top;}
+#panel-kitchen table.ka-grid th:last-child,#panel-kitchen table.ka-grid td:last-child{border-right:0;}
+#panel-kitchen table.ka-grid tbody tr:last-child td{border-bottom:0;}
+#panel-kitchen table.ka-grid thead th{background:#eef3f8;color:var(--navy);font-size:12px;font-weight:800;padding:7px 4px;text-align:center;position:sticky;top:0;z-index:2;}
+#panel-kitchen table.ka-grid thead th .ka-dow{display:block;font-size:13px;}
+#panel-kitchen table.ka-grid thead th .ka-md{display:block;font-size:11px;color:var(--mute);font-weight:700;}
+#panel-kitchen .ka-tcol{position:sticky;left:0;z-index:1;background:#f8fafc;width:74px;min-width:74px;padding:5px 4px;}
+#panel-kitchen thead th.ka-tcol{z-index:3;background:#e7eef5;text-align:center;}
+#panel-kitchen .ka-tlabel{font-size:14px;font-weight:800;color:var(--navy);text-align:center;padding:8px 2px;}
+#panel-kitchen .ka-plabelfx{font-size:13px;font-weight:800;color:var(--purple);text-align:center;padding:8px 2px;}
+#panel-kitchen tr.ka-preprow .ka-tcol{background:#f6f1fb;}
+#panel-kitchen td.ka-cell{min-width:92px;padding:4px;cursor:pointer;}
+#panel-kitchen td.ka-cell:active{background:#eef7ff;}
+#panel-kitchen tr.ka-preprow td.ka-cell:active{background:#f3ecfb;}
+#panel-kitchen .ka-chip{display:block;margin:2px 0;padding:5px 7px;border-radius:7px;color:#fff;font-size:12px;font-weight:800;line-height:1.2;word-break:break-all;}
+#panel-kitchen .ka-chip .ka-chipend{font-weight:600;opacity:.82;margin-left:3px;}
+#panel-kitchen .ka-cell-add{display:block;text-align:center;color:#c2cdd9;font-size:15px;padding:3px 0;}
+
+/* ── アクションバー ── */
+#panel-kitchen .ka-actionbar{position:sticky;bottom:0;z-index:6;background:rgba(244,246,249,.96);backdrop-filter:blur(4px);border-top:1px solid var(--line);padding:8px 10px;display:flex;gap:7px;flex-wrap:wrap;}
+#panel-kitchen .ka-act{flex:1;min-width:84px;border:0;border-radius:10px;padding:11px 6px;font-size:13px;font-weight:800;cursor:pointer;color:#fff;display:flex;align-items:center;justify-content:center;gap:4px;}
+#panel-kitchen .ka-act.ka-save{background:var(--blue);}
+#panel-kitchen .ka-act.ka-all{background:var(--green);}
+#panel-kitchen .ka-act.ka-diff{background:var(--orange);}
+#panel-kitchen .ka-act:disabled{opacity:.5;}
+#panel-kitchen .ka-act .ka-bdg{background:rgba(255,255,255,.28);border-radius:999px;font-size:11px;padding:1px 7px;font-weight:800;}
+
+#panel-kitchen .ka-empty{margin:24px 14px;padding:32px 18px;background:#fff;border-radius:12px;text-align:center;color:var(--mute);font-size:14px;box-shadow:0 1px 4px rgba(0,0,0,.06);}
+#panel-kitchen .ka-empty .ka-ico{font-size:34px;margin-bottom:8px;}
+
+/* ── 追加シート（bottom sheet） ── */
+#panel-kitchen #kaSheet{position:fixed;inset:0;z-index:120;display:none;}
+#panel-kitchen #kaSheet.ka-show{display:block;}
+#panel-kitchen .ka-sheet-bd{position:absolute;inset:0;background:rgba(18,28,40,.45);}
+#panel-kitchen .ka-sheet-panel{position:absolute;left:0;right:0;bottom:0;max-width:480px;margin:0 auto;background:#fff;border-radius:16px 16px 0 0;max-height:86vh;display:flex;flex-direction:column;box-shadow:0 -6px 24px rgba(0,0,0,.22);}
+#panel-kitchen .ka-sheet-head{padding:14px 16px 8px;border-bottom:1px solid var(--line);}
+#panel-kitchen .ka-sheet-head h3{margin:0;font-size:16px;color:var(--navy);font-weight:800;}
+#panel-kitchen .ka-sheet-head .ka-sub{font-size:12px;color:var(--mute);margin-top:3px;}
+#panel-kitchen .ka-sheet-body{padding:6px 14px 4px;overflow-y:auto;}
+#panel-kitchen .ka-sec-t{font-size:12px;font-weight:800;color:var(--navy);margin:10px 2px 6px;}
+#panel-kitchen .ka-sec-empty{font-size:12px;color:var(--mute);padding:4px 2px 8px;}
+#panel-kitchen .ka-pl{display:flex;align-items:center;gap:8px;padding:9px;border:1px solid var(--line);border-radius:9px;margin-bottom:7px;background:#f8fafc;}
+#panel-kitchen .ka-pl .ka-nm{font-weight:800;font-size:13px;}
+#panel-kitchen .ka-pl .ka-emp{font-size:10px;color:var(--purple);font-weight:800;border:1px solid #d9cef0;border-radius:6px;padding:1px 5px;}
+#panel-kitchen .ka-pl .ka-rm{margin-left:auto;border:1px solid var(--red);background:#fff;color:var(--red);font-size:11.5px;font-weight:800;border-radius:8px;padding:7px 11px;cursor:pointer;}
+#panel-kitchen .ka-cand{display:flex;align-items:center;gap:8px;padding:9px;border:1px solid var(--line);border-radius:9px;margin-bottom:7px;}
+#panel-kitchen .ka-cand.ka-placed{background:#eef0f3;opacity:.72;}
+#panel-kitchen .ka-cand.ka-placed .ka-nm{color:var(--mute);}
+#panel-kitchen .ka-cand .ka-nm{font-weight:800;font-size:13px;}
+#panel-kitchen .ka-cand .ka-hint{font-size:11px;color:var(--mute);}
+#panel-kitchen .ka-cand .ka-hint.ka-emp{color:var(--purple);}
+#panel-kitchen .ka-cand .ka-hint.ka-move{color:var(--orange);font-weight:700;}
+#panel-kitchen .ka-cand .ka-add{margin-left:auto;border:0;background:var(--green);color:#fff;font-size:12.5px;font-weight:800;border-radius:8px;padding:8px 13px;cursor:pointer;}
+#panel-kitchen .ka-cand.ka-placed .ka-add{background:var(--orange);}
+#panel-kitchen .ka-sheet-foot{padding:10px 14px;border-top:1px solid var(--line);}
+#panel-kitchen .ka-sheet-close{width:100%;border:0;background:var(--navy);color:#fff;font-size:14px;font-weight:800;border-radius:10px;padding:12px;cursor:pointer;}
+
+#panel-kitchen .ka-footer{text-align:center;padding:10px 16px 20px;font-size:11px;color:#9aa5b1;}
 </style>
 </head>
 <body>
@@ -1362,7 +1495,7 @@ input { font-family: inherit; }
     <button class="tab-btn active" id="tab-shift" onclick="switchTab('shift')">📋 シフト</button>
     <button class="tab-btn" id="tab-confirm" onclick="switchTab('confirm')">✅ 確認状況<span class="badge-tab red" id="unconfirmedBadge" hidden>0</span></button>
     <button class="tab-btn" id="tab-staff" onclick="switchTab('staff')">👥 スタッフ<span class="badge-tab" id="orphanBadge" hidden>0</span></button>
-    <button class="tab-btn" id="tab-kitchen" onclick="window.open('https://akiotogasaki-bit.github.io/shift-app/kitchen-admin.html','_blank')">🍳 キッチン ↗</button>
+    <button class="tab-btn" id="tab-kitchen" onclick="switchTab('kitchen')">🍳 キッチン</button>
   </div>
 
   <div class="tab-panel active" id="panel-shift">
@@ -1518,6 +1651,70 @@ input { font-family: inherit; }
     </div>
 
   </div><!-- /panel-staff -->
+
+  <!-- ═══ 🍳 キッチンタブ（2026-08-14 kitchen-admin.html v3.5 を統合） ═══
+       元ファイルの <header>／グリッド／アクションバー／追加シートをそのまま移設。
+       ・パスワード画面は削除（shift-admin のログインと同じ 1115 だったため。統合の狙いはここ）
+       ・#toast / #overlay も削除し、shift-admin の toast() / showLoading() を共用
+       ・class は ka-、id は ka… を付けて衝突を回避（CSS側の注記を参照）        -->
+  <div class="tab-panel" id="panel-kitchen">
+    <div class="ka-app">
+
+      <div class="ka-header">
+        <div class="ka-brand">お江戸弁当</div>
+        <h1>🍳 キッチンシフト 管理</h1>
+      </div>
+
+      <div class="ka-toolbar">
+        <div class="ka-seg">
+          <button id="kaSegThis" class="ka-active" onclick="KA.switchWeek('this')">今週</button>
+          <button id="kaSegNext" onclick="KA.switchWeek('next')">来週</button>
+        </div>
+        <button class="ka-reload" onclick="KA.load()">🔄 更新</button>
+      </div>
+
+      <div class="ka-weekrange" id="kaWeekRange">　</div>
+      <div class="ka-status" id="kaStatus">読み込み中...</div>
+
+      <div class="ka-nbar" id="kaNotifyBar"></div>
+
+      <div class="ka-coverage" id="kaCoverage" style="display:none;"></div>
+      <button class="ka-copyall" id="kaCopyAllBtn" style="display:none;" onclick="KA.copyReqAll()">🔁 希望＋社員デフォルトで配置</button>
+      <div class="ka-hint-line" id="kaHintLine"></div>
+
+      <div id="kaGrid"></div>
+
+      <div class="ka-footer">お江戸弁当 キッチンシフト管理 v3.5</div>
+
+      <div class="ka-actionbar" id="kaActionbar" style="display:none;">
+        <button class="ka-act ka-save" id="kaBtnSave" onclick="KA.doSave()">💾 保存</button>
+        <button class="ka-act ka-all" id="kaBtnAll" onclick="KA.doSendAll()">📣 一括送信</button>
+        <button class="ka-act ka-diff" id="kaBtnDiff" onclick="KA.doSendDiff()">✏️ 未通知へ送信 <span class="ka-bdg" id="kaDiffBadge">0</span></button>
+      </div>
+
+    </div>
+
+    <!-- 追加シート -->
+    <div id="kaSheet">
+      <div class="ka-sheet-bd" onclick="KA.closeSheet()"></div>
+      <div class="ka-sheet-panel">
+        <div class="ka-sheet-head">
+          <h3 id="kaShTitle"></h3>
+          <div class="ka-sub" id="kaShSub"></div>
+        </div>
+        <div class="ka-sheet-body">
+          <div class="ka-sec-t">この枠に配置済み</div>
+          <div id="kaShPlaced"></div>
+          <div class="ka-sec-t">候補（希望者＋社員）</div>
+          <div id="kaShCand"></div>
+        </div>
+        <div class="ka-sheet-foot">
+          <button class="ka-sheet-close" onclick="KA.closeSheet()">閉じる</button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /panel-kitchen -->
 </div>
 
 <div class="sheet-overlay" id="sheetOverlay" onclick="if(event.target===this)closeSheet()">
@@ -3270,9 +3467,17 @@ function switchTab(tab) {
   document.getElementById('tab-shift').classList.toggle('active', tab === 'shift');
   document.getElementById('tab-staff').classList.toggle('active', tab === 'staff');
   document.getElementById('tab-confirm').classList.toggle('active', tab === 'confirm');
+  document.getElementById('tab-kitchen').classList.toggle('active', tab === 'kitchen');
   document.getElementById('panel-shift').classList.toggle('active', tab === 'shift');
   document.getElementById('panel-staff').classList.toggle('active', tab === 'staff');
   document.getElementById('panel-confirm').classList.toggle('active', tab === 'confirm');
+  document.getElementById('panel-kitchen').classList.toggle('active', tab === 'kitchen');
+
+  // ★2026-08-14 キッチンタブは自前の「今週／来週」を持つので、
+  //   ヘッダの週ナビ（前週/今週/来週）と週表示を隠す（別々の週を指して混乱するため）
+  const kitchenOn = (tab === 'kitchen');
+  document.querySelector('.week-nav').style.display = kitchenOn ? 'none' : '';
+  document.getElementById('weekInfo').style.display = kitchenOn ? 'none' : '';
 
   if (tab === 'staff' && !state.staffTabLoaded) {
     loadStaffTab();
@@ -3280,6 +3485,10 @@ function switchTab(tab) {
   // ★v2026-07-12 確認状況：未読込 or 週が変わっていたら取得
   if (tab === 'confirm' && state.confirmLoadedWeek !== state.weekTarget) {
     loadConfirmTab();
+  }
+  // ★2026-08-14 キッチン：初回表示のときだけ取得（3並列APIを毎回叩かない）
+  if (kitchenOn && !KA.loaded) {
+    KA.load();
   }
 }
 
@@ -3761,6 +3970,548 @@ async function unignoreOrphanAction(i) {
     hideLoading();
   }
 }
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   🍳 キッチンシフト管理（2026-08-14 kitchen-admin.html v3.5 を丸ごと統合）
+
+   ・IIFEで囲ってある。素で並べると GAS_URL / PASSWORD / state / apiGet /
+     apiPost / toast / setStatus / showLoading / hideLoading / openSheet /
+     closeSheet / switchWeek の12個が shift-admin と衝突するため。
+     囲えば元コードを触らずに済む（⑦-a の index 統合と同じやり方）。
+   ・GAS_URL は外側のものをそのまま使う（同一URL）。
+   ・toast() / showLoading() / hideLoading() は宣言せず、外側＝shift-admin の
+     ものが引かれる（引数も 'ok'|'err' で完全に同じ）。
+   ・apiGet / apiPost は shift-admin と引数の形が違う（あちらは (action, params)、
+     こちらは (paramsオブジェクト)）ので、IIFE内に別物として持つ。
+   ・state は KS に改名。DOM id は ka…、class は ka- を付けた。
+   ・元の checkPw / パスワード画面は削除。shift-admin のログイン（同じ1115）に一本化。
+   ・onclick から呼ぶものだけ末尾で window.KA に出している。
+   ═══════════════════════════════════════════════════════════════════════════ */
+const KA = { loaded: false };
+(function(){
+  const DAYS = ['月','火','水','木','金'];
+  const COLORS = ['#1A3C5E','#0E7C66','#B5651D','#6A4C93','#1E6091','#9A3B3B','#3A7D44','#7A5195'];
+
+  /* 固定行：9時間 + 仕込み（1行） */
+  const FIXED_TIMES = ['0:00','2:00','3:00','4:00','5:00','6:00','6:30','7:00','8:00'];
+  const PREP_LABEL = '仕込み';
+
+  const KS = { week:'this', weekTarget:null, dates:[], cooks:[], rows:[], notify:null, pending:{} };
+  // rows[i] = { id:'t0'..'t8'|'p0', type:'time'|'prep', time:'HH:MM', label:'仕込み' }
+  // cooks[i] = { name, userId, registered, isEmployee, hasReq, req:[5], days:[{off,rowId}×5], base:[5], color }
+  // notify   = { count, names:[{name,at}], lastSentAt } … この週に確定通知が飛んだ人（GAS通知履歴 type='kitchen'）
+  // pending  = { 氏名:true } … 「保存はしたがまだ通知していない」人。保存で base が更新されて
+  //                            差分が消えても差分送信の対象に残すための退避（v3.5）
+  let sheetRowId = null, sheetDay = -1;
+
+  /* ───────── 時刻ユーティリティ ───────── */
+  function pad2(n){ n=parseInt(n,10)||0; return (n<10?'0':'')+n; }
+  function padTime(t){ const p=String(t||'').split(':'); if(p.length<2) return ''; const h=parseInt(p[0],10), m=parseInt(p[1],10); if(isNaN(h)||isNaN(m)) return ''; return pad2(h)+':'+pad2(m); }
+  function dispTime(t){ const c=padTime(t); if(!c) return String(t||''); const p=c.split(':'); return (parseInt(p[0],10))+':'+p[1]; }
+  function toMin(t){ const p=String(t).split(':'); return (parseInt(p[0],10)||0)*60+(parseInt(p[1],10)||0); }
+
+  /* セル値：'HH:MM'（時間配置・開始のみ）/ '休' / 空 / それ以外の文字列（仕込み等のラベル配置） */
+  function parseCellRaw(v){
+    v=String(v||'').trim();
+    if(v==='' || v==='休') return { type:'off' };
+    if(v.indexOf('-')>0){ const p=v.split('-'); const s=padTime(p[0]); if(s) return { type:'time', start:s }; }
+    if(/^\d{1,2}:\d{2}$/.test(v)) return { type:'time', start:padTime(v) };
+    return { type:'prep', label:v };
+  }
+  function normNV(v){
+    v=String(v||'').trim();
+    if(v===''||v==='休') return '休';
+    if(v.indexOf('-')>0){ const p=v.split('-'); const s=padTime(p[0]); if(s) return s; }
+    if(/^\d{1,2}:\d{2}$/.test(v)) return padTime(v);
+    return v;
+  }
+  /* v3.3: 希望値からの終了抽出（'HH:MM-HH:MM'→'HH:MM'／それ以外→''） */
+  function cellEnd(v){ v=String(v||'').trim(); if(v.indexOf('-')>0){ const p=v.split('-'); const e=padTime(p[1]); return e||''; } return ''; }
+  function rowById(id){ for(const r of KS.rows){ if(r.id===id) return r; } return null; }
+  function findTimeRow(t){ for(const r of KS.rows){ if(r.type==='time' && toMin(r.time)===toMin(t)) return r; } return null; }
+  function snapTimeRow(t){
+    const m=toMin(t); let best=null, bd=Infinity;
+    for(const r of KS.rows){ if(r.type!=='time') continue; const diff=Math.abs(toMin(r.time)-m); if(diff<bd){ bd=diff; best=r; } }
+    return best;
+  }
+  function firstPrepRow(){ for(const r of KS.rows){ if(r.type==='prep') return r; } return null; }
+  function serializeDay(c,d){
+    const dd=c.days[d];
+    if(!dd || dd.off || !dd.rowId) return '休';
+    const row=rowById(dd.rowId);
+    if(!row) return '休';
+    return row.type==='time' ? row.time : (row.label||PREP_LABEL);
+  }
+
+  /* ───────── 固定行の構築 ───────── */
+  function buildRows(){
+    const rows=FIXED_TIMES.map((t,i)=>({ id:'t'+i, type:'time', time:t, label:'' }));
+    rows.push({ id:'p0', type:'prep', time:'', label:PREP_LABEL });
+    KS.rows=rows;
+  }
+  /* 確定/希望のセル値を行へ割当（時刻は一致行→無ければ最寄り。ただし開始09:00以上は「仕込み」へ） */
+  function assignDay(raw){
+    if(raw.type==='off') return { off:true, rowId:null };
+    if(raw.type==='time'){
+      // v3.4: 開始09:00以上は「仕込み」行へ自動配置（時間行に吸着させない）
+      if(toMin(raw.start) >= toMin('09:00')){ const pp=firstPrepRow(); if(pp) return { off:false, rowId:pp.id }; }
+      const r=findTimeRow(raw.start)||snapTimeRow(raw.start); return r ? { off:false, rowId:r.id } : { off:true, rowId:null };
+    }
+    const p=firstPrepRow(); return p ? { off:false, rowId:p.id } : { off:true, rowId:null };
+  }
+  /* 希望＞社員デフォルト＞休 で raw を決める（確定は含めない） */
+  function rawReqDef(c,d){
+    const rv=c.req[d];
+    const hasReqDay=String(rv==null?'':rv).trim()!=='';
+    if(hasReqDay) return parseCellRaw(rv);
+    if(c.isEmployee && c.defaultStart) return parseCellRaw(c.defaultStart);
+    return parseCellRaw('');
+  }
+
+  /* ───────── 週解決（kitchen-shift.html と同一・サーバの当週/翌週基準に一致） ───────── */
+  function isoWeekTargetOfDate(d){
+    const tmp=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));
+    const dayNum=tmp.getUTCDay()||7; tmp.setUTCDate(tmp.getUTCDate()+4-dayNum);
+    const ys=new Date(Date.UTC(tmp.getUTCFullYear(),0,1));
+    const wn=Math.ceil((((tmp-ys)/86400000)+1)/7);
+    return tmp.getUTCFullYear()+'-W'+String(wn).padStart(2,'0');
+  }
+  function thisWeekTarget(){
+    const t=new Date(); const dow=t.getDay(); const hour=t.getHours();
+    const isNext=(dow===5&&hour>=18)||dow===6||dow===0;
+    let mon;
+    if(isNext){ const add=dow===0?1:8-dow; mon=new Date(t); mon.setDate(t.getDate()+add); }
+    else{ const sub=dow-1; mon=new Date(t); mon.setDate(t.getDate()-sub); }
+    return isoWeekTargetOfDate(mon);
+  }
+  function mondayOfWeekTarget(wt){
+    const m=String(wt||'').match(/^(\d{4})-W(\d{1,2})$/); if(!m)return null;
+    const year=parseInt(m[1],10),week=parseInt(m[2],10);
+    const jan4=new Date(year,0,4); const dow=jan4.getDay()||7;
+    const w1=new Date(jan4); w1.setDate(jan4.getDate()-dow+1);
+    const mon=new Date(w1); mon.setDate(w1.getDate()+(week-1)*7); return mon;
+  }
+  function resolveWeekTarget(){
+    const tw=thisWeekTarget();
+    if(KS.week==='this') return tw;
+    const mon=mondayOfWeekTarget(tw); if(!mon)return tw;
+    const t=new Date(mon); t.setDate(mon.getDate()+7); return isoWeekTargetOfDate(t);
+  }
+
+  /* ───────── 通信 ───────── */
+  async function apiGet(params){
+    const qs=new URLSearchParams(params).toString();
+    const res=await fetch(GAS_URL+'?'+qs,{redirect:'follow'});
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    return await res.json();
+  }
+  async function apiPost(payload){
+    const res=await fetch(GAS_URL,{method:'POST',redirect:'follow',body:JSON.stringify(payload)});
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    return await res.json();
+  }
+
+  /* ───────── UI小物 ───────── */
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  function stripDow(lab){ return String(lab==null?'':lab).replace(/\([^)]*\)/,'').trim(); }
+  function setStatus(msg,kind){ const el=document.getElementById('kaStatus'); el.textContent=msg||''; el.className='ka-status'+(kind?(' ka-'+kind):''); }
+
+
+  function switchWeek(w){
+    if(KS.week===w) return;
+    KS.week=w;
+    document.getElementById('kaSegThis').classList.toggle('ka-active',w==='this');
+    document.getElementById('kaSegNext').classList.toggle('ka-active',w==='next');
+    load();
+  }
+
+  /* ───────── 読み込み（3並列） ───────── */
+  async function load(){
+    KA.loaded = true;          // ★統合版：初回だけ switchTab から呼ぶための印
+    closeSheet();
+    setStatus('読み込み中...');
+    document.getElementById('kaWeekRange').innerHTML='　';
+    document.getElementById('kaCoverage').style.display='none';
+    document.getElementById('kaCopyAllBtn').style.display='none';
+    document.getElementById('kaActionbar').style.display='none';
+    document.getElementById('kaGrid').innerHTML='';
+    document.getElementById('kaHintLine').textContent='';
+    KS.notify=null; KS.pending={};
+    setNotifyBar('load','📣 通知状況を確認中...','');
+    try{
+      const wt=resolveWeekTarget();
+      const [staffR,reqR,confR,notiR]=await Promise.all([
+        apiGet({action:'getKitchenStaff'}),
+        apiGet({action:'getKitchenRequests',weekTarget:wt}),
+        apiGet({action:'getKitchenShift',weekTarget:wt}),
+        // 通知状況は取れなくても本体に影響させない（未デプロイ・通信断でも表を出す）
+        apiGet({action:'getKitchenNotifyStatus',weekTarget:wt}).catch(()=>null),
+      ]);
+      if(staffR.ok===false) throw new Error(staffR.error||'スタッフ取得失敗');
+      KS.notify=(notiR&&notiR.ok)?notiR:null;
+
+      KS.weekTarget=(confR&&confR.weekTarget)||(reqR&&reqR.weekTarget)||wt;
+      KS.dates=(confR&&confR.dates&&confR.dates.length?confR.dates:(reqR&&reqR.dates))||[];
+
+      const reqMap={}, confMap={};
+      ((reqR&&reqR.staff)||[]).forEach(s=>{ reqMap[s.name]=s.days||[]; });
+      ((confR&&confR.staff)||[]).forEach(s=>{ confMap[s.name]=s.days||[]; });
+
+      const roster=(staffR.staff||[]);
+
+      // 固定10行を構築
+      buildRows();
+
+      // 自動配置：確定（保存済み）＞希望＞社員デフォルト＞休
+      KS.cooks=roster.map((s,idx)=>{
+        const conf=confMap[s.name]||['','','','',''];
+        const req =reqMap[s.name]||null;
+        const c={
+          name:s.name, userId:s.userId||'', registered:!!s.registered,
+          isEmployee:!!s.isEmployee,
+          defaultStart:String(s.defaultStart||'').trim(),
+          hasReq:!!req,
+          req: req || ['','','','',''],
+          days: [],
+          base: [0,1,2,3,4].map(d=>normNV(conf[d])),
+          color: COLORS[idx%COLORS.length],
+        };
+        c.days=[0,1,2,3,4].map(d=>{
+          const cv=conf[d];
+          const hasConf=String(cv==null?'':cv).trim()!=='';
+          if(hasConf) return assignDay(parseCellRaw(cv));
+          return assignDay(rawReqDef(c,d));
+        });
+        return c;
+      });
+
+      const ds=KS.dates;
+      document.getElementById('kaWeekRange').textContent=(ds.length>=5?stripDow(ds[0])+' 〜 '+stripDow(ds[4]):KS.weekTarget);
+      renderGrid();
+      document.getElementById('kaCoverage').style.display='flex';
+      document.getElementById('kaCopyAllBtn').style.display='block';
+      document.getElementById('kaActionbar').style.display='flex';
+      document.getElementById('kaHintLine').textContent='希望は自動配置済み。社員は「デフォルト開始」で自動配置（確定＞希望＞社員デフォルト＞休）。枠タップで追加・移動・×。固定時間に無い値は最寄り時間へ寄せます。★バッジ＝まだLINEを送っていない人数。「💾 保存」だけではLINEは飛びません。';
+      updateMeta();
+      setStatus('読込完了：キッチン対象 '+KS.cooks.length+'名','ok');
+    }catch(e){
+      KS.cooks=[]; KS.rows=[];
+      document.getElementById('kaGrid').innerHTML='';
+      setStatus('読み込みに失敗しました：'+e.message+'（通信環境を確認して「更新」）','err');
+    }
+  }
+
+  /* ───────── グリッド描画 ───────── */
+  function renderGrid(){
+    const host=document.getElementById('kaGrid');
+    if(!KS.cooks.length){
+      host.innerHTML='<div class="ka-empty"><div class="ka-ico">🍳</div><div>キッチン対象スタッフが登録されていません。<br>メインSSのスタッフ設定 H列＝「調理」または「社員」を設定してください。</div></div>';
+      return;
+    }
+    const ds=KS.dates;
+    let h='<div class="ka-gridwrap"><table class="ka-grid"><thead><tr>';
+    h+='<th class="ka-tcol">時間</th>';
+    for(let d=0;d<5;d++){
+      h+='<th><span class="ka-dow">'+DAYS[d]+'</span><span class="ka-md">'+esc(stripDow(ds[d]||''))+'</span></th>';
+    }
+    h+='</tr></thead><tbody>';
+
+    KS.rows.forEach(row=>{
+      const isPrep=(row.type==='prep');
+      h+='<tr'+(isPrep?' class="ka-preprow"':'')+'>';
+      h+='<td class="ka-tcol">';
+      if(isPrep){ h+='<div class="ka-plabelfx">'+esc(row.label)+'</div>'; }
+      else { h+='<div class="ka-tlabel">'+esc(dispTime(row.time))+'</div>'; }
+      h+='</td>';
+      for(let d=0;d<5;d++){
+        h+='<td class="ka-cell" onclick="KA.openSheet(\''+row.id+'\','+d+')">';
+        let any=false;
+        KS.cooks.forEach(c=>{ const dd=c.days[d]; if(dd && !dd.off && dd.rowId===row.id){ any=true; const ev=(row.type==='time')?cellEnd(c.req[d]):''; h+='<span class="ka-chip" style="background:'+c.color+'">'+esc(c.name)+(ev?'<span class="ka-chipend">〜'+esc(dispTime(ev))+'</span>':'')+'</span>'; } });
+        if(!any) h+='<span class="ka-cell-add">＋</span>';
+        h+='</td>';
+      }
+      h+='</tr>';
+    });
+    h+='</tbody></table></div>';
+    host.innerHTML=h;
+  }
+
+  /* ───────── 追加シート ───────── */
+  function isCandidate(c,d){
+    if(c.isEmployee) return true;
+    return parseCellRaw(c.req[d]).type!=='off';
+  }
+  function curRowLabel(c,d){
+    const dd=c.days[d]; if(!dd||dd.off||!dd.rowId) return null;
+    const r=rowById(dd.rowId); if(!r) return null;
+    return r.type==='time' ? dispTime(r.time) : r.label;
+  }
+
+  function openSheet(rowId,d){
+    sheetRowId=rowId; sheetDay=d;
+    renderSheet();
+    document.getElementById('kaSheet').classList.add('ka-show');
+  }
+  function closeSheet(){ document.getElementById('kaSheet').classList.remove('ka-show'); sheetRowId=null; sheetDay=-1; }
+  function renderSheetIfOpen(){ if(document.getElementById('kaSheet').classList.contains('ka-show') && sheetDay>=0) renderSheet(); }
+
+  function renderSheet(){
+    const d=sheetDay, row=rowById(sheetRowId); if(d<0||!row) return;
+    const lab=KS.dates[d]||DAYS[d];
+    document.getElementById('kaShTitle').textContent=DAYS[d]+'曜日　'+stripDow(lab);
+    const where = row.type==='time' ? ('時間 '+dispTime(row.time)) : ('「'+row.label+'」');
+    document.getElementById('kaShSub').textContent=where+' に配置　／　候補をタップで追加・×で外す';
+
+    // この枠（行×曜日）に配置済み
+    const placed=[];
+    KS.cooks.forEach((c,ci)=>{ const dd=c.days[d]; if(dd && !dd.off && dd.rowId===row.id) placed.push(ci); });
+    placed.sort((a,b)=>KS.cooks[a].name.localeCompare(KS.cooks[b].name,'ja'));
+    let ph='';
+    if(!placed.length){ ph='<div class="ka-sec-empty">この枠にはまだ誰もいません</div>'; }
+    placed.forEach(ci=>{
+      const c=KS.cooks[ci];
+      ph+='<div class="ka-pl"><span class="ka-nm">'+esc(c.name)+'</span>';
+      if(c.isEmployee) ph+='<span class="ka-emp">社員</span>';
+      ph+='<button class="ka-rm" onclick="KA.rmPlaced('+ci+')">× 外す</button></div>';
+    });
+    document.getElementById('kaShPlaced').innerHTML=ph;
+
+    // 候補（希望者＋社員、この枠に未配置）
+    const cand=[];
+    KS.cooks.forEach((c,ci)=>{ const dd=c.days[d]; const inThis=(dd && !dd.off && dd.rowId===row.id); if(!inThis && isCandidate(c,d)) cand.push(ci); });
+    cand.sort((a,b)=>{
+      const ca=KS.cooks[a], cb=KS.cooks[b];
+      const ea=ca.isEmployee?1:0, eb=cb.isEmployee?1:0;
+      if(ea!==eb) return ea-eb;
+      if(!ca.isEmployee){ return toMin(parseCellRaw(ca.req[d]).start||'0:00')-toMin(parseCellRaw(cb.req[d]).start||'0:00'); }
+      return ca.name.localeCompare(cb.name,'ja');
+    });
+    let ch='';
+    if(!cand.length){ ch='<div class="ka-sec-empty">追加できる候補がいません（希望未提出／休み希望）</div>'; }
+    cand.forEach(ci=>{
+      const c=KS.cooks[ci];
+      const cur=(!c.days[d].off) ? curRowLabel(c,d) : null;   // 他の枠に配置済みか
+      const placedElsewhere=!!cur;
+      let baseHint, hintcls='';
+      if(c.isEmployee){
+        hintcls=' ka-emp';
+        if(c.defaultStart){ const dr=parseCellRaw(c.defaultStart); baseHint='社員 '+(dr.type==='time'?dispTime(dr.start):(dr.type==='prep'?dr.label:c.defaultStart)); }
+        else baseHint='社員';
+      }
+      else { const rr=parseCellRaw(c.req[d]); baseHint='希望 '+(rr.type==='time'?dispTime(rr.start):(rr.type==='prep'?rr.label:'—')); }
+      ch+='<div class="ka-cand'+(placedElsewhere?' ka-placed':'')+'">';
+      ch+='<span class="ka-nm">'+esc(c.name)+'</span>';
+      ch+='<span class="ka-hint'+hintcls+'">'+esc(baseHint)+'</span>';
+      if(placedElsewhere) ch+='<span class="ka-hint ka-move">'+esc(cur)+'に配置済み</span>';
+      ch+='<button class="ka-add" onclick="KA.addCand('+ci+')">'+(placedElsewhere?'移動':'追加')+'</button></div>';
+    });
+    document.getElementById('kaShCand').innerHTML=ch;
+  }
+
+  function addCand(ci){
+    const c=KS.cooks[ci]; if(!c || sheetDay<0 || !sheetRowId) return;
+    c.days[sheetDay]={ off:false, rowId:sheetRowId };   // 1人1日1枠：別枠から移動
+    renderGrid(); renderSheet(); updateMeta();
+  }
+  function rmPlaced(ci){
+    const c=KS.cooks[ci]; if(!c || sheetDay<0) return;
+    c.days[sheetDay]={ off:true, rowId:null };
+    renderGrid(); renderSheet(); updateMeta();
+  }
+
+  /* ───────── 希望どおりに配置（手動再適用） ───────── */
+  function copyReqAll(){
+    const targets=KS.cooks.filter(c=>c.hasReq || (c.isEmployee && c.defaultStart));
+    if(!targets.length){ toast('再適用できる対象がいません'); return; }
+    if(!confirm('希望どおり＋社員デフォルトで '+targets.length+'名 を配置し直します。\n（未提出かつデフォルト無しの人は変更なし。現在の手動配置は上書きされます）\nよろしいですか？')) return;
+    targets.forEach(c=>{
+      for(let d=0;d<5;d++){ c.days[d]=assignDay(rawReqDef(c,d)); }
+    });
+    renderGrid(); renderSheetIfOpen(); updateMeta();
+    toast('希望＋社員デフォルトで配置しました（'+targets.length+'名）','ok');
+  }
+
+  /* ───────── メタ更新（出勤人数・差分・ボタン） ───────── */
+  function computeChanges(){
+    const ch=[];
+    KS.cooks.forEach(c=>{
+      for(let d=0;d<5;d++){
+        const nv=serializeDay(c,d);
+        if(normNV(nv)!==normNV(c.base[d])){
+          ch.push({ name:c.name, dayIndex:d, date:(KS.dates[d]||DAYS[d]), newVal:nv });
+        }
+      }
+    });
+    return ch;
+  }
+  /* 通知が必要な人（v3.5）＝次の3つの和集合
+       ①未保存の変更がある人（computeChanges）
+       ②このセッションで保存はしたがまだ通知していない人（KS.pending）
+       ③この週に出勤があるのに通知履歴が1件も無い人（KS.notify）
+     ①だけだったのが v3.4。保存すると base が更新されて computeChanges が空になるため
+     後から押しても “変更はありません” で空振りした。さらに③が無いと、
+     「保存済み・内容も変わっていない・でも一度も通知していない」人（＝今回の21名）が
+     永久に対象から漏れる。実測：2026-W32 は22名保存済みで通知は本間mieko 1名のみだった。 */
+  function unsentNames(){
+    const set={};
+    computeChanges().forEach(c=>{ set[c.name]=true; });
+    Object.keys(KS.pending).forEach(n=>{ set[n]=true; });
+    if(KS.notify){
+      const done={}; (KS.notify.names||[]).forEach(x=>{ done[x.name]=true; });
+      workingNames().forEach(n=>{ if(!done[n]) set[n]=true; });
+    }
+    return Object.keys(set);
+  }
+  /* この週に1日でも出勤がある人＝通知が飛ぶべき人（全休はGAS側でもスキップされる） */
+  function workingNames(){
+    return KS.cooks
+      .filter(c=>{ for(let d=0;d<5;d++){ if(!c.days[d].off) return true; } return false; })
+      .map(c=>c.name);
+  }
+  function updateMeta(){
+    const counts=[0,0,0,0,0];
+    KS.cooks.forEach(c=>{ for(let d=0;d<5;d++){ if(!c.days[d].off) counts[d]++; } });
+    let cv='';
+    for(let d=0;d<5;d++){ cv+='<div class="ka-cv">'+DAYS[d]+'<b>'+counts[d]+'</b></div>'; }
+    document.getElementById('kaCoverage').innerHTML=cv;
+
+    const names=unsentNames();   // ★バッジの意味＝「未通知の人数」（v3.4までは変更セル数）
+    document.getElementById('kaDiffBadge').textContent=names.length;
+    document.getElementById('kaBtnDiff').disabled=(names.length===0);
+    renderNotifyBar();
+  }
+
+  /* ───────── 通知状況バー（v3.5） ───────── */
+  function setNotifyBar(kind,title,sub){
+    const el=document.getElementById('kaNotifyBar');
+    el.className='ka-nbar ka-'+kind;
+    el.style.display='block';
+    el.innerHTML='<div class="ka-nb-t">'+esc(title)+'</div>'+(sub?('<div class="ka-nb-sub">'+esc(sub)+'</div>'):'');
+  }
+  function renderNotifyBar(){
+    if(!KS.notify){
+      setNotifyBar('load','📣 通知状況を取得できませんでした','この週に通知が飛んだかは画面からは確認できません。🔄更新で再取得してください。');
+      return;
+    }
+    const work=workingNames();
+    if(!work.length){ setNotifyBar('load','📣 この週はまだ出勤者がいません',''); return; }
+
+    const done={}; (KS.notify.names||[]).forEach(x=>{ done[x.name]=x.at; });
+    const un=work.filter(n=>!done[n]);
+    const last=KS.notify.lastSentAt||'';
+    const head='📣 この週の確定通知：'+(work.length-un.length)+'/'+work.length+'名'+(last?('　最終送信 '+last):'');
+
+    if(!un.length){ setNotifyBar('ok',head,'この週の出勤者全員にLINEが飛んでいます。'); return; }
+    if(un.length===work.length){
+      setNotifyBar('none',head,'⚠️ まだ誰にも通知が飛んでいません。組み終わったら「📣 一括送信」を押してください（「💾 保存」だけではLINEは飛びません）。');
+      return;
+    }
+    setNotifyBar('warn',head,'未通知：'+un.join('、'));
+  }
+  /* 送信後に通知状況を取り直す（失敗しても画面は壊さない） */
+  async function refreshNotifyStatus(){
+    try{
+      const r=await apiGet({action:'getKitchenNotifyStatus',weekTarget:KS.weekTarget});
+      KS.notify=(r&&r.ok)?r:KS.notify;
+    }catch(e){ /* 表示は据え置き */ }
+    renderNotifyBar();
+  }
+
+  /* ───────── 保存・送信 ───────── */
+  function buildRowsPayload(){
+    return KS.cooks.map(c=>({name:c.name,days:[0,1,2,3,4].map(d=>serializeDay(c,d))}));
+  }
+  function commitBase(){
+    KS.cooks.forEach(c=>{ c.base=[0,1,2,3,4].map(d=>normNV(serializeDay(c,d))); });
+  }
+
+  async function doSave(opt){
+    const promptSend=!(opt&&opt.promptSend===false);
+    const changed=computeChanges();          // ★保存前に退避（保存すると差分が消えるため）
+    showLoading('保存中...'); setStatus('保存中...');
+    let ok=false;
+    try{
+      const data=await apiPost({action:'saveKitchenShift',weekTarget:KS.weekTarget,rows:buildRowsPayload()});
+      if(!data.success) throw new Error(data.error||'保存失敗');
+      commitBase();
+      changed.forEach(c=>{ KS.pending[c.name]=true; });   // ★保存済み・未通知として残す
+      updateMeta();
+      setStatus('保存完了（'+data.saved+'名）※LINEはまだ飛んでいません','ok');
+      toast('保存しました（'+data.saved+'名）','ok');
+      ok=true;
+    }catch(e){
+      setStatus('保存失敗：'+e.message,'err'); toast('保存失敗：'+e.message,'err');
+    }finally{ hideLoading(); }
+    if(ok&&promptSend) await promptNotifyAfterSave();
+  }
+
+  /* 保存しただけで終わらせないための促し（v3.5）
+     ＝「保存だけで通知が飛んでいない」が今回の不具合の直接の再発防止 */
+  async function promptNotifyAfterSave(){
+    const names=unsentNames();
+    if(!names.length) return;
+    const list=names.slice(0,10).join('、')+(names.length>10?(' ほか'+(names.length-10)+'名'):'');
+    if(!confirm('保存しました。まだLINEは飛んでいません。\n\n未通知：'+names.length+'名\n'+list+'\n\n今すぐこの'+names.length+'名へ通知しますか？\n（キャンセル＝送らない。あとから「✏️ 差分送信」でも送れます）')) return;
+    await sendDiffCore(names);
+  }
+
+  async function doSendAll(){
+    const work=workingNames();
+    if(!work.length){ toast('この週は出勤者がいません'); return; }
+    if(!confirm('現在の内容を保存し、この週に出勤がある '+work.length+'名へ確定シフトをLINE通知します。\n（過去日・休は通知されません）\nよろしいですか？')) return;
+    showLoading('保存＋一括通知中...'); setStatus('保存＋一括通知中...');
+    try{
+      const sv=await apiPost({action:'saveKitchenShift',weekTarget:KS.weekTarget,rows:buildRowsPayload()});
+      if(!sv.success) throw new Error(sv.error||'保存失敗');
+      commitBase();
+      const data=await apiPost({action:'sendKitchenShiftNotify',weekTarget:KS.weekTarget,source:'manual'});
+      if(!data.success) throw new Error(data.error||'通知失敗');
+      KS.pending={};
+      await refreshNotifyStatus();
+      updateMeta();
+      setStatus('一括送信完了（送信'+data.sent+'名 / スキップ'+data.skipped+'名）','ok');
+      toast('一括送信：'+data.sent+'名へ通知','ok');
+    }catch(e){
+      setStatus('一括送信失敗：'+e.message,'err'); toast('一括送信失敗：'+e.message,'err');
+    }finally{ hideLoading(); }
+  }
+
+  async function doSendDiff(){
+    const names=unsentNames();
+    if(!names.length){ toast('未通知の人はいません'); return; }
+    if(!confirm('現在の内容を保存し、まだ通知していない '+names.length+'名にだけLINEを送ります。\n対象：'+names.join('、')+'\n（過去日はスキップ）\nよろしいですか？')) return;
+    await sendDiffCore(names);
+  }
+
+  /* 差分送信の実体（保存→氏名指定で送信）。
+     GAS の sendKitchenShiftDiff は changes の name しか見ず、
+     その人の「確定シートの現在の内容」を丸ごと送る仕様なので氏名だけ渡せばよい。 */
+  async function sendDiffCore(names){
+    showLoading('保存＋差分通知中...'); setStatus('保存＋差分通知中...');
+    try{
+      const sv=await apiPost({action:'saveKitchenShift',weekTarget:KS.weekTarget,rows:buildRowsPayload()});
+      if(!sv.success) throw new Error(sv.error||'保存失敗');
+      const data=await apiPost({action:'sendKitchenShiftDiff',weekTarget:KS.weekTarget,changes:names.map(n=>({name:n}))});
+      if(!data.success) throw new Error(data.error||'通知失敗');
+      commitBase();
+      KS.pending={};
+      await refreshNotifyStatus();
+      updateMeta();
+      setStatus('差分送信完了（送信'+data.sent+'名 / スキップ'+data.skipped+'名）','ok');
+      toast('差分送信：'+data.sent+'名へ通知','ok');
+    }catch(e){
+      setStatus('差分送信失敗：'+e.message,'err'); toast('差分送信失敗：'+e.message,'err');
+    }finally{ hideLoading(); }
+  }
+
+/* onclick から呼ぶものだけ公開（他は外に出さない） */
+Object.assign(KA, {
+  load, switchWeek, copyReqAll,
+  openSheet, closeSheet, rmPlaced, addCand,
+  doSave, doSendAll, doSendDiff,
+});
+})();
 
 if (sessionStorage.getItem('shift_admin_auth') === '1') {
   showMain();
