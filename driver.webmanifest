@@ -5,8 +5,8 @@
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#2471A3",
-  "theme_color": "#2471A3",
+  "background_color": "#1E8449",
+  "theme_color": "#1E8449",
   "icons": [
     { "src": "./driver-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
     { "src": "./driver-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
