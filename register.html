@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>お江戸弁当 レジ</title>
+<!-- register v3.25 (2026-08-15) 【二次販売も納品数を入れる＝通常レジと同じ流れに戻した】社長指示「セカンドの拠点の納品数はスポットと同じ仕様で。回収タブより拠点を選んで納品数をドライバーが入力。そこからは通常のレジアプリと同じように販売員が納品数のチェックから始まるいつもと同じレジアプリの使い方で。締めの作業も通常拠点と全く同じで」「セカンドでの納品数は300円・500円の2項目で良い」。★v3.23 の「二次販売は納品数を入力しない（一旦3で＝売れた数だけ記録）」を**撤回**した。撤回したのは4箇所＝①`renderDeliveryInputs` の早期return（納品数カードを隠して配分表を取りに行かない）②`btn-start-submit` の `if (!IS_2ND)` の括り（入力欄の読み取りを通常どおり通す）③確認画面の「納品数を入力しません」差し替え ④締め画面の「—（入力なし）」表示。★**既定値の出どころ**＝ドライバーが回収タブで入れた数。メインGAS `getPlannedDelivery` が**二次販売拠点のときだけ**専用シート「二次販売納品」から返すようにしたので、レジ側は通常拠点と同じ経路（`loadPlannedDelivery`）をそのまま通る＝二次販売のための特別な取得処理は持たない。★**専用シートにした理由**＝2026-08-13 に「基本数マスタ（配分調整）に二次販売の行を作らない」と決めたため（夜間バッチが拠点×商品を全件回して空行を149行×2日ぶん作った件の後始末）。基本数マスタに書き戻すとその除外ロジックとまた衝突する。★**下限チェック（合計10個以下は開始できない・v3.22）は二次販売だけ通さない**。二次販売は一次販売の残りを持って行って売るので、10個未満の日が普通にあり、通すとレジを開始できなくなる。★**ギャラは1500円ぴったりのまま維持**（社長指示「残数・現金の流れだけ同じ。ギャラ1500円は維持」）＝賄い補填・遅刻控除・インセンティブは従来どおり付けない。締め画面の賄い/遅刻カードも隠したまま。要: メインGAS @2026-08-15 以降（`getSecondDelivery` / `saveSecondDelivery` / `_isSecondLoc_` / `getPlannedDelivery` の二次販売分岐）＋ driver v4.0（回収タブの納品入力）。 -->
 <!-- register v3.24 (2026-08-13) 【通常レジの拠点一覧から「車載（芝）」を外す】本番で二次販売レジの動作を確認していて見つけた。★`車載（芝）`（L901）は 8/13 に足した**仮想拠点**（芝エリアの巡回補充テスト用。ドライバーが車に積んだぶんを在庫として持つための箱）で、**レジは置いていない**。ところが拠点マスタに実在する行なので、通常レジの拠点一覧に「車載（芝）」として**34番目に並んでいた**（本番で実際に並んでいるのを確認）。販売員がうっかり選んでレジを開始すると、車載の在庫が販売拠点として動き、巡回補充の残数計算が壊れる。★driver の「📊 実況」では既に除外済み（v3.3/v3.5）だったが、**レジ側は素通し**だった。★`REGISTER_HIDDEN_AREAS = ['車載']` と `isRegisterHiddenLoc_()` を新設し、`applyMasterToState` の拠点フィルタに追加（二次販売の除外と同じ場所）。今後この種の仮想拠点が増えても配列に足すだけで済む。★二次販売レジ側（`?mode=2nd`）はエリア＝二次販売だけを出すので元から影響なし。GAS変更なし。 -->
 <!-- register v3.23 (2026-08-13) 【二次販売レジ（セカンドセール）を新設】社長指示（ミーティング）「セカンドセール用のレジを用意する。商品としての品目は300円・500円の2種類で大丈夫。それ以外は全て通常時のレジと一緒で大丈夫」。★入口は **`register.html?mode=2nd`**（LINEリッチメニューに「🛒 二次販売」を1つ足して、そのURLを開く）。**同じファイルのまま入口だけ分ける**のが要点。理由＝二次販売を打つのは**その日どこかの拠点で売っていた販売員**が多い（社長 2026-08-13「1が多い。たまに2時販売だけ入る人もいる」）のに、通常レジは「同じ人・同じ日」なら**確認なしで前の拠点のレジ画面へ自動復帰**し（`restoreState` の `isSamePerson`）、しかも `clearSavedState` は「別人が引き継ぎを断った時」しか呼ばれない＝**締めても localStorage は残る**。つまり拠点を足すだけでは、二次販売のときに拠点選択画面までたどり着けない。→ `STATE_KEY` を `oedo_register_state_2nd` に分け、**通常レジと完全に独立した別レジ**として動かす（通常レジを打っている途中でも壊さない）。★対象の見分けは**既存のマスタ列だけ**で済ませた＝**GAS改修なし**：拠点は拠点マスタ「エリア」列＝`二次販売`（`getLocations` が `area` で返す）、商品は単価マスタ「カテゴリー」列＝`二次販売`（`getProducts` が `category` で返す）。通常レジ側は逆に**この2つを必ず除外**する（拠点一覧に並んで押し間違えるのを防ぐ）。★通常レジと違うのはここだけ：①商品は300円・500円の2品 ②**納品数は入力しない**（社長「一旦3で」＝売れた数だけ記録）→ 納品数カードを隠し、`plannedDeliveryLoaded` を最初から true にして配分表を取りに行かない（取りに行くと「📋 配分表を読み込み中…」で永久に押せない）。あわせて**入力欄の存在チェックと「10個以下は開始できない」下限チェック（v3.22）を通さない**＝通すと必ず止まってレジを開始できない ③ギャラは**1500円ぴったり**（社長「2次販売は1500円のギャラ」）＝拠点マスタの基本ギャラをそのまま使い、インセンティブ・賄い補填・遅刻控除は付けない（締め画面から賄い/遅刻カードごと隠す）。社員・ドライバー・スポット名乗りは従来どおり0円 ④納品数を入れないので納品数・完売率は「—」表示（0個/0%だと故障に見える）。★**必ず踏む地雷を1つ潰した**：`checkTodayReport` は「その日・その人の報告」を**拠点に関係なく**返すため、拠点を締めた人が二次販売レジを開くと毎回「本日すでに報告が提出されています（拠点：浜松町…）」が出て入れない（逆に通常レジも二次販売の報告で塞がる）。→ **今のモードの拠点一覧に無い拠点の報告は別レジのものとして無視**する（`state.locations` は既にモードで絞ってあるのでこれだけで判定できる）。★同日に複数か所でやる日は**場所ごとに販売員が別**（社長「販売拠点が増えれば販売員も増える」）なので、1台で場所を渡り歩く導線は作っていない。★交通費（日によって違う・ドライバーが入力）は**このアプリでは扱わない**＝別途ドライバーアプリ側で対応する。★**社長の準備が3つ必要**：①拠点マスタに二次販売3拠点（エリア列＝二次販売／基本ギャラ＝1500）②単価マスタに300円・500円の2品（カテゴリー列＝二次販売）③リッチメニューに「🛒 二次販売」。★検証：headless Chrome に偽マスタを食わせ、通常レジ／二次販売レジの両方で商品・拠点の絞り込み、保存キー、当日報告ダイアログの有無、納品数カード、ギャラ計算まで実際に動かして確認済み。GAS変更なし。 -->
 <!-- register v3.22 (2026-08-10) 【配分表の取り込み中は次の画面へ行かせない／納品数10個以下ではレジを開始させない】社長指示「レジアプリの納品数の取り込みをしている間は次の画面に行けないように、また納品数0、もしくは10個以下でレジをスタートできないようにして欲しい」。★①v3.20 で送信ボタンを disabled にしたが、**ボタンの状態だけが頼り**だと Enter キー・二度押し・画面を作り直した直後などですり抜ける経路が残る。`btn-start-submit` のハンドラ**入口**でも `state.plannedDeliveryLoaded` を見て、未完了ならアラートで止めて確認画面へ行かせない（引き継ぎモードはこのガードの手前で return するので影響なし）。★②スタートの下限を新設。**お茶を除いた納品数の合計が `START_MIN_DELIVERY`(=10) 以下ならレジを開始できない**。v3.20 の「全品0なら confirm で確認」を置き換えた＝ダイアログは押して通せてしまい、現に「全品0のまま開始 → ＋1ずつ直す」が起きていたため、確認ではなく**完全に止める**。止めた時は最初の商品欄へフォーカス＋スクロールする。他社弁当（メンチカツ等）は配分表の既定値こそ入らないが実際に届くので合計に入れる。お茶を除くのは開始・締めの既存規則（v3.9 / v3.10）に揃えたもの。少数納品の日が出てきたら `START_MIN_DELIVERY` の数字だけ下げれば効く。★③あわせて `loadPlannedDelivery` の**デッドロック経路**を塞いだ：拠点未選択の時に try の手前で return しており finally が走らず、`plannedDeliveryLoaded` が false のまま固定＝送信ボタンが「📋 配分表を読み込み中…」で永久に押せなくなる（①のガードが入ると確実に詰まる）。ここで拾って「読み込み完了・配分表なし」に倒す。GAS変更なし。 -->
@@ -2231,19 +2232,10 @@ async function submitTakeoverStartCash() {
 // START REPORT
 // ═══════════════════════════════════════════════════════════════
 function renderDeliveryInputs() {
-  // ★2026-08-13 二次販売は納品数を入力しない（社長決定：売れた数だけ記録する）。
-  //   配分表も無いので取りに行かない。取りに行くと `plannedDeliveryLoaded` が立たず
-  //   「📋 配分表を読み込み中…」のまま送信ボタンが永久に押せなくなる（v3.22 のガード）。
-  if (IS_2ND) {
-    const card = document.getElementById('start-card-delivery');
-    if (card) card.style.display = 'none';
-    const box = document.getElementById('delivery-inputs');
-    if (box) box.innerHTML = '';
-    state.deliveryCount = {};
-    state.plannedDelivery = null;
-    state.plannedDeliveryLoaded = true;
-    return;
-  }
+  // ★2026-08-15 v3.25 二次販売も通常拠点と同じく納品数を出す（社長指示）。
+  //   既定値はドライバーが回収タブで入れた数（GAS getPlannedDelivery が
+  //   二次販売拠点だけ専用シート「二次販売納品」から返す）。
+  //   ⚠ v3.23 でここに置いていた「カードを隠して配分表を取りに行かない」早期returnは削除した。
   const container = document.getElementById('delivery-inputs');
   container.innerHTML = state.products.map(p => `
     <div class="form-row">
@@ -2367,9 +2359,8 @@ document.getElementById('btn-start-submit').addEventListener('click', () => {
   // ★2026-08-04 v3.13 入力欄が無いまま送ろうとしたら、黙って落ちずに画面を作り直して知らせる。
   //   従来は `document.getElementById(...).value` が null で例外になり、
   //   **ボタンを押しても何も起きない**状態になっていた（販売員からは「入力できない」に見える）。
-  // ★2026-08-13 二次販売は納品数を入力しない＝入力欄の存在チェックも下限チェックも通さない。
-  //   通すと「入力欄が無い」で必ず止まり、そもそもレジを開始できない。
-  if (!IS_2ND) {
+  // ★2026-08-15 v3.25 二次販売も納品数を入れるようになったので、この括りを外した。
+  //   （ドライバーが回収タブで入れた数が既定値として入っている＝通常拠点と同じ流れ）
   state.deliveryCount = {};
   let _missingInputs = 0;
   state.products.forEach(p => {
@@ -2389,7 +2380,9 @@ document.getElementById('btn-start-submit').addEventListener('click', () => {
   //   ・数えるのはお茶を除いた合計。お茶は配分調整の対象外で、レジの納品数としても
   //     開始・締めの両方で除外している（v3.9 / v3.10）ので、ここでも同じ規則に揃える。
   //   ・他社弁当（メンチカツ等）は配分表の既定値こそ入らないが実際に届く商品なので合計に入れる。
-  {
+  // ★2026-08-15 v3.25 下限チェックだけは二次販売で通さない。二次販売は一次販売の
+  //   残りを持って行って売るので、**10個未満の日が普通にある**（通すと開始できない）。
+  if (!IS_2ND) {
     const teaOf   = p => String(p.name || '').indexOf('お茶') >= 0;
     const nonTea  = state.products.filter(p => !teaOf(p));
     const total   = nonTea.reduce((s, p) => s + (Number(state.deliveryCount[p.id]) || 0), 0);
@@ -2403,7 +2396,6 @@ document.getElementById('btn-start-submit').addEventListener('click', () => {
       return;
     }
   }
-  }   // ← ★2026-08-13 if (!IS_2ND) ここまで
   // ★2026-07-31 Phase B：配分表と違う数で始めるなら、その場で伝えておく（驚かせない）
   //   実際の承認依頼はGAS側（handleStart）が送る。ここは表示だけ。
   try {
@@ -2434,13 +2426,7 @@ function showConfirm() {
 
   const teaIds = state.products.filter(p => p.name.includes('お茶')).map(p => p.id);
   const list = document.getElementById('confirm-delivery-list');
-  // ★2026-08-13 二次販売は納品数を入れないので、確認する数字が無い（0個が並ぶだけ）
-  if (IS_2ND) {
-    list.innerHTML = '<div class="form-row" style="color:var(--ink-mute);font-size:13px;line-height:1.7;">'
-                   + '二次販売は納品数を入力しません。<br>売れた数だけ記録します。</div>';
-    showScreen('confirm');
-    return;
-  }
+  // ★2026-08-15 v3.25 二次販売も納品数を確認する（通常拠点と同じ画面に戻した）
   list.innerHTML = state.products.map(p => {
     const count = state.deliveryCount[p.id] || 0;
     const isTea = teaIds.includes(p.id);
@@ -3577,9 +3563,10 @@ async function calcFinal() {
   document.getElementById('res-cash').textContent     = `¥${state.cashSales.toLocaleString()}`;
   document.getElementById('res-paypay').textContent   = `¥${state.paypayAmount.toLocaleString()}`;
   // ★2026-08-13 二次販売は納品数を入れないので、納品数・完売率は数字が出ない（0個/0%だと故障に見える）
-  document.getElementById('res-delivery').textContent = IS_2ND ? '—（入力なし）' : `${totalDelivery}個`;
+  // ★2026-08-15 v3.25 二次販売も納品数を入れるようになったので「—」表示をやめた
+  document.getElementById('res-delivery').textContent = `${totalDelivery}個`;
   document.getElementById('res-sold').textContent     = `${state.soldCount}個（お茶除く：${nonTeaSold}個）`;
-  document.getElementById('res-rate').textContent     = IS_2ND ? '—' : `${sellRate}%`;
+  document.getElementById('res-rate').textContent     = `${sellRate}%`;
   document.getElementById('res-incentive').textContent = IS_2ND
     ? '¥0（二次販売はギャラのみ）'
     : `¥${incentive.toLocaleString()}（${nonTeaSold}個）`;

@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v4.0 (2026-08-15) 【二次販売の納品数をドライバーが入れる】社長指示「セカンドの拠点の納品数はスポットと同じ仕様で。**回収タブより拠点を選んで納品数をドライバーが入力**。そこからは通常のレジアプリと同じように販売員が納品数のチェックから始まる、いつもと同じレジアプリの使い方で。締めの作業も通常拠点と全く同じで」「セカンドでの納品数は300円・500円の2項目で良い」。★回収タブの「🏪 本日のスポット拠点」の下に **「🛒 本日の二次販売拠点」** を追加。拠点をタップ → 300円・500円の数を入れる → 登録。入れた数はメインGASの専用シート「二次販売納品」に入り、**レジは通常拠点と同じ経路（getPlannedDelivery）で既定値として受け取る**（register v3.25 が v3.23 の「納品数を入力しない」を撤回）。★**スポットとの違い**＝スポットは定数なので既定値が入っていて「違う日だけ直す」。二次販売は一次販売の残りを持って行くので**毎日数が変わる**＝毎回ここで入れる。既に入っていればカードに「納品 N個（入力者）」と出て、タップで直せる。★対象の商品は**単価マスタのカテゴリー＝二次販売**（＝300円・500円）、対象の拠点は**拠点マスタのエリア＝二次販売**。どちらも既存の目印をそのまま使うのでマスタの追加設定は不要。★取得は `loadSpotToday` に相乗りさせた（別々に呼ぶと回収タブの再描画が二度走るため）。★**専用シートにした理由**＝2026-08-13 に「基本数マスタ（配分調整）に二次販売の行を作らない」と決めたため。基本数マスタに書き戻すと夜間バッチの除外ロジックとまた衝突する（あの時は空行が149行×2日ぶんできた）。要: メインGAS @2026-08-15 以降（`getSecondDelivery` / `saveSecondDelivery` / `_isSecondLoc_` / `SECOND_DELIV_SHEET`）＋ register v3.25。 -->
 <!-- driver v3.9 (2026-08-15) 【巡回：置く・下げるを1画面に統合】芝エリアの巡回補充テスト（8/17開始）用。★v3.1「🚚 車から補充」とv3.3「📥 車へ回収」を**1つに統合**した。社長指摘＝「商品毎の売れ行きで変わるから、置くのと回収は同時発生するはず」。実際その通りで、同じ拠点で「Aは切れている・Bは余っている」が同時に起きるのに、分かれていると**2回開いて2回送る**ことになっていた。→ 商品ごとに ＋（置く）／−（下げる）を1つの表に並べ、**1回の送信で両方**記録する（裏では既存の supplyFromVehicle と collectToVehicle を順に叩くだけなので、記録の形も在庫の動きも従来と同じ）。★もう1つの社長指摘＝「ボタンはいらない。どっちにしても必ず拠点リストに飛ぶんだから」。→ **移動タブを開いた瞬間に拠点リストを出す**（車載の仮想拠点を持っている人だけ）。ピーク中のタップが1回減る。**車載を持っていない人の画面は1つも変わらない**＝他のドライバーへの案内は不要。★通常の移動フォームは畳んでおき「▼ 通常の拠点間移動をする」で開く（社長指示）。★拠点の並びは**拠点IDの昇順で固定**（社長指示。ルート順にするかは初週を見てから判断）。★推奨個数の出どころ＝**置く**は `getSupplyPace`（同じ曜日の直近4週・12:00〜12:20の平均販売数 − いまの残り。車載にあるぶんが上限）／**下げる**は `getSupplyRecommend`（昼の販売ペース通知🥶と同じ計算＝拠点×曜日の販売カーブ＋当日の進捗の遅れから「最後まで残りそうな数」。**12:00より前はサーバーが空を返す**＝社長指示「12:00前の残りそうは積極的に出さなくていい。配分がレベル制で絞ってあるので昼前に余ること自体が少ない」）。★どちらの取得に失敗しても操作はできる（推奨が入らないだけで手入力に落ちる）。実績が無い拠点は従来の刻み（SUPPLY_STEP）を「残りが少ない商品」から均して配るが、**刻みの数字は画面に出さない**（社長指示）。★数字はすべて初期値として入るだけで、「置く／下げる」タグを押せば向きを変えられ、数はテンキーで直せる。★旧2ボタンのモーダル（#sv-modal / #cv-modal）と関数（openSupplyModal / openCollectModal / submitSupply / submitCollect）は**画面から呼べない状態で残置**（退避経路）。要: メインGAS @2026-08-15 以降（`getSupplyPace` / `getSupplyRecommend` / `_spHHMMToMin_` / `SUPPLY_BACK_FROM_MIN`）。→ [[芝エリア_巡回補充テスト_設計_2026-08-17]] -->
 <!-- driver v3.8 (2026-08-15) 【PWAの色をドライバーの緑に統一】リッチメニュー統一の一環。統一仕様は「同じアプリはどこでも同じ色」で、ドライバーは緑 `#1E8449`。ところが `driver.webmanifest` の `theme_color`/`background_color` が **`#2471A3`＝配分表の青**（delivery からのコピペ時の取り違えと思われる）、`driver.html` の `theme-color` が `#1a1a2e` で、**アイコンの緑と起動画面の色が食い違っていた**。両方を `#1E8449` に揃えた。★アイコンも同時に差し替え済み＝`driver-icon.png`(180)/`driver-icon-512.png`(512) は **リッチメニューのトラックの絵から切り出したもの**なので、LINEのメニューとホーム画面で同じ絵になる。★変更は色の値だけ。機能・レイアウト・GASは一切触っていない。※`delivery` と `kanri` は元から正しい色だったので触っていない。 -->
 <!-- driver v3.7 (2026-08-14) 【「📊 実況」をタブの先頭へ】社長指示。★変えたのは **タブバーのボタンの並びだけ**（`#tab-btn-realtime` を先頭に移動）。`.tab-bar` は `display:flex` ＋各ボタン `flex:1` の均等割りで、`:first-child` 等の順序依存CSSも無いため、見た目は幅も配色も従来どおり。パネル（`#tab-realtime` 以下）は移動していない＝`switchTab` は id で切り替えるのでDOM順に依存しない。★**起動時に開くタブは従来どおり「🚚 回収」**（`active` は collection のまま）。実況を既定にすると `getTodayIntermediate` の5分ポーリングが起動と同時に始まり、v3.3 で「タブを開いている間だけ回す」（回収中ずっと開くアプリなので裏で叩き続けさせない）とした設計を打ち消してしまう。既定も実況にするなら別途指示のこと。★GAS変更なし。 -->
@@ -1799,7 +1800,21 @@ body {
         <button class="sv-close" onclick="ptBackToList()">◀ 拠点を選び直す</button>
       </div>
     </div>
-    <!-- ★2026-08-15 巡回中は通常の移動フォームを畳んでおく（社長指示）。押すと開く。
+    <!-- ★2026-08-15 二次販売の納品数を入れるモーダル（回収タブの「🛒 本日の二次販売拠点」から開く）。
+       300円・500円の2品だけ（単価マスタのカテゴリー＝二次販売）。入れた数はレジの納品数になる。 -->
+  <div class="sv-modal-bg" id="sd-modal" onclick="if(event.target===this)closeSecondDelivModal()">
+    <div class="sv-box">
+      <div class="mv-title">🛒 二次販売の納品数</div>
+      <div class="sv-sec" id="sd-loc"></div>
+      <div id="sd-rows"></div>
+      <div class="pt-why">ここで入れた数が、販売員のレジに<b>納品数</b>として出ます。<br>
+        持って行った数を入れてください（あとから直せます）。</div>
+      <button class="sv-send" id="sd-send" onclick="submitSecondDeliv()">この数で登録する</button>
+      <button class="sv-close" onclick="closeSecondDelivModal()">閉じる</button>
+    </div>
+  </div>
+
+  <!-- ★2026-08-15 巡回中は通常の移動フォームを畳んでおく（社長指示）。押すと開く。
          車載を持っていない人にはこのボタンは出ず、下の従来フォームがそのまま見える。 -->
     <button class="pt-fold" id="pt-fold-btn" style="display:none;" onclick="ptToggleFold()">▼ 通常の拠点間移動をする</button>
     <div class="mv-form">
@@ -2440,6 +2455,8 @@ let spotToday = [];          // [{locationId, locationName, staff, registerStart
 let okibenLocs = [];         // [{locationId, locationName, cash}]
 
 async function loadSpotToday(rerender) {
+  // ★2026-08-15 二次販売の納品数も同じタイミングで取る（別々に呼ぶと再描画が二度走るため相乗り）
+  loadSecondToday_().then(() => { if (rerender) renderCollectionList(); });
   try {
     const url = `${GAS_URL}?action=getSpotToday&date=${encodeURIComponent(ccToday_())}`;
     const j = await (await fetch(url, { redirect: 'follow' })).json();
@@ -2458,6 +2475,109 @@ function spotOf_(locId) {
 }
 function okibenOf_(locId) {
   return okibenLocs.find(o => String(o.locationId) === String(locId)) || null;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   二次販売の納品数（2026-08-15 追加）
+   ══════════════════════════════════════════════════════════════
+   社長指示＝「セカンドの拠点の納品数はスポットと同じ仕様で。**回収タブより拠点を選んで
+   納品数をドライバーが入力**。そこからは通常のレジアプリと同じように販売員が納品数の
+   チェックから始まる、いつもと同じレジアプリの使い方で」「納品数は300円・500円の2項目でよい」。
+
+   ★スポットとの違い＝スポットは**定数**なので既定値が入っていて「違う日だけ直す」。
+     二次販売は一次販売の残りを持って行くので**毎日数が変わる**＝毎回ここで入れる。
+   ★入れた数はメインGASの専用シート「二次販売納品」に入り、レジは
+     getPlannedDelivery 経由で**通常拠点と同じ既定値**として受け取る（register v3.25）。
+*/
+let secondToday = { byLoc: {}, locations: [], products: [] };
+
+async function loadSecondToday_() {
+  try {
+    const url = `${GAS_URL}?action=getSecondDelivery&date=${encodeURIComponent(ccToday_())}`;
+    const d = await fetch(url, { redirect: 'follow' }).then(r => r.json());
+    if (d && d.ok) secondToday = d;
+  } catch (e) { console.warn('getSecondDelivery', e); }
+}
+
+function renderSecondSection_() {
+  const locs = secondToday.locations || [];
+  if (!locs.length) return '';
+  const cards = locs.map(l => {
+    const d     = (secondToday.byLoc || {})[l.id];
+    const total = d ? (Number(d.total) || 0) : 0;
+    const has   = total > 0;
+    return `<div class="sp-card${has ? ' done' : ''}" onclick="openSecondDelivModal('${esc_(l.id)}')">`
+         + `<div class="sp-name">`
+         +   `<div class="sp-n1">${esc_(l.name)}</div>`
+         +   `<div class="sp-n2">${has
+                ? ('納品 ' + total + '個' + (d.enteredBy ? '（' + esc_(d.enteredBy) + '）' : ''))
+                : 'まだ入っていません'}</div>`
+         + `</div><div>`
+         +   `<div class="sp-go">${has ? 'タップで直す' : 'タップで納品数を入力'}</div>`
+         + `</div></div>`;
+  }).join('');
+  return `<div class="section-label" style="color:#6C3483;">🛒 本日の二次販売拠点 `
+       + `<span style="background:#7D3C98;color:#FFF;font-size:11px;font-weight:700;padding:1px 8px;border-radius:10px;">${locs.length}</span></div>`
+       + `<div class="list-wrap sp-sec">${cards}`
+       + `<div style="font-size:11px;color:var(--ink-mute);padding:4px 4px 2px;line-height:1.5;">`
+       +   `ここで<b>持って行った数</b>を入れると、販売員のレジに納品数として出ます。<br>`
+       +   `<b>残数・現金の回収は、下の「未回収」から同じ拠点をタップ</b>してください。</div>`
+       + `</div>`;
+}
+
+let sdLocId = null;
+function openSecondDelivModal(locId) {
+  sdLocId = locId;
+  const loc  = (secondToday.locations || []).filter(l => String(l.id) === String(locId))[0];
+  const d    = (secondToday.byLoc || {})[locId];
+  const prods = secondToday.products || [];
+  const el = document.getElementById('sd-loc');
+  if (el) el.textContent = (loc ? loc.name : locId) + ' に持って行った数';
+  const box = document.getElementById('sd-rows');
+  if (box) {
+    box.innerHTML = prods.length
+      ? prods.map(p => {
+          const v = (d && d.deliveryCount) ? (Number(d.deliveryCount[p.id]) || 0) : 0;
+          return `<div class="pt-row"><span class="a">${esc_(p.name)}</span>
+            <span class="c"><input type="number" inputmode="numeric" min="0" class="pt-num sd-num"
+              data-pid="${esc_(p.id)}" value="${v > 0 ? v : ''}"></span></div>`;
+        }).join('')
+      : `<p class="mv-empty">二次販売の商品（単価マスタのカテゴリー＝二次販売）が登録されていません</p>`;
+  }
+  const m = document.getElementById('sd-modal');
+  if (m) m.classList.add('show');
+}
+function closeSecondDelivModal() {
+  const m = document.getElementById('sd-modal');
+  if (m) m.classList.remove('show');
+}
+
+async function submitSecondDeliv() {
+  if (!sdLocId) return;
+  const qty = {};
+  document.querySelectorAll('#sd-rows .sd-num').forEach(inp => {
+    const pid = inp.getAttribute('data-pid');
+    const q   = parseInt(inp.value, 10) || 0;
+    if (pid && q > 0) qty[pid] = q;
+  });
+  const btn = document.getElementById('sd-send');
+  if (btn) { btn.disabled = true; btn.textContent = '送信中…'; }
+  try {
+    const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({
+      action: 'saveSecondDelivery', date: ccToday_(), locationId: sdLocId,
+      driverUserId: state.userId, driverName: state.userName, qty: qty,
+    })});
+    const d = await res.json();
+    if (!d.ok) throw new Error(d.error || '登録に失敗しました');
+    showToast((d.locationName || '') + ' の納品数を ' + (d.total || 0) + '個 で登録しました', 'success', 4000);
+    closeSecondDelivModal();
+    await loadSecondToday_();
+    renderCollectionList();
+  } catch (e) {
+    showToast('エラー：' + (e.message || e), 'error', 6000);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'この数で登録する'; }
+  }
 }
 
 // 回収タブの先頭に出す「本日のスポット拠点」
@@ -2611,7 +2731,8 @@ function renderCollectionList() {
   const collected   = activeLocations.filter(l =>  state.collectedIds.has(l.id));
 
   // ★2026-08-06 スポット拠点は先頭に別枠で出す（朝のレジ開始金入力の導線）
-  let html = renderSpotSection_();
+  // ★2026-08-15 二次販売の納品数入力をスポットの下に並べる（社長指示「回収タブより拠点を選んで入力」）
+  let html = renderSpotSection_() + renderSecondSection_();
 
   // 未回収セクション（休止中も末尾に含める）
   const sectionCount = uncollected.length;
