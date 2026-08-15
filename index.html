@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- index.html v2026-08-14 ⑦-a（A案）確定シフトへのディープリンク `?tab=kshift` を追加。★狙い＝kitchen-shift.html を index への転送1枚に置き換えたので（社長決定A案・リッチメニューは触らない）、そこから飛んできた人を**提出フォームではなく確定シフトの画面へ直接着地**させる。これが無いと調理の人は入口分岐 `if (role === '調理') enterKitchenFlow()` で提出フォームに着き、旧 kitchen-shift.html より不便になる（タブを自分で押す必要がある）。★実装＝`detectKshiftMode()`（`?profile=1` と同じ作り。LIFFが `?liff.state=%3Ftab%3Dkshift` で渡す場合も拾う）→ `state.kshiftMode` → 入口分岐の手前で **調理／兼任のときだけ** `openKitchenShift()`。★**確定シフトのタブが出ない属性（販売員ら）では何も起きない**＝従来どおり。パラメータが付かない通常の起動も一切変わらない。★GAS変更なし。 -->
 <!-- index.html v2026-08-04 兼任スタッフが販売の希望を提出できるようにした。原因＝スタッフ設定H列（属性）は値を1つしか持てず、兼任者はH列='調理'のためLIFFの入口が `if (role === '調理') enterKitchenFlow()` で調理フォームに固定され、販売の希望提出画面に一度も辿り着けなかった（2026-08-03にK列＝兼任を見る名簿ゲートは直したが、この入口だけ残っていた）。対処＝getRole のレスポンスに kennin（K列）を追加し、兼任者にだけ「🍳 調理の希望／🏢 販売の希望」の切替バーを screen-select と screen-kitchen-submit の2画面に表示。既定の入口は従来どおりで、兼任でない人の画面・挙動は一切変わらない。旧レスポンス（roleのみ）でも kennin=false に倒れるため、GAS未反映でも壊れない。検証用に ?test=1&role=調理&kennin=1。要メインGAS v2026-08-04（getRoleInfo_）。 -->
 <!-- index.html v2026-08-03 初回登録に「プロフィール登録」画面を追加（販売スタッフのみ）。氏名登録→getRoleで販売員判定→顔写真＋職業・学生＋生年月日（必須）／最寄駅・希望エリア・週何回・備考（任意）を入力。写真は端末側で長辺640px・JPEG q0.8に縮小してbase64送信。保存先＝別SS「販売スタッフ管理表」(1Yh29o…Xg6w / gid=471776451)のA〜J列をそのまま埋め、K=userId・L=顔写真FileId・M=更新日時を右に追加。写真はDrive非公開フォルダ、B列はHYPERLINKのみ。LINE表示名はLIFFプロフィールから自動。要メインGAS v2026-08-03（saveStaffProfile / getStaffProfiles / getStaffPhoto）。 -->
 <html lang="ja">
@@ -1115,6 +1116,7 @@ const state = {
   userName: '',
   displayName: '',     // LINEのプロフィール名
   profileMode: false,  // ?profile=1 で開かれた（プロフィール登録のお願いから来た）
+  kshiftMode: false,   // ★2026-08-14 ?tab=kshift で開かれた（kitchen-shift.html からのリダイレクト）
   role: '',            // スタッフ設定 H列（'調理' / '販売員' など）
   kennin: false,       // スタッフ設定 K列（兼任）★2026-08-04。true なら提出モード切替を出す
   dates: [],           // 来週の平日 [{label: '5/12(月)', selected: false}, ...]
@@ -1305,6 +1307,23 @@ function detectProfileMode() {
   return false;
 }
 
+/* ★2026-08-14 ⑦-a（A案）：kitchen-shift.html を index へのリダイレクト1枚に置き換えたので、
+   そこから `?tab=kshift` が付いて飛んでくる。リッチメニューの「シフト確認」を押した人を
+   **提出フォームではなく確定シフトの画面へ直接着地**させるための印。
+   ・これが無いと、調理の人は入口分岐 `if (role === '調理') enterKitchenFlow()` で提出フォームに着く
+     ＝タブを自分で押さないと確定シフトに辿り着けず、旧 kitchen-shift.html より不便になる。
+   ・LIFFは環境によって `?tab=kshift` をそのまま渡す場合と `?liff.state=%3Ftab%3Dkshift` で渡す
+     場合があるので、profileMode と同じく両方を見る。 */
+function detectKshiftMode() {
+  try {
+    const p = new URLSearchParams(location.search);
+    if (p.get('tab') === 'kshift') return true;
+    const st = p.get('liff.state');
+    if (st && new URLSearchParams(st.replace(/^\?/, '')).get('tab') === 'kshift') return true;
+  } catch (e) {}
+  return false;
+}
+
 async function init() {
   // テストモード（?test=1 でLIFFをバイパス。?test=1&role=調理 でキッチン提出フォームの表示確認）
   const params = new URLSearchParams(location.search);
@@ -1321,6 +1340,7 @@ async function init() {
   //   LINEの「プロフィール登録のお願い」から開かれた時に、登録済みの人でも入力画面へ入れる。
   //   LIFFは環境によって ?profile=1 をそのまま渡す場合と ?liff.state=%3Fprofile%3D1 で渡す場合がある。
   state.profileMode = detectProfileMode();
+  state.kshiftMode  = detectKshiftMode();   // ★2026-08-14 ⑦-a
 
   try {
     if (isTest) {
@@ -1351,6 +1371,7 @@ async function init() {
       state.displayName = profile.displayName || '';
       // liff.init 後にURLが書き換わることがあるので、ここでも見る
       if (!state.profileMode) state.profileMode = detectProfileMode();
+      if (!state.kshiftMode)  state.kshiftMode  = detectKshiftMode();   // ★2026-08-14 ⑦-a
     }
 
     // ─────────────────────────────────────────────────────────
@@ -1402,6 +1423,14 @@ async function init() {
       //   ここが無いと初回登録の人しかフォームに辿り着けない。
       if (state.profileMode && role !== '調理') {
         showScreen('profile');
+        return;
+      }
+
+      // ★2026-08-14 ⑦-a（A案）：kitchen-shift.html からのリダイレクト（?tab=kshift）。
+      //   確定シフトのタブが出る人＝調理／兼任 だけを、その画面へ直接着地させる。
+      //   それ以外の属性で付いてきた場合は無視して従来どおり（タブが無いので着地させない）。
+      if (state.kshiftMode && (role === '調理' || state.kennin)) {
+        openKitchenShift();
         return;
       }
 
