@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v4.1 (2026-08-15) 【巡回ログ＝推奨と実際とその時の残りを毎回残す】社長指示「車載の数だったり、レベルの上げ下げの基準・レベル毎の個数など、いろいろ調整していくことになるので、それも含めて毎日検証したい。あとデータとして拠点毎の癖や当日の置く・下げるの個数の正解率をどうやったら上がるのかも検証していかないと」。★**なぜ送信時に残すのか**＝推奨の元（同曜日の平均）は後からいくらでも再計算できるが、**「その瞬間に拠点に何個残っていたか」「車載に何個あったか」は絶対に復元できない**（残数は分単位で動く）。記録しなければ初週のデータは永久に失われる。★実装＝`ptRenderRows_` で画面を描いた瞬間に `ptSnap`（推奨の置く/下げる・拠点残り・車載残り・同曜日平均・根拠日・12時前か）を控え、`ptSubmit` の送信が終わってから `savePatrolLog` で1回投げる。**移動の登録とは別のPOST**にしてあるので、記録が失敗しても業務は完了する（記録は検証用であって業務ではない）。片方だけ失敗した時も note 付きで残す。★シート「巡回ログ」は1行＝1拠点×1商品。**推奨が出ていたのに0にされた商品も残す**＝これを落とすと「入れた商品の中での正解率」になって必ず高く出る。★これで社長の5つの検証項目（車載の数・レベルの上げ下げ基準・レベル毎の個数・拠点毎の癖・置く下げるの正解率）がすべてこの1シートから出せる。要: メインGAS @508 以降（`savePatrolLog` / `PATROL_LOG_SHEET`）。 -->
 <!-- driver v4.0 (2026-08-15) 【二次販売の納品数をドライバーが入れる】社長指示「セカンドの拠点の納品数はスポットと同じ仕様で。**回収タブより拠点を選んで納品数をドライバーが入力**。そこからは通常のレジアプリと同じように販売員が納品数のチェックから始まる、いつもと同じレジアプリの使い方で。締めの作業も通常拠点と全く同じで」「セカンドでの納品数は300円・500円の2項目で良い」。★回収タブの「🏪 本日のスポット拠点」の下に **「🛒 本日の二次販売拠点」** を追加。拠点をタップ → 300円・500円の数を入れる → 登録。入れた数はメインGASの専用シート「二次販売納品」に入り、**レジは通常拠点と同じ経路（getPlannedDelivery）で既定値として受け取る**（register v3.25 が v3.23 の「納品数を入力しない」を撤回）。★**スポットとの違い**＝スポットは定数なので既定値が入っていて「違う日だけ直す」。二次販売は一次販売の残りを持って行くので**毎日数が変わる**＝毎回ここで入れる。既に入っていればカードに「納品 N個（入力者）」と出て、タップで直せる。★対象の商品は**単価マスタのカテゴリー＝二次販売**（＝300円・500円）、対象の拠点は**拠点マスタのエリア＝二次販売**。どちらも既存の目印をそのまま使うのでマスタの追加設定は不要。★取得は `loadSpotToday` に相乗りさせた（別々に呼ぶと回収タブの再描画が二度走るため）。★**専用シートにした理由**＝2026-08-13 に「基本数マスタ（配分調整）に二次販売の行を作らない」と決めたため。基本数マスタに書き戻すと夜間バッチの除外ロジックとまた衝突する（あの時は空行が149行×2日ぶんできた）。要: メインGAS @2026-08-15 以降（`getSecondDelivery` / `saveSecondDelivery` / `_isSecondLoc_` / `SECOND_DELIV_SHEET`）＋ register v3.25。 -->
 <!-- driver v3.9 (2026-08-15) 【巡回：置く・下げるを1画面に統合】芝エリアの巡回補充テスト（8/17開始）用。★v3.1「🚚 車から補充」とv3.3「📥 車へ回収」を**1つに統合**した。社長指摘＝「商品毎の売れ行きで変わるから、置くのと回収は同時発生するはず」。実際その通りで、同じ拠点で「Aは切れている・Bは余っている」が同時に起きるのに、分かれていると**2回開いて2回送る**ことになっていた。→ 商品ごとに ＋（置く）／−（下げる）を1つの表に並べ、**1回の送信で両方**記録する（裏では既存の supplyFromVehicle と collectToVehicle を順に叩くだけなので、記録の形も在庫の動きも従来と同じ）。★もう1つの社長指摘＝「ボタンはいらない。どっちにしても必ず拠点リストに飛ぶんだから」。→ **移動タブを開いた瞬間に拠点リストを出す**（車載の仮想拠点を持っている人だけ）。ピーク中のタップが1回減る。**車載を持っていない人の画面は1つも変わらない**＝他のドライバーへの案内は不要。★通常の移動フォームは畳んでおき「▼ 通常の拠点間移動をする」で開く（社長指示）。★拠点の並びは**拠点IDの昇順で固定**（社長指示。ルート順にするかは初週を見てから判断）。★推奨個数の出どころ＝**置く**は `getSupplyPace`（同じ曜日の直近4週・12:00〜12:20の平均販売数 − いまの残り。車載にあるぶんが上限）／**下げる**は `getSupplyRecommend`（昼の販売ペース通知🥶と同じ計算＝拠点×曜日の販売カーブ＋当日の進捗の遅れから「最後まで残りそうな数」。**12:00より前はサーバーが空を返す**＝社長指示「12:00前の残りそうは積極的に出さなくていい。配分がレベル制で絞ってあるので昼前に余ること自体が少ない」）。★どちらの取得に失敗しても操作はできる（推奨が入らないだけで手入力に落ちる）。実績が無い拠点は従来の刻み（SUPPLY_STEP）を「残りが少ない商品」から均して配るが、**刻みの数字は画面に出さない**（社長指示）。★数字はすべて初期値として入るだけで、「置く／下げる」タグを押せば向きを変えられ、数はテンキーで直せる。★旧2ボタンのモーダル（#sv-modal / #cv-modal）と関数（openSupplyModal / openCollectModal / submitSupply / submitCollect）は**画面から呼べない状態で残置**（退避経路）。要: メインGAS @2026-08-15 以降（`getSupplyPace` / `getSupplyRecommend` / `_spHHMMToMin_` / `SUPPLY_BACK_FROM_MIN`）。→ [[芝エリア_巡回補充テスト_設計_2026-08-17]] -->
 <!-- driver v3.8 (2026-08-15) 【PWAの色をドライバーの緑に統一】リッチメニュー統一の一環。統一仕様は「同じアプリはどこでも同じ色」で、ドライバーは緑 `#1E8449`。ところが `driver.webmanifest` の `theme_color`/`background_color` が **`#2471A3`＝配分表の青**（delivery からのコピペ時の取り違えと思われる）、`driver.html` の `theme-color` が `#1a1a2e` で、**アイコンの緑と起動画面の色が食い違っていた**。両方を `#1E8449` に揃えた。★アイコンも同時に差し替え済み＝`driver-icon.png`(180)/`driver-icon-512.png`(512) は **リッチメニューのトラックの絵から切り出したもの**なので、LINEのメニューとホーム画面で同じ絵になる。★変更は色の値だけ。機能・レイアウト・GASは一切触っていない。※`delivery` と `kanri` は元から正しい色だったので触っていない。 -->
@@ -5296,6 +5297,13 @@ let ptFolded = true;    // 通常の移動フォームを畳んでいるか
 let ptPace   = null;    // getSupplyPace の結果
 let ptRec    = null;    // getSupplyRecommend の結果
 
+// ★2026-08-15 巡回ログ用のスナップショット。**画面を描いた瞬間の状態**をそのまま持つ。
+//   社長の狙い＝「置く・下げるの正解率をどう上げるか」「拠点毎の癖」を毎日検証したい。
+//   ⚠ 推奨の元（同曜日の平均）は後から再計算できるが、
+//     **その瞬間の拠点の残り・車載の残りは復元できない**（残数は分単位で動く）。
+//     だから送信時ではなく「描いた時」の値を取っておき、送信と一緒に投げる。
+let ptSnap = null;      // { put, back, res, veh, pace }
+
 // 呼び出し元（switchTab など）の都合で関数名は据え置き。中身は巡回の表示に差し替えた。
 async function refreshSupplyButton_() { await ptRefresh_(); }
 
@@ -5397,6 +5405,17 @@ function ptRenderRows_() {
 
   const put  = ptCalcPut_(locId, res, veh);
   const back = ptCalcBack_(locId, res);
+
+  // ★2026-08-15 巡回ログ用に「この瞬間」を控える（送信時には残数が変わっている）
+  ptSnap = {
+    put: JSON.parse(JSON.stringify(put)),      // 画面に出した推奨（置く）
+    back: JSON.parse(JSON.stringify(back)),    // 画面に出した推奨（下げる）
+    res: JSON.parse(JSON.stringify(res)),      // その時の拠点の残り（商品別）
+    veh: JSON.parse(JSON.stringify(veh)),      // その時の車載の残り（商品別）
+    pace: (ptPace && ptPace.byLoc && ptPace.byLoc[locId]) ? ptPace.byLoc[locId].items : {},
+    paceDays: (ptPace && ptPace.days) || [],
+    tooEarly: !!(ptRec && ptRec.tooEarly),
+  };
 
   const box = document.getElementById('pt-rows');
   if (box) {
@@ -5586,15 +5605,38 @@ async function ptSubmit() {
       done.push('下げた ' + _fmtQtyObj_(back));
     }
     showToast(name + '：' + done.join(' / '), 'success', 4500);
+    await ptSaveLog_(ptPicked, name, put, back);   // ★2026-08-15 検証用の記録（失敗しても止めない）
     ptPicked = '';
     await loadTodayMoves_();
     await ptRefresh_();
   } catch (e) {
+    try { await ptSaveLog_(ptPicked, name, put, back, '片方失敗: ' + (e.message || e)); } catch (_) {}
     // ★片方だけ通った場合はログに残っているので、やり直す前に「本日の移動」を見ること。
     showToast('エラー：' + (e.message || e) + (done.length ? '（' + done.join(' / ') + ' は登録済み）' : ''), 'error', 7000);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = 'この内容で反映する'; }
   }
+}
+
+/* ★2026-08-15 巡回ログ（検証用）
+   社長「車載の数・レベルの上げ下げの基準・レベル毎の個数を調整していくことになるので、
+        それも含めて毎日検証したい。拠点毎の癖や置く・下げるの正解率も」
+   ここで残さないと**その瞬間の残り**が永久に失われる（＝正解率が後から出せない）。
+   ⚠ 移動の登録が終わった**後**に投げる。ここが失敗しても業務は完了している。 */
+async function ptSaveLog_(locId, locName, put, back, note) {
+  if (!locId || !ptSnap) return;
+  try {
+    await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({
+      action: 'savePatrolLog', date: getDateStrOffset_(0),
+      locationId: locId, locationName: locName,
+      driverUserId: state.userId, driverName: state.userName,
+      put: put, back: back,                       // 実際に送った数
+      recPut: ptSnap.put, recBack: ptSnap.back,   // 画面に出ていた推奨
+      residual: ptSnap.res, vehicle: ptSnap.veh,  // その時の残り
+      pace: ptSnap.pace, paceDays: ptSnap.paceDays, tooEarly: ptSnap.tooEarly,
+      note: note || '',
+    })});
+  } catch (e) { console.warn('savePatrolLog', e); }   // 記録の失敗は現場に出さない
 }
 
 async function loadVehicleStock_() {
