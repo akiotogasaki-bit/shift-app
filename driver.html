@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v3.9 (2026-08-15) 【巡回：置く・下げるを1画面に統合】芝エリアの巡回補充テスト（8/17開始）用。★v3.1「🚚 車から補充」とv3.3「📥 車へ回収」を**1つに統合**した。社長指摘＝「商品毎の売れ行きで変わるから、置くのと回収は同時発生するはず」。実際その通りで、同じ拠点で「Aは切れている・Bは余っている」が同時に起きるのに、分かれていると**2回開いて2回送る**ことになっていた。→ 商品ごとに ＋（置く）／−（下げる）を1つの表に並べ、**1回の送信で両方**記録する（裏では既存の supplyFromVehicle と collectToVehicle を順に叩くだけなので、記録の形も在庫の動きも従来と同じ）。★もう1つの社長指摘＝「ボタンはいらない。どっちにしても必ず拠点リストに飛ぶんだから」。→ **移動タブを開いた瞬間に拠点リストを出す**（車載の仮想拠点を持っている人だけ）。ピーク中のタップが1回減る。**車載を持っていない人の画面は1つも変わらない**＝他のドライバーへの案内は不要。★通常の移動フォームは畳んでおき「▼ 通常の拠点間移動をする」で開く（社長指示）。★拠点の並びは**拠点IDの昇順で固定**（社長指示。ルート順にするかは初週を見てから判断）。★推奨個数の出どころ＝**置く**は `getSupplyPace`（同じ曜日の直近4週・12:00〜12:20の平均販売数 − いまの残り。車載にあるぶんが上限）／**下げる**は `getSupplyRecommend`（昼の販売ペース通知🥶と同じ計算＝拠点×曜日の販売カーブ＋当日の進捗の遅れから「最後まで残りそうな数」。**12:00より前はサーバーが空を返す**＝社長指示「12:00前の残りそうは積極的に出さなくていい。配分がレベル制で絞ってあるので昼前に余ること自体が少ない」）。★どちらの取得に失敗しても操作はできる（推奨が入らないだけで手入力に落ちる）。実績が無い拠点は従来の刻み（SUPPLY_STEP）を「残りが少ない商品」から均して配るが、**刻みの数字は画面に出さない**（社長指示）。★数字はすべて初期値として入るだけで、「置く／下げる」タグを押せば向きを変えられ、数はテンキーで直せる。★旧2ボタンのモーダル（#sv-modal / #cv-modal）と関数（openSupplyModal / openCollectModal / submitSupply / submitCollect）は**画面から呼べない状態で残置**（退避経路）。要: メインGAS @2026-08-15 以降（`getSupplyPace` / `getSupplyRecommend` / `_spHHMMToMin_` / `SUPPLY_BACK_FROM_MIN`）。→ [[芝エリア_巡回補充テスト_設計_2026-08-17]] -->
 <!-- driver v3.8 (2026-08-15) 【PWAの色をドライバーの緑に統一】リッチメニュー統一の一環。統一仕様は「同じアプリはどこでも同じ色」で、ドライバーは緑 `#1E8449`。ところが `driver.webmanifest` の `theme_color`/`background_color` が **`#2471A3`＝配分表の青**（delivery からのコピペ時の取り違えと思われる）、`driver.html` の `theme-color` が `#1a1a2e` で、**アイコンの緑と起動画面の色が食い違っていた**。両方を `#1E8449` に揃えた。★アイコンも同時に差し替え済み＝`driver-icon.png`(180)/`driver-icon-512.png`(512) は **リッチメニューのトラックの絵から切り出したもの**なので、LINEのメニューとホーム画面で同じ絵になる。★変更は色の値だけ。機能・レイアウト・GASは一切触っていない。※`delivery` と `kanri` は元から正しい色だったので触っていない。 -->
 <!-- driver v3.7 (2026-08-14) 【「📊 実況」をタブの先頭へ】社長指示。★変えたのは **タブバーのボタンの並びだけ**（`#tab-btn-realtime` を先頭に移動）。`.tab-bar` は `display:flex` ＋各ボタン `flex:1` の均等割りで、`:first-child` 等の順序依存CSSも無いため、見た目は幅も配色も従来どおり。パネル（`#tab-realtime` 以下）は移動していない＝`switchTab` は id で切り替えるのでDOM順に依存しない。★**起動時に開くタブは従来どおり「🚚 回収」**（`active` は collection のまま）。実況を既定にすると `getTodayIntermediate` の5分ポーリングが起動と同時に始まり、v3.3 で「タブを開いている間だけ回す」（回収中ずっと開くアプリなので裏で叩き続けさせない）とした設計を打ち消してしまう。既定も実況にするなら別途指示のこと。★GAS変更なし。 -->
 <!-- driver v3.6 (2026-08-14) 【ホーム画面に置ける本物のPWAにする＋入口パスワード】アプリ再編⑥。★経緯＝社長の狙いは「現場アプリをホーム画面から一発で開きたい」。方針A（外部ブラウザ＋PWA）で進める前に **iOS実機で liff.login() の往復を検証したところ不合格**（2026-08-14）。ホーム画面のPWAから `access.line.me` へ出た瞬間 iOS が Safari に投げ出し、**戻り先もSafariのまま**になる。しかもログイン情報はSafari側に入るので **PWAからは何度やってもログインできない**。回避策なし。★よってPWAでは **LINEログインを使わず「入口パスワード」で本人を特定する**（社長決定：人ごとに違うパスワード）。入れた時点で本人が確定するので名前を選ばせない＝なりすまし不可。照合はGAS側 `driverPwLogin`（**POST**。/exec のURLはログに残りうるのでクエリに載せない）。パスワードは スタッフ設定 **N列**（`?action=runfix&name=drvpw&run=1&token=…` で8桁を自動発行・冪等）。対象は属性が社員/ドライバーでLINE IDのある人（2026-08-14時点で社員8名）。★**入口は2本になった**＝LINE内（リッチメニュー）で開いたら従来どおりLIFF認証・**今までの運用は1つも変わらない**／ホーム画面や外部ブラウザで開いたらパスワード。`liff.isInClient()` で分ける。liff.init が失敗してもパスワード側には入れる（LINE SDKが落ちても現場が止まらない）。★一度入れたら `localStorage` に userId と名前を保存し次から素通り。ヘッダーの名前に下線が付き、**タップ→確認→別の人に切り替え**（押し間違いで他人の名前のまま記録するのを防ぐためパスワード再入力が要る）。★PWA化＝`apple-mobile-web-app-capable` / `driver.webmanifest`（display:standalone）/ `driver-icon.png`（180・512）を追加。★**レジ(register)はリッチメニュー運用のまま。今回は触っていない**（社長決定）。⚠ **入口パスワードは「URLを知っているだけの人にアプリを開かれない」ための関所であって、データの防御ではない。**GASのAPIは元々無認証で userId を知っていれば直接叩ける（今までも同じ）。 -->
@@ -931,6 +932,46 @@ body {
 .sv-send.cv{background:#b45309;}
 #cv-modal .sv-stock{background:#fdf3e7;border-color:#f0d9bb;color:#7c3d09;}
 #cv-modal .sv-loc-btn.on{border-color:#b45309;background:#b45309;color:#fff;}
+/* ★2026-08-15 巡回補充：拠点を縦に並べ、残りの少ない順に出す。タップで推奨個数が入る。
+   社長指示「担当エリアの拠点名を並べる／到着する拠点をタップ／その拠点で下ろす推奨個数が自動で出る」。
+   刻み（SUPPLY_STEP）は画面に出さない（社長指示 2026-08-15）。実績が無い拠点の内部の当て木としてだけ残す。 */
+.sv-loc-grid.vert{grid-template-columns:1fr;}
+.pt-loc{display:block;width:100%;text-align:left;padding:12px 14px;
+  border:2px solid #d5d8dd;border-radius:11px;background:#fff;}
+.pt-loc .n{display:block;font-size:15.5px;font-weight:700;color:#333;}
+.pt-loc .m{display:block;margin-top:4px;font-size:12.5px;font-weight:700;color:#9A9A9A;}
+.pt-loc .m.few{color:#C0392B;}
+.pt-loc.on{border-color:#0f7b3f;background:#eef7f1;}
+#cv-modal .pt-loc.on{border-color:#b45309;background:#fdf3e7;}
+.pt-badge{display:inline-block;font-size:10.5px;font-weight:700;color:#fff;background:#C0392B;
+  border-radius:4px;padding:1px 6px;margin-left:6px;vertical-align:1px;}
+.pt-why{background:#fdf6e3;border:1px solid #f0e0b0;border-radius:9px;padding:9px 11px;
+  font-size:11.5px;color:#7a5c00;line-height:1.6;margin:10px 0 0;}
+.pt-why.none{background:#f4f6f9;border-color:#dfe4ea;color:#6b7280;}
+/* 商品ごとの「置く／下げる」。同じ拠点で両方同時に起きるので1つの表にまとめる。 */
+.pt-head{display:flex;font-size:10.5px;color:#9A9A9A;padding:0 2px 4px;}
+.pt-head .a{flex:1;} .pt-head .b{width:38px;text-align:center;} .pt-head .c{width:106px;text-align:center;}
+.pt-row{display:flex;align-items:center;padding:7px 2px;border-bottom:1px solid #eceff2;}
+.pt-row .a{flex:1;font-size:13.5px;}
+.pt-row .b{width:38px;text-align:center;font-size:13px;color:#9A9A9A;}
+.pt-row .b.z{color:#C0392B;font-weight:700;}
+.pt-row .c{width:106px;display:flex;align-items:center;justify-content:flex-end;gap:5px;}
+.pt-tag{font-size:11px;font-weight:700;padding:4px 7px;border-radius:5px;border:0;min-width:44px;}
+.pt-tag.p{background:#e3f3ea;color:#0f7b3f;}
+.pt-tag.m{background:#fbeee0;color:#b45309;}
+.pt-tag.n{background:#f1f3f5;color:#aeb4ba;}
+.pt-num{width:54px;padding:7px 0;border:2px solid #d5d8dd;border-radius:8px;text-align:center;
+  font-size:16px;font-weight:700;color:#9A9A9A;background:#fff;font-family:inherit;}
+.pt-num.p{border-color:#0f7b3f;color:#0f7b3f;}
+.pt-num.m{border-color:#b45309;color:#b45309;}
+.pt-sum{display:flex;gap:8px;margin-top:12px;}
+.pt-sum div{flex:1;border-radius:10px;padding:9px 6px;text-align:center;font-size:12px;font-weight:700;}
+.pt-sum .p{background:#e3f3ea;color:#0f7b3f;}
+.pt-sum .m{background:#fbeee0;color:#b45309;}
+.pt-sum b{display:block;font-size:19px;margin-top:2px;}
+/* 巡回中は通常の移動フォームを畳んでおく（社長指示 2026-08-15）。押すと開く。 */
+.pt-fold{width:100%;margin:16px 0 0;padding:12px;border:1px dashed #c8ced5;border-radius:10px;
+  background:#fff;font-size:13.5px;color:#6b7280;font-weight:700;font-family:inherit;}
 
   /* ═══ ★2026-08-13 v3.3 ④driver作り替え：dashboard「リアルタイム」タブを移設 ═══
      見た目を変えないため dashboard の配色変数を #tab-realtime 配下だけで再定義する
@@ -1726,16 +1767,41 @@ body {
       <div class="mv-title">🔄 拠点移動</div>
       <div class="mv-date" id="mv-date">--</div>
     </div>
-    <!-- ★2026-08-13 車から補充。車載の仮想拠点がある人にだけ出す（芝エリアのテスト中は戸賀崎さんだけ）。 -->
-    <button class="sv-open-btn" id="sv-open-btn" style="display:none;" onclick="openSupplyModal()">
-      🚚 車から補充
-      <span class="sv-left" id="sv-open-left">車載の残り 読み込み中…</span>
-    </button>
-    <!-- ★2026-08-13 v3.3 車へ回収（引き上げ）。補充の逆。社長決定「ルートで動いているので途中余りそうなら引き上げる」。 -->
-    <button class="sv-open-btn cv" id="cv-open-btn" style="display:none;" onclick="openCollectModal()">
-      📥 車へ回収
-      <span class="sv-left">余りそうな拠点から引き上げる</span>
-    </button>
+    <!-- ★2026-08-15 巡回（置く・下げる）。車載の仮想拠点がある人にだけ、移動タブを開くと**いきなり**出る。
+         社長指示「芝エリアは移動タブを開くといきなり拠点リストでいい。ボタンはいらない。
+         どっちにしても必ずそこに飛ぶんだから」。
+         ★v3.1〜v3.3 の「🚚 車から補充」「📥 車へ回収」の2ボタンはここに統合した。
+           社長指摘「商品毎の売れ行きで変わるから、置くのと回収は同時発生するはず」＝
+           同じ拠点で「Aは足りない・Bは余っている」が同時に起きるのに、
+           分かれていると2回開いて2回送ることになっていた。
+         ★芝エリア以外の人には出ない（従来の移動フォームだけが見える）。 -->
+    <div id="pt-wrap" style="display:none;">
+      <div class="sv-stock" id="pt-stock">車載の残り …</div>
+
+      <!-- ステップ1：拠点を選ぶ -->
+      <div id="pt-step1">
+        <div class="sv-sec">いまどこに着きましたか？</div>
+        <div class="sv-loc-grid vert" id="pt-loc-list"></div>
+      </div>
+
+      <!-- ステップ2：置く数・下げる数 -->
+      <div id="pt-step2" style="display:none;">
+        <div id="pt-picked"></div>
+        <div class="sv-sec">置く数・下げる数</div>
+        <div class="pt-head"><span class="a">商品</span><span class="b">残り</span><span class="c">置く / 下げる</span></div>
+        <div id="pt-rows"></div>
+        <div class="pt-sum">
+          <div class="p">置く<b id="pt-sum-p">0個</b></div>
+          <div class="m">下げる<b id="pt-sum-m">0個</b></div>
+        </div>
+        <div class="pt-why" id="pt-why"></div>
+        <button class="sv-send" id="pt-send-btn" onclick="ptSubmit()">この内容で反映する</button>
+        <button class="sv-close" onclick="ptBackToList()">◀ 拠点を選び直す</button>
+      </div>
+    </div>
+    <!-- ★2026-08-15 巡回中は通常の移動フォームを畳んでおく（社長指示）。押すと開く。
+         車載を持っていない人にはこのボタンは出ず、下の従来フォームがそのまま見える。 -->
+    <button class="pt-fold" id="pt-fold-btn" style="display:none;" onclick="ptToggleFold()">▼ 通常の拠点間移動をする</button>
     <div class="mv-form">
       <div class="mv-section-title">出発登録（このトラックから持ち出す分）</div>
       <div class="mv-field">
@@ -5085,23 +5151,329 @@ function _svTargets_() {
   return mine.length ? mine : all;
 }
 
-// 移動タブを開いた時に、車載を持っている人にだけボタンを出す。
-async function refreshSupplyButton_() {
-  const btn = document.getElementById('sv-open-btn');
-  const cbt = document.getElementById('cv-open-btn');   // ★v3.3 車へ回収（引き上げ）
-  if (!btn) return;
-  if (!_svVehicle_()) {
-    btn.style.display = 'none';
-    if (cbt) cbt.style.display = 'none';
-    return;
+/* ══════════════════════════════════════════════════════════════
+   巡回（置く・下げる）  2026-08-15
+   ══════════════════════════════════════════════════════════════
+   v3.1〜v3.3 の「🚚 車から補充」「📥 車へ回収」を1つに統合したもの。
+
+   ★社長指摘①「商品毎の売れ行きで変わるから、置くのと回収は同時発生するはず」
+     → 同じ拠点で「Aは足りない・Bは余っている」が同時に起きる。分かれていると
+       2回開いて2回送ることになっていた。1つの表に ＋/− を並べ、1回で両方送る。
+   ★社長指摘②「ボタンはいらない。どっちにしても必ず拠点リストに飛ぶんだから」
+     → 移動タブを開いた瞬間に拠点リストを出す。ピーク中のタップを1回減らす。
+   ★社長指示③ 並びは**拠点IDの昇順で固定**。ルート順にするかは初週を見てから。
+   ★社長指示④ 通常の移動フォームは畳んでおく。
+
+   数字の出どころ（どちらも外れても操作はできる＝手入力に落ちるだけ）:
+     置く   … getSupplyPace  … 同じ曜日の直近4週・12:00〜12:20の平均販売数 − いまの残り
+     下げる … getSupplyRecommend … 昼の販売ペース通知（🥶）と同じ計算＝今日の売れ行きで
+              最後まで残りそうな数。**12:00より前はサーバーが空を返す**（社長指示）。
+   ⚠ 車載にあるぶんが置く数の上限。下げる数はその拠点の残りが上限。
+*/
+let ptPicked = '';      // 選んでいる拠点ID
+let ptFolded = true;    // 通常の移動フォームを畳んでいるか
+let ptPace   = null;    // getSupplyPace の結果
+let ptRec    = null;    // getSupplyRecommend の結果
+
+// 呼び出し元（switchTab など）の都合で関数名は据え置き。中身は巡回の表示に差し替えた。
+async function refreshSupplyButton_() { await ptRefresh_(); }
+
+async function ptRefresh_() {
+  const wrap = document.getElementById('pt-wrap');
+  if (!wrap) return;
+  if (!_svVehicle_()) { wrap.style.display = 'none'; ptApplyFold_(); return; }
+  wrap.style.display = 'block';
+  ptApplyFold_();
+
+  const st  = await loadVehicleStock_();
+  const box = document.getElementById('pt-stock');
+  if (box) {
+    box.innerHTML = st && st.remaining
+      ? ('車載の残り <b>' + st.remaining.total + '個</b>　（' + _esc(st.vehicle.name) + '）')
+      : '車載の残りが取れませんでした。登録はできます。';
   }
-  btn.style.display = 'block';
-  if (cbt) cbt.style.display = 'block';
-  const left = await loadVehicleStock_();
-  const el = document.getElementById('sv-open-left');
-  if (el) el.textContent = (left && left.remaining)
-    ? ('車載の残り ' + left.remaining.total + '個')
-    : '車載の残りが取れませんでした';
+  await Promise.all([ptLoadPace_(), ptLoadRec_()]);
+  if (ptPicked) ptRenderRows_(); else ptRenderLocs_();
+}
+
+async function ptLoadPace_() {
+  try {
+    const url = `${GAS_URL}?action=getSupplyPace&date=${getDateStrOffset_(0)}&from=12:00&to=12:20`;
+    const d = await fetch(url, { redirect: 'follow' }).then(r => r.json());
+    ptPace = (d && d.ok) ? d : null;
+  } catch (e) { console.warn('getSupplyPace', e); ptPace = null; }
+}
+async function ptLoadRec_() {
+  try {
+    const url = `${GAS_URL}?action=getSupplyRecommend&driverUserId=${encodeURIComponent(state.userId || '')}`;
+    const d = await fetch(url, { redirect: 'follow' }).then(r => r.json());
+    ptRec = (d && d.ok) ? d : null;
+  } catch (e) { console.warn('getSupplyRecommend', e); ptRec = null; }
+}
+
+// 拠点の商品別残数 ＝ 納品 ＋拠点間移動± −販売。calcMyResidualDetail_ と同じ材料。
+function _locResidualByProduct_(locId) {
+  const r = state.reportsByLoc[locId];
+  if (!r) return null;
+  const deliv = getDeliveryObj_(r);
+  const sold  = getSoldObj_(r);
+  if (!deliv || !sold) return null;                 // 商品別に割れない（レジ開始報告がまだ等）
+  const mv = (getMyMoveAdjustmentByLocProduct_() || {})[locId] || {};
+  const out = {}, pids = {};
+  Object.keys(deliv).forEach(p => { pids[String(p)] = 1; });
+  Object.keys(mv).forEach(p => { pids[String(p)] = 1; });
+  Object.keys(pids).forEach(pid => {
+    out[pid] = Math.max(0, (Number(deliv[pid]) || 0) + (Number(mv[pid]) || 0) - (Number(sold[pid]) || 0));
+  });
+  return out;
+}
+function _locResidualTotal_(locId) {
+  const res = _locResidualByProduct_(locId);
+  if (!res) return null;
+  const tea = getTeaIdSet_();
+  return Object.keys(res).reduce((a, p) => a + (tea.has(String(p)) ? 0 : res[p]), 0);
+}
+
+function ptRenderLocs_() {
+  const s1 = document.getElementById('pt-step1');
+  const s2 = document.getElementById('pt-step2');
+  if (s1) s1.style.display = '';
+  if (s2) s2.style.display = 'none';
+  const box = document.getElementById('pt-loc-list');
+  if (!box) return;
+  // ★並びは拠点IDの昇順で固定（社長指示 2026-08-15）
+  const list = _svTargets_().slice().sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  box.innerHTML = list.map(l => {
+    const left = _locResidualTotal_(l.id);
+    const few  = (left !== null && left <= 5);
+    return `<button class="pt-loc" onclick="ptPickLoc('${_esc(l.id)}')">
+      <span class="n">${_esc(l.name)}${few ? '<span class="pt-badge">少ない</span>' : ''}</span>
+      <span class="m${few ? ' few' : ''}">${left === null ? '残りはレジの開始報告が入ると出ます' : '残り ' + left + '個'}</span>
+    </button>`;
+  }).join('');
+}
+
+function ptPickLoc(id) { ptPicked = id; ptRenderRows_(); }
+function ptBackToList() { ptPicked = ''; ptRenderLocs_(); }
+
+function ptRenderRows_() {
+  const s1 = document.getElementById('pt-step1');
+  const s2 = document.getElementById('pt-step2');
+  if (s1) s1.style.display = 'none';
+  if (s2) s2.style.display = '';
+
+  const locId = ptPicked;
+  const res   = _locResidualByProduct_(locId) || {};
+  const left  = _locResidualTotal_(locId);
+  const rem   = (state.move.vehicle && state.move.vehicle.remaining) || {};
+  const veh   = rem.items || {};
+
+  const head = document.getElementById('pt-picked');
+  if (head) head.innerHTML = `<button class="pt-loc on" onclick="ptBackToList()">
+      <span class="n">${_esc(_moveLocName_(locId))}</span>
+      <span class="m">${left === null ? '残り —' : '残り ' + left + '個'}　車載 ${Number(rem.total) || 0}個</span>
+    </button>`;
+
+  const put  = ptCalcPut_(locId, res, veh);
+  const back = ptCalcBack_(locId, res);
+
+  const box = document.getElementById('pt-rows');
+  if (box) {
+    box.innerHTML = _moveNonTeaProducts_().map(p => {
+      const pid = String(p.id);
+      const rm  = Number(res[pid]) || 0;
+      const q   = put[pid] || back[pid] || 0;
+      const dir = put[pid] ? 'p' : (back[pid] ? 'm' : 'n');
+      const lab = dir === 'p' ? '置く' : (dir === 'm' ? '下げる' : '—');
+      return `<div class="pt-row">
+        <span class="a">${_esc(p.name)}</span>
+        <span class="b${rm === 0 ? ' z' : ''}">${rm}</span>
+        <span class="c">
+          <button class="pt-tag ${dir}" data-pid="${_esc(pid)}" onclick="ptToggleDir('${_esc(pid)}')">${lab}</button>
+          <input type="number" inputmode="numeric" min="0" class="pt-num${dir === 'n' ? '' : ' ' + dir}"
+                 data-pid="${_esc(pid)}" data-dir="${dir}" value="${q > 0 ? q : ''}" oninput="ptRecalc_()">
+        </span></div>`;
+    }).join('');
+  }
+  ptRecalc_();
+  ptRenderWhy_(locId, put, back);
+}
+
+// 置く数＝この時間帯にいつも売れるぶん − いまの残り。車載にあるぶんが上限。
+function ptCalcPut_(locId, res, veh) {
+  const tea = getTeaIdSet_(), out = {};
+  const pace = (ptPace && ptPace.byLoc && ptPace.byLoc[locId]) ? ptPace.byLoc[locId].items : null;
+  if (pace) {
+    Object.keys(pace).forEach(pid => {
+      if (tea.has(String(pid))) return;
+      const need = Math.round(Number(pace[pid]) || 0) - (Number(res[pid]) || 0);
+      if (need <= 0) return;
+      const q = Math.min(need, Number(veh[pid]) || 0);
+      if (q > 0) out[String(pid)] = q;
+    });
+    return out;
+  }
+  // 実績が無い拠点＝従来の刻みを「残りが少ない商品」から均して配る（刻みは画面に出さない）
+  let leftN = SUPPLY_STEP[locId] || 0;
+  if (leftN <= 0) return out;
+  const pids = Object.keys(veh).filter(p => !tea.has(String(p)) && (Number(veh[p]) || 0) > 0);
+  let guard = 0;
+  while (leftN > 0 && guard++ < 400) {
+    let target = null, min = Infinity;
+    pids.forEach(p => {
+      if ((out[p] || 0) >= (Number(veh[p]) || 0)) return;   // 車載を超えない
+      const v = (Number(res[p]) || 0) + (out[p] || 0);
+      if (v < min) { min = v; target = p; }
+    });
+    if (!target) break;
+    out[target] = (out[target] || 0) + 1;
+    leftN--;
+  }
+  return out;
+}
+
+// 下げる数＝今日の売れ行きだと最後まで残りそうな数。その拠点の残りが上限。
+function ptCalcBack_(locId, res) {
+  const out = {};
+  if (!ptRec || ptRec.tooEarly) return out;      // ★12:00より前は出さない
+  const L = ptRec.byLoc && ptRec.byLoc[locId];
+  if (!L || !L.back) return out;
+  const tea = getTeaIdSet_();
+  L.back.forEach(r => {
+    const pid = String(r.pid);
+    if (tea.has(pid)) return;
+    const have = (res && res[pid] != null) ? Number(res[pid]) : (Number(r.remain) || 0);
+    const q = Math.min(Number(r.qty) || 0, have);
+    if (q > 0) out[pid] = q;
+  });
+  return out;
+}
+
+// 「置く」→「下げる」→「—」の順に切り替える。
+function ptToggleDir(pid) {
+  const tag = document.querySelector('#pt-rows .pt-tag[data-pid="' + pid + '"]');
+  const inp = document.querySelector('#pt-rows .pt-num[data-pid="' + pid + '"]');
+  if (!tag || !inp) return;
+  const cur  = inp.getAttribute('data-dir');
+  const next = cur === 'n' ? 'p' : (cur === 'p' ? 'm' : 'n');
+  inp.setAttribute('data-dir', next);
+  inp.classList.remove('p', 'm');
+  tag.classList.remove('p', 'm', 'n');
+  tag.classList.add(next);
+  tag.textContent = next === 'p' ? '置く' : (next === 'm' ? '下げる' : '—');
+  if (next === 'n') inp.value = ''; else inp.classList.add(next);
+  ptRecalc_();
+}
+
+function ptRecalc_() {
+  let p = 0, m = 0;
+  document.querySelectorAll('#pt-rows .pt-num').forEach(inp => {
+    const q = parseInt(inp.value, 10) || 0;
+    if (q <= 0) return;
+    const d = inp.getAttribute('data-dir');
+    if (d === 'p') p += q; else if (d === 'm') m += q;
+  });
+  const ep = document.getElementById('pt-sum-p');
+  const em = document.getElementById('pt-sum-m');
+  if (ep) ep.textContent = p + '個';
+  if (em) em.textContent = m + '個';
+}
+
+function ptRenderWhy_(locId, put, back) {
+  const el = document.getElementById('pt-why');
+  if (!el) return;
+  const msg = [];
+  const hasPace = !!(ptPace && ptPace.byLoc && ptPace.byLoc[locId]);
+  if (Object.keys(put).length) {
+    msg.push(hasPace
+      ? 'この20分でいつも売れるぶん（同じ曜日の直近4週）から、いまの残りを引いた数です。'
+      : 'この拠点はまだ実績が少ないので、目安の数を置いています。');
+  }
+  if (Object.keys(back).length) {
+    let ex = 0;
+    const L = ptRec && ptRec.byLoc && ptRec.byLoc[locId];
+    ((L && L.back) || []).forEach(r => { ex = Math.max(ex, Number(r.excess) || 0); });
+    msg.push('今日の売れ行きだと最後まで残りそうな数を下げます。'
+      + (ex > 0 ? 'いつもより最大' + ex + '個多く残る見込みです。' : ''));
+  } else if (ptRec && ptRec.tooEarly) {
+    msg.push('12:00より前は、残りそうな数を出しません。下げる数はご自身で入れてください。');
+  }
+  el.className = 'pt-why' + (msg.length ? '' : ' none');
+  el.innerHTML = msg.length ? msg.join('<br>') : '数字はテンキーで直せます。';
+}
+
+function ptToggleFold() { ptFolded = !ptFolded; ptApplyFold_(); }
+function ptApplyFold_() {
+  const panel = document.getElementById('tab-move');
+  if (!panel) return;
+  const isPt = !!_svVehicle_();
+  const btn  = document.getElementById('pt-fold-btn');
+  let after = false;
+  Array.from(panel.children).forEach(el => {
+    if (el.id === 'pt-wrap')     { after = true; return; }
+    if (el.id === 'pt-fold-btn') return;
+    if (!after) return;                                   // 見出しより上は触らない
+    el.style.display = (isPt && ptFolded) ? 'none' : '';
+  });
+  if (btn) {
+    btn.style.display = isPt ? 'block' : 'none';
+    btn.textContent = ptFolded ? '▼ 通常の拠点間移動をする' : '▲ 通常の移動を閉じる';
+  }
+}
+
+// 置く（車→拠点）と下げる（拠点→車）を1回の操作で送る。裏では既存の2エンドポイントを順に叩く。
+async function ptSubmit() {
+  if (!ptPicked) { showToast('拠点を選んでください', 'error'); return; }
+  const put = {}, back = {};
+  document.querySelectorAll('#pt-rows .pt-num').forEach(inp => {
+    const pid = inp.getAttribute('data-pid');
+    const q   = parseInt(inp.value, 10) || 0;
+    if (!pid || q <= 0) return;
+    const d = inp.getAttribute('data-dir');
+    if (d === 'p') put[pid] = q; else if (d === 'm') back[pid] = q;
+  });
+  if (!Object.keys(put).length && !Object.keys(back).length) {
+    showToast('置く数か下げる数を入れてください', 'error'); return;
+  }
+
+  const btn = document.getElementById('pt-send-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '送信中…'; }
+  const veh  = _svVehicle_();
+  const name = _moveLocName_(ptPicked);
+  const done = [];
+  try {
+    if (Object.keys(put).length) {
+      const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({
+        action: 'supplyFromVehicle', date: getDateStrOffset_(0),
+        driverUserId: state.userId, driverName: state.userName,
+        vehicleLocationId: veh ? veh.id : '',
+        toLocationId: ptPicked, toLocationName: name, qty: put,
+      })});
+      const d = await res.json();
+      if (!d.ok) throw new Error(d.error || '置く登録に失敗しました');
+      done.push('置いた ' + _fmtQtyObj_(put));
+    }
+    if (Object.keys(back).length) {
+      const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({
+        action: 'collectToVehicle', date: getDateStrOffset_(0),
+        driverUserId: state.userId, driverName: state.userName,
+        vehicleLocationId: veh ? veh.id : '',
+        fromLocationId: ptPicked, fromLocationName: name, qty: back,
+      })});
+      const d = await res.json();
+      if (!d.ok) throw new Error(d.error || '下げる登録に失敗しました');
+      done.push('下げた ' + _fmtQtyObj_(back));
+    }
+    showToast(name + '：' + done.join(' / '), 'success', 4500);
+    ptPicked = '';
+    await loadTodayMoves_();
+    await ptRefresh_();
+  } catch (e) {
+    // ★片方だけ通った場合はログに残っているので、やり直す前に「本日の移動」を見ること。
+    showToast('エラー：' + (e.message || e) + (done.length ? '（' + done.join(' / ') + ' は登録済み）' : ''), 'error', 7000);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'この内容で反映する'; }
+  }
 }
 
 async function loadVehicleStock_() {
