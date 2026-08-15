@@ -1,0 +1,14 @@
+{
+  "name": "お江戸弁当 配分表",
+  "short_name": "配分表",
+  "start_url": "./kanri.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#2471A3",
+  "theme_color": "#2471A3",
+  "icons": [
+    { "src": "./kanri-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
+    { "src": "./kanri-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
