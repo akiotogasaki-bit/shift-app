@@ -1,6 +1,17 @@
 <!DOCTYPE html>
 <!--
   お江戸弁当 shift-admin.html
+  v2026-08-15 PWA化（ホーム画面から開けるようにする）
+    - 社長要望「リッチメニューからじゃなくてホーム画面から行きたいだけ」。認証は作り替えていない。
+    - shift-admin は **LIFF を1箇所も使っていない**（実測0件）ので、driver で不合格になった
+      「ホーム画面のPWAからLINEログインできない＝iOSが access.line.me で Safari へ投げ出す」
+      問題に当たらない。そのまま置ける。
+    - パスワード 1115 は **localStorage に保存していない**（保存しているのは表示キャッシュだけ）。
+      よってPWA化しても今までと同じ＝開くたびに1回入れる。アイコンを消しても失うものは無い。
+    - 追加したのは head の6行 ＋ 新規 shift-admin.webmanifest だけ。機能・レイアウト・GASは無変更。
+    - アイコンはキッチン用リッチメニューの「シフト確認」（カレンダー＋チェック・青緑 #16A085）から
+      切り出したもの＝LINEのメニューとホーム画面で同じ絵になる。
+    ⚠ ホーム画面に置くと、端末を触れる人が開ける（ただしパスワード1115は要る）。
   v2026-08-14 「🍳 キッチン」を外部リンク → 本物のタブに統合（アプリ再編⑦-b）
     - これまで kitchen-admin.html を window.open していたため、同じパスワード 1115 を
       2回打たされていた。745行を丸ごと取り込み、ログインを1回に集約
@@ -59,6 +70,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>お江戸弁当 シフト管理</title>
+<!-- PWA（ホーム画面に置く） v2026-08-15 -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="シフト管理">
+<link rel="apple-touch-icon" href="shift-admin-icon.png">
+<link rel="manifest" href="shift-admin.webmanifest">
+<meta name="theme-color" content="#16A085">
 <style>
 :root {
   --navy: #1A3C5E;

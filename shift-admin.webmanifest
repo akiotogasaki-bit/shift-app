@@ -1,0 +1,14 @@
+{
+  "name": "お江戸弁当 シフト管理",
+  "short_name": "シフト管理",
+  "start_url": "./shift-admin.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#16A085",
+  "theme_color": "#16A085",
+  "icons": [
+    { "src": "./shift-admin-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
+    { "src": "./shift-admin-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
