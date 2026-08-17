@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v4.3 (2026-08-18) 【二次販売の納品を「追加式」にした】社長決定「合計数は難しいからやっぱり追加で納品できるようにしたい」「合計を入れる時にこの数で入力しますか？と出す。訂正ボタンも作っておこう。そこも訂正しますか？と出す」。★背景＝二次販売は一次販売の**余りを刻んで持って行く**ので1日に複数回の追加が普通に起きるが、旧実装 `saveSecondDelivery` は**その日・その拠点の行を消してから書き直す＝合計の上書き**だった。20個持って行ったあとに10個足すたびに「30」と暗算して入れ直す必要があり、現場で無理がある。★変更＝①GAS `saveSecondDelivery` に `mode` を追加（`add`＝行を消さず追記／`set`＝従来どおり消して入れ直す＝**訂正用**）②GAS `getSecondDelivery` を**後勝ち→合計**に（byLoc・単拠点の両方）。あわせて `rows`（何回に分けて入れたか）を返す ③保存後に**その拠点の合計を読み直して返す**（画面に「20個 → 30個」と出すため）④driver のモーダルを作り替え＝「いま N個（300円 x / 500円 y）」を出し、入力欄は**今回足す数**（空欄スタート）。`✏️ 合計を訂正する` で訂正モードに切り替わり、入力欄に現在値が入る。★**どちらも送信前に `confirm` を出す**（社長指示）＝追加「合計 20個 → 30個 になります。この数で入力しますか？」／訂正「合計 30個 → 25個 に訂正します。訂正しますか？」。**追加式は二重に押すと増えるので訂正の口は必須。**★これで「誰がいつ何個足したか」がシートに全部残る（上書きでは消えていた）＝1周目・2周目の追加が測れる。★**測定の連鎖**＝持ち込みが入る → レジが納品数を受け取る → 回収の残数欄が出る → **廃棄が測れる**。8/17は持ち込み未入力だったため納品数0→残数欄0件で、主指標の廃棄が取れていなかった。要: メインGAS 2026-08-18 以降（`saveSecondDelivery` の mode／`getSecondDelivery` の合計化）。 -->
 <!-- driver v4.2 (2026-08-16) 【巡回の「置く」を到着トリガー方式に切替】社長指摘＝「元々の話が12時までに完売商品が出ないように移動しながら細かく補充していく運用だった。芝パーク以外の拠点は基本当日売れる個数を想定して配分してあるはずだから、いつもより早く売れちゃっている商品がわかれば良い。これは時間のトリガーで通知ではなく、拠点に到着した時にその拠点の情報をドライバーに伝える訳だから、スタート時刻は関係なく対応できるんじゃないの？」。★**なぜ直したか**＝旧v3.9は `getSupplyPace(12:00〜12:20の同曜日平均)` という**時刻に貼り付いた数字**を見ていた。社長のルートは11:20発・12:30までに3周なので、1周目・2周目は「12:00〜12:20の平均 − いまの残り」が必ずマイナス＝**推奨がほぼ全商品0**になり、3周目しか機能しない状態だった。★新＝`getSupplyRecommend` の `place`＝**12:20までに売れる見込み − いまの残り**。見込みは その拠点×その商品の平常カーブ（＝基準値。社長「そこまでに残しておきたい在庫は決まってる」）から出し、**今日の速さは remain 側に出る**（見込みまで今日のペースで膨らませると二重に効く＝2026-08-05の「31個売れるはず」と同じ罠）。sold と remain が「いまこの瞬間」の値なので**到着時刻に依存しない**。平常どおりの商品は0になり、**いつもより速く売れている商品だけが数字を持つ**。★下限は1個（社長決定）。★カーブが取れない拠点は従来の同曜日4日平均にフォールバック（社長決定）。★「下げる」は無変更＝12:00前は空・いつもより3個以上多く残る時だけ（社長「残りそうは今まで通り積極的に出さない。あまりにもいつもと曲線が違う場合だけ」）。要: メインGAS @516 以降（`getSupplyRecommend` の place / `_rt_judge_` の placeQty / `_rt_evaluateNow_(slot, conf, {patrol:true})`）。 -->
 <!-- driver v4.1 (2026-08-15) 【巡回ログ＝推奨と実際とその時の残りを毎回残す】社長指示「車載の数だったり、レベルの上げ下げの基準・レベル毎の個数など、いろいろ調整していくことになるので、それも含めて毎日検証したい。あとデータとして拠点毎の癖や当日の置く・下げるの個数の正解率をどうやったら上がるのかも検証していかないと」。★**なぜ送信時に残すのか**＝推奨の元（同曜日の平均）は後からいくらでも再計算できるが、**「その瞬間に拠点に何個残っていたか」「車載に何個あったか」は絶対に復元できない**（残数は分単位で動く）。記録しなければ初週のデータは永久に失われる。★実装＝`ptRenderRows_` で画面を描いた瞬間に `ptSnap`（推奨の置く/下げる・拠点残り・車載残り・同曜日平均・根拠日・12時前か）を控え、`ptSubmit` の送信が終わってから `savePatrolLog` で1回投げる。**移動の登録とは別のPOST**にしてあるので、記録が失敗しても業務は完了する（記録は検証用であって業務ではない）。片方だけ失敗した時も note 付きで残す。★シート「巡回ログ」は1行＝1拠点×1商品。**推奨が出ていたのに0にされた商品も残す**＝これを落とすと「入れた商品の中での正解率」になって必ず高く出る。★これで社長の5つの検証項目（車載の数・レベルの上げ下げ基準・レベル毎の個数・拠点毎の癖・置く下げるの正解率）がすべてこの1シートから出せる。要: メインGAS @508 以降（`savePatrolLog` / `PATROL_LOG_SHEET`）。 -->
 <!-- driver v4.0 (2026-08-15) 【二次販売の納品数をドライバーが入れる】社長指示「セカンドの拠点の納品数はスポットと同じ仕様で。**回収タブより拠点を選んで納品数をドライバーが入力**。そこからは通常のレジアプリと同じように販売員が納品数のチェックから始まる、いつもと同じレジアプリの使い方で。締めの作業も通常拠点と全く同じで」「セカンドでの納品数は300円・500円の2項目で良い」。★回収タブの「🏪 本日のスポット拠点」の下に **「🛒 本日の二次販売拠点」** を追加。拠点をタップ → 300円・500円の数を入れる → 登録。入れた数はメインGASの専用シート「二次販売納品」に入り、**レジは通常拠点と同じ経路（getPlannedDelivery）で既定値として受け取る**（register v3.25 が v3.23 の「納品数を入力しない」を撤回）。★**スポットとの違い**＝スポットは定数なので既定値が入っていて「違う日だけ直す」。二次販売は一次販売の残りを持って行くので**毎日数が変わる**＝毎回ここで入れる。既に入っていればカードに「納品 N個（入力者）」と出て、タップで直せる。★対象の商品は**単価マスタのカテゴリー＝二次販売**（＝300円・500円）、対象の拠点は**拠点マスタのエリア＝二次販売**。どちらも既存の目印をそのまま使うのでマスタの追加設定は不要。★取得は `loadSpotToday` に相乗りさせた（別々に呼ぶと回収タブの再描画が二度走るため）。★**専用シートにした理由**＝2026-08-13 に「基本数マスタ（配分調整）に二次販売の行を作らない」と決めたため。基本数マスタに書き戻すと夜間バッチの除外ロジックとまた衝突する（あの時は空行が149行×2日ぶんできた）。要: メインGAS @2026-08-15 以降（`getSecondDelivery` / `saveSecondDelivery` / `_isSecondLoc_` / `SECOND_DELIV_SHEET`）＋ register v3.25。 -->
@@ -1808,10 +1809,11 @@ body {
     <div class="sv-box">
       <div class="mv-title">🛒 二次販売の納品数</div>
       <div class="sv-sec" id="sd-loc"></div>
+      <div class="pt-why" id="sd-now" style="margin:2px 0 8px;"></div>
       <div id="sd-rows"></div>
-      <div class="pt-why">ここで入れた数が、販売員のレジに<b>納品数</b>として出ます。<br>
-        持って行った数を入れてください（あとから直せます）。</div>
+      <div class="pt-why" id="sd-hint"></div>
       <button class="sv-send" id="sd-send" onclick="submitSecondDeliv()">この数で登録する</button>
+      <button class="sv-close" id="sd-fix" onclick="sdToggleMode_()" style="margin-bottom:6px;">✏️ 合計を訂正する</button>
       <button class="sv-close" onclick="closeSecondDelivModal()">閉じる</button>
     </div>
   </div>
@@ -2515,7 +2517,7 @@ function renderSecondSection_() {
                 ? ('納品 ' + total + '個' + (d.enteredBy ? '（' + esc_(d.enteredBy) + '）' : ''))
                 : 'まだ入っていません'}</div>`
          + `</div><div>`
-         +   `<div class="sp-go">${has ? 'タップで直す' : 'タップで納品数を入力'}</div>`
+         +   `<div class="sp-go">${has ? 'タップで追加' : 'タップで納品数を入力'}</div>`
          + `</div></div>`;
   }).join('');
   return `<div class="section-label" style="color:#6C3483;">🛒 本日の二次販売拠点 `
@@ -2523,32 +2525,88 @@ function renderSecondSection_() {
        + `<div class="list-wrap sp-sec">${cards}`
        + `<div style="font-size:11px;color:var(--ink-mute);padding:4px 4px 2px;line-height:1.5;">`
        +   `ここで<b>持って行った数</b>を入れると、販売員のレジに納品数として出ます。<br>`
+       +   `<b>あとから追加で持って行った分も、同じカードをタップして足せます。</b><br>`
        +   `<b>残数・現金の回収は、下の「未回収」から同じ拠点をタップ</b>してください。</div>`
        + `</div>`;
 }
 
 let sdLocId = null;
+// ★2026-08-18 追加式に変更（社長決定「合計数は難しいからやっぱり追加で納品できるようにしたい」）。
+//   二次販売は一次販売の余りを刻んで持って行くので、1日に複数回の追加が普通に起きる。
+//   毎回その日の合計を暗算させるのは現場で無理があるため、**入れるのは「今回足す数」**にした。
+//   ・sdMode 'add'（既定）… 追加。サーバーは行を追記し、合計して返す
+//   ・sdMode 'set'        … 合計の訂正。サーバーはその日の行を消して入れ直す
+//   どちらも送信前に確認を出す（社長指示「この数で入力しますか？」「訂正しますか？」）。
+//   ★追加式は二重に押すと増えるので、訂正の口を必ず残すこと。
+let sdMode = 'add';
+
+function sdCurrent_() {
+  const d = (secondToday.byLoc || {})[sdLocId];
+  return (d && d.deliveryCount) ? d.deliveryCount : {};
+}
+function sdCurrentTotal_() {
+  const cur = sdCurrent_();
+  return Object.keys(cur).reduce((a, p) => a + (Number(cur[p]) || 0), 0);
+}
+
 function openSecondDelivModal(locId) {
   sdLocId = locId;
-  const loc  = (secondToday.locations || []).filter(l => String(l.id) === String(locId))[0];
-  const d    = (secondToday.byLoc || {})[locId];
+  sdMode  = 'add';
+  sdRender_();
+  const m = document.getElementById('sd-modal');
+  if (m) m.classList.add('show');
+}
+
+function sdToggleMode_() {
+  sdMode = (sdMode === 'add') ? 'set' : 'add';
+  sdRender_();
+}
+
+function sdRender_() {
+  const loc   = (secondToday.locations || []).filter(l => String(l.id) === String(sdLocId))[0];
   const prods = secondToday.products || [];
+  const cur   = sdCurrent_();
+  const curTotal = sdCurrentTotal_();
+  const isSet = (sdMode === 'set');
+
   const el = document.getElementById('sd-loc');
-  if (el) el.textContent = (loc ? loc.name : locId) + ' に持って行った数';
+  if (el) el.textContent = (loc ? loc.name : sdLocId) + (isSet ? ' の合計を訂正' : ' に持って行った数');
+
+  const now = document.getElementById('sd-now');
+  if (now) {
+    now.innerHTML = curTotal > 0
+      ? 'いま <b>' + curTotal + '個</b>（' + prods.map(p => esc_(p.name) + ' ' + (Number(cur[p.id]) || 0)).join(' / ') + '）'
+      : 'まだ入っていません';
+  }
+
   const box = document.getElementById('sd-rows');
   if (box) {
     box.innerHTML = prods.length
       ? prods.map(p => {
-          const v = (d && d.deliveryCount) ? (Number(d.deliveryCount[p.id]) || 0) : 0;
-          return `<div class="pt-row"><span class="a">${esc_(p.name)}</span>
+          const n = Number(cur[p.id]) || 0;
+          // 追加のときは空欄から（＝今回足す数）。訂正のときは今の値を入れておく。
+          const v = isSet ? (n > 0 ? n : '') : '';
+          const label = esc_(p.name) + (isSet ? '' : (n > 0 ? '（今 ' + n + '個）' : ''));
+          return `<div class="pt-row"><span class="a">${label}</span>
             <span class="c"><input type="number" inputmode="numeric" min="0" class="pt-num sd-num"
-              data-pid="${esc_(p.id)}" value="${v > 0 ? v : ''}"></span></div>`;
+              data-pid="${esc_(p.id)}" value="${v}"></span></div>`;
         }).join('')
       : `<p class="mv-empty">二次販売の商品（単価マスタのカテゴリー＝二次販売）が登録されていません</p>`;
   }
-  const m = document.getElementById('sd-modal');
-  if (m) m.classList.add('show');
+
+  const hint = document.getElementById('sd-hint');
+  if (hint) {
+    hint.innerHTML = isSet
+      ? '<b>その日の合計</b>を入れ直します。押し間違えて増えてしまった時に使ってください。'
+      : 'ここで入れた数が、販売員のレジに<b>納品数</b>として出ます。<br>'
+        + '<b>今回持って行った数だけ</b>を入れてください（前の分に足されます）。';
+  }
+  const send = document.getElementById('sd-send');
+  if (send) send.textContent = isSet ? 'この数に訂正する' : '追加で登録する';
+  const fix = document.getElementById('sd-fix');
+  if (fix) fix.textContent = isSet ? '↩ 追加の入力に戻る' : '✏️ 合計を訂正する';
 }
+
 function closeSecondDelivModal() {
   const m = document.getElementById('sd-modal');
   if (m) m.classList.remove('show');
@@ -2556,29 +2614,49 @@ function closeSecondDelivModal() {
 
 async function submitSecondDeliv() {
   if (!sdLocId) return;
+  const isSet = (sdMode === 'set');
+  const prods = secondToday.products || [];
+  const cur   = sdCurrent_();
   const qty = {};
   document.querySelectorAll('#sd-rows .sd-num').forEach(inp => {
     const pid = inp.getAttribute('data-pid');
     const q   = parseInt(inp.value, 10) || 0;
     if (pid && q > 0) qty[pid] = q;
   });
+  const sum = Object.keys(qty).reduce((a, p) => a + qty[p], 0);
+  if (!isSet && sum <= 0) { showToast('追加する数を入れてください', 'error', 3000); return; }
+
+  // ★確認（社長指示）。追加式は二重に押すと増えるので、送る前に必ず出す。
+  const loc  = (secondToday.locations || []).filter(l => String(l.id) === String(sdLocId))[0];
+  const name = loc ? loc.name : sdLocId;
+  const detail = prods.filter(p => (qty[p.id] || 0) > 0 || isSet)
+                      .map(p => p.name + ' ' + (qty[p.id] || 0) + '個').join(' / ') || 'なし';
+  const before = sdCurrentTotal_();
+  const msg = isSet
+    ? name + ' の合計を訂正します。\n\n' + detail + '\n合計 ' + before + '個 → ' + sum + '個\n\n訂正しますか？'
+    : name + ' に追加します。\n\n' + detail + '\n合計 ' + before + '個 → ' + (before + sum) + '個\n\nこの数で入力しますか？';
+  if (!confirm(msg)) return;
+
   const btn = document.getElementById('sd-send');
+  const btnText = btn ? btn.textContent : '';
   if (btn) { btn.disabled = true; btn.textContent = '送信中…'; }
   try {
     const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({
       action: 'saveSecondDelivery', date: ccToday_(), locationId: sdLocId,
       driverUserId: state.userId, driverName: state.userName, qty: qty,
+      mode: isSet ? 'set' : 'add',
     })});
     const d = await res.json();
     if (!d.ok) throw new Error(d.error || '登録に失敗しました');
-    showToast((d.locationName || '') + ' の納品数を ' + (d.total || 0) + '個 で登録しました', 'success', 4000);
+    showToast((d.locationName || '') + (isSet ? ' の納品数を ' : ' に ' + (d.added || 0) + '個 追加しました。合計 ')
+              + (d.total || 0) + '個' + (isSet ? ' に訂正しました' : ''), 'success', 4000);
     closeSecondDelivModal();
     await loadSecondToday_();
     renderCollectionList();
   } catch (e) {
     showToast('エラー：' + (e.message || e), 'error', 6000);
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'この数で登録する'; }
+    if (btn) { btn.disabled = false; btn.textContent = btnText || 'この数で登録する'; }
   }
 }
 
