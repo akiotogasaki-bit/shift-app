@@ -4,7 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>お江戸弁当 レジ</title>
-<!-- register v3.25 (2026-08-15) 【二次販売も納品数を入れる＝通常レジと同じ流れに戻した】社長指示「セカンドの拠点の納品数はスポットと同じ仕様で。回収タブより拠点を選んで納品数をドライバーが入力。そこからは通常のレジアプリと同じように販売員が納品数のチェックから始まるいつもと同じレジアプリの使い方で。締めの作業も通常拠点と全く同じで」「セカンドでの納品数は300円・500円の2項目で良い」。★v3.23 の「二次販売は納品数を入力しない（一旦3で＝売れた数だけ記録）」を**撤回**した。撤回したのは4箇所＝①`renderDeliveryInputs` の早期return（納品数カードを隠して配分表を取りに行かない）②`btn-start-submit` の `if (!IS_2ND)` の括り（入力欄の読み取りを通常どおり通す）③確認画面の「納品数を入力しません」差し替え ④締め画面の「—（入力なし）」表示。★**既定値の出どころ**＝ドライバーが回収タブで入れた数。メインGAS `getPlannedDelivery` が**二次販売拠点のときだけ**専用シート「二次販売納品」から返すようにしたので、レジ側は通常拠点と同じ経路（`loadPlannedDelivery`）をそのまま通る＝二次販売のための特別な取得処理は持たない。★**専用シートにした理由**＝2026-08-13 に「基本数マスタ（配分調整）に二次販売の行を作らない」と決めたため（夜間バッチが拠点×商品を全件回して空行を149行×2日ぶん作った件の後始末）。基本数マスタに書き戻すとその除外ロジックとまた衝突する。★**下限チェック（合計10個以下は開始できない・v3.22）は二次販売だけ通さない**。二次販売は一次販売の残りを持って行って売るので、10個未満の日が普通にあり、通すとレジを開始できなくなる。★**ギャラは1500円ぴったりのまま維持**（社長指示「残数・現金の流れだけ同じ。ギャラ1500円は維持」）＝賄い補填・遅刻控除・インセンティブは従来どおり付けない。締め画面の賄い/遅刻カードも隠したまま。要: メインGAS @2026-08-15 以降（`getSecondDelivery` / `saveSecondDelivery` / `_isSecondLoc_` / `getPlannedDelivery` の二次販売分岐）＋ driver v4.0（回収タブの納品入力）。 -->
+<!-- register v3.26 (2026-08-18) 【今日作らない日替わり商品をレジに出さない（献立表と連動）】社長指示「レジアプリの商品が今日あるかのチェックボックス無くしちゃったんだけど、日替わりメニューで今日ない商品を自動で表示しないようにしてほしい」。★これまでは dashboard「商品管理」タブの停止/稼働（`getProductSwitches`）を毎朝押す運用だったが、そのチェックを使わなくなったため、作らない日替わり（海苔弁系・満腹系）がレジに並びっぱなしになっていた。→ **kanri「📋 献立表」で決まっている今日の品目だけを出す**。★材料は既存API 2本だけで **GAS改修・再デプロイ不要**：`getMenuSelections&date=YYYY-MM-DD`（保存済みの日＝確定内容／未保存の日＝⚙ルールのローテ・曜日固定・定番からの自動解決／確定後にルールを変えた日＝後勝ちの新ルール）と `getMenuMeta`（定番の商品ID）。起動時の `Promise.all`（getMaster / getProductSwitches / getReport）に**相乗り**させたので待ち時間は増えない。★**触るのは日替わりの2カテゴリーだけ**。全六・他社商品・お茶（カテゴリー「全」）は献立表の管理外なので一切触らない。★**定番（銀しゃけ・あいもり等）は献立に無くても隠さない**（定番は対象カテゴリーの中に居るので、見落とすと毎日消える）。★**隠す側に倒れない安全弁を4つ**：①献立が取れない日（通信失敗・献立もルールも未登録）は1品も隠さない ②献立キャッシュは**日付一致の時だけ**使う（TTL24hだと前日の献立で隠す事故になる）③対象カテゴリーが全滅する結果になったら連動を見送る ④**納品数>0 か既に売った商品は献立に無くても必ず出す**（献立の入れ違いで違う種類が届いた日に売れなくなるのを防ぐ・`restoreState` の後に絞り込みをやり直す）。★逃げ道＝販売画面と納品数入力の両方に「＋ 隠れている商品も出す」バー（`offmenu-bar`）。押せば全商品に戻り、納品数入力では**打ち込み済みの数字を保持**したまま作り直す。★修正画面（`edit-delivery-inputs` 2か所）は `productsForEdit_` で「隠れていても数が記録されている商品」を必ず出す＝あとから直せる。★カテゴリーが1品も残らない場合はタブごと消えるので、選択中カテゴリーが消えたら先頭へ戻す（グリッドが空になるのを防ぐ）。★二次販売レジ（`?mode=2nd`）は300円・500円の2品だけなので連動しない（APIも叩かない）。★テストモード（`?test=1`）も本番と同じく献立連動を通す。 -->
+
+<!-- register v3.25 (2026-08-15)【二次販売も納品数を入れる＝通常レジと同じ流れに戻した】社長指示「セカンドの拠点の納品数はスポットと同じ仕様で。回収タブより拠点を選んで納品数をドライバーが入力。そこからは通常のレジアプリと同じように販売員が納品数のチェックから始まるいつもと同じレジアプリの使い方で。締めの作業も通常拠点と全く同じで」「セカンドでの納品数は300円・500円の2項目で良い」。★v3.23 の「二次販売は納品数を入力しない（一旦3で＝売れた数だけ記録）」を**撤回**した。撤回したのは4箇所＝①`renderDeliveryInputs` の早期return（納品数カードを隠して配分表を取りに行かない）②`btn-start-submit` の `if (!IS_2ND)` の括り（入力欄の読み取りを通常どおり通す）③確認画面の「納品数を入力しません」差し替え ④締め画面の「—（入力なし）」表示。★**既定値の出どころ**＝ドライバーが回収タブで入れた数。メインGAS `getPlannedDelivery` が**二次販売拠点のときだけ**専用シート「二次販売納品」から返すようにしたので、レジ側は通常拠点と同じ経路（`loadPlannedDelivery`）をそのまま通る＝二次販売のための特別な取得処理は持たない。★**専用シートにした理由**＝2026-08-13 に「基本数マスタ（配分調整）に二次販売の行を作らない」と決めたため（夜間バッチが拠点×商品を全件回して空行を149行×2日ぶん作った件の後始末）。基本数マスタに書き戻すとその除外ロジックとまた衝突する。★**下限チェック（合計10個以下は開始できない・v3.22）は二次販売だけ通さない**。二次販売は一次販売の残りを持って行って売るので、10個未満の日が普通にあり、通すとレジを開始できなくなる。★**ギャラは1500円ぴったりのまま維持**（社長指示「残数・現金の流れだけ同じ。ギャラ1500円は維持」）＝賄い補填・遅刻控除・インセンティブは従来どおり付けない。締め画面の賄い/遅刻カードも隠したまま。要: メインGAS @2026-08-15 以降（`getSecondDelivery` / `saveSecondDelivery` / `_isSecondLoc_` / `getPlannedDelivery` の二次販売分岐）＋ driver v4.0（回収タブの納品入力）。 -->
 <!-- register v3.24 (2026-08-13) 【通常レジの拠点一覧から「車載（芝）」を外す】本番で二次販売レジの動作を確認していて見つけた。★`車載（芝）`（L901）は 8/13 に足した**仮想拠点**（芝エリアの巡回補充テスト用。ドライバーが車に積んだぶんを在庫として持つための箱）で、**レジは置いていない**。ところが拠点マスタに実在する行なので、通常レジの拠点一覧に「車載（芝）」として**34番目に並んでいた**（本番で実際に並んでいるのを確認）。販売員がうっかり選んでレジを開始すると、車載の在庫が販売拠点として動き、巡回補充の残数計算が壊れる。★driver の「📊 実況」では既に除外済み（v3.3/v3.5）だったが、**レジ側は素通し**だった。★`REGISTER_HIDDEN_AREAS = ['車載']` と `isRegisterHiddenLoc_()` を新設し、`applyMasterToState` の拠点フィルタに追加（二次販売の除外と同じ場所）。今後この種の仮想拠点が増えても配列に足すだけで済む。★二次販売レジ側（`?mode=2nd`）はエリア＝二次販売だけを出すので元から影響なし。GAS変更なし。 -->
 <!-- register v3.23 (2026-08-13) 【二次販売レジ（セカンドセール）を新設】社長指示（ミーティング）「セカンドセール用のレジを用意する。商品としての品目は300円・500円の2種類で大丈夫。それ以外は全て通常時のレジと一緒で大丈夫」。★入口は **`register.html?mode=2nd`**（LINEリッチメニューに「🛒 二次販売」を1つ足して、そのURLを開く）。**同じファイルのまま入口だけ分ける**のが要点。理由＝二次販売を打つのは**その日どこかの拠点で売っていた販売員**が多い（社長 2026-08-13「1が多い。たまに2時販売だけ入る人もいる」）のに、通常レジは「同じ人・同じ日」なら**確認なしで前の拠点のレジ画面へ自動復帰**し（`restoreState` の `isSamePerson`）、しかも `clearSavedState` は「別人が引き継ぎを断った時」しか呼ばれない＝**締めても localStorage は残る**。つまり拠点を足すだけでは、二次販売のときに拠点選択画面までたどり着けない。→ `STATE_KEY` を `oedo_register_state_2nd` に分け、**通常レジと完全に独立した別レジ**として動かす（通常レジを打っている途中でも壊さない）。★対象の見分けは**既存のマスタ列だけ**で済ませた＝**GAS改修なし**：拠点は拠点マスタ「エリア」列＝`二次販売`（`getLocations` が `area` で返す）、商品は単価マスタ「カテゴリー」列＝`二次販売`（`getProducts` が `category` で返す）。通常レジ側は逆に**この2つを必ず除外**する（拠点一覧に並んで押し間違えるのを防ぐ）。★通常レジと違うのはここだけ：①商品は300円・500円の2品 ②**納品数は入力しない**（社長「一旦3で」＝売れた数だけ記録）→ 納品数カードを隠し、`plannedDeliveryLoaded` を最初から true にして配分表を取りに行かない（取りに行くと「📋 配分表を読み込み中…」で永久に押せない）。あわせて**入力欄の存在チェックと「10個以下は開始できない」下限チェック（v3.22）を通さない**＝通すと必ず止まってレジを開始できない ③ギャラは**1500円ぴったり**（社長「2次販売は1500円のギャラ」）＝拠点マスタの基本ギャラをそのまま使い、インセンティブ・賄い補填・遅刻控除は付けない（締め画面から賄い/遅刻カードごと隠す）。社員・ドライバー・スポット名乗りは従来どおり0円 ④納品数を入れないので納品数・完売率は「—」表示（0個/0%だと故障に見える）。★**必ず踏む地雷を1つ潰した**：`checkTodayReport` は「その日・その人の報告」を**拠点に関係なく**返すため、拠点を締めた人が二次販売レジを開くと毎回「本日すでに報告が提出されています（拠点：浜松町…）」が出て入れない（逆に通常レジも二次販売の報告で塞がる）。→ **今のモードの拠点一覧に無い拠点の報告は別レジのものとして無視**する（`state.locations` は既にモードで絞ってあるのでこれだけで判定できる）。★同日に複数か所でやる日は**場所ごとに販売員が別**（社長「販売拠点が増えれば販売員も増える」）なので、1台で場所を渡り歩く導線は作っていない。★交通費（日によって違う・ドライバーが入力）は**このアプリでは扱わない**＝別途ドライバーアプリ側で対応する。★**社長の準備が3つ必要**：①拠点マスタに二次販売3拠点（エリア列＝二次販売／基本ギャラ＝1500）②単価マスタに300円・500円の2品（カテゴリー列＝二次販売）③リッチメニューに「🛒 二次販売」。★検証：headless Chrome に偽マスタを食わせ、通常レジ／二次販売レジの両方で商品・拠点の絞り込み、保存キー、当日報告ダイアログの有無、納品数カード、ギャラ計算まで実際に動かして確認済み。GAS変更なし。 -->
 <!-- register v3.22 (2026-08-10) 【配分表の取り込み中は次の画面へ行かせない／納品数10個以下ではレジを開始させない】社長指示「レジアプリの納品数の取り込みをしている間は次の画面に行けないように、また納品数0、もしくは10個以下でレジをスタートできないようにして欲しい」。★①v3.20 で送信ボタンを disabled にしたが、**ボタンの状態だけが頼り**だと Enter キー・二度押し・画面を作り直した直後などですり抜ける経路が残る。`btn-start-submit` のハンドラ**入口**でも `state.plannedDeliveryLoaded` を見て、未完了ならアラートで止めて確認画面へ行かせない（引き継ぎモードはこのガードの手前で return するので影響なし）。★②スタートの下限を新設。**お茶を除いた納品数の合計が `START_MIN_DELIVERY`(=10) 以下ならレジを開始できない**。v3.20 の「全品0なら confirm で確認」を置き換えた＝ダイアログは押して通せてしまい、現に「全品0のまま開始 → ＋1ずつ直す」が起きていたため、確認ではなく**完全に止める**。止めた時は最初の商品欄へフォーカス＋スクロールする。他社弁当（メンチカツ等）は配分表の既定値こそ入らないが実際に届くので合計に入れる。お茶を除くのは開始・締めの既存規則（v3.9 / v3.10）に揃えたもの。少数納品の日が出てきたら `START_MIN_DELIVERY` の数字だけ下げれば効く。★③あわせて `loadPlannedDelivery` の**デッドロック経路**を塞いだ：拠点未選択の時に try の手前で return しており finally が走らず、`plannedDeliveryLoaded` が false のまま固定＝送信ボタンが「📋 配分表を読み込み中…」で永久に押せなくなる（①のガードが入ると確実に詰まる）。ここで拾って「読み込み完了・配分表なし」に倒す。GAS変更なし。 -->
@@ -171,6 +173,34 @@ body {
   white-space: nowrap;
 }
 .cat-tab-btn.active { color: #F4C430; border-bottom-color: #F4C430; }
+
+/* ── ★2026-08-18 v3.26 献立連動で隠している時の案内バー（販売画面／納品数入力 共通） ── */
+.offmenu-bar {
+  margin: 4px 12px 14px;
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: rgba(244,196,48,.12);
+  border-left: 3px solid #F4C430;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #DDD;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.offmenu-bar button {
+  background: transparent;
+  color: #F4C430;
+  border: 1px solid #F4C430;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+}
 
 /* ── 大型2列グリッド ── */
 .products-grid {
@@ -1003,6 +1033,8 @@ html, body { overscroll-behavior-y: contain; }
       <!-- ★2026-07-31 Phase B：配分表の個数を既定値として入れる。実物と違えば直してもらう。 -->
       <div id="delivery-plan-note" style="display:none;font-size:12.5px;line-height:1.7;background:rgba(244,196,48,.14);border-left:3px solid var(--gold,#F4C430);border-radius:6px;padding:8px 11px;margin-bottom:10px;"></div>
       <div id="delivery-inputs"></div>
+      <!-- ★2026-08-18 v3.26 献立に無い商品を隠している時の案内＋逃げ道 -->
+      <div class="offmenu-bar" id="offmenu-start-bar" style="display:none;"></div>
     </div>
     <!-- ★2026-08-04 v3.12：引き継ぎで入った時だけ出す案内 -->
     <div id="takeover-start-note" style="display:none;font-size:13px;line-height:1.75;background:rgba(244,196,48,.14);border-left:3px solid var(--gold,#F4C430);border-radius:6px;padding:11px 13px;margin-bottom:12px;"></div>
@@ -1148,6 +1180,8 @@ html, body { overscroll-behavior-y: contain; }
 
   <div style="overflow-y:auto;flex:1;padding-bottom:280px;">
     <div class="products-grid" id="products-grid"></div>
+    <!-- ★2026-08-18 v3.26 献立に無い商品を隠している時の案内＋逃げ道 -->
+    <div class="offmenu-bar" id="offmenu-bar" style="display:none;"></div>
   </div>
 
   <!-- 固定下部：カート＋合計＋支払いボタン -->
@@ -1624,6 +1658,10 @@ const state = {
   paypayAmount: 0,
   paypayReceivedTotal: 0,  // PayPay実受取合計（お釣り含む）
   stoppedProductIds: [],   // ★ NEW: 商品スイッチで停止中の商品ID（デバッグ用に保持）
+  // ★2026-08-18 v3.26 献立表連動（今日作らない日替わり商品をレジに出さない）
+  menuActiveIds: null,     // 今日の献立に入っている商品ID配列。null＝不明（＝絶対に隠さない）
+  menuTeibanIds: [],       // 定番（毎日必ず入る）＝献立に無くても隠さない
+  showOffMenu: false,      // 販売員が「献立外も出す」を押した状態（この端末・この日だけ）
   couponOn: false,
   couponAmount: 300,
   soldCount: 0,
@@ -1672,6 +1710,9 @@ async function init() {
       state.userName = 'テストユーザー';
       document.getElementById('user-name-location').textContent = state.userName;
       await loadMasterData();
+      // ★2026-08-18 v3.26 テストモードでも献立連動を通す（本番と同じ見え方で確認できるように）
+      await loadTodayMenu();
+      filterStoppedProducts();
       renderLocations();
       showScreen('location');
     } catch(e) {
@@ -1699,9 +1740,14 @@ async function init() {
     // ─────────────────────────────────────────────────────────
     const cachedMaster   = loadMasterCache();
     const cachedSwitches = loadSwitchesCache();
+    const cachedMenu     = loadMenuCache();   // ★2026-08-18 v3.26 同じ日のぶんだけ返る
     let prevSnapshot = null;
     if (cachedMaster && applyMasterToState(cachedMaster)) {
       if (Array.isArray(cachedSwitches)) state.stoppedProductIds = cachedSwitches;
+      if (cachedMenu) {
+        state.menuActiveIds = cachedMenu.active;
+        state.menuTeibanIds = cachedMenu.teiban || [];
+      }
       filterStoppedProducts();
       prevSnapshot = {
         productsJson:  JSON.stringify(state.products),
@@ -1716,10 +1762,13 @@ async function init() {
     //   - キャッシュあり：既に描画は進める。Promise.all 結果で差分検出
     // ─────────────────────────────────────────────────────────
     // ★2026-08-13 todayReport は下で「別レジの報告なら無視」に差し替えるので let
-    let [masterData, _switchesData, todayReport] = await Promise.all([
+    // ★2026-08-18 v3.26 ここに献立取得（loadTodayMenu）を相乗りさせる。
+    //   直列で足すと起動が丸ごと数秒遅くなるため、必ず同じ Promise.all に入れること。
+    let [masterData, _switchesData, todayReport, _menuData] = await Promise.all([
       loadMasterData(),
       applyProductSwitches(),
       checkTodayReport(),
+      loadTodayMenu(),
     ]);
     filterStoppedProducts();
 
@@ -1835,6 +1884,7 @@ async function init() {
 // ═══════════════════════════════════════════════════════════════
 const MASTER_CACHE_KEY   = 'oedo_register_master_cache_v1';
 const SWITCHES_CACHE_KEY = 'oedo_register_switches_cache_v1';
+const MENU_CACHE_KEY     = 'oedo_register_menu_cache_v1';   // ★2026-08-18 v3.26 今日の献立
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;  // 24時間
 
 function loadMasterCache() {
@@ -1887,6 +1937,27 @@ function saveSwitchesCache(stoppedIds) {
       data: Array.isArray(stoppedIds) ? stoppedIds : [],
     }));
   } catch(e) { console.warn('saveSwitchesCache error:', e); }
+}
+
+// ★2026-08-18 v3.26 献立キャッシュは**日付が一致した時だけ**使う。
+//   TTL24時間だと日をまたいで前日の献立で商品を隠す事故が起きる（隠す＝売れない）。
+function loadMenuCache() {
+  try {
+    const raw = localStorage.getItem(MENU_CACHE_KEY);
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
+    if (!obj || obj.date !== menuToday_()) { localStorage.removeItem(MENU_CACHE_KEY); return null; }
+    return (obj.data && Array.isArray(obj.data.active)) ? obj.data : null;
+  } catch(e) {
+    console.warn('loadMenuCache error:', e);
+    return null;
+  }
+}
+
+function saveMenuCache(data) {
+  try {
+    localStorage.setItem(MENU_CACHE_KEY, JSON.stringify({ date: menuToday_(), data: data }));
+  } catch(e) { console.warn('saveMenuCache error:', e); }
 }
 
 // マスタデータを state に反映（キャッシュ復元・API取得 両方から使う）
@@ -2008,6 +2079,183 @@ function filterStoppedProducts() {
   } else {
     state.products = base.slice();   // 停止なし＝原本そのまま（絞り込みを必ず解除する）
   }
+  // ★2026-08-18 v3.26 献立表連動（商品スイッチの後に重ねる。どちらも原本から作り直すので冪等）
+  const off = offMenuProductIds_();
+  if (off.size > 0) {
+    state.products = state.products.filter(p => !off.has(String(p.id)));
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ★2026-08-18 v3.26【献立表と連動：今日作らない日替わり商品はレジに出さない】
+//
+//   社長指示「レジアプリの商品が今日あるかのチェックボックスを無くしたので、
+//   日替わりメニューで今日ない商品を自動で表示しないようにしてほしい」。
+//
+//   材料＝献立表（kanri「📋 献立表」タブ）。GAS `getMenuSelections` は
+//   ・保存済みの日 … その日の確定内容
+//   ・未保存の日   … ⚙ルール（ローテ／曜日固定／定番）からの自動解決値
+//   ・確定後にルールを変えた日 … 後勝ちで新ルールの自動値
+//   を返すので、レジは「今日の献立に入っている商品ID」をそのまま受け取れる。
+//
+//   ★対象は日替わりの2カテゴリー（海苔弁系・満腹系）だけ。
+//     全六・他社商品・お茶（カテゴリー「全」）は献立表の管理外なので絶対に触らない。
+//   ★定番（銀しゃけ・あいもり等）は毎日入る＝献立に無くても隠さない。
+//     定番は献立表の対象カテゴリーの中に居るため、ここを見落とすと毎日消える。
+//   ★献立が取れない日（通信失敗・献立もルールも未登録）は**1品も隠さない**。
+//     隠す＝その商品が一日売れないという事故になるので、迷ったら必ず出す側へ倒す。
+// ═══════════════════════════════════════════════════════════════
+const MENU_DAILY_CATS_ = ['海苔弁系', '満腹系'];   // GAS の MENU_DAILY_CATS と同じ
+
+function menuToday_() {
+  const d = new Date();
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;   // GASは YYYY-MM-DD で受ける
+}
+
+function isMenuManagedProduct_(p) {
+  return MENU_DAILY_CATS_.indexOf(String((p && p.category) || '').trim()) >= 0;
+}
+
+// 今日の献立に無い＝隠す商品IDの集合。隠す条件が揃わない時は必ず空集合を返す。
+function offMenuProductIds_() {
+  const empty = new Set();
+  if (IS_2ND) return empty;                                   // 二次販売レジは300円・500円だけ＝献立は無関係
+  if (state.showOffMenu) return empty;                        // 販売員が「献立外も出す」を押している
+  const active = state.menuActiveIds;
+  if (!Array.isArray(active) || active.length === 0) return empty;   // 献立が不明な日は隠さない
+  const keep = new Set(active.map(String));
+  (state.menuTeibanIds || []).forEach(id => keep.add(String(id)));
+  const base = (Array.isArray(state.allProducts) && state.allProducts.length) ? state.allProducts : [];
+  // ★実際に届いた（納品数>0）／既に売った商品は、献立に無くても絶対に隠さない。
+  //   献立の入れ違いで違う種類が届いた日に、レジから消えて売れなくなるのを防ぐ。
+  const dc = state.deliveryCount || {};
+  const ps = state.productSales  || {};
+  const off = new Set();
+  base.forEach(p => {
+    if (!isMenuManagedProduct_(p)) return;
+    if (keep.has(String(p.id))) return;
+    if (Number(dc[p.id]) > 0 || Number(ps[p.id]) > 0) return;
+    off.add(String(p.id));
+  });
+  // ★全滅ガード：対象カテゴリーの商品が1つも残らない＝献立の中身がこのレジの商品と噛み合っていない。
+  //   その状態で隠すと日替わりが1品も売れなくなるので、この日は連動しない。
+  const managed = base.filter(isMenuManagedProduct_);
+  if (managed.length > 0 && off.size >= managed.length) {
+    console.warn('[献立連動] 日替わりが全滅するため連動を見送りました', { active: active, managed: managed.length });
+    return empty;
+  }
+  return off;
+}
+
+// 隠している商品の数（案内文とボタンの出し分けに使う）
+function offMenuHiddenCount_() {
+  if (state.showOffMenu) {
+    const saved = state.showOffMenu;
+    state.showOffMenu = false;
+    const n = offMenuProductIds_().size;
+    state.showOffMenu = saved;
+    return n;
+  }
+  return offMenuProductIds_().size;
+}
+
+// 今日の献立を取得（getMenuSelections＝その日の品目／getMenuMeta＝定番）。
+// どちらも読み取り専用。失敗しても throw せず「不明（＝隠さない）」で返す。
+async function loadTodayMenu() {
+  if (IS_2ND) return null;
+  const cached = loadMenuCache();
+  if (cached) {                       // まずキャッシュで即描画（同じ日のぶんだけ）
+    state.menuActiveIds = cached.active;
+    state.menuTeibanIds = cached.teiban || [];
+  }
+  const date = menuToday_();
+  const getJson = async (url) => {
+    const res = await fetch(url, { method: 'GET', redirect: 'follow' });
+    return JSON.parse(await res.text());
+  };
+  const [sel, meta] = await Promise.all([
+    getJson(`${state.GAS_URL}?action=getMenuSelections&date=${encodeURIComponent(date)}`)
+      .catch(e => { console.warn('getMenuSelections error:', e); return null; }),
+    getJson(`${state.GAS_URL}?action=getMenuMeta`)
+      .catch(e => { console.warn('getMenuMeta error:', e); return null; }),
+  ]);
+
+  // 定番は取れた時だけ更新（取れなければキャッシュの値を維持＝定番が消えないように）
+  if (meta && meta.ok && Array.isArray(meta.teibanProductIds)) {
+    state.menuTeibanIds = meta.teibanProductIds.map(String);
+  }
+  if (!sel || sel.ok === false || !Array.isArray(sel.active) || sel.active.length === 0) {
+    // 取れなかった／その日の献立が空 → 連動しない（キャッシュも使わない＝全商品を出す）
+    console.warn('[献立連動] 今日の献立が取得できないため連動しません', sel);
+    state.menuActiveIds = null;
+    return null;
+  }
+  state.menuActiveIds = sel.active.map(String);
+  saveMenuCache({ active: state.menuActiveIds, teiban: state.menuTeibanIds || [] });
+  console.log(`[献立連動] ${date} の献立 ${state.menuActiveIds.length}品`, state.menuActiveIds);
+  return state.menuActiveIds;
+}
+
+// 「＋ 今日の献立に無い商品も出す」／「献立外を隠す」トグル
+//   from = 'start'（納品数入力画面）／'register'（販売画面）
+function toggleOffMenu(from) {
+  state.showOffMenu = !state.showOffMenu;
+  // 納品数入力は打ち込み中の数字を消さない（再描画で input が作り直されるため退避しておく）
+  const typed = {};
+  document.querySelectorAll('#delivery-inputs input[id^="delivery-"]').forEach(el => {
+    if (el.value !== '' && el.value !== null) typed[el.id.replace('delivery-', '')] = el.value;
+  });
+  filterStoppedProducts();
+  if (from === 'start') {
+    renderDeliveryInputs();
+    Object.keys(typed).forEach(pid => {
+      const el = document.getElementById(`delivery-${pid}`);
+      if (el) el.value = typed[pid];
+    });
+  } else {
+    renderCategoryTabs();
+    renderProducts();
+  }
+  try { showToast(state.showOffMenu ? '今日の献立に無い商品も表示しています' : '今日の献立の商品だけ表示しています'); } catch (e) {}
+}
+
+// 販売画面の下に出す案内バー
+function renderOffMenuBar() {
+  const bar = document.getElementById('offmenu-bar');
+  if (!bar) return;
+  const hidden = offMenuHiddenCount_();
+  if (hidden === 0 && !state.showOffMenu) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
+  bar.style.display = '';   // CSS の flex に戻す（block だと横並びが崩れる）
+  bar.innerHTML = state.showOffMenu
+    ? `<span>今日の献立に無い商品も表示中です</span>
+       <button type="button" onclick="toggleOffMenu('register')">献立の商品だけにする</button>`
+    : `<span>今日の献立に無い日替わり ${hidden}品を隠しています</span>
+       <button type="button" onclick="toggleOffMenu('register')">＋ 隠れている商品も出す</button>`;
+}
+
+// ★2026-08-18 v3.26 修正画面は「隠れている商品でも、数が記録されているものは必ず出す」。
+//   献立に無いのに実際は届いた日（献立の入れ違い等）に、その数字を直せなくなるのを防ぐ。
+function productsForEdit_(counts) {
+  const c = counts || {};
+  const visible = new Set(state.products.map(p => String(p.id)));
+  const base = (Array.isArray(state.allProducts) && state.allProducts.length) ? state.allProducts : state.products;
+  const extra = base.filter(p => !visible.has(String(p.id)) && Number(c[p.id]) > 0);
+  return extra.length ? state.products.concat(extra) : state.products;
+}
+
+// 納品数入力（スタート報告）の下に出す案内バー
+function renderOffMenuStartBar() {
+  const bar = document.getElementById('offmenu-start-bar');
+  if (!bar) return;
+  const hidden = offMenuHiddenCount_();
+  if (hidden === 0 && !state.showOffMenu) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
+  bar.style.display = '';   // CSS の flex に戻す（block だと横並びが崩れる）
+  bar.innerHTML = state.showOffMenu
+    ? `<span>今日の献立に無い商品も表示中です</span>
+       <button type="button" onclick="toggleOffMenu('start')">献立の商品だけにする</button>`
+    : `<span>今日の献立に無い日替わり ${hidden}品は入力欄を出していません</span>
+       <button type="button" onclick="toggleOffMenu('start')">＋ 届いた商品が足りない時はここ</button>`;
 }
 
 function showScreen(name) {
@@ -2244,6 +2492,7 @@ function renderDeliveryInputs() {
       <span class="form-unit">個</span>
     </div>
   `).join('');
+  renderOffMenuStartBar();   // ★2026-08-18 v3.26 献立で隠している数と「出す」ボタン
   // ★2026-08-07 v3.20【A案】配分表の取得完了まで送信ボタンを無効化。
   //   loadPlannedDelivery は async。GAS応答（2〜5秒）を待たずに送信を押すと
   //   全品目0で開始報告が飛び、戻しても1ずつしか変えられない状態になっていた。
@@ -2599,6 +2848,11 @@ function getCategories() {
 function renderCategoryTabs() {
   const cats = getCategories();
   if (!state.activeCategory && cats.length > 0) state.activeCategory = cats[0];
+  // ★2026-08-18 v3.26 献立連動で1品も残らなかったカテゴリーはタブごと消える。
+  //   選択中のカテゴリーが消えたまま放置すると商品グリッドが空になるので先頭へ戻す。
+  if (state.activeCategory && cats.length > 0 && cats.indexOf(state.activeCategory) < 0) {
+    state.activeCategory = cats[0];
+  }
   const bar = document.getElementById('cat-tab-bar');
   bar.innerHTML = cats.map(c => `
     <button class="cat-tab-btn ${c === state.activeCategory ? 'active' : ''}" onclick="switchCategory('${c}')">
@@ -2673,6 +2927,7 @@ function renderProducts() {
       </div>
     `;
   }).join('');
+  renderOffMenuBar();   // ★2026-08-18 v3.26 献立で隠している数と「出す」ボタン
 }
 
 function toggleSoldOut(productId) {
@@ -3317,7 +3572,7 @@ function loadEditFromReport(report) {
   document.getElementById('reg-location-name').textContent    = loc.name;
   document.getElementById('final-location-name').textContent  = loc.name;
   const container = document.getElementById('edit-delivery-inputs');
-  container.innerHTML = state.products.map(p => `
+  container.innerHTML = productsForEdit_(report.deliveryCount).map(p => `
     <div class="form-row">
       <span class="form-label">${p.name}</span>
       <input type="number" class="form-input" id="edit-delivery-${p.id}"
@@ -3414,6 +3669,9 @@ function restoreState() {
     state._finalRegisterEnd = save.finalRegisterEnd || '';
     state._finalLateMinutes = save.finalLateMinutes || '';
     if (typeof save.makanaiAri === 'boolean') state['makanaiあり'] = save.makanaiAri;
+    // ★2026-08-18 v3.26 復元した納品数・販売数を見てから絞り込みをやり直す。
+    //   「実際に届いた／既に売った商品」は献立に無くても必ず出す（offMenuProductIds_ が判定）。
+    try { filterStoppedProducts(); } catch (e) {}
     return {
       savedUserId:   save.userId || '',
       savedUserName: save.userName || '',
@@ -4190,7 +4448,7 @@ function goToEdit() {
   const now  = new Date();
   const canEdit = now.getHours() < 16;
   const container = document.getElementById('edit-delivery-inputs');
-  container.innerHTML = state.products.map(p => `
+  container.innerHTML = productsForEdit_(state.deliveryCount).map(p => `
     <div class="form-row">
       <span class="form-label">${p.name}</span>
       <input type="number" class="form-input" id="edit-delivery-${p.id}"
