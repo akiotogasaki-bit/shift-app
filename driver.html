@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v4.7 (2026-08-19) 【巡回パネル：全部クリア／推奨に戻す（★テスト期間だけ）】社長「移動の数字があっていない時、今はその数を0に直すのが面倒で通常の移動でやった」。★**なぜ要るか**＝8/18は車載から**9件48個**を下ろしているのに**全件が通常の移動タブの手入力**で、巡回パネル経由は**0件**だった（8/17は13件47個のうち5件がパネル経由）。⚠**「テストが走っていない」ではない**＝個数はむしろ増えている（47→48個）。変わったのは**入口**だけ。ところがパネルを通らないと**巡回ログに1行も残らない**ので、①「置く」の推奨が正しかったかの採点 ②29列「本来(置く)」＝[[芝エリア_配分と車載の決まり方]] §7『渡し切れたか』の判定 の両方ができず、**翌週の配分への戻しが動かない**。★**原因**＝各行は「置く→下げる→—」をタップで巡回させる作りなので、推奨の入った行を消すのに**2〜3タップ**。拠点によっては10〜16商品並ぶため、1商品だけ渡したいのに十数タップかかっていた。★**入れたもの**＝`#pt-editbar` の2ボタン（全部クリア／推奨に戻す）と `ptClearAll_`/`ptRestoreRec_`。**既定は今までどおり推奨入りのまま**なので、「推奨どおり渡す」は**0タップ**（今と同じ）、「1商品だけ渡す」は**2タップ**になる。★⚠**記録は壊れない**＝巡回ログ用の `ptSnap` は `ptRenderRows_` が**画面を描いた瞬間**に控えるので、後から全部0にしても推奨値はそのまま残る（v4.1「推奨が出ていたのに0にされた商品も残す」設計どおり）。クリアして1商品だけ入れても正解率は水増しされない。★⚠**`ptRestoreRec_` は再描画しない**＝`ptRenderRows_()` を呼び直すと今の残数で推奨を計算し直して `ptSnap` が上書きされ、「到着した瞬間の状態」が失われる。だから入力欄だけを `ptSnap` の値に戻す。★**GAS無改修**（Pages反映のみ・デプロイ枠を消費しない）。★**テスト期間だけ**（社長決定）。やめる時は `#pt-editbar` の div ／ `ptClearAll_`・`ptRestoreRec_` ／ `.pt-editbar` のCSS の3つを消せば元に戻る。→ [[巡回パネルが使われない_推奨の採点ができない_2026-08-19]] -->
 <!-- driver v4.6 (2026-08-19) 【当日欠勤の拠点を回収タブから「移動」へ入れるようにした（v4.5の積み残し）】社長報告「当日急にやらなくなった拠点を回収タブから移動に行けるようにしたはずだけど、なっていない」。★調べた結果、**サーバーは動いていた**（メインGAS @539 で `getDeclaredResidual` が `noRegister:true` ＋納品数入りの items を返すのを /exec 実測で確認）。足りなかったのは**カードをタップした時の行き先**＝`renderLocationItem` の分岐で `openCashModal` に振っているのは スポット／置き弁／最終報告ありの3つだけで、当日欠勤の拠点は報告が永久に立たないため必ず最後の else に落ち、`handleUnreportedTap`（未報告リマインドの確認）に吸われていた。つまり v4.5 で作った受け口に一度も到達できていなかった。**2026-08-07 にスポット・置き弁で直したのと同じ形の取りこぼし**（あの時も「モーダルは開けるようにしたがタップ判定は直っていなかった」）。★実装＝未報告モーダルの中に「🚚 当日欠勤：弁当を他拠点へ回す」を1つ足し、`openAbsenceMove()` が回収モーダルを開く。★**カードのタップはリマインドのまま変えていない**＝朝は全拠点がまだレジ未開始で、サーバーの `noRegister` 判定（開始ログの有無）では朝の全拠点が該当してしまう。タップで直行させると「未報告へのリマインド」を送る手段が消える。欠勤は例外操作なのでリマインド画面の中の逃げ道にした。★暴発防止は v4.5 の2枚がそのまま効く＝レジが開いている拠点でこのボタンを押しても `noRegister` が返らず「報告が未提出です」で閉じる／確定直前に個数つきの confirm が出る。GAS変更なし（v4.5 のサーバー実装をそのまま使う）。 -->
 <!-- driver v4.5 (2026-08-18) 【当日欠勤：レジ未開始の拠点でも回収タブから振り分けられるようにした】社長報告「当日欠勤になった時、その弁当をドライバーが他の拠点に振り分けたりするんだけど、レジがスタートしてないから移動ができない」。★何が問題だったか＝回収モーダルは `getDeclaredResidual` の行（残数照合ログ）を前提にしている。この行は**販売員の締め（submitClosingResidual）で初めて立つ**ので、欠勤で誰もレジを開けない日は行が存在せず `found:false` かつ報告なし → 「報告が未提出です」でモーダルが即閉じる。つまり回収タブの「🔄 移動」に一切入れなかった。移動タブから手入力すれば `startMove` 自体は通る（レジの縛りは無い）が、数量を自分で打つ必要があり現場では使われていない。**移動を立てないと欠勤拠点の納品数が丸ごと残り、残数照合・完売率・廃棄が全部ずれる。**★実装＝①GAS `getDeclaredResidual` に**行が無い時のフォールバック**を追加。1個も売っていない＝**残数＝納品数**なので `getPlannedDelivery` の納品数から items を組み、`noRegister:true` で返す（`found` は false のまま＝行は本当に無い）。二次販売拠点は除外＝あちらの納品数はドライバーの当日入力なので「行が無い＝まだ持ち込んでいない」で意味が違う。②driver は `noRegister` を見てモーダルを開き、`ccNoCash=true`（レジを開けていない＝数える現金が無い→1画面で確定）にして 納品数を既定値で並べる。③`ccFound` は false のままなので `submitCollectionCheck` は空振りする＝**送らない**（送ると 「残数を記録できませんでした」の警告だけが出て現場が不安になる）。持ち出しは既存の保険経路 `startMove` が立て、`origin` を **`欠勤振り分け`** にして通常の「終了拠点振り分け」と分けて数えられるようにした。★**暴発防止を2枚**＝①サーバーは `開始ログ`（handleStart がレジ開始で1行書く＝レジ開始の唯一の印）にその日の行が**無い拠点にだけ** noRegister を返す。報告ログ（中間・最終）は開始から数時間あとなので判定に使えない。これが無いと**朝はまだ全拠点が「行なし」なので、販売中の拠点まで丸ごと移動できてしまう**。②driver は確定の直前に `confirm`「◯◯ はレジがまだ開始されていません。当日欠勤として N個 を他拠点へ回します。よろしいですか？」を出す。★到着側は改修不要＝`getMoveAdjByLocProduct_` が移動先の納品数に＋を合流するので、開いているレジの納品数がそのまま増える。要: メインGAS 2026-08-18 以降（`getDeclaredResidual` の noRegister フォールバック）。 -->
 <!-- driver v4.5 (2026-08-18) 【①12:15を境に「置く」がフル基準へ広がる ②渡し切れなかった分を記録する】社長「12:15超えたらピーク＋フル　現状がフルでも残りそうな引き上げる」。★①〜12:15＝ピーク20分の不足（従来どおり）／12:15〜＝**ピークとフルの大きい方**。⚠ **足し算にしていない**＝どちらの式も「− いまの残り」を持つので、素直に足すと残りを2回引いて過剰に出る（8/17に芝パークへ「置く25個」が出た窓の二重計上と同じ形）。フル窓はピーク窓を含むので max が意味としての「ピーク＋フル」。★**下げる側は1行も変えていない**＝もともと `overFinal`＝1日フル基準なので、社長の言う形に既になっていた。★②**`ptCalcPut_` が `Math.min(推奨, 車載残り)` でクランプしてから `ptSnap` に控えていたため、車載が空の商品は行ごと巡回ログから消えていた**＝「渡したかったが渡せなかった」が復元不可能だった。社長ルール（2026-08-18）「芝パークは**最終納品数が推奨納品数に達していない時の完売は参照にしない**。達しているときは販売数を対象にする」を翌週の推奨で効かせるには、この差が残っていないと判定できない。→ `ptWant/ptFull/ptPred/ptBasis` を新設し、クランプ**前**の推奨と内訳（フル不足・予測総販売・基準）を巡回ログの**29〜32列**へ送る。⚠ 19〜28列は `fillPatrolOutcome_`（夜のバッチ）の領分なので触っていない。★画面には ①12:15以降は根拠の文が「閉店までに売れる見込み」に変わる ②車載が足りず推奨どおり置けない商品を「⚠ 車載が足りず、推奨どおり置けません：◯◯ あとN個」と出す。**押す数字は常に1つのまま**（社長「ピークを超えるまではピークだけでいいんじゃない？」）。要: メインGAS @2026-08-18 以降（`RT_PLACE_FULL_FROM` / `placeItems` の内訳 / `PATROL_LOG_EXTRA_`）。→ [[芝エリア_配分と車載の決まり方]] §6・§7 -->
@@ -980,6 +981,11 @@ body {
 /* 商品ごとの「置く／下げる」。同じ拠点で両方同時に起きるので1つの表にまとめる。 */
 .pt-head{display:flex;font-size:10.5px;color:#9A9A9A;padding:0 2px 4px;}
 .pt-head .a{flex:1;} .pt-head .b{width:38px;text-align:center;} .pt-head .c{width:106px;text-align:center;}
+/* ★2026-08-19 v4.7【テスト期間だけ】推奨と違う数を渡す時の入力を軽くする2ボタン。
+   やめる時はこの2行と #pt-editbar の div、ptClearAll_/ptRestoreRec_ を消せば元に戻る。 */
+.pt-editbar{display:flex;gap:8px;margin:2px 0 8px;}
+.pt-editbar button{flex:1;font-size:12px;font-weight:700;padding:9px 6px;border-radius:9px;
+  border:1px solid #dfe4ea;background:#f7f9fb;color:#4b5563;}
 .pt-row{display:flex;align-items:center;padding:7px 2px;border-bottom:1px solid #eceff2;}
 .pt-row .a{flex:1;font-size:13.5px;}
 .pt-row .b{width:38px;text-align:center;font-size:13px;color:#9A9A9A;}
@@ -1817,6 +1823,17 @@ body {
       <div id="pt-step2" style="display:none;">
         <div id="pt-picked"></div>
         <div class="sv-sec">置く数・下げる数</div>
+        <!-- ★2026-08-19 v4.7【テスト期間だけ・社長決定 2026-08-19】
+             推奨と違う数を渡したい時、行ごとに「置く→下げる→—」を2〜3タップして消す必要があり、
+             拠点によっては10〜16商品並ぶ。1商品だけ渡したいのに十数タップかかるので、
+             現場は巡回パネルを諦めて通常の移動タブで入れていた（8/18＝車載発9件48個が全部手入力）。
+             既定は今までどおり推奨入りのまま。ここを足すだけで
+             「1商品だけ渡す」＝2タップ／「推奨どおり」＝0タップ（変更なし）になる。
+             ⚠ やめる時はこの div と ptClearAll_/ptRestoreRec_、.pt-editbar のCSSを消せば元に戻る。 -->
+        <div class="pt-editbar" id="pt-editbar">
+          <button type="button" onclick="ptClearAll_()">全部クリア</button>
+          <button type="button" onclick="ptRestoreRec_()">推奨に戻す</button>
+        </div>
         <div class="pt-head"><span class="a">商品</span><span class="b">残り</span><span class="c">置く / 下げる</span></div>
         <div id="pt-rows"></div>
         <div class="pt-sum">
@@ -5738,6 +5755,53 @@ function ptToggleDir(pid) {
   tag.classList.add(next);
   tag.textContent = next === 'p' ? '置く' : (next === 'm' ? '下げる' : '—');
   if (next === 'n') inp.value = ''; else inp.classList.add(next);
+  ptRecalc_();
+}
+
+/* ★2026-08-19 v4.7【テスト期間だけ】全部クリア／推奨に戻す（社長決定 2026-08-19）
+   【なぜ要るか】8/18は車載から9件48個を下ろしているのに、**全件が通常の移動タブの手入力**で、
+     巡回パネル経由は0件だった（8/17は5件がパネル経由）。理由は社長より
+     「移動の数字があっていない時、その数を0に直すのが面倒で通常の移動でやった」。
+     パネルを通らないと**巡回ログに1行も残らない**ので、
+     ①「置く」の推奨が正しかったかの採点 ②29列「本来(置く)」＝§7『渡し切れたか』の判定
+     の両方ができず、翌週の配分への戻しが動かなくなる。
+   ⚠ **記録は壊れない。**巡回ログ用の `ptSnap` は `ptRenderRows_` が**画面を描いた瞬間**に控えるので、
+     ここで全部0にしても推奨値はそのまま残る（v4.1「推奨が出ていたのに0にされた商品も残す」設計どおり）。
+     だから「クリアして1商品だけ入れる」使い方をしても、正解率が水増しされることはない。
+   ⚠ **再描画はしない。**`ptRenderRows_()` を呼び直すと今の残数で推奨を計算し直して `ptSnap` が
+     上書きされ、「到着した瞬間の状態」が失われる。だから入力欄だけを ptSnap の値に戻す。 */
+function ptClearAll_() {
+  document.querySelectorAll('#pt-rows .pt-num').forEach(inp => {
+    inp.value = '';
+    inp.setAttribute('data-dir', 'n');
+    inp.classList.remove('p', 'm');
+  });
+  document.querySelectorAll('#pt-rows .pt-tag').forEach(tag => {
+    tag.classList.remove('p', 'm', 'n');
+    tag.classList.add('n');
+    tag.textContent = '—';
+  });
+  ptRecalc_();
+}
+
+function ptRestoreRec_() {
+  const put  = (ptSnap && ptSnap.put)  || {};
+  const back = (ptSnap && ptSnap.back) || {};
+  document.querySelectorAll('#pt-rows .pt-num').forEach(inp => {
+    const pid = inp.getAttribute('data-pid');
+    const q   = put[pid] || back[pid] || 0;
+    const dir = put[pid] ? 'p' : (back[pid] ? 'm' : 'n');
+    inp.value = q > 0 ? q : '';
+    inp.setAttribute('data-dir', dir);
+    inp.classList.remove('p', 'm');
+    if (dir !== 'n') inp.classList.add(dir);
+    const tag = document.querySelector('#pt-rows .pt-tag[data-pid="' + pid + '"]');
+    if (tag) {
+      tag.classList.remove('p', 'm', 'n');
+      tag.classList.add(dir);
+      tag.textContent = dir === 'p' ? '置く' : (dir === 'm' ? '下げる' : '—');
+    }
+  });
   ptRecalc_();
 }
 
