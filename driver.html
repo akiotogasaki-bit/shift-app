@@ -1,5 +1,7 @@
 <!DOCTYPE html>
+<!-- driver v4.6 (2026-08-19) 【当日欠勤の拠点を回収タブから「移動」へ入れるようにした（v4.5の積み残し）】社長報告「当日急にやらなくなった拠点を回収タブから移動に行けるようにしたはずだけど、なっていない」。★調べた結果、**サーバーは動いていた**（メインGAS @539 で `getDeclaredResidual` が `noRegister:true` ＋納品数入りの items を返すのを /exec 実測で確認）。足りなかったのは**カードをタップした時の行き先**＝`renderLocationItem` の分岐で `openCashModal` に振っているのは スポット／置き弁／最終報告ありの3つだけで、当日欠勤の拠点は報告が永久に立たないため必ず最後の else に落ち、`handleUnreportedTap`（未報告リマインドの確認）に吸われていた。つまり v4.5 で作った受け口に一度も到達できていなかった。**2026-08-07 にスポット・置き弁で直したのと同じ形の取りこぼし**（あの時も「モーダルは開けるようにしたがタップ判定は直っていなかった」）。★実装＝未報告モーダルの中に「🚚 当日欠勤：弁当を他拠点へ回す」を1つ足し、`openAbsenceMove()` が回収モーダルを開く。★**カードのタップはリマインドのまま変えていない**＝朝は全拠点がまだレジ未開始で、サーバーの `noRegister` 判定（開始ログの有無）では朝の全拠点が該当してしまう。タップで直行させると「未報告へのリマインド」を送る手段が消える。欠勤は例外操作なのでリマインド画面の中の逃げ道にした。★暴発防止は v4.5 の2枚がそのまま効く＝レジが開いている拠点でこのボタンを押しても `noRegister` が返らず「報告が未提出です」で閉じる／確定直前に個数つきの confirm が出る。GAS変更なし（v4.5 のサーバー実装をそのまま使う）。 -->
 <!-- driver v4.5 (2026-08-18) 【当日欠勤：レジ未開始の拠点でも回収タブから振り分けられるようにした】社長報告「当日欠勤になった時、その弁当をドライバーが他の拠点に振り分けたりするんだけど、レジがスタートしてないから移動ができない」。★何が問題だったか＝回収モーダルは `getDeclaredResidual` の行（残数照合ログ）を前提にしている。この行は**販売員の締め（submitClosingResidual）で初めて立つ**ので、欠勤で誰もレジを開けない日は行が存在せず `found:false` かつ報告なし → 「報告が未提出です」でモーダルが即閉じる。つまり回収タブの「🔄 移動」に一切入れなかった。移動タブから手入力すれば `startMove` 自体は通る（レジの縛りは無い）が、数量を自分で打つ必要があり現場では使われていない。**移動を立てないと欠勤拠点の納品数が丸ごと残り、残数照合・完売率・廃棄が全部ずれる。**★実装＝①GAS `getDeclaredResidual` に**行が無い時のフォールバック**を追加。1個も売っていない＝**残数＝納品数**なので `getPlannedDelivery` の納品数から items を組み、`noRegister:true` で返す（`found` は false のまま＝行は本当に無い）。二次販売拠点は除外＝あちらの納品数はドライバーの当日入力なので「行が無い＝まだ持ち込んでいない」で意味が違う。②driver は `noRegister` を見てモーダルを開き、`ccNoCash=true`（レジを開けていない＝数える現金が無い→1画面で確定）にして 納品数を既定値で並べる。③`ccFound` は false のままなので `submitCollectionCheck` は空振りする＝**送らない**（送ると 「残数を記録できませんでした」の警告だけが出て現場が不安になる）。持ち出しは既存の保険経路 `startMove` が立て、`origin` を **`欠勤振り分け`** にして通常の「終了拠点振り分け」と分けて数えられるようにした。★**暴発防止を2枚**＝①サーバーは `開始ログ`（handleStart がレジ開始で1行書く＝レジ開始の唯一の印）にその日の行が**無い拠点にだけ** noRegister を返す。報告ログ（中間・最終）は開始から数時間あとなので判定に使えない。これが無いと**朝はまだ全拠点が「行なし」なので、販売中の拠点まで丸ごと移動できてしまう**。②driver は確定の直前に `confirm`「◯◯ はレジがまだ開始されていません。当日欠勤として N個 を他拠点へ回します。よろしいですか？」を出す。★到着側は改修不要＝`getMoveAdjByLocProduct_` が移動先の納品数に＋を合流するので、開いているレジの納品数がそのまま増える。要: メインGAS 2026-08-18 以降（`getDeclaredResidual` の noRegister フォールバック）。 -->
+<!-- driver v4.5 (2026-08-18) 【①12:15を境に「置く」がフル基準へ広がる ②渡し切れなかった分を記録する】社長「12:15超えたらピーク＋フル　現状がフルでも残りそうな引き上げる」。★①〜12:15＝ピーク20分の不足（従来どおり）／12:15〜＝**ピークとフルの大きい方**。⚠ **足し算にしていない**＝どちらの式も「− いまの残り」を持つので、素直に足すと残りを2回引いて過剰に出る（8/17に芝パークへ「置く25個」が出た窓の二重計上と同じ形）。フル窓はピーク窓を含むので max が意味としての「ピーク＋フル」。★**下げる側は1行も変えていない**＝もともと `overFinal`＝1日フル基準なので、社長の言う形に既になっていた。★②**`ptCalcPut_` が `Math.min(推奨, 車載残り)` でクランプしてから `ptSnap` に控えていたため、車載が空の商品は行ごと巡回ログから消えていた**＝「渡したかったが渡せなかった」が復元不可能だった。社長ルール（2026-08-18）「芝パークは**最終納品数が推奨納品数に達していない時の完売は参照にしない**。達しているときは販売数を対象にする」を翌週の推奨で効かせるには、この差が残っていないと判定できない。→ `ptWant/ptFull/ptPred/ptBasis` を新設し、クランプ**前**の推奨と内訳（フル不足・予測総販売・基準）を巡回ログの**29〜32列**へ送る。⚠ 19〜28列は `fillPatrolOutcome_`（夜のバッチ）の領分なので触っていない。★画面には ①12:15以降は根拠の文が「閉店までに売れる見込み」に変わる ②車載が足りず推奨どおり置けない商品を「⚠ 車載が足りず、推奨どおり置けません：◯◯ あとN個」と出す。**押す数字は常に1つのまま**（社長「ピークを超えるまではピークだけでいいんじゃない？」）。要: メインGAS @2026-08-18 以降（`RT_PLACE_FULL_FROM` / `placeItems` の内訳 / `PATROL_LOG_EXTRA_`）。→ [[芝エリア_配分と車載の決まり方]] §6・§7 -->
 <!-- driver v4.4 (2026-08-18) 【移動タブの行き先から二次販売拠点を外した】社長「消しちゃってください」。★何が問題だったか＝二次販売の納品数は専用シート「二次販売納品」**だけ**が正で、`getPlannedDelivery` は `_isSecondLoc_` の分岐で基本数マスタも移動ログも見ない。つまり**移動タブから二次販売拠点へ下ろしても、レジの納品数は1個も増えない**。移動ログには残るのに納品数が増えないので、残数照合が合わず**廃棄も測れなくなる**。それなのに行き先の一覧は `state.locations` を素通しで出していたので、セカンド神谷などが普通に選べてしまっていた（2026-08-13 に「通常レジの拠点一覧に車載（芝）が並んでいた」のを潰したのと同じ形が、移動タブ側に残っていた）。★実装＝`mvIsSecondArea_()` を新設し、①行き先グリッド `renderDestGrid_` ②到着の「別の拠点に下ろす」セレクト（`populateMoveLocations_(sel, {noSecond:true})`）から除外。**`rtHiddenLoc_` は流用していない**＝あれは `RT_HIDDEN_AREAS=['車載','二次販売']` で**車載も一緒に隠す**ため、使うと「車から補充」「車へ回収」が壊れる。★**移動「元」からは外していない**（`populateMoveLocations_` の既定は従来どおり）＝間違えて入れてしまった分を戻す道を塞がないため。★追加の納品は「回収タブ → 🛒 本日の二次販売拠点」から（v4.3 の追加式）。GAS変更なし。 -->
 <!-- driver v4.3 (2026-08-18) 【二次販売の納品を「追加式」にした】社長決定「合計数は難しいからやっぱり追加で納品できるようにしたい」「合計を入れる時にこの数で入力しますか？と出す。訂正ボタンも作っておこう。そこも訂正しますか？と出す」。★背景＝二次販売は一次販売の**余りを刻んで持って行く**ので1日に複数回の追加が普通に起きるが、旧実装 `saveSecondDelivery` は**その日・その拠点の行を消してから書き直す＝合計の上書き**だった。20個持って行ったあとに10個足すたびに「30」と暗算して入れ直す必要があり、現場で無理がある。★変更＝①GAS `saveSecondDelivery` に `mode` を追加（`add`＝行を消さず追記／`set`＝従来どおり消して入れ直す＝**訂正用**）②GAS `getSecondDelivery` を**後勝ち→合計**に（byLoc・単拠点の両方）。あわせて `rows`（何回に分けて入れたか）を返す ③保存後に**その拠点の合計を読み直して返す**（画面に「20個 → 30個」と出すため）④driver のモーダルを作り替え＝「いま N個（300円 x / 500円 y）」を出し、入力欄は**今回足す数**（空欄スタート）。`✏️ 合計を訂正する` で訂正モードに切り替わり、入力欄に現在値が入る。★**どちらも送信前に `confirm` を出す**（社長指示）＝追加「合計 20個 → 30個 になります。この数で入力しますか？」／訂正「合計 30個 → 25個 に訂正します。訂正しますか？」。**追加式は二重に押すと増えるので訂正の口は必須。**★これで「誰がいつ何個足したか」がシートに全部残る（上書きでは消えていた）＝1周目・2周目の追加が測れる。★**測定の連鎖**＝持ち込みが入る → レジが納品数を受け取る → 回収の残数欄が出る → **廃棄が測れる**。8/17は持ち込み未入力だったため納品数0→残数欄0件で、主指標の廃棄が取れていなかった。要: メインGAS 2026-08-18 以降（`saveSecondDelivery` の mode／`getSecondDelivery` の合計化）。 -->
 <!-- driver v4.2 (2026-08-16) 【巡回の「置く」を到着トリガー方式に切替】社長指摘＝「元々の話が12時までに完売商品が出ないように移動しながら細かく補充していく運用だった。芝パーク以外の拠点は基本当日売れる個数を想定して配分してあるはずだから、いつもより早く売れちゃっている商品がわかれば良い。これは時間のトリガーで通知ではなく、拠点に到着した時にその拠点の情報をドライバーに伝える訳だから、スタート時刻は関係なく対応できるんじゃないの？」。★**なぜ直したか**＝旧v3.9は `getSupplyPace(12:00〜12:20の同曜日平均)` という**時刻に貼り付いた数字**を見ていた。社長のルートは11:20発・12:30までに3周なので、1周目・2周目は「12:00〜12:20の平均 − いまの残り」が必ずマイナス＝**推奨がほぼ全商品0**になり、3周目しか機能しない状態だった。★新＝`getSupplyRecommend` の `place`＝**12:20までに売れる見込み − いまの残り**。見込みは その拠点×その商品の平常カーブ（＝基準値。社長「そこまでに残しておきたい在庫は決まってる」）から出し、**今日の速さは remain 側に出る**（見込みまで今日のペースで膨らませると二重に効く＝2026-08-05の「31個売れるはず」と同じ罠）。sold と remain が「いまこの瞬間」の値なので**到着時刻に依存しない**。平常どおりの商品は0になり、**いつもより速く売れている商品だけが数字を持つ**。★下限は1個（社長決定）。★カーブが取れない拠点は従来の同曜日4日平均にフォールバック（社長決定）。★「下げる」は無変更＝12:00前は空・いつもより3個以上多く残る時だけ（社長「残りそうは今まで通り積極的に出さない。あまりにもいつもと曲線が違う場合だけ」）。要: メインGAS @516 以降（`getSupplyRecommend` の place / `_rt_judge_` の placeQty / `_rt_evaluateNow_(slot, conf, {patrol:true})`）。 -->
@@ -583,6 +585,27 @@ body {
   font-weight: 700;
 }
 .reminder-modal-body { padding: 18px; }
+/* ★2026-08-19 v4.6 未報告モーダルの中の「当日欠勤：他拠点へ回す」。
+   リマインド送信が主で、こちらは例外操作なので枠線だけの控えめな見た目にする。 */
+.reminder-alt-btn {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1.5px solid var(--red);
+  border-radius: 10px;
+  background: var(--white);
+  color: var(--red);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.reminder-alt-note {
+  font-size: 11px;
+  color: var(--ink-mute);
+  margin-top: 6px;
+  line-height: 1.5;
+}
 .reminder-modal-body p {
   font-size: 14px;
   color: var(--ink);
@@ -3873,6 +3896,26 @@ function closeReminderModal() {
   state.pendingReminderId = null;
 }
 
+/* ★2026-08-19 v4.6【当日欠勤の拠点から回収モーダルへ入れるようにする】
+   社長報告「当日急にやらなくなった拠点を回収タブから移動に行けるようにしたはずだけど、なっていない」。
+   ★何が残っていたか＝v4.5 でサーバー（getDeclaredResidual の noRegister）と回収モーダルの受け口は
+     作ったが、**カードをタップした時の行き先を直していなかった**。`renderLocationItem` の分岐は
+     スポット／置き弁／最終報告あり だけが `openCashModal` で、欠勤拠点は報告が永久に立たないので
+     必ず最後の else に落ち、`handleUnreportedTap`（リマインド確認）に吸われていた。
+     2026-08-07 にスポット・置き弁で直したのと同じ取りこぼし。
+   ★カードのタップ自体は**リマインドのまま変えていない**。朝は全拠点がまだレジ未開始なので、
+     タップで直接この画面を出すと「未報告へのリマインド」が送れなくなる（サーバーの noRegister は
+     開始ログの有無しか見ないため、朝は全拠点が該当してしまう）。
+     欠勤は例外なので、リマインドの画面の中に逃げ道を置く形にした。
+   ★レジが開いている拠点で押しても、サーバーが noRegister を返さない → openCashModal は
+     「報告が未提出です」で閉じる＝ここから丸ごと移動されることはない。 */
+function openAbsenceMove() {
+  const id = state.pendingReminderId;      // closeReminderModal が null にするので先に控える
+  if (!id) return;
+  closeReminderModal();
+  openCashModal(id);
+}
+
 async function confirmSendReminder() {
   const locationId = state.pendingReminderId;
   if (!locationId) return;
@@ -5152,6 +5195,11 @@ function _moveLocName_(locId) {
   const l = (state.locations || []).find(x => String(x.id) === String(locId));
   return l ? l.name : locId;
 }
+// ★2026-08-18 v4.5 商品IDから表示名（車載が足りない時の警告文で使う）
+function _moveProdName_(pid) {
+  const p = (state.products || []).find(x => String(x.id) === String(pid));
+  return p ? (p.name || pid) : pid;
+}
 /* ★2026-08-07 行き先ピッカー ─────────────────────────────────────────
    社長決定：行き先は積んだ時点で確定している（2箇所の時も）。個数の内訳は出発時に入れない。
    回収モーダルの「🔄 移動」と、移動タブの「出発を登録」の両方から同じUIを使う。
@@ -5442,6 +5490,8 @@ let ptRec    = null;    // getSupplyRecommend の結果
 //     **その瞬間の拠点の残り・車載の残りは復元できない**（残数は分単位で動く）。
 //     だから送信時ではなく「描いた時」の値を取っておき、送信と一緒に投げる。
 let ptSnap = null;      // { put, back, res, veh, pace }
+// ★2026-08-18 v4.5 置く数の「クランプ前」と内訳。ptCalcPut_ が埋め、ptSnap 経由で巡回ログへ。
+let ptWant = {}, ptFull = {}, ptPred = {}, ptBasis = {};
 
 // 呼び出し元（switchTab など）の都合で関数名は据え置き。中身は巡回の表示に差し替えた。
 async function refreshSupplyButton_() { await ptRefresh_(); }
@@ -5559,6 +5609,11 @@ function ptRenderRows_() {
     putSrc: (ptRec && ptRec.byLoc && ptRec.byLoc[locId]
              && ptRec.byLoc[locId].place && ptRec.byLoc[locId].place.length) ? 'curve' : 'pace',
     nowMin: (ptRec && ptRec.nowMin != null) ? ptRec.nowMin : null,
+    // ★2026-08-18 v4.5 クランプ前の推奨と内訳（巡回ログ 29〜32列）
+    want: JSON.parse(JSON.stringify(ptWant)),
+    full: JSON.parse(JSON.stringify(ptFull)),
+    pred: JSON.parse(JSON.stringify(ptPred)),
+    basis: JSON.parse(JSON.stringify(ptBasis)),
   };
 
   const box = document.getElementById('pt-rows');
@@ -5586,6 +5641,8 @@ function ptRenderRows_() {
 // 置く数＝この時間帯にいつも売れるぶん − いまの残り。車載にあるぶんが上限。
 function ptCalcPut_(locId, res, veh) {
   const tea = getTeaIdSet_(), out = {};
+  // ★2026-08-18 v4.5 拠点を選び直すたびに作り直す（前の拠点の値が混ざらないように）
+  ptWant = {}; ptFull = {}; ptPred = {}; ptBasis = {};
 
   /* ★2026-08-16 v4.2 置く数は「到着した瞬間の不足」から出す（社長指示）
        社長「大事なのは予測最終販売数ではなく、12:00〜12:20までに何個売れる予測で、
@@ -5604,6 +5661,16 @@ function ptCalcPut_(locId, res, veh) {
     rec.place.forEach(r => {
       const pid = String(r.pid);
       if (tea.has(pid)) return;
+      /* ★2026-08-18 v4.5 **クランプする前の推奨を必ず控える。**
+         ここは Math.min(推奨, 車載残り) で潰すので、車載が空だと q=0 になり
+         out にも ptSnap にも入らない＝**「渡したかったが渡せなかった」が記録から消えていた**。
+         社長ルール（2026-08-18）「芝パークは最終納品数が推奨納品数に達していない時の完売は
+         参照にしない」を翌週の推奨で効かせるには、この差が残っていないと判定できない。
+         → ptWant/ptFull/ptPred/ptBasis に控えて巡回ログの29〜32列へ送る。 */
+      ptWant[pid]  = Number(r.qty) || 0;
+      if (r.full  != null) ptFull[pid]  = Number(r.full)  || 0;
+      if (r.pred  != null) ptPred[pid]  = Number(r.pred)  || 0;
+      if (r.basis)         ptBasis[pid] = String(r.basis);
       const q = Math.min(Number(r.qty) || 0, Number(veh[pid]) || 0);   // 車載が上限
       if (q > 0) out[pid] = q;
     });
@@ -5616,6 +5683,7 @@ function ptCalcPut_(locId, res, veh) {
       if (tea.has(String(pid))) return;
       const need = Math.round(Number(pace[pid]) || 0) - (Number(res[pid]) || 0);
       if (need <= 0) return;
+      ptWant[String(pid)] = need;          // ★2026-08-18 v4.5 クランプ前（カーブ側と同じ理由）
       const q = Math.min(need, Number(veh[pid]) || 0);
       if (q > 0) out[String(pid)] = q;
     });
@@ -5693,9 +5761,21 @@ function ptRenderWhy_(locId, put, back) {
   const msg = [];
   const hasPace = !!(ptPace && ptPace.byLoc && ptPace.byLoc[locId]);
   if (Object.keys(put).length) {
+    /* ★2026-08-18 v4.5 12:15を境に「置く」の意味が変わるので、根拠の文も切り替える。
+       社長「12:15超えたらピーク＋フル」。〜12:15＝ピーク20分の不足だけ／12:15〜＝
+       ピークとフルの**大きい方**（足すと残りを2回引くので max。→ メインGAS placeItems）。
+       ドライバーが押す数字は常に1つのままで、理由だけがここに出る。 */
+    const usedFull = Object.keys(put).some(p => (ptBasis || {})[p] === 'full');
     msg.push(hasPace
-      ? 'この20分でいつも売れるぶん（同じ曜日の直近4週）から、いまの残りを引いた数です。'
+      ? (usedFull
+          ? '12:15を過ぎたので、<b>閉店までに売れる見込み</b>から、いまの残りを引いた数です。'
+          : 'この20分でいつも売れるぶん（同じ曜日の直近4週）から、いまの残りを引いた数です。')
       : 'この拠点はまだ実績が少ないので、目安の数を置いています。');
+    // 車載が足りずに推奨どおり渡せない商品は、その場で分かるようにする（記録にも残る）
+    const shortOf = Object.keys(ptWant || {})
+      .filter(p => (Number(ptWant[p]) || 0) > (Number(put[p]) || 0))
+      .map(p => _moveProdName_(p) + ' あと' + ((Number(ptWant[p]) || 0) - (Number(put[p]) || 0)) + '個');
+    if (shortOf.length) msg.push('⚠ 車載が足りず、推奨どおり置けません：' + shortOf.join(' / '));
   }
   if (Object.keys(back).length) {
     let ex = 0;
@@ -5802,6 +5882,8 @@ async function ptSaveLog_(locId, locName, put, back, note) {
       recPut: ptSnap.put, recBack: ptSnap.back,   // 画面に出ていた推奨
       residual: ptSnap.res, vehicle: ptSnap.veh,  // その時の残り
       pace: ptSnap.pace, paceDays: ptSnap.paceDays, tooEarly: ptSnap.tooEarly,
+      // ★2026-08-18 v4.5 巡回ログ29〜32列。want＝**車載でクランプする前**の推奨。
+      want: ptSnap.want, full: ptSnap.full, pred: ptSnap.pred, basis: ptSnap.basis,
       // ★2026-08-16 v4.2 「置く」の根拠と到着時刻を備考に残す。初週の検証で
       //   カーブ方式と旧・平均方式の正解率を分けて見る／何時に着いた時の推奨かを追うため。
       //   （シートの列は18本のまま。列を増やすと既存8行と幅がずれるので備考に入れる）
@@ -7003,6 +7085,11 @@ function rtEscapeHtml(s) {
       </div>
       <p>この拠点の販売員にリマインドを送信しますか？</p>
       <p style="font-size:12px;color:var(--ink-mute);">送信内容：「最終報告がまだです。レジアプリを開いて締めをお願いします」</p>
+      <!-- ★2026-08-19 v4.6 当日欠勤の逃げ道。販売員が来ていない拠点はリマインドを送る相手が居ないので、
+           ここから回収モーダル（＝「🔄 移動」）へ入れるようにする。レジが開いている拠点で押しても
+           サーバーが noRegister を返さないため「報告が未提出です」で閉じる＝暴発しない。 -->
+      <button class="reminder-alt-btn" onclick="openAbsenceMove()">🚚 当日欠勤：弁当を他拠点へ回す</button>
+      <div class="reminder-alt-note">販売員が来ていない拠点はこちら。納品数がそのまま入った画面が開くので、回す数に直して「🔄 移動」を押してください。</div>
     </div>
     <div class="reminder-modal-btns">
       <button class="reminder-modal-btn cancel" onclick="closeReminderModal()">キャンセル</button>
