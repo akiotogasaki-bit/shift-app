@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v5.2 (2026-08-20) 【不具合修正：回収タブのレジ報告が起動時のまま固まっていた】社長報告3件（①回収タブに更新ボタンがない ②芝エリアの回収ボタンが押せない ③レジの開始がカウントされていない）は**すべてこれ1つが原因**だった。★**原因**＝`getTodayReports`（レジの開始・中間・最終報告）を取っているのは**初期ロードの1箇所だけ**。回っているタイマー3本のうち `syncDriverState`(10秒) は**回収済み／休止フラグしか見ておらず**、`loadResidualSummary`(30秒) は残数タブ、`rtLoadAll`(5分) は `getTodayReports` を取り直しているが**実況用の別の入れ物**なので `state.reportsByLoc` は更新されない。＝**回収タブの報告状態はアプリを開いた瞬間のまま固定**され、あとからレジが開いた拠点は永久に「未報告」のままになる。★**なぜ芝エリアだけ出るか**＝芝は巡回テストで**朝早くからアプリを開きっぱなし**にする。開いた時点では芝の販売員はまだレジを開けていない（芝パーク②は11:24開店）ので全拠点が「未報告」で固定される。未報告のカードは `handleUnreportedTap`（リマインド送信の確認）に落ちるため、**回収モーダルに入れない＝「回収ボタンが押せない」**。他エリアは回収直前に開くので間にレジが立っていて気づきにくい。★**直した（社長決定＝A案）。新しいタイマーは足さない**＝昨日の最重要発見「`getDriverState` が doGet を詰まらせている（2903件/日・平均10.5秒・12時台に1200件集中）」を悪化させないため。①**🔄 更新ボタン**を回収タブに追加（手動・スロットル無視・「HH:MM 更新」も表示） ②回収タブに**切り替えた時**に取り直す（60秒スロットル） ③**アプリを前面に戻した時**に取り直す（`visibilitychange`・回収タブを見ている時だけ。拠点間の移動で画面を消すので戻った瞬間が一番古い） ④**未報告のカードをタップした時は先に取り直してから行き先を決める**（final になっていればリマインドではなく回収モーダルを開く）。★⚠ **取れなかった時は古い値を消さない**（空で上書きすると報告済みの拠点がカードごと「未報告」に戻りリマインドが誤発射される。置き弁のリストで同じ事故を一度やっている）。★⚠ **回収済み／休止は自分で押した直後(5秒)は上書きしない**（`syncDriverState` と同じ `SELF_ACTION_GRACE_MS` ガード）。レジ報告はサーバーにしか無い値なのでガードを掛けない。GAS変更なし。 -->
 <!-- driver v5.1 (2026-08-20) 【不具合修正：サーバーが「置く必要なし」と答えた時に、クライアントが別の式で置く数を作っていた】★**症状**＝v5.0 で残数の表示は直ったが、**根本が1つ残っていた**。サーバー `getSupplyRecommend.place` は **qty>0 の商品しか入れない**ので、全商品足りている拠点は **`place: []`（空配列）** で返る。ところが `ptCalcPut_` は `rec.place.length === 0` を見て「サーバーが答えを返せなかった」と解釈し、**平均フォールバック（同曜日平均 − 残り）に落ちていた**。＝**サーバーが正しく『置く必要なし』と答えた時にこそ別の式が走る**。8/19 11:33 芝パーク②の「在庫26個に置く10個」は、この構造と v5.0 で直した残数バグ（`平均 − 0`）の合わせ技だった。★**直した**＝メインGASが **`placeOK`（この拠点の置く数を判定できたか＝`rows.length > 0`）** を返すようにし（`_rt_judge_` → `slim` → `byLoc` の3段すべてに載せた・キャッシュキーも V4→V5 へ）、driver は **`placeOK` が true なら place が空でもフォールバックしない**。★⚠ 古いGASの応答には `placeOK` が無いので従来どおり `place.length` で判断する（落ちない）。要: メインGAS 2026-08-20。★これで**「置く数」の式が実際に使われる口は1本**になる（フォールバックはカーブも平常値も取れない新拠点だけ）。→ [[販売ペースレポート_2026-08-19]] ⑦-4 -->
 <!-- driver v5.0 (2026-08-19) 【不具合修正：まだ売れていない拠点で「残り0」と出て、巡回パネルの推奨が過大になっていた】ドライバー指摘（社長経由）「この推奨の数はおかしいんじゃないか」。★**症状**＝8/19 11:33 芝パーク②の画面が**全商品「残り0」・拠点カードも「残り —」なのに「置く10個」**。実データでは **11:24:02 に26個で開店／最初の販売は 11:33:20**＝その瞬間の実在庫は26個。**在庫が満載の拠点が「空っぽ」として扱われていた。**ドライバーは全六なし玄3個だけ置き、当日の芝パーク②は 納品26＋移動4＝30 → 販売19・残12個＝**現場の判断のほうが正しかった**。★**原因**＝`_locResidualByProduct_` は `productSalesJson` が無いと null（＝残数不明）を返すが、**このJSONはレジが最初の1件を売るまで立たない**。つまり開店直後は必ず「不明」になる。ところが `ptRenderRows_` が **`|| {}` で null を潰していた**ため、①全商品が「残り0」と表示され ②その空オブジェクトが `ptCalcPut_` にも渡り、平均フォールバックが **`同曜日平均 − 0` ＝ 平均まるごと**を推奨に出していた。（巡回ログの備考が「置く根拠=平均」、推奨値が同曜日平均と一致することで裏付け。芝の訪問9回66行だけ「拠点残り」が空で、12:24以降のお茶の水・神保町19行は値ありだったのも、朝＝まだ売れていない時間帯だったから）★**直した3か所**＝①`_locResidualByProduct_`：**販売合計が0なら内訳が無くても `{}` で確定**し残り＝納品±移動を返す（売れているのに内訳が無い古いデータは従来どおり null） ②`ptRenderRows_`：null を潰さず持ち回り、**残りは「—」表示**・`ptSnap.resOK` に残数が取れたかを記録 ③`ptCalcPut_`：**残数が不明のときは推奨を出さない**（入力欄は残るので手で置ける）＋ `ptRenderWhy_` に理由を1行出す。★⚠ **サーバー側（`getSupplyRecommend` の place）は無改修。**あちらは GAS が開始ログと販売中ログから直接 remain を出しているので影響を受けない。メインGASの変更なし＝**デプロイのバージョンを消費しない**（`deploy-front.sh driver.html` だけ）。→ [[販売ペースレポート_2026-08-19]] ⑦-4 -->
 <!-- driver v4.9 (2026-08-19) 【巡回パネル：レベル差の「足りない」を理由の文に出す】メインGAS側で `placeItems` に `lvl`（レベル差不足＝商品ごとの推奨個数 − いまの納品数）と `basis:'lvl'` が増えたのに合わせて、根拠の文を1本足しただけ。★**なぜ要るか**＝レベル差は**まだ1個も売れていない拠点にも出る**（在庫がレベル分しかない、という話で売れ行きの話ではない）。従来の文「この20分でいつも売れるぶんから、いまの残りを引いた数です」のままだと、0販売の拠点に数字が出た時にドライバーが「おかしい」と判断して自分で決め直す＝[[システムの目指す姿]] §1 で消したかった能力依存が戻る。★**判定・押す数字は1行も変えていない**（`ptCalcPut_` は無改修。`basis` は既に `ptBasis` へ控えて巡回ログ32列目に流れているので記録も自動で乗る）。★⚠ 古いGASの応答には `lvl` が無い＝その時は従来の文のまま（落ちない）。要: メインGAS @2026-08-19（③④）以降。→ [[芝エリア_配分と車載の決まり方]] §10 -->
@@ -1662,6 +1663,13 @@ body {
   </div>
 
   <div id="tab-collection" class="tab-panel active">
+    <!-- ★2026-08-20 v5.2 回収タブの更新バー。**レジの報告は起動時に1回しか取っていなかった**ので、
+         アプリを開いたあとにレジが開いた拠点は永久に「未報告」のままだった（→ ヘッダのコメント）。 -->
+    <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:8px;">
+      <span style="font-size:11px;color:var(--ink-mute);" id="collection-updated-at">--:-- 更新</span>
+      <button id="collection-refresh-btn" onclick="reloadCollectionData_(true)"
+              style="background:var(--blue);border:none;color:#FFF;font-size:11px;padding:4px 12px;border-radius:10px;cursor:pointer;font-family:inherit;">🔄 更新</button>
+    </div>
     <div id="collection-list"></div>
   </div>
 
@@ -2491,6 +2499,96 @@ async function syncDriverState() {
     console.warn('syncDriverState error:', e);
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   ★2026-08-20 v5.2【不具合修正】回収タブのレジ報告が起動時のまま固まっていた
+   ───────────────────────────────────────────────────────────────
+   社長報告3件（①回収タブに更新ボタンがない ②芝エリアの回収ボタンが押せない
+   ③レジの開始がカウントされていない）は**すべてこれ1つが原因**だった。
+
+   【何が起きていたか】`getTodayReports`（レジの開始・中間・最終報告）を取っているのは
+     **初期ロードの1箇所だけ**。回っているタイマーは
+       ・`syncDriverState` 10秒 … **回収済み／休止フラグだけ**（報告は見ていない）
+       ・`loadResidualSummary` 30秒 … 残数タブ
+       ・`rtLoadAll` 5分 … 実況タブ。ここは `getTodayReports` を取り直しているが、
+                           **実況用の別の入れ物**なので `state.reportsByLoc` は更新されない
+     ＝ **回収タブの報告状態は、アプリを開いた瞬間のまま固定される。**
+
+   【なぜ芝エリアだけ出るか】芝は巡回テストで**朝早くからアプリを開きっぱなし**にする。
+     開いた時点では芝の販売員はまだレジを開けていない（芝パーク②は11:24開店）ので、
+     全拠点が「未報告」で固定される。他エリアは回収の直前に開くので気づきにくい。
+     未報告のカードは `handleUnreportedTap`（リマインド送信の確認）に落ちるので、
+     **回収モーダルに入れない＝「回収ボタンが押せない」**になる。
+
+   【直し方（社長決定＝A案 2026-08-20）】**新しいタイマーは足さない。**
+     昨日の最重要発見が「`getDriverState` が doGet を詰まらせている（2903件/日・平均10.5秒・
+     12時台に1200件集中）」なので、毎分の取得を足すと悪化する。代わりに
+       ① 🔄 更新ボタン（手動・スロットル無視）
+       ② 回収タブに切り替えた時（60秒スロットル）
+       ③ アプリを前面に戻した時（60秒スロットル）
+       ④ 未報告のカードをタップした時は**先に取り直してから**行き先を決める
+   ═══════════════════════════════════════════════════════════════ */
+let collectionReloadAt = 0;              // 最後に取り直した時刻（ms）
+let collectionReloading = false;
+const COLLECTION_RELOAD_MIN_MS = 60000;  // 自動の時だけ効くスロットル
+
+async function reloadCollectionData_(force) {
+  if (collectionReloading) return false;
+  if (!force && Date.now() - collectionReloadAt < COLLECTION_RELOAD_MIN_MS) return false;
+  collectionReloading = true;
+  const btn = document.getElementById('collection-refresh-btn');
+  if (btn && force) { btn.disabled = true; btn.textContent = '更新中…'; }
+  try {
+    const [reportsRes, intermediateRes, driverStateRes] = await Promise.all([
+      fetch(`${GAS_URL}?action=getTodayReports`,      { redirect: 'follow' }).then(r => r.json()).catch(() => null),
+      fetch(`${GAS_URL}?action=getTodayIntermediate`, { redirect: 'follow' }).then(r => r.json()).catch(() => null),
+      fetch(`${GAS_URL}?action=getDriverState`,       { redirect: 'follow' }).then(r => r.json()).catch(() => null),
+    ]);
+    /* ⚠ 取れなかった時は**古い値を消さない**。空で上書きすると
+       報告済みの拠点がカードごと「未報告」に戻り、リマインドが誤発射される。
+       （置き弁のリストで同じ事故を一度やっている＝loadSpotToday のコメント参照） */
+    if (reportsRes && Array.isArray(reportsRes.data)) {
+      const next = {};
+      reportsRes.data.forEach(r => { next[r.locationId] = { ...r, status: 'final' }; });
+      if (intermediateRes && Array.isArray(intermediateRes.data)) {
+        intermediateRes.data.forEach(r => {
+          if (!next[r.locationId]) next[r.locationId] = { ...r, status: 'intermediate' };
+        });
+      }
+      state.reportsByLoc = next;
+      try { saveDrvReportsCache(state.reportsByLoc); } catch (e) {}
+    }
+    /* ⚠ 回収済み／休止は**自分で押した直後は上書きしない**（`syncDriverState` と同じガード）。
+       押した瞬間に画面へ反映しているので、サーバーが追いつく前に取り直すと元に戻って見える。
+       レジ報告のほうはサーバーにしか無い値なので、このガードは掛けない。 */
+    if (driverStateRes && Array.isArray(driverStateRes.collected)
+        && Date.now() - state.lastUserActionAt >= SELF_ACTION_GRACE_MS) {
+      state.collectedIds = new Set(driverStateRes.collected.map(c => c.locationId));
+      state.inactiveIds  = new Set((driverStateRes.inactive || []).map(i => i.locationId));
+      try { persistDrvDriverStateFromState(); } catch (e) {}
+    }
+    collectionReloadAt = Date.now();
+    try { renderCollectionList(); } catch (e) {}
+    const t = new Date();
+    const el = document.getElementById('collection-updated-at');
+    if (el) el.textContent = `${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')} 更新`;
+    return true;
+  } catch (e) {
+    console.warn('reloadCollectionData_ error:', e);
+    return false;
+  } finally {
+    collectionReloading = false;
+    if (btn) { btn.disabled = false; btn.textContent = '🔄 更新'; }
+  }
+}
+
+/* ★2026-08-20 v5.2 アプリを前面に戻した時に取り直す（回収タブを見ている時だけ）。
+   ドライバーは拠点間の移動中に画面を消すので、戻ってきた瞬間が一番「古い」。 */
+document.addEventListener('visibilitychange', function () {
+  if (document.visibilityState !== 'visible') return;
+  const tab = document.getElementById('tab-collection');
+  if (tab && tab.classList.contains('active')) reloadCollectionData_(false);
+});
 
 function setsEqual(a, b) {
   if (a.size !== b.size) return false;
@@ -3905,9 +4003,23 @@ async function confirmToggleInactive() {
 // ═══════════════════════════════════════════════════════════════
 // 未報告拠点タップ時の処理
 // ═══════════════════════════════════════════════════════════════
-function handleUnreportedTap(locationId) {
+async function handleUnreportedTap(locationId) {
   const loc = state.locations.find(l => l.id === locationId);
   if (!loc) return;
+
+  /* ★2026-08-20 v5.2 **リマインドを出す前に、まずレジ報告を取り直す。**
+     報告は起動時にしか取っていなかったので、「未報告」の正体が
+     **本当に未報告**なのか**手元の情報が古いだけ**なのかを区別できていなかった。
+     古いだけの拠点にリマインドを送ると、ちゃんとレジを開けている販売員に
+     「まだ報告していません」と催促が飛ぶ＝現場の信用を落とす。
+     取り直して final になっていたら、そのまま回収モーダルへ通す（社長決定 2026-08-20）。 */
+  await reloadCollectionData_(true);
+  const r2 = state.reportsByLoc[locationId];
+  if (spotOf_(locationId) || okibenOf_(locationId) || (r2 && r2.status === 'final')) {
+    openCashModal(locationId);
+    return;
+  }
+
   state.pendingReminderId = locationId;
 
   const prevTime = state.remindersSent[locationId];
@@ -4481,6 +4593,8 @@ function switchTab(tab) {
   document.getElementById('tab-approval').classList.toggle('active', tab === 'approval');
   document.getElementById('tab-btn-approval').classList.toggle('active', tab === 'approval');
   if (tab === 'approval') loadDeliveryApprovals();
+  // ★2026-08-20 v5.2 回収タブに戻った時にレジ報告を取り直す（60秒スロットル）
+  if (tab === 'collection') reloadCollectionData_(false);
   // ★v3.3 リアルタイム（dashboard から移設）
   document.getElementById('tab-realtime').classList.toggle('active', tab === 'realtime');
   document.getElementById('tab-btn-realtime').classList.toggle('active', tab === 'realtime');
