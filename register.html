@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>お江戸弁当 レジ</title>
+<!-- register v3.27 (2026-08-20) 【拠点振替：②から回ってきた弁当を、このレジで受け取って納品数に足す】社長要望「芝パーク②が終わる時、芝パークに残りを追加して終わる。それを紐づけて自動で追加できないか」→「ドライバーを介さないで終わらせたい」。★**数を確定するのはこの画面（受け取り側）**にした。理由＝渡す側がレジ拠点の日は締めの申告残数が既定値で入り、渡す側が**スポットの日**（当日バイト・レジ非使用＝締めが無い）は0から入れるだけで、**どちらの日も同じ画面で通る**。バイトにもドライバーにも作業が増えない（社長「渡す側がスポットの日もありえる」2026-08-20）。★販売画面の上に「📥 芝パーク② から受け取り」バナーを出す（`getPendingHandover`）。押すと商品別の数が並び、確定で `confirmHandover` → メインGASが拠点間移動ログに「完結」を1本立てる＝**納品数に即加算**。在庫表示は元から `state.moveAdj` を見ているので `refreshMoveAdj_` を叩けばその場で反映される。★**上限は渡す側にあった数**（締め済みなら申告残数／それ以外は納品数）でクランプする。超えると実在しない在庫を作るため。★**逃げ道＝締めで引き留める**（社長選択「すぐ確認できない場合があるから後からでもできるように」）。`enterFinalScreen` の冒頭で未受け取りがあれば止めて受け取り画面を開く。今日は来なかった日のために「今日は受け取りが無かった」も置いた（押すと記録だけ残して引き留めが外れる）。★読み込みは `showScreen('register')` に集約（入口が7か所あるので個別に付けると必ず漏れる）＋60秒スロットル。二次販売レジ（`?mode=2nd`）は対象外でAPIも叩かない。要: メインGAS @2026-08-20 以降＋拠点マスタに「自動振替先」列。 -->
 <!-- register v3.26 (2026-08-18) 【今日作らない日替わり商品をレジに出さない（献立表と連動）】社長指示「レジアプリの商品が今日あるかのチェックボックス無くしちゃったんだけど、日替わりメニューで今日ない商品を自動で表示しないようにしてほしい」。★これまでは dashboard「商品管理」タブの停止/稼働（`getProductSwitches`）を毎朝押す運用だったが、そのチェックを使わなくなったため、作らない日替わり（海苔弁系・満腹系）がレジに並びっぱなしになっていた。→ **kanri「📋 献立表」で決まっている今日の品目だけを出す**。★材料は既存API 2本だけで **GAS改修・再デプロイ不要**：`getMenuSelections&date=YYYY-MM-DD`（保存済みの日＝確定内容／未保存の日＝⚙ルールのローテ・曜日固定・定番からの自動解決／確定後にルールを変えた日＝後勝ちの新ルール）と `getMenuMeta`（定番の商品ID）。起動時の `Promise.all`（getMaster / getProductSwitches / getReport）に**相乗り**させたので待ち時間は増えない。★**触るのは日替わりの2カテゴリーだけ**。全六・他社商品・お茶（カテゴリー「全」）は献立表の管理外なので一切触らない。★**定番（銀しゃけ・あいもり等）は献立に無くても隠さない**（定番は対象カテゴリーの中に居るので、見落とすと毎日消える）。★**隠す側に倒れない安全弁を4つ**：①献立が取れない日（通信失敗・献立もルールも未登録）は1品も隠さない ②献立キャッシュは**日付一致の時だけ**使う（TTL24hだと前日の献立で隠す事故になる）③対象カテゴリーが全滅する結果になったら連動を見送る ④**納品数>0 か既に売った商品は献立に無くても必ず出す**（献立の入れ違いで違う種類が届いた日に売れなくなるのを防ぐ・`restoreState` の後に絞り込みをやり直す）。★逃げ道＝販売画面と納品数入力の両方に「＋ 隠れている商品も出す」バー（`offmenu-bar`）。押せば全商品に戻り、納品数入力では**打ち込み済みの数字を保持**したまま作り直す。★修正画面（`edit-delivery-inputs` 2か所）は `productsForEdit_` で「隠れていても数が記録されている商品」を必ず出す＝あとから直せる。★カテゴリーが1品も残らない場合はタブごと消えるので、選択中カテゴリーが消えたら先頭へ戻す（グリッドが空になるのを防ぐ）。★二次販売レジ（`?mode=2nd`）は300円・500円の2品だけなので連動しない（APIも叩かない）。★テストモード（`?test=1`）も本番と同じく献立連動を通す。 -->
 
 <!-- register v3.25 (2026-08-15)【二次販売も納品数を入れる＝通常レジと同じ流れに戻した】社長指示「セカンドの拠点の納品数はスポットと同じ仕様で。回収タブより拠点を選んで納品数をドライバーが入力。そこからは通常のレジアプリと同じように販売員が納品数のチェックから始まるいつもと同じレジアプリの使い方で。締めの作業も通常拠点と全く同じで」「セカンドでの納品数は300円・500円の2項目で良い」。★v3.23 の「二次販売は納品数を入力しない（一旦3で＝売れた数だけ記録）」を**撤回**した。撤回したのは4箇所＝①`renderDeliveryInputs` の早期return（納品数カードを隠して配分表を取りに行かない）②`btn-start-submit` の `if (!IS_2ND)` の括り（入力欄の読み取りを通常どおり通す）③確認画面の「納品数を入力しません」差し替え ④締め画面の「—（入力なし）」表示。★**既定値の出どころ**＝ドライバーが回収タブで入れた数。メインGAS `getPlannedDelivery` が**二次販売拠点のときだけ**専用シート「二次販売納品」から返すようにしたので、レジ側は通常拠点と同じ経路（`loadPlannedDelivery`）をそのまま通る＝二次販売のための特別な取得処理は持たない。★**専用シートにした理由**＝2026-08-13 に「基本数マスタ（配分調整）に二次販売の行を作らない」と決めたため（夜間バッチが拠点×商品を全件回して空行を149行×2日ぶん作った件の後始末）。基本数マスタに書き戻すとその除外ロジックとまた衝突する。★**下限チェック（合計10個以下は開始できない・v3.22）は二次販売だけ通さない**。二次販売は一次販売の残りを持って行って売るので、10個未満の日が普通にあり、通すとレジを開始できなくなる。★**ギャラは1500円ぴったりのまま維持**（社長指示「残数・現金の流れだけ同じ。ギャラ1500円は維持」）＝賄い補填・遅刻控除・インセンティブは従来どおり付けない。締め画面の賄い/遅刻カードも隠したまま。要: メインGAS @2026-08-15 以降（`getSecondDelivery` / `saveSecondDelivery` / `_isSecondLoc_` / `getPlannedDelivery` の二次販売分岐）＋ driver v4.0（回収タブの納品入力）。 -->
@@ -1175,6 +1176,10 @@ html, body { overscroll-behavior-y: contain; }
     <button onclick="retryFailedSends()" style="background:#FFF;color:#C0392B;border:none;border-radius:6px;padding:6px 14px;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;">再送</button>
   </div>
 
+  <!-- ★2026-08-20 v3.27【拠点振替】②から回ってきた弁当の受け取りバナー。
+       押されるまで消えない（社長選択の逃げ道＝締めでも引き留める）。 -->
+  <div id="handover-banner" style="display:none;"></div>
+
   <!-- カテゴリータブ -->
   <div class="cat-tab-bar" id="cat-tab-bar"></div>
 
@@ -1589,6 +1594,22 @@ html, body { overscroll-behavior-y: contain; }
     <div class="modal-title" style="padding-right:48px;">本日の会計履歴 <span id="history-count" style="color:#F4C430;font-size:14px;font-weight:700;"></span></div>
     <div id="history-list"></div>
     <button class="modal-confirm-btn" onclick="closeHistoryModal()" style="margin-top:14px;background:#444;">閉じる</button>
+  </div>
+</div>
+
+<!-- ★2026-08-20 v3.27 拠点振替：受け取りモーダル -->
+<div class="modal-overlay" id="handover-modal" onclick="if(event.target===this)closeHandoverModal()">
+  <div class="modal-sheet" data-swipe-close="closeHandoverModal">
+    <button class="modal-close-x" onclick="closeHandoverModal()" aria-label="閉じる">✕</button>
+    <div class="modal-handle"></div>
+    <div class="modal-title" style="padding-right:48px;" id="handover-title">📥 受け取り</div>
+    <div id="handover-note" style="color:rgba(255,255,255,.65);font-size:12px;line-height:1.6;margin-bottom:10px;"></div>
+    <div id="handover-list"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;border-top:1px solid #333;margin-top:10px;padding-top:10px;font-weight:700;">
+      <span>合計</span><span style="color:#F4C430;font-size:20px;" id="handover-total">0</span>
+    </div>
+    <button class="modal-confirm-btn" id="handover-ok" onclick="submitHandover(false)" style="margin-top:14px;">この数で受け取る</button>
+    <button class="modal-confirm-btn" onclick="submitHandover(true)" style="margin-top:8px;background:#444;font-size:13px;">今日は受け取りが無かった</button>
   </div>
 </div>
 
@@ -2262,6 +2283,10 @@ function showScreen(name) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(`screen-${name}`).classList.add('active');
   window.scrollTo(0, 0);
+  // ★2026-08-20 v3.27【拠点振替】販売画面に入るたびに受け取り待ちを取り直す。
+  //   入口が7か所（通常フロー・引き継ぎ・復元・締めから戻る…）あるので、
+  //   個別に呼ぶと必ずどれか付け忘れる。ここ1か所に集約する（60秒スロットル）。
+  if (name === 'register') { try { loadHandover_(false); } catch (e) {} }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -3183,6 +3208,165 @@ function addToHistory(entry) {
 let stockEditMode = false;
 
 // ★v3.2 拠点間移動±を当拠点分だけサーバー単一ソースから取得（在庫を開くたびに最新化＝その場反映）
+// ═══════════════════════════════════════════════════════════════
+// 拠点振替（②→本体）★2026-08-20 v3.27
+//   社長要望「芝パーク②が終わる時、芝パークに残りを追加して終わる。それを紐づけて
+//   自動で追加できないか」→「ドライバーを介さないで終わらせたい」。
+//   ★数を確定するのは**この画面（受け取り側）**。渡す側が締めていれば申告残数が
+//     既定値で入り、渡す側がスポットの日は0から入れる（社長 2026-08-20）。
+//   ★確定した瞬間に拠点間移動ログへ「完結」が1本立つ＝納品数に即加算される。
+//     在庫表示は state.moveAdj を見ているので refreshMoveAdj_ を叩けばその場で動く。
+//   ★押されるまでバナーは消えない。締めでも引き留める（enterFinalScreen）。
+// ═══════════════════════════════════════════════════════════════
+let hoPending   = [];      // サーバーが返した受け取り待ち
+let hoTarget    = null;    // いま開いているもの
+let hoVals      = {};      // {productId: 個数（文字列）}
+let hoBusy      = false;
+let hoLastFetch = 0;
+
+async function loadHandover_(force) {
+  try {
+    if (IS_2ND) return;                                  // 二次販売レジは対象外
+    const locId = state.location && state.location.id;
+    if (!locId) return;
+    const now = Date.now();
+    if (!force && (now - hoLastFetch) < 60000) return;    // 60秒スロットル
+    hoLastFetch = now;
+    const url = `${state.GAS_URL}?action=getPendingHandover`
+              + `&date=${encodeURIComponent(menuToday_())}&loc=${encodeURIComponent(locId)}`;
+    const j = await (await fetch(url, { method: 'GET', redirect: 'follow' })).json();
+    if (!j || !j.ok) return;
+    hoPending = Array.isArray(j.pending) ? j.pending : [];
+    renderHandoverBanner_();
+  } catch (e) {
+    console.warn('拠点振替の取得に失敗:', e);   // 取れなくてもレジは止めない
+  }
+}
+
+function renderHandoverBanner_() {
+  const box = document.getElementById('handover-banner');
+  if (!box) return;
+  if (!hoPending.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
+  box.style.display = 'block';
+  box.innerHTML = hoPending.map((p, i) =>
+      `<div style="background:#1B5E20;color:#FFF;padding:10px 14px;font-size:13px;font-weight:700;`
+    + `display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px solid #0f3d13;">`
+    + `<span>📥 ${escHo_(p.fromLocationName)} から受け取り`
+    + (p.closed ? `（残り ${p.total}個）` : `（まだ締めていません）`)
+    + `</span>`
+    + `<button onclick="openHandoverModal(${i})" style="background:#FFF;color:#1B5E20;border:none;`
+    + `border-radius:6px;padding:6px 14px;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;">受け取る</button>`
+    + `</div>`
+  ).join('');
+}
+
+function escHo_(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function openHandoverModal(i) {
+  const p = hoPending[i];
+  if (!p) return;
+  hoTarget = p;
+  hoVals = {};
+  (p.items || []).forEach(it => { hoVals[it.productId] = String(Number(it.qty) || 0); });
+  document.getElementById('handover-title').textContent = '📥 ' + p.fromLocationName + ' から受け取り';
+  document.getElementById('handover-note').innerHTML = p.closed
+    ? `${escHo_(p.fromLocationName)} が締めた時の残数が入っています。<b>実際に受け取った数と違う時だけ直してください。</b>`
+    : `${escHo_(p.fromLocationName)} はまだ締めていません（スポットの日など）。<b>受け取った数を入れてください。</b>`;
+  renderHandoverList_();
+  document.getElementById('handover-modal').classList.add('show');
+}
+
+function renderHandoverList_() {
+  const box = document.getElementById('handover-list');
+  if (!box || !hoTarget) return;
+  box.innerHTML = (hoTarget.items || []).map(it => {
+    const v = hoVals[it.productId];
+    return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 2px;border-bottom:1px solid #2a2a2a;">`
+         + `<span style="flex:1;font-size:14px;">${escHo_(it.name)}`
+         + `<span style="color:rgba(255,255,255,.4);font-size:11px;margin-left:6px;">最大 ${Number(it.max) || 0}</span></span>`
+         + `<input type="number" inputmode="numeric" min="0" max="${Number(it.max) || 0}" value="${v === undefined ? 0 : v}"`
+         + ` onchange="setHandoverVal('${it.productId}', this.value)" oninput="setHandoverVal('${it.productId}', this.value)"`
+         + ` style="width:76px;background:#111;color:#F4C430;border:1px solid #444;border-radius:6px;`
+         + `padding:8px;font-size:17px;font-weight:700;text-align:center;">`
+         + `<span style="color:rgba(255,255,255,.5);font-size:12px;">個</span></div>`;
+  }).join('');
+  updateHandoverTotal_();
+}
+
+function setHandoverVal(pid, v) {
+  const it = (hoTarget && hoTarget.items || []).find(x => String(x.productId) === String(pid));
+  let n = parseInt(v, 10);
+  if (isNaN(n) || n < 0) n = 0;
+  // ★上限は渡す側にあった数（締め済みなら申告残数／それ以外は納品数）。
+  //   超えると移動ログが実在しない在庫を作るので、ここで必ず止める。
+  if (it && Number(it.max) > 0 && n > Number(it.max)) n = Number(it.max);
+  hoVals[pid] = String(n);
+  updateHandoverTotal_();
+}
+
+function updateHandoverTotal_() {
+  let t = 0;
+  Object.keys(hoVals).forEach(k => { t += parseInt(hoVals[k], 10) || 0; });
+  const el = document.getElementById('handover-total');
+  if (el) el.textContent = t.toLocaleString();
+  const ok = document.getElementById('handover-ok');
+  if (ok) { ok.disabled = (t <= 0 || hoBusy); ok.style.opacity = (t <= 0 || hoBusy) ? '.45' : '1'; }
+  return t;
+}
+
+function closeHandoverModal() {
+  document.getElementById('handover-modal').classList.remove('show');
+  hoTarget = null; hoVals = {};
+}
+
+async function submitHandover(none) {
+  if (!hoTarget || hoBusy) return;
+  const p = hoTarget;
+  const qty = {};
+  Object.keys(hoVals).forEach(k => { const n = parseInt(hoVals[k], 10) || 0; if (n > 0) qty[k] = n; });
+  if (!none && !Object.keys(qty).length) { showToast('受け取った数を入れてください'); return; }
+  if (none && !confirm(p.fromLocationName + ' からの受け取りは無かった、で記録します。よろしいですか？')) return;
+
+  hoBusy = true; updateHandoverTotal_();
+  try {
+    const j = await (await fetch(state.GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'confirmHandover',
+        date: menuToday_(),
+        fromLocationId: p.fromLocationId,
+        toLocationId:   p.toLocationId,
+        qty: qty,
+        userId:   state.userId,
+        userName: state.userName,
+        none: !!none,
+      }),
+      redirect: 'follow',
+    })).json();
+    if (!j || !j.ok) throw new Error((j && j.error) || '受け取りを記録できませんでした');
+
+    hoPending = hoPending.filter(x => x.fromLocationId !== p.fromLocationId);
+    closeHandoverModal();
+    renderHandoverBanner_();
+    if (none) {
+      showToast('受け取りなしで記録しました');
+    } else {
+      // ★納品数への反映はサーバーが移動ログ（完結）で立てている。
+      //   在庫表示は state.moveAdj を見ているので、取り直して即その場で反映させる。
+      await refreshMoveAdj_();
+      try { renderStockList(); } catch (e) {}
+      showToast(`${p.fromLocationName} から ${j.total}個 受け取りました（納品数に加算）`);
+    }
+  } catch (e) {
+    alert('⚠️ ' + (e && e.message ? e.message : e));
+  } finally {
+    hoBusy = false; updateHandoverTotal_();
+  }
+}
+
 async function refreshMoveAdj_() {
   try {
     const locId = state.location && state.location.id;
@@ -4400,6 +4584,19 @@ function resumeForAdditionalSales() {
 //   - 退場（レジに戻る）：値を保持しつつregister画面へ
 // ═══════════════════════════════════════════════════════════════
 function enterFinalScreen() {
+  /* ★2026-08-20 v3.27【拠点振替】受け取っていない振替があれば締めさせない。
+     社長選択の逃げ道＝「すぐ確認できない時があるから後からでもできるように」。
+     ここで引き留めれば、残数を申告する前に必ず目に入る。
+     「今日は来なかった」日もあるので、モーダル側に『受け取りが無かった』を置いてある。 */
+  if (hoPending.length) {
+    const names = hoPending.map(p => p.fromLocationName).join('・');
+    alert('📥 ' + names + ' からの受け取りがまだ済んでいません。\n\n'
+        + '先に「受け取る」を押してください。\n'
+        + '今日は来ていない場合は、その画面の「今日は受け取りが無かった」を押してください。');
+    try { openHandoverModal(0); } catch (e) {}
+    return;
+  }
+
   // localStorageから復元した値があればDOMに反映
   const regEnd = document.getElementById('register-end');
   const lateMin = document.getElementById('late-minutes');
