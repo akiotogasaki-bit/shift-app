@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v5.6 (2026-08-20) 【拠点振替：芝パーク②の残りを、ドライバーを介さず芝パークへ渡す】社長要望「芝パーク②とかが終わる時、芝パークに残りを追加して終わるんだけど、それを紐づけて自動で追加できないか」→「ドライバーを介さないで終わらせたい」。★仕組み＝拠点マスタの新しい列「自動振替先」でペアを持ち（芝パーク②の行に 芝パーク）、**数を確定するのは受け取り側のレジ**（register v3.27）。確定した瞬間にメインGASが拠点間移動ログへ「完結」の行を1本立てるので、そのぶんが芝パークの納品数に即加算され、芝パーク②の納品数からは同じだけ引かれる。★**driver 側の変更は表示だけ**＝回収モーダルを開いた時、受け取りが済んでいれば `getDeclaredResidual` が `handover:{total,toName,detail}` を返す。①申告残数からこのぶんを引いて既定値にする（引かないと同じ弁当を2拠点で二重に数える）②「🔁 残数◯個は 芝パーク へ追加されました」の案内を出す ③手元に何も残っていなければ**残数リストとテンキーを出さず、そのまま②金庫へ送る**（社長指示「金庫の金額だけドライバーが確認して入力」）。★**スポット拠点だけ①に残す**＝①にはクーポン枚数と「💰 売上を確定」があり、通さないと あるべき現金 が出ない（2026-08-06 の社長決定の順番）。残数リストだけ隠してクーポンを打たせる。売上は メインGAS `_spotSettle_` が振替ぶんを納品数から引いて計算するので水増しにならない。★ドライバーに**新しい操作は一切増えない**（回収の「🔄 移動」を押す手間が消えるだけ）。要: メインGAS @2026-08-20 以降（getPendingHandover / confirmHandover / 拠点振替ログ）。 -->
 <!-- driver v5.5 (2026-08-20) 【朝の便のキャッシュ判定を直した】v5.4 で `preBy`（いま〜12:00に売れる予測）を足したが、`ptLoadPlan_` の再取得判定が**日付と `peakNeedBy` の有無だけ**を見ていた。そのため **v5.4 より前に今日の朝の便を取っていた端末は、`preBy` の無い古い形をその日ずっと使い続ける**（`preOf` が0を返す＝12:00揃えにならず旧式のまま動く）。→ **新しく増えた項目（`preBy`）の有無まで確かめて、無ければ取り直す**ようにした。形が変わった時に自動で拾い直させるには、日付ではなく**増えた項目の有無**で見るのが確実。GAS変更なし。 -->
 <!-- driver v5.4 (2026-08-20) 【置く数：引く「残り」を12:00時点の予測残りに揃えた（社長決定）】社長「ピーク基準しか持ってないと〜12:00までに売れる予想の個数が含まれなくなっちゃうんじゃないの？」「12時揃えの方が今俺が言った計算式？」→ **そのとおりだった。**★**何が起きていたか**＝2026-08-18 に窓の起点を「いまの時刻→12:00固定」に変えた（8/17の芝パーク置く25個＝二重計上の対策・正しい変更）。ところが**分子（窓）だけ12:00に揃えて、分母（残り）は「いま」のまま**だった。社長の狙いは「**12:00の時点で**ピーク20分に売れる数を在庫として持っておく」なので、引くべきは**12:00時点の予測残り**＝いまの残り −（いま〜12:00に売れる予測）。★**実測（8/19・芝4拠点）**＝11:30 2→10個／11:40 5→14個／11:45 5→12個／11:50 9→15個／11:55 17→21個。**12:00以降はぴったり0**（理屈どおり）。実訪問9回に当てはめると **34→42個（+8個）**。車載42個なので渡す在庫は足りる。★**実装**＝メインGAS `_rt_judge_` の `placeQty` を12:00揃えに（旧式は `placeOld` に残して点検口 `?name=place` で新旧を並べられる）。朝の便 `getPatrolPlan` に **`preBy[拠点][商品][11:20〜12:00の5分刻み9個]`＝その時刻から12:00までに売れる予測**を追加（V3）。driver のフォールバックも同じ式に揃えた。★⚠ **端末側を旧式のまま残さない**＝サーバーと端末で式が2本になると 2026-08-19 の平均フォールバックとまったく同じ失敗になる。★⚠ 計測中に2回間違えた：①補正**あり**の比率(12:00)と補正**なし**の比率(いま)を引き算していた（12:00以降にも差が出た）②12:00揃えだけ残りを0でクランプしていた（移動で残りが負になった商品だけ差が出た）。**12:00以降の差が0になることが、式が揃った証拠**。要: メインGAS @562 以降。 -->
 <!-- driver v5.3 (2026-08-20) 【A: 置く数の見込みを朝に1回だけ配って端末に持たせる ／ B: 画面を見ていない間はポーリングを止める】社長「このカーブの計算も都度じゃなくて朝（前週）には済んでいて、都度計算する必要はないんじゃないの」「じゃなきゃそもそも推奨の数が出ないよね？」→ **そのとおりだった。**★**確認した事実**＝販売カーブ（5分刻みの累積比率）も平常の最終販売数（nm.med/nm.max）も**すでに「販売カーブ」シートに保存済み**で、`getSupplyRecommend` は毎回それを**読んでいるだけ**。「12:00〜12:20に売れる見込み ＝ 平常値 × (rTail − rPeak)」は**当日データを1つも使わない**。当日いるのは「**いまの残り**」だけで、それは端末が既に持っている。★**A の実装**＝メインGASに **`?action=getPatrolPlan&date=…`**（@557／@558）を新設。`peakNeedBy[拠点][商品]` を返す。driver は**その日1回だけ**取って `localStorage` に保存し、以後はサーバーに聞かない。`ptCalcPut_` の優先順を **①サーバーの place（placeOK）→ ②朝の便の見込み − 残り → ③平均フォールバック** にした。⚠ **端末で式を作り直していない**（サーバーが返した見込みをそのまま引くだけ）＝2026-08-19 の平均フォールバックと同じ轍を踏まないため。★**数字の一致を実測**＝8/19 で 浜松町4=4・ソフバン8=8・芝パーク②6=6 で一致。芝パークだけ 24 vs 26 で、これは**拠点間移動ぶん**（`d = 納品 + 移動` で minDeliv を通る商品が増える）。移動は朝には分からないので**朝の便は控えめ側に出る＝置きすぎない方向**。⚠ **`minDeliv`(既定3個) で切ること**を忘れない＝切らないと朝の便のほうが多く出る（実測：切る前 28/11/12/10 → サーバー実値 26/4/8/6）。★🔴 **`ptSnap.putSrc` も直した**＝旧実装は `place.length` で判定していたが、v5.1 以降は「置くもの無し」で place が空でも**サーバー経路を通っている**ので、そのままだと巡回ログに「置く根拠=平均」と誤って残り、**『平均が消えたか』での合否判定が必ず偽陰性になる**。実際に通った経路（curve / plan / pace / none）を記録するようにした。備考の文言も `置く根拠=カーブ／朝の見込み／平均／なし` の4種に。★**B の実装**＝`syncDriverState`（10秒ポーリング）は**無条件で回っていた**。8/19 実測で `getDriverState` は **2903件/日（5秒超の82%）・平均10.5秒・合計8時間29分**、12時台に1200件集中・14:29に**801秒のタイムアウト**。スマホをポケットに入れて運転している30分も180回叩き続けていた。→ `visibilitychange` で**見えていない間は止め、戻った瞬間に1回取り直す**。見ているのは回収済み／休止フラグだけなので現場の見え方は変わらない。`syncDriverState` 自体は無改修（自操作の5秒ガードもそのまま）。要: メインGAS @558 以降。 -->
@@ -928,6 +929,10 @@ body {
 /* ★2026-08-13 回収を2段階に（①残った弁当 → ②金庫）※社長指示 */
 .cash-modal-btn.next{background:var(--blue);color:#FFF;}
 .cash-modal-btn.next:disabled{opacity:.45;}
+/* ★2026-08-20 v5.6 拠点振替の案内（受け取り側のレジが確定済み） */
+.cc-handover{background:#E8F5E9;border:1px solid #A5D6A7;border-radius:10px;padding:10px 12px;
+  margin-bottom:10px;font-size:13px;line-height:1.6;color:#1B5E20;font-weight:700;}
+.cc-handover .cc-ho-sub{display:block;font-weight:500;font-size:11px;color:#33691E;margin-top:3px;}
 .cc-step-head{display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:10px;font-size:12px;font-weight:700;}
 .cc-step-head .cc-step-on{color:#FFF;background:var(--blue);border-radius:999px;padding:4px 12px;}
 .cc-step-head .cc-step-off{color:var(--ink-mute);background:#EEF0F3;border-radius:999px;padding:4px 12px;}
@@ -3196,6 +3201,9 @@ let ccIsOkiben     = false;
 let ccNoCash       = false;        // 置き弁で現金会計なし＝現金欄を出さない
 // ★2026-08-07 「🔄 移動」で選んだ行き先 [{id,name}]。空＝あとで決める（従来どおり到着登録で選ぶ）
 let ccPlannedTo    = [];
+// ★2026-08-20 v5.6【拠点振替】受け取り側のレジが確定済みなら {total, toName, detail} が入る。
+//   残数からこのぶんを引き、残りが0なら残数の入力欄を出さず金庫だけ確認させる。
+let ccHandover     = null;
 // ★2026-08-06 getDeclaredResidual が found:true を返したか。
 //   residualLoaded は「入力欄が1つ以上できたか」なので、**完売拠点（申告残数0）と
 //   取得失敗の区別がつかない**。完売は「残数0」という事実なので送らなければならず、
@@ -3275,6 +3283,7 @@ async function openCashModal(id) {
   ccStep  = 1;             // ★2026-08-13 必ず①残数から始める
   ccTransport = '';        // ★2026-08-13 交通費は毎回空から（拠点ごとに違う）
   ccIs2nd     = is2ndLoc_(id);
+  ccHandover  = null;      // ★2026-08-20 拠点振替（サーバーの応答で入る）
 
   document.getElementById('cash-modal-title').textContent = loc.name;
   document.getElementById('cash-modal-expected').textContent = '報告の残数が入っています。違う場合だけ直してください。';
@@ -3298,11 +3307,18 @@ async function openCashModal(id) {
         ccCoupon    = String(Number(j.spotCouponCount) || 0);   // ★枚数
         ccCouponYen = Number(j.spotCouponYen) || 300;
       }
+      /* ★2026-08-20 v5.6【拠点振替】受け取り側のレジがもう受け取っているなら、
+         その数はこの拠点の残数ではなく**向こうの納品数**になっている。
+         申告残数から引かないと、同じ弁当を2拠点で二重に数えることになる。 */
+      ccHandover = (j.handover && Number(j.handover.total) > 0) ? j.handover : null;
+      const hoDet = (ccHandover && ccHandover.detail) ? ccHandover.detail : {};
+
       ccItems = Array.isArray(j.items) ? j.items : [];
       ccItems.forEach(it => {
         // 既に実査を入れ直している場合はその値、無ければ申告値（置き弁は納品数）
         const v = (it.actual !== null && it.actual !== undefined) ? it.actual : it.declared;
-        ccVals[it.productId] = String(Number(v) || 0);
+        const left = (Number(v) || 0) - (Number(hoDet[it.productId]) || 0);
+        ccVals[it.productId] = String(left > 0 ? left : 0);
       });
       residualLoaded = ccItems.length > 0;
       if (residualLoaded) ccField = 'p:' + ccItems[0].productId;
@@ -3341,6 +3357,17 @@ async function openCashModal(id) {
   } catch (e) {
     console.warn('既定の残数の取得に失敗:', e);
     if (!hasReport) { showToast('残数を取得できませんでした', 'error'); closeCashModal(); return; }
+  }
+
+  /* ★2026-08-20 v5.6【拠点振替】受け取り側が全部受け取っていて手元に何も残っていないなら、
+     ①残った弁当の画面は数えるものが無い。社長指示「残数は〜に追加されましたと表示、
+     金庫の金額だけドライバーが確認して入力」＝そのまま②へ送る。
+     ⚠ スポット拠点だけは①に残す。①にはクーポン枚数と「💰 売上を確定」があり、
+       これを通さないと あるべき現金 が出ない（2026-08-06 の社長決定の順番）。
+       残数リストだけ隠して、打つのはクーポンだけにする。 */
+  if (ccHandover && ccResidualTotal_() === 0 && !ccIsSpot && !ccNoCash) {
+    ccStep  = 2;
+    ccField = 'cash';
   }
   refreshCashModal_();
 }
@@ -3416,6 +3443,7 @@ function closeCashModal() {
   ccIsSpot = false; ccCoupon = '0'; ccSpot = null; ccSpotBusy = false;   // ★2026-08-06
   ccStep = 1;         // ★2026-08-13 次に開く拠点も①残数から
   ccTransport = ''; ccIs2nd = false;   // ★2026-08-13 交通費を次の拠点へ持ち越さない
+  ccHandover = null;  // ★2026-08-20 振替の案内を次の拠点へ持ち越さない
 }
 
 // ★2026-08-13 ①残数 → ②金庫 の行き来（社長指示：まず残数を確認、次に金庫を確認）
@@ -3497,11 +3525,34 @@ function renderCashModal_(net) {
       : '<span class="cc-step-off">① 残った弁当</span><span class="cc-step-arrow">▶</span><span class="cc-step-on">② 金庫</span>';
   }
 
+  /* ── ★2026-08-20 v5.6【拠点振替】受け取り側のレジがもう受け取っている時の案内 ──
+     ここに出す数は「向こうの納品数になった数」。この拠点の残数からは既に引いてある。 */
+  const hoNote = document.getElementById('cc-handover-note');
+  const hoLeft = ccResidualTotal_();
+  const hoDone = !!(ccHandover && Number(ccHandover.total) > 0);
+  if (hoNote) {
+    if (hoDone) {
+      hoNote.style.display = '';
+      hoNote.innerHTML = `🔁 残数 ${Number(ccHandover.total).toLocaleString()}個は `
+        + `<u>${esc_(ccHandover.toName || '受け取り拠点')}</u> へ追加されました`
+        + `<span class="cc-ho-sub">`
+        + ((hoLeft === null || hoLeft === 0)
+            ? '手元に残っている弁当はありません。金庫の金額だけ確認してください。'
+            : `手元に残っている ${hoLeft}個 は下で確認してください。`)
+        + `</span>`;
+    } else {
+      hoNote.style.display = 'none';
+      hoNote.innerHTML = '';
+    }
+  }
+  // 全部振り替わっていて数えるものが無い時は、商品リストを出さない（0を並べても意味がない）
+  const hoHideList = hoDone && (hoLeft === null || hoLeft === 0);
+
   // ── ★2026-08-03 残数：商品ごとの行 ──
   const listEl = document.getElementById('cc-residual-list');
   if (listEl) {
     // ★2026-08-13 ②金庫の画面では残数リストを畳む（合計だけ残す＝数え直したい時は合計をタップ）
-    listEl.style.display = onStep2 ? 'none' : '';
+    listEl.style.display = (onStep2 || hoHideList) ? 'none' : '';
     // ★2026-08-07 スポットは追加UI（クーポン・売上確定・計算結果）で縦が長くなる。
     //   商品リストの高さを抑えてテンキーが画面内に残るようにする。
     listEl.style.maxHeight = ccIsSpot ? '20vh' : '';
@@ -3616,7 +3667,8 @@ function renderCashModal_(net) {
 
   // ★2026-08-13 ①の画面で打つものが無い拠点（残数が取れなかった等）はテンキーを隠す。
   //   出したままだと ccField が 'cash' のまま残っており、金庫の額を①で打ててしまう。
-  const padHidden = onStep1 && !ccItems.length && !ccIsSpot;
+  //   ★2026-08-20 拠点振替で全部渡し済みの時も同じ（スポットはクーポンを打つので出したまま）。
+  const padHidden = onStep1 && !ccIsSpot && (!ccItems.length || hoHideList);
   const padEl  = document.querySelector('#cash-modal-bg .cash-pad');
   const dispEl = document.getElementById('cash-modal-display');
   if (padEl)  padEl.style.display  = padHidden ? 'none' : '';
@@ -7583,6 +7635,10 @@ function rtEscapeHtml(s) {
     <!-- ★2026-08-13 回収は2段階（社長指示）：①残数を入力して確認 → ②金庫を入力して確認。
          金庫は必ず空から始める（報告値を既定で入れない）。 -->
     <div class="cc-step-head" id="cc-step-head"></div>
+    <!-- ★2026-08-20 v5.6【拠点振替】受け取り側のレジがもう受け取っている時の案内。
+         社長指示「回収でドライバーが拠点をタップした時は『残数は〜に追加されました』と表示。
+         金庫の金額だけドライバーが確認して入力」。 -->
+    <div class="cc-handover" id="cc-handover-note" style="display:none;"></div>
     <!-- ★2026-08-03 残った弁当は商品ごとに入力する（行をタップして数字を打つ） -->
     <div class="cc-list" id="cc-residual-list"></div>
     <div class="cc-total" id="cc-total-box">
