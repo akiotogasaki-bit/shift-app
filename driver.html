@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v5.3 (2026-08-20) 【A: 置く数の見込みを朝に1回だけ配って端末に持たせる ／ B: 画面を見ていない間はポーリングを止める】社長「このカーブの計算も都度じゃなくて朝（前週）には済んでいて、都度計算する必要はないんじゃないの」「じゃなきゃそもそも推奨の数が出ないよね？」→ **そのとおりだった。**★**確認した事実**＝販売カーブ（5分刻みの累積比率）も平常の最終販売数（nm.med/nm.max）も**すでに「販売カーブ」シートに保存済み**で、`getSupplyRecommend` は毎回それを**読んでいるだけ**。「12:00〜12:20に売れる見込み ＝ 平常値 × (rTail − rPeak)」は**当日データを1つも使わない**。当日いるのは「**いまの残り**」だけで、それは端末が既に持っている。★**A の実装**＝メインGASに **`?action=getPatrolPlan&date=…`**（@557／@558）を新設。`peakNeedBy[拠点][商品]` を返す。driver は**その日1回だけ**取って `localStorage` に保存し、以後はサーバーに聞かない。`ptCalcPut_` の優先順を **①サーバーの place（placeOK）→ ②朝の便の見込み − 残り → ③平均フォールバック** にした。⚠ **端末で式を作り直していない**（サーバーが返した見込みをそのまま引くだけ）＝2026-08-19 の平均フォールバックと同じ轍を踏まないため。★**数字の一致を実測**＝8/19 で 浜松町4=4・ソフバン8=8・芝パーク②6=6 で一致。芝パークだけ 24 vs 26 で、これは**拠点間移動ぶん**（`d = 納品 + 移動` で minDeliv を通る商品が増える）。移動は朝には分からないので**朝の便は控えめ側に出る＝置きすぎない方向**。⚠ **`minDeliv`(既定3個) で切ること**を忘れない＝切らないと朝の便のほうが多く出る（実測：切る前 28/11/12/10 → サーバー実値 26/4/8/6）。★🔴 **`ptSnap.putSrc` も直した**＝旧実装は `place.length` で判定していたが、v5.1 以降は「置くもの無し」で place が空でも**サーバー経路を通っている**ので、そのままだと巡回ログに「置く根拠=平均」と誤って残り、**『平均が消えたか』での合否判定が必ず偽陰性になる**。実際に通った経路（curve / plan / pace / none）を記録するようにした。備考の文言も `置く根拠=カーブ／朝の見込み／平均／なし` の4種に。★**B の実装**＝`syncDriverState`（10秒ポーリング）は**無条件で回っていた**。8/19 実測で `getDriverState` は **2903件/日（5秒超の82%）・平均10.5秒・合計8時間29分**、12時台に1200件集中・14:29に**801秒のタイムアウト**。スマホをポケットに入れて運転している30分も180回叩き続けていた。→ `visibilitychange` で**見えていない間は止め、戻った瞬間に1回取り直す**。見ているのは回収済み／休止フラグだけなので現場の見え方は変わらない。`syncDriverState` 自体は無改修（自操作の5秒ガードもそのまま）。要: メインGAS @558 以降。 -->
 <!-- driver v5.2 (2026-08-20) 【不具合修正：回収タブのレジ報告が起動時のまま固まっていた】社長報告3件（①回収タブに更新ボタンがない ②芝エリアの回収ボタンが押せない ③レジの開始がカウントされていない）は**すべてこれ1つが原因**だった。★**原因**＝`getTodayReports`（レジの開始・中間・最終報告）を取っているのは**初期ロードの1箇所だけ**。回っているタイマー3本のうち `syncDriverState`(10秒) は**回収済み／休止フラグしか見ておらず**、`loadResidualSummary`(30秒) は残数タブ、`rtLoadAll`(5分) は `getTodayReports` を取り直しているが**実況用の別の入れ物**なので `state.reportsByLoc` は更新されない。＝**回収タブの報告状態はアプリを開いた瞬間のまま固定**され、あとからレジが開いた拠点は永久に「未報告」のままになる。★**なぜ芝エリアだけ出るか**＝芝は巡回テストで**朝早くからアプリを開きっぱなし**にする。開いた時点では芝の販売員はまだレジを開けていない（芝パーク②は11:24開店）ので全拠点が「未報告」で固定される。未報告のカードは `handleUnreportedTap`（リマインド送信の確認）に落ちるため、**回収モーダルに入れない＝「回収ボタンが押せない」**。他エリアは回収直前に開くので間にレジが立っていて気づきにくい。★**直した（社長決定＝A案）。新しいタイマーは足さない**＝昨日の最重要発見「`getDriverState` が doGet を詰まらせている（2903件/日・平均10.5秒・12時台に1200件集中）」を悪化させないため。①**🔄 更新ボタン**を回収タブに追加（手動・スロットル無視・「HH:MM 更新」も表示） ②回収タブに**切り替えた時**に取り直す（60秒スロットル） ③**アプリを前面に戻した時**に取り直す（`visibilitychange`・回収タブを見ている時だけ。拠点間の移動で画面を消すので戻った瞬間が一番古い） ④**未報告のカードをタップした時は先に取り直してから行き先を決める**（final になっていればリマインドではなく回収モーダルを開く）。★⚠ **取れなかった時は古い値を消さない**（空で上書きすると報告済みの拠点がカードごと「未報告」に戻りリマインドが誤発射される。置き弁のリストで同じ事故を一度やっている）。★⚠ **回収済み／休止は自分で押した直後(5秒)は上書きしない**（`syncDriverState` と同じ `SELF_ACTION_GRACE_MS` ガード）。レジ報告はサーバーにしか無い値なのでガードを掛けない。GAS変更なし。 -->
 <!-- driver v5.1 (2026-08-20) 【不具合修正：サーバーが「置く必要なし」と答えた時に、クライアントが別の式で置く数を作っていた】★**症状**＝v5.0 で残数の表示は直ったが、**根本が1つ残っていた**。サーバー `getSupplyRecommend.place` は **qty>0 の商品しか入れない**ので、全商品足りている拠点は **`place: []`（空配列）** で返る。ところが `ptCalcPut_` は `rec.place.length === 0` を見て「サーバーが答えを返せなかった」と解釈し、**平均フォールバック（同曜日平均 − 残り）に落ちていた**。＝**サーバーが正しく『置く必要なし』と答えた時にこそ別の式が走る**。8/19 11:33 芝パーク②の「在庫26個に置く10個」は、この構造と v5.0 で直した残数バグ（`平均 − 0`）の合わせ技だった。★**直した**＝メインGASが **`placeOK`（この拠点の置く数を判定できたか＝`rows.length > 0`）** を返すようにし（`_rt_judge_` → `slim` → `byLoc` の3段すべてに載せた・キャッシュキーも V4→V5 へ）、driver は **`placeOK` が true なら place が空でもフォールバックしない**。★⚠ 古いGASの応答には `placeOK` が無いので従来どおり `place.length` で判断する（落ちない）。要: メインGAS 2026-08-20。★これで**「置く数」の式が実際に使われる口は1本**になる（フォールバックはカーブも平常値も取れない新拠点だけ）。→ [[販売ペースレポート_2026-08-19]] ⑦-4 -->
 <!-- driver v5.0 (2026-08-19) 【不具合修正：まだ売れていない拠点で「残り0」と出て、巡回パネルの推奨が過大になっていた】ドライバー指摘（社長経由）「この推奨の数はおかしいんじゃないか」。★**症状**＝8/19 11:33 芝パーク②の画面が**全商品「残り0」・拠点カードも「残り —」なのに「置く10個」**。実データでは **11:24:02 に26個で開店／最初の販売は 11:33:20**＝その瞬間の実在庫は26個。**在庫が満載の拠点が「空っぽ」として扱われていた。**ドライバーは全六なし玄3個だけ置き、当日の芝パーク②は 納品26＋移動4＝30 → 販売19・残12個＝**現場の判断のほうが正しかった**。★**原因**＝`_locResidualByProduct_` は `productSalesJson` が無いと null（＝残数不明）を返すが、**このJSONはレジが最初の1件を売るまで立たない**。つまり開店直後は必ず「不明」になる。ところが `ptRenderRows_` が **`|| {}` で null を潰していた**ため、①全商品が「残り0」と表示され ②その空オブジェクトが `ptCalcPut_` にも渡り、平均フォールバックが **`同曜日平均 − 0` ＝ 平均まるごと**を推奨に出していた。（巡回ログの備考が「置く根拠=平均」、推奨値が同曜日平均と一致することで裏付け。芝の訪問9回66行だけ「拠点残り」が空で、12:24以降のお茶の水・神保町19行は値ありだったのも、朝＝まだ売れていない時間帯だったから）★**直した3か所**＝①`_locResidualByProduct_`：**販売合計が0なら内訳が無くても `{}` で確定**し残り＝納品±移動を返す（売れているのに内訳が無い古いデータは従来どおり null） ②`ptRenderRows_`：null を潰さず持ち回り、**残りは「—」表示**・`ptSnap.resOK` に残数が取れたかを記録 ③`ptCalcPut_`：**残数が不明のときは推奨を出さない**（入力欄は残るので手で置ける）＋ `ptRenderWhy_` に理由を1行出す。★⚠ **サーバー側（`getSupplyRecommend` の place）は無改修。**あちらは GAS が開始ログと販売中ログから直接 remain を出しているので影響を受けない。メインGASの変更なし＝**デプロイのバージョンを消費しない**（`deploy-front.sh driver.html` だけ）。→ [[販売ペースレポート_2026-08-19]] ⑦-4 -->
@@ -2596,10 +2597,28 @@ function setsEqual(a, b) {
   return true;
 }
 
+/* ★2026-08-20 v5.3【B】画面を見ていない間はポーリングを止める（社長決定）。
+   【なぜ要るか】2026-08-19 の doGet遅延ログの実測：
+     `getDriverState` が **2903件/日（5秒超の82%）・平均10.5秒・合計8時間29分**。
+     12時台に1200件が集中し、14:13に18本同時 → 14:29に**801秒のタイムアウト**。
+   ところがこのポーリングは **10秒ごとに無条件**で回っており、
+   **スマホをポケットに入れて運転している30分も 180回叩き続けていた。**
+   見ているのは回収済み／休止フラグだけなので、画面が見えていない間は止めてよい。
+   戻ってきた瞬間に1回取り直すので、現場の見え方は変わらない。
+   ⚠ タイマーを止めるだけで `syncDriverState` 自体は無改修（自操作の5秒ガードもそのまま）。 */
 function startDriverStateTimer() {
   if (driverStateTimer) clearInterval(driverStateTimer);
+  if (document.visibilityState === 'hidden') return;   // 見えていないなら回さない
   driverStateTimer = setInterval(syncDriverState, DRIVER_STATE_POLL_MS);
 }
+function stopDriverStateTimer() {
+  if (driverStateTimer) { clearInterval(driverStateTimer); driverStateTimer = null; }
+}
+document.addEventListener('visibilitychange', function () {
+  if (document.visibilityState === 'hidden') { stopDriverStateTimer(); return; }
+  syncDriverState();            // 戻ってきた瞬間に1回だけ取り直す
+  startDriverStateTimer();
+});
 
 // ═══════════════════════════════════════════════════════════════
 // ★2026-08-06 スポット拠点（当日限りのバイト・レジ非使用）
@@ -5626,6 +5645,17 @@ function _svTargets_() {
 let ptPicked = '';      // 選んでいる拠点ID
 let ptFolded = true;    // 通常の移動フォームを畳んでいるか
 let ptPace   = null;    // getSupplyPace の結果
+/* ★2026-08-20 v5.3【朝の便】その日の「12:00〜12:20に売れる見込み」を朝に1回だけ取って持っておく。
+   社長（2026-08-20）「このカーブの計算も都度じゃなくて朝には済んでいて、都度計算する必要はないんじゃないの」
+   → **そのとおりだった。**カーブも平常値も「販売カーブ」シートに保存済みで、
+     見込み＝`平常値 × カーブの差` は**当日データを1つも使わない**。当日いるのは「いまの残り」だけ。
+   → 昼に doGet が詰まっても（8/19 実測：12時台に5秒超が1200件・14:29に801秒）
+     **サーバーと同じ数字**で置く数が出せる。`ptPlan − 残り` を引くだけ。
+   ⚠ 端末で式を作り直さない。**サーバーが返した見込みをそのまま使う**。
+     ここを別式にすると 2026-08-19 の平均フォールバックと同じ轍を踏む。 */
+let ptPlan   = null;    // getPatrolPlan の結果（当日の peakNeedBy）
+let ptPutSrc = 'none';  // 直近に「置く数」を出した経路（curve / plan / pace / none）
+const PT_PLAN_KEY = 'oedo_driver_patrolplan_v1';
 let ptRec    = null;    // getSupplyRecommend の結果
 
 // ★2026-08-15 巡回ログ用のスナップショット。**画面を描いた瞬間の状態**をそのまま持つ。
@@ -5654,7 +5684,7 @@ async function ptRefresh_() {
       ? ('車載の残り <b>' + st.remaining.total + '個</b>　（' + _esc(st.vehicle.name) + '）')
       : '車載の残りが取れませんでした。登録はできます。';
   }
-  await Promise.all([ptLoadPace_(), ptLoadRec_()]);
+  await Promise.all([ptLoadPlan_(), ptLoadPace_(), ptLoadRec_()]);
   if (ptPicked) ptRenderRows_(); else ptRenderLocs_();
 }
 
@@ -5665,6 +5695,28 @@ async function ptLoadPace_() {
     ptPace = (d && d.ok) ? d : null;
   } catch (e) { console.warn('getSupplyPace', e); ptPace = null; }
 }
+/* ★2026-08-20 v5.3 朝の便。**その日1回だけ**取って localStorage に置く。
+   保存済みで日付が今日なら**サーバーに聞かない**（これが呼び出しを減らす本体）。 */
+async function ptLoadPlan_() {
+  const today = ccToday_();
+  if (ptPlan && ptPlan.date === today) return;
+  try {
+    const raw = localStorage.getItem(PT_PLAN_KEY);
+    if (raw) {
+      const o = JSON.parse(raw);
+      if (o && o.date === today && o.peakNeedBy) { ptPlan = o; return; }
+    }
+  } catch (e) {}
+  try {
+    const d = await fetch(`${GAS_URL}?action=getPatrolPlan&date=${encodeURIComponent(today)}`,
+                          { redirect: 'follow' }).then(r => r.json());
+    if (d && d.ok && d.peakNeedBy) {
+      ptPlan = d;
+      try { localStorage.setItem(PT_PLAN_KEY, JSON.stringify(d)); } catch (e) {}
+    }
+  } catch (e) { console.warn('getPatrolPlan', e); }
+}
+
 async function ptLoadRec_() {
   try {
     const url = `${GAS_URL}?action=getSupplyRecommend&driverUserId=${encodeURIComponent(state.userId || '')}`;
@@ -5781,8 +5833,12 @@ function ptRenderRows_() {
     tooEarly: !!(ptRec && ptRec.tooEarly),
     // ★2026-08-16 v4.2 どちらの根拠で「置く」を出したかを残す。初週の検証で
     //   「カーブ方式の正解率」と「旧・平均方式の正解率」を分けて見るために要る。
-    putSrc: (ptRec && ptRec.byLoc && ptRec.byLoc[locId]
-             && ptRec.byLoc[locId].place && ptRec.byLoc[locId].place.length) ? 'curve' : 'pace',
+    /* ★2026-08-20 v5.3 **実際に通った経路**を記録する。
+       旧実装は `place.length` で判定していたが、v5.1 以降は
+       **「置くもの無し」で place が空でもサーバー経路を通っている**ので、
+       旧のままだと巡回ログに「置く根拠=平均」と誤って残り、
+       『平均が消えたか』での合否判定が**必ず偽陰性になる**。 */
+    putSrc: ptPutSrc,
     nowMin: (ptRec && ptRec.nowMin != null) ? ptRec.nowMin : null,
     // ★2026-08-18 v4.5 クランプ前の推奨と内訳（巡回ログ 29〜32列）
     want: JSON.parse(JSON.stringify(ptWant)),
@@ -5851,8 +5907,10 @@ function ptCalcPut_(locId, res, veh) {
      → メインGASが `placeOK`（判定できたか）を返すようにしたので、**それを見る**。
      ⚠ 古いGASの応答には `placeOK` が無い＝その時は従来どおり `place.length` で判断（落ちない）。
         要: メインGAS 2026-08-20（@555以降）。 */
+  ptPutSrc = 'none';
   const rec = (ptRec && ptRec.byLoc && ptRec.byLoc[locId]) ? ptRec.byLoc[locId] : null;
   if (rec && (rec.placeOK || (rec.place && rec.place.length))) {
+    ptPutSrc = 'curve';
     (rec.place || []).forEach(r => {
       const pid = String(r.pid);
       if (tea.has(pid)) return;
@@ -5881,8 +5939,28 @@ function ptCalcPut_(locId, res, veh) {
        入力欄は残るのでドライバーは手で置ける。画面には理由を1行出す（ptRenderWhy_）。 */
   if (res === null) return out;
 
+  /* ★2026-08-20 v5.3【朝の便】サーバーの推奨が取れなかった時は、朝に受け取った
+     「12:00〜12:20に売れる見込み」から `− いまの残り` するだけにする。
+     **サーバーと同じ式・同じ材料**なので数字は一致する（芝パークだけ拠点間移動ぶん数個少なめ。
+     移動は朝には分からないので、朝の便は控えめ側に出る＝置きすぎない方向）。
+     これが無いと、昼に doGet が詰まった時に下の平均フォールバックへ落ちる。 */
+  const plan = (ptPlan && ptPlan.peakNeedBy) ? ptPlan.peakNeedBy[locId] : null;
+  if (plan) {
+    ptPutSrc = 'plan';
+    Object.keys(plan).forEach(pid => {
+      if (tea.has(String(pid))) return;
+      const need = (Number(plan[pid]) || 0) - (Number(res[pid]) || 0);
+      if (need <= 0) return;
+      ptWant[String(pid)] = need;          // クランプ前（カーブ側と同じ理由）
+      const q = Math.min(need, Number(veh[pid]) || 0);
+      if (q > 0) out[String(pid)] = q;
+    });
+    return out;
+  }
+
   const pace = (ptPace && ptPace.byLoc && ptPace.byLoc[locId]) ? ptPace.byLoc[locId].items : null;
   if (pace) {
+    ptPutSrc = 'pace';
     Object.keys(pace).forEach(pid => {
       if (tea.has(String(pid))) return;
       const need = Math.round(Number(pace[pid]) || 0) - (Number(res[pid]) || 0);
@@ -6157,7 +6235,9 @@ async function ptSaveLog_(locId, locName, put, back, note) {
       // ★2026-08-16 v4.2 「置く」の根拠と到着時刻を備考に残す。初週の検証で
       //   カーブ方式と旧・平均方式の正解率を分けて見る／何時に着いた時の推奨かを追うため。
       //   （シートの列は18本のまま。列を増やすと既存8行と幅がずれるので備考に入れる）
-      note: [(ptSnap.putSrc === 'curve' ? '置く根拠=カーブ' : '置く根拠=平均'),
+      note: [('置く根拠=' + (ptSnap.putSrc === 'curve' ? 'カーブ'
+                            : ptSnap.putSrc === 'plan' ? '朝の見込み'
+                            : ptSnap.putSrc === 'pace' ? '平均' : 'なし')),
              (ptSnap.nowMin != null ? ('判定' + String(Math.floor(ptSnap.nowMin / 60)).padStart(2, '0') + ':'
                                         + String(ptSnap.nowMin % 60).padStart(2, '0')) : ''),
              (note || '')].filter(Boolean).join(' / '),
