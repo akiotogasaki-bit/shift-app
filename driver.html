@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v5.0 (2026-08-19) 【不具合修正：まだ売れていない拠点で「残り0」と出て、巡回パネルの推奨が過大になっていた】ドライバー指摘（社長経由）「この推奨の数はおかしいんじゃないか」。★**症状**＝8/19 11:33 芝パーク②の画面が**全商品「残り0」・拠点カードも「残り —」なのに「置く10個」**。実データでは **11:24:02 に26個で開店／最初の販売は 11:33:20**＝その瞬間の実在庫は26個。**在庫が満載の拠点が「空っぽ」として扱われていた。**ドライバーは全六なし玄3個だけ置き、当日の芝パーク②は 納品26＋移動4＝30 → 販売19・残12個＝**現場の判断のほうが正しかった**。★**原因**＝`_locResidualByProduct_` は `productSalesJson` が無いと null（＝残数不明）を返すが、**このJSONはレジが最初の1件を売るまで立たない**。つまり開店直後は必ず「不明」になる。ところが `ptRenderRows_` が **`|| {}` で null を潰していた**ため、①全商品が「残り0」と表示され ②その空オブジェクトが `ptCalcPut_` にも渡り、平均フォールバックが **`同曜日平均 − 0` ＝ 平均まるごと**を推奨に出していた。（巡回ログの備考が「置く根拠=平均」、推奨値が同曜日平均と一致することで裏付け。芝の訪問9回66行だけ「拠点残り」が空で、12:24以降のお茶の水・神保町19行は値ありだったのも、朝＝まだ売れていない時間帯だったから）★**直した3か所**＝①`_locResidualByProduct_`：**販売合計が0なら内訳が無くても `{}` で確定**し残り＝納品±移動を返す（売れているのに内訳が無い古いデータは従来どおり null） ②`ptRenderRows_`：null を潰さず持ち回り、**残りは「—」表示**・`ptSnap.resOK` に残数が取れたかを記録 ③`ptCalcPut_`：**残数が不明のときは推奨を出さない**（入力欄は残るので手で置ける）＋ `ptRenderWhy_` に理由を1行出す。★⚠ **サーバー側（`getSupplyRecommend` の place）は無改修。**あちらは GAS が開始ログと販売中ログから直接 remain を出しているので影響を受けない。メインGASの変更なし＝**デプロイのバージョンを消費しない**（`deploy-front.sh driver.html` だけ）。→ [[販売ペースレポート_2026-08-19]] ⑦-4 -->
 <!-- driver v4.9 (2026-08-19) 【巡回パネル：レベル差の「足りない」を理由の文に出す】メインGAS側で `placeItems` に `lvl`（レベル差不足＝商品ごとの推奨個数 − いまの納品数）と `basis:'lvl'` が増えたのに合わせて、根拠の文を1本足しただけ。★**なぜ要るか**＝レベル差は**まだ1個も売れていない拠点にも出る**（在庫がレベル分しかない、という話で売れ行きの話ではない）。従来の文「この20分でいつも売れるぶんから、いまの残りを引いた数です」のままだと、0販売の拠点に数字が出た時にドライバーが「おかしい」と判断して自分で決め直す＝[[システムの目指す姿]] §1 で消したかった能力依存が戻る。★**判定・押す数字は1行も変えていない**（`ptCalcPut_` は無改修。`basis` は既に `ptBasis` へ控えて巡回ログ32列目に流れているので記録も自動で乗る）。★⚠ 古いGASの応答には `lvl` が無い＝その時は従来の文のまま（落ちない）。要: メインGAS @2026-08-19（③④）以降。→ [[芝エリア_配分と車載の決まり方]] §10 -->
 <!-- driver v4.8 (2026-08-19) 【巡回パネル：推奨の左に『ピーク』＝12:00〜12:20に必要な個数を出す（★テスト期間だけ）】社長「推奨の個数の左に 12:00〜12:20(ピーク時必要)な個数を出しておいて」「ドライバーには推奨の個数を参考にしつつ、**自分が思う数を入れる**ように言っています。熟練のドライバーで、時間だったり売れ行きだったりを元に移動しているので、**推奨と違う時に、どうして違いが出たのかを検証する必要がある**」。★**なぜサーバー改修が要ったか**＝推奨は `置く ＝ ピーク20分に売れる予定 − いまの残り` だが、送っていたのは**引き算した後**の値だけで、しかも0になった商品は `placeItems` から**行ごと落ちる**（filter(qty>0)）。つまり「ピークに5個要るが残り6個あるので置かなくてよい」商品は画面に出す材料が届いていなかった。ドライバーが推奨と違う数を入れるのは**システムが0と言った商品を足す時**が多いので、そこが空欄だと『なぜ違うのか』の検証が**一番したいケースで取れない**。→ メインGASに `peakNeed`（行）と `peakNeedBy`（拠点・全商品）を新設し、`getSupplyRecommend` で返す。★**画面**＝行は `商品 / 残り / **ピーク** / 置く・下げる`。ピークは0でも薄いグレーで必ず出す（空欄だと「データが無い」と紛らわしいため）。★**巡回ログ33列目『ピーク必要』**にも残す（`PATROL_LOG_EXTRA_` に追加）。これで1行に `ピーク必要 / 残り / 本来(置く) / 実際に置いた数` が並び、**差の理由を後から追える**。★⚠**判定は1行も変えていない**＝`placeQty`・`fullQty`・🔥🥶・`basis` はすべて無改修。追加したのは表示と記録だけ。★⚠**古いキャッシュの応答には `peakNeedBy` が無い**＝その場合は全部0で出る（落ちない）。キャッシュが切れれば入る。★**テスト期間だけ**（社長決定）。やめる時は `.pt-head .d`／`.pt-row .d` のCSS、描画の `<span class="d">`、ヘッダの `ピーク`、`peakNeed` の取得と `ptSnap`/送信の3行、GASの `peakNeed`/`peakNeedBy`/33列目 を消せば元に戻る。要: メインGAS @2026-08-19 以降。→ [[巡回パネルが使われない_推奨の採点ができない_2026-08-19]] -->
 <!-- driver v4.7 (2026-08-19) 【巡回パネル：全部クリア／推奨に戻す（★テスト期間だけ）】社長「移動の数字があっていない時、今はその数を0に直すのが面倒で通常の移動でやった」。★**なぜ要るか**＝8/18は車載から**9件48個**を下ろしているのに**全件が通常の移動タブの手入力**で、巡回パネル経由は**0件**だった（8/17は13件47個のうち5件がパネル経由）。⚠**「テストが走っていない」ではない**＝個数はむしろ増えている（47→48個）。変わったのは**入口**だけ。ところがパネルを通らないと**巡回ログに1行も残らない**ので、①「置く」の推奨が正しかったかの採点 ②29列「本来(置く)」＝[[芝エリア_配分と車載の決まり方]] §7『渡し切れたか』の判定 の両方ができず、**翌週の配分への戻しが動かない**。★**原因**＝各行は「置く→下げる→—」をタップで巡回させる作りなので、推奨の入った行を消すのに**2〜3タップ**。拠点によっては10〜16商品並ぶため、1商品だけ渡したいのに十数タップかかっていた。★**入れたもの**＝`#pt-editbar` の2ボタン（全部クリア／推奨に戻す）と `ptClearAll_`/`ptRestoreRec_`。**既定は今までどおり推奨入りのまま**なので、「推奨どおり渡す」は**0タップ**（今と同じ）、「1商品だけ渡す」は**2タップ**になる。★⚠**記録は壊れない**＝巡回ログ用の `ptSnap` は `ptRenderRows_` が**画面を描いた瞬間**に控えるので、後から全部0にしても推奨値はそのまま残る（v4.1「推奨が出ていたのに0にされた商品も残す」設計どおり）。クリアして1商品だけ入れても正解率は水増しされない。★⚠**`ptRestoreRec_` は再描画しない**＝`ptRenderRows_()` を呼び直すと今の残数で推奨を計算し直して `ptSnap` が上書きされ、「到着した瞬間の状態」が失われる。だから入力欄だけを `ptSnap` の値に戻す。★**GAS無改修**（Pages反映のみ・デプロイ枠を消費しない）。★**テスト期間だけ**（社長決定）。やめる時は `#pt-editbar` の div ／ `ptClearAll_`・`ptRestoreRec_` ／ `.pt-editbar` のCSS の3つを消せば元に戻る。→ [[巡回パネルが使われない_推奨の採点ができない_2026-08-19]] -->
@@ -5562,8 +5563,21 @@ function _locResidualByProduct_(locId) {
   const r = state.reportsByLoc[locId];
   if (!r) return null;
   const deliv = getDeliveryObj_(r);
-  const sold  = getSoldObj_(r);
-  if (!deliv || !sold) return null;                 // 商品別に割れない（レジ開始報告がまだ等）
+  let   sold  = getSoldObj_(r);
+  if (!deliv) return null;                          // 納品が割れない＝レジ開始報告がまだ
+  /* ★2026-08-19 v5.0【不具合修正】まだ1個も売れていない拠点で残数が「不明」になっていた。
+     `productSalesJson` はレジが最初の1件を売るまで立たない。従来はそれを「商品別に割れない」
+     として null を返していたため、**開店直後の拠点＝在庫が満載の拠点が「残数不明」**になり、
+     呼び出し側（巡回パネル）で 0 に潰されて「全商品 残り0＝空っぽ」と表示されていた。
+     実例 2026-08-19 11:33 芝パーク②：11:24に26個で開店・最初の販売は11:33:20。
+     その瞬間の画面は全商品「残り0」で、推奨が「置く10個」と出ていた（在庫26個の拠点に）。
+     → **販売合計が0なら、内訳が無くても残り＝納品±移動で確定できる。**{} を入れて先へ進める。
+     ⚠ 売れているのに内訳が無い場合（古いデータ）は従来どおり null＝不明のまま。
+        ここで 0 とみなすと残数を実際より多く見せてしまう。 */
+  if (!sold) {
+    if (getNonTeaSoldCount_(r) > 0) return null;    // 売れているのに内訳が無い＝本当に不明
+    sold = {};                                      // 販売0＝内訳ゼロで確定
+  }
   const mv = (getMyMoveAdjustmentByLocProduct_() || {})[locId] || {};
   const out = {}, pids = {};
   Object.keys(deliv).forEach(p => { pids[String(p)] = 1; });
@@ -5609,7 +5623,14 @@ function ptRenderRows_() {
   if (s2) s2.style.display = '';
 
   const locId = ptPicked;
-  const res   = _locResidualByProduct_(locId) || {};
+  /* ★2026-08-19 v5.0【不具合修正】`|| {}` で潰していたのをやめた。
+     `_locResidualByProduct_` の null は「在庫ゼロ」ではなく**「残数が分からない」**。
+     従来はここで {} にしていたため、①全商品が「残り0」と表示され
+     ②その {} が `ptCalcPut_` にも渡って `need = 同曜日平均 − 0` ＝
+     **平均まるごとが推奨に出る**という2つの誤りが同時に起きていた。
+     → null のまま持ち回り、表示は「—」、推奨は出さない（下の ptCalcPut_ 参照）。 */
+  const res   = _locResidualByProduct_(locId);
+  const resOK = (res !== null);
   const left  = _locResidualTotal_(locId);
   const rem   = (state.move.vehicle && state.move.vehicle.remaining) || {};
   const veh   = rem.items || {};
@@ -5617,7 +5638,7 @@ function ptRenderRows_() {
   const head = document.getElementById('pt-picked');
   if (head) head.innerHTML = `<button class="pt-loc on" onclick="ptBackToList()">
       <span class="n">${_esc(_moveLocName_(locId))}</span>
-      <span class="m">${left === null ? '残り —' : '残り ' + left + '個'}　車載 ${Number(rem.total) || 0}個</span>
+      <span class="m">${left === null ? '残り —（レジのデータがまだ届いていません）' : '残り ' + left + '個'}　車載 ${Number(rem.total) || 0}個</span>
     </button>`;
 
   const put  = ptCalcPut_(locId, res, veh);
@@ -5635,7 +5656,10 @@ function ptRenderRows_() {
   ptSnap = {
     put: JSON.parse(JSON.stringify(put)),      // 画面に出した推奨（置く）
     back: JSON.parse(JSON.stringify(back)),    // 画面に出した推奨（下げる）
-    res: JSON.parse(JSON.stringify(res)),      // その時の拠点の残り（商品別）
+    res: JSON.parse(JSON.stringify(res || {})),// その時の拠点の残り（商品別・不明なら空）
+    // ★2026-08-19 v5.0 残数が取れていたか。巡回ログの「拠点残り」が空の行が
+    //   「本当に0」なのか「データが来ていない」なのかを後から分けるために残す。
+    resOK: resOK,
     veh: JSON.parse(JSON.stringify(veh)),      // その時の車載の残り（商品別）
     pace: (ptPace && ptPace.byLoc && ptPace.byLoc[locId]) ? ptPace.byLoc[locId].items : {},
     paceDays: (ptPace && ptPace.days) || [],
@@ -5660,7 +5684,9 @@ function ptRenderRows_() {
   if (box) {
     box.innerHTML = _moveNonTeaProducts_().map(p => {
       const pid = String(p.id);
-      const rm  = Number(res[pid]) || 0;
+      // ★2026-08-19 v5.0 残数が取れていない時は 0 ではなく「—」。
+      //   0 と出すと「売り切れ」に見え、在庫が満載の拠点を空だと誤認させる。
+      const rm  = resOK ? (Number(res[pid]) || 0) : null;
       const q   = put[pid] || back[pid] || 0;
       const dir = put[pid] ? 'p' : (back[pid] ? 'm' : 'n');
       const lab = dir === 'p' ? '置く' : (dir === 'm' ? '下げる' : '—');
@@ -5670,7 +5696,7 @@ function ptRenderRows_() {
       const pk = Number(peakNeed[pid]) || 0;
       return `<div class="pt-row">
         <span class="a">${_esc(p.name)}</span>
-        <span class="b${rm === 0 ? ' z' : ''}">${rm}</span>
+        <span class="b${(rm === 0 || rm === null) ? ' z' : ''}">${rm === null ? '—' : rm}</span>
         <span class="d${pk === 0 ? ' z' : ''}">${pk}</span>
         <span class="c">
           <button class="pt-tag ${dir}" data-pid="${_esc(pid)}" onclick="ptToggleDir('${_esc(pid)}')">${lab}</button>
@@ -5680,7 +5706,7 @@ function ptRenderRows_() {
     }).join('');
   }
   ptRecalc_();
-  ptRenderWhy_(locId, put, back);
+  ptRenderWhy_(locId, put, back, resOK);
 }
 
 // 置く数＝この時間帯にいつも売れるぶん − いまの残り。車載にあるぶんが上限。
@@ -5721,6 +5747,15 @@ function ptCalcPut_(locId, res, veh) {
     });
     return out;
   }
+
+  /* ★2026-08-19 v5.0【不具合修正】残数が取れていない拠点では推奨を出さない。
+     下の平均フォールバックは `同曜日平均 − いまの残り` だが、残数が不明のとき
+     呼び出し側が {} を渡していたため **`平均 − 0` ＝ 平均まるごと**が推奨に出ていた。
+     実例 2026-08-19 11:33 芝パーク②：在庫26個の拠点に「置く10個」（銀鮭玄3・全六なし玄2…）。
+     ドライバーは3個だけ置き、その判断が正しかった（当日 販売19・残12個）。
+     → 材料が無いときは**黙って0を出すのではなく、推奨そのものを出さない**。
+       入力欄は残るのでドライバーは手で置ける。画面には理由を1行出す（ptRenderWhy_）。 */
+  if (res === null) return out;
 
   const pace = (ptPace && ptPace.byLoc && ptPace.byLoc[locId]) ? ptPace.byLoc[locId].items : null;
   if (pace) {
@@ -5847,10 +5882,18 @@ function ptRecalc_() {
   if (em) em.textContent = m + '個';
 }
 
-function ptRenderWhy_(locId, put, back) {
+function ptRenderWhy_(locId, put, back, resOK) {
   const el = document.getElementById('pt-why');
   if (!el) return;
   const msg = [];
+  /* ★2026-08-19 v5.0 残数が取れていない拠点では、その事実を先に出す。
+     従来はこの状態でも「置く数」が出ており（平均−0＝平均まるごと）、
+     ドライバーから「この推奨の数はおかしい」と指摘が入った（2026-08-19 芝パーク②）。
+     数字を黙って出すより、材料が無いことを言って手入力にゆだねる方が安全。 */
+  if (resOK === false) {
+    msg.push('⚠ <b>この拠点の残数がまだ届いていません</b>（レジで最初の1件が売れると入ります）。'
+           + '<b>推奨は出せないので、見て判断して入れてください。</b>');
+  }
   const hasPace = !!(ptPace && ptPace.byLoc && ptPace.byLoc[locId]);
   if (Object.keys(put).length) {
     /* ★2026-08-18 v4.5 12:15を境に「置く」の意味が変わるので、根拠の文も切り替える。
