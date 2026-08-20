@@ -1863,6 +1863,20 @@ async function init() {
           renderCategoryTabs();
           renderProducts();
           document.getElementById('reg-sales-count').textContent = `${state.soldCount}個`;
+          // ★2026-08-20 v3.27 復元時の下限チェック：納品数が入っていない状態で復元→在庫0でレジ開始を防ぐ。
+          //   アプリを閉じて開き直すと、納品数0のまま販売画面に直行する穴があった（8/20 ソフバン・青山で発生）。
+          //   開始報告がまだ送られていない＝まだスタートしていないのに復元だけ先行したケース。
+          if (!IS_2ND && !state.startReported) {
+            const _tOf = p => String(p.name || '').indexOf('お茶') >= 0;
+            const _nT  = (state.products || []).filter(p => !_tOf(p));
+            const _tot = _nT.reduce((s, p) => s + (Number((state.deliveryCount || {})[p.id]) || 0), 0);
+            if (_tot <= START_MIN_DELIVERY) {
+              clearSavedState();
+              showToast('⚠️ 納品数が入っていません。スタート報告からやり直してください', 4000);
+              showScreen('location');
+              return;
+            }
+          }
           showScreen('register');
           showToast('📋 前回の続きから再開しました', 3000);
           return;
@@ -1878,6 +1892,18 @@ async function init() {
           renderCategoryTabs();
           renderProducts();
           document.getElementById('reg-sales-count').textContent = `${state.soldCount}個`;
+          // ★2026-08-20 v3.27 復元時の下限チェック（他者引き継ぎ）
+          if (!IS_2ND && !state.startReported) {
+            const _tOf = p => String(p.name || '').indexOf('お茶') >= 0;
+            const _nT  = (state.products || []).filter(p => !_tOf(p));
+            const _tot = _nT.reduce((s, p) => s + (Number((state.deliveryCount || {})[p.id]) || 0), 0);
+            if (_tot <= START_MIN_DELIVERY) {
+              clearSavedState();
+              showToast('⚠️ 納品数が入っていません。スタート報告からやり直してください', 4000);
+              showScreen('location');
+              return;
+            }
+          }
           showScreen('register');
           return;
         } else {
