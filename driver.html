@@ -1,4 +1,6 @@
 <!DOCTYPE html>
+<!-- driver v5.7b (2026-08-21) 【車載を減らすボタン（開店前に下ろした分）】社長決定（2026-08-21 午前）「車載は**減らすだけ**。拠点には足さない（開店前は販売員が数えるので二重になる）。**行き先の拠点は必須で記録**（A案）」。★⚠ **既存の「車から補充」（supplyFromVehicle）を開店前に使ってはいけない**＝あちらは status=完結 で書くので`getMoveAdjByLocProduct_` が行き先の納品数をその場で増やし、販売員のレジ開始時の数え直しと**二重になる**。★**どうやって減らすだけにしたか**＝`getMoveAdjByLocProduct_` は「出発側は status に関係なく必ず引く／到着側は status===完結 の時だけ足す」という作り。だから status を **車載下ろし** にすれば「車載は減る・行き先は増えない・行き先は記録に残る」が既存の在庫計算に一切手を入れずに実現できる。新API＝`reduceVehicleStock`。⚠ **移動ログの19列目 車載下ろし を 完結 に変えると納品数が二重になる。**★画面＝移動タブの車載セクション直下に畳んだボタン。開くと「どこに置きましたか？（必須）」＋車載にある商品だけの個数欄。行き先未選択では送信ボタンが押せない。★🔑 これで「車載の積み込み実数が配分表と合わない」（8/17から続く宿題）も追える＝8/20は下ろし45個>積み込み42個だった。要: メインGAS @2026-08-21 以降（`reduceVehicleStock`）。 -->
+<!-- driver v5.7 (2026-08-21) 【車載に「メイン返却分」を常時表示し、割ったら警告】社長要望「自分の手持ち、例えば昨日だったら22個が芝パーク分で20個がプラス分。ドライバーが22個を下回りそうだったら、芝パークに追加する分が足りないと早めにわかるから、他のエリアから足りなくなりそうなものを早めに持ってきてもらうように指示が出せた」「だからエリア別に何個がメインに返却分というのがわかるようになっていた方がいい（個数でいい。商品別だとややこしくなりそう）」。★**返却分とは何か**＝メイン拠点の12:20以降の販売予定数＝**3区間予定の区間3の合計**。手で決める数字ではない。実測で芝パーク8/21＝22個・車載42なのでプラス分20個＝社長の言った数字とぴったり一致した。★⚠ **日ごとに違う**（芝：8/19 25／8/20 25／8/21 22）。固定値にしない＝サーバーがその日の3区間予定から出す。★⚠ **マイナスにならない**＝返却分が車載の総数を超える日は総数で頭打ちにし、溢れた分はメイン拠点に置いたまま（社長「溢れた分はメインの拠点に置くって仕様になってるはず」＝§2-1決定3）。実測でBizタワーは8/19:21／8/20:27／8/21:22と車載20個を超える。頭打ちにしないと積み込んだ瞬間から警告が鳴る。★画面は `#pt-stock` の1ブロックだけ。手持ちが返却分を割ると赤（`.pt-short`）にして不足個数を出す。**判定・置く数の計算は1行も変えていない。**★⚠ 古いGASの応答には `mainReturn` が無い＝その時は従来の1行のまま（落ちない）。要: メインGAS @2026-08-21 以降（`vehComputeReturnQty_` / `3区間予定` シート / getVehicleStock の `mainReturn`）。 -->
 <!-- driver v5.6 (2026-08-20) 【拠点振替：芝パーク②の残りを、ドライバーを介さず芝パークへ渡す】社長要望「芝パーク②とかが終わる時、芝パークに残りを追加して終わるんだけど、それを紐づけて自動で追加できないか」→「ドライバーを介さないで終わらせたい」。★仕組み＝拠点マスタの新しい列「自動振替先」でペアを持ち（芝パーク②の行に 芝パーク）、**数を確定するのは受け取り側のレジ**（register v3.27）。確定した瞬間にメインGASが拠点間移動ログへ「完結」の行を1本立てるので、そのぶんが芝パークの納品数に即加算され、芝パーク②の納品数からは同じだけ引かれる。★**driver 側の変更は表示だけ**＝回収モーダルを開いた時、受け取りが済んでいれば `getDeclaredResidual` が `handover:{total,toName,detail}` を返す。①申告残数からこのぶんを引いて既定値にする（引かないと同じ弁当を2拠点で二重に数える）②「🔁 残数◯個は 芝パーク へ追加されました」の案内を出す ③手元に何も残っていなければ**残数リストとテンキーを出さず、そのまま②金庫へ送る**（社長指示「金庫の金額だけドライバーが確認して入力」）。★**スポット拠点だけ①に残す**＝①にはクーポン枚数と「💰 売上を確定」があり、通さないと あるべき現金 が出ない（2026-08-06 の社長決定の順番）。残数リストだけ隠してクーポンを打たせる。売上は メインGAS `_spotSettle_` が振替ぶんを納品数から引いて計算するので水増しにならない。★ドライバーに**新しい操作は一切増えない**（回収の「🔄 移動」を押す手間が消えるだけ）。要: メインGAS @2026-08-20 以降（getPendingHandover / confirmHandover / 拠点振替ログ）。 -->
 <!-- driver v5.5 (2026-08-20) 【朝の便のキャッシュ判定を直した】v5.4 で `preBy`（いま〜12:00に売れる予測）を足したが、`ptLoadPlan_` の再取得判定が**日付と `peakNeedBy` の有無だけ**を見ていた。そのため **v5.4 より前に今日の朝の便を取っていた端末は、`preBy` の無い古い形をその日ずっと使い続ける**（`preOf` が0を返す＝12:00揃えにならず旧式のまま動く）。→ **新しく増えた項目（`preBy`）の有無まで確かめて、無ければ取り直す**ようにした。形が変わった時に自動で拾い直させるには、日付ではなく**増えた項目の有無**で見るのが確実。GAS変更なし。 -->
 <!-- driver v5.4 (2026-08-20) 【置く数：引く「残り」を12:00時点の予測残りに揃えた（社長決定）】社長「ピーク基準しか持ってないと〜12:00までに売れる予想の個数が含まれなくなっちゃうんじゃないの？」「12時揃えの方が今俺が言った計算式？」→ **そのとおりだった。**★**何が起きていたか**＝2026-08-18 に窓の起点を「いまの時刻→12:00固定」に変えた（8/17の芝パーク置く25個＝二重計上の対策・正しい変更）。ところが**分子（窓）だけ12:00に揃えて、分母（残り）は「いま」のまま**だった。社長の狙いは「**12:00の時点で**ピーク20分に売れる数を在庫として持っておく」なので、引くべきは**12:00時点の予測残り**＝いまの残り −（いま〜12:00に売れる予測）。★**実測（8/19・芝4拠点）**＝11:30 2→10個／11:40 5→14個／11:45 5→12個／11:50 9→15個／11:55 17→21個。**12:00以降はぴったり0**（理屈どおり）。実訪問9回に当てはめると **34→42個（+8個）**。車載42個なので渡す在庫は足りる。★**実装**＝メインGAS `_rt_judge_` の `placeQty` を12:00揃えに（旧式は `placeOld` に残して点検口 `?name=place` で新旧を並べられる）。朝の便 `getPatrolPlan` に **`preBy[拠点][商品][11:20〜12:00の5分刻み9個]`＝その時刻から12:00までに売れる予測**を追加（V3）。driver のフォールバックも同じ式に揃えた。★⚠ **端末側を旧式のまま残さない**＝サーバーと端末で式が2本になると 2026-08-19 の平均フォールバックとまったく同じ失敗になる。★⚠ 計測中に2回間違えた：①補正**あり**の比率(12:00)と補正**なし**の比率(いま)を引き算していた（12:00以降にも差が出た）②12:00揃えだけ残りを0でクランプしていた（移動で残りが負になった商品だけ差が出た）。**12:00以降の差が0になることが、式が揃った証拠**。要: メインGAS @562 以降。 -->
@@ -958,6 +960,26 @@ body {
 .sv-stock{background:#eef7f1;border:1px solid #cfe6d8;border-radius:10px;padding:10px 12px;
   font-size:14px;color:#14532d;margin-bottom:12px;}
 .sv-stock b{font-size:18px;}
+/* ★2026-08-21 v5.7 車載を減らす（開店前に下ろす） */
+.rv-open{width:100%;padding:12px;margin-bottom:12px;border:1px solid #cfd8e3;border-radius:10px;
+  background:#f6f9fc;font-size:15px;font-weight:700;color:#24405e;}
+#rv-panel{border:1px solid #cfd8e3;border-radius:10px;padding:12px;margin-bottom:12px;background:#fbfdff;}
+.rv-note{background:#fff8e1;border:1px solid #f0e0b0;border-radius:8px;padding:8px 10px;
+  font-size:13px;color:#7a5b00;line-height:1.5;}
+.rv-req{background:#c0392b;color:#fff;border-radius:4px;font-size:11px;padding:1px 6px;margin-left:6px;}
+.rv-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #eef2f6;}
+.rv-row .rv-nm{flex:1;font-size:14px;}
+.rv-row .rv-have{font-size:12px;color:#888;min-width:52px;text-align:right;}
+.rv-row input{width:64px;padding:8px;border:1px solid #d5d8dd;border-radius:8px;
+  font-size:16px;text-align:center;}
+.rv-submit{width:100%;margin-top:12px;padding:14px;border:0;border-radius:10px;
+  background:#24405e;color:#fff;font-size:16px;font-weight:700;}
+.rv-submit:disabled{background:#b6bfc9;}
+#rv-loc-list .sv-loc.on{background:#24405e;color:#fff;border-color:#24405e;}
+/* ★2026-08-21 v5.7 メイン返却分。手持ちが返却分を割ったら赤くする（社長「早めに分かる」ため） */
+.sv-stock.pt-short{background:#fdecec;border-color:#f3bcbc;color:#8a1c1c;}
+.pt-ret{display:block;margin-top:6px;font-size:13px;line-height:1.5;}
+.pt-ret .pt-ret-n{font-weight:700;}
 .sv-sec{font-size:13px;font-weight:700;color:#555;margin:14px 0 8px;}
 .sv-loc-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
 .sv-loc-btn{padding:14px 8px;border:2px solid #d5d8dd;border-radius:10px;background:#fff;
@@ -1839,6 +1861,26 @@ body {
          ★芝エリア以外の人には出ない（従来の移動フォームだけが見える）。 -->
     <div id="pt-wrap" style="display:none;">
       <div class="sv-stock" id="pt-stock">車載の残り …</div>
+
+      <!-- ★2026-08-21 v5.7【社長決定】開店前に車載から下ろす用。
+           ⚠ **「車から補充」（supplyFromVehicle）を開店前に使ってはいけない。**
+             あちらは行き先の納品数をその場で増やすので、販売員がレジ開始時に実物を数えて
+             入れる数と**二重になる**。こちらは車載を減らすだけで拠点には足さない。
+           ⚠ 行き先の拠点は**必須**（社長決定A案）。翌週の配分の材料になる。 -->
+      <div id="rv-box">
+        <button type="button" class="rv-open" id="rv-open" onclick="rvToggle_()">
+          🚚 車載を減らす（開店前に下ろした分）
+        </button>
+        <div id="rv-panel" style="display:none;">
+          <div class="rv-note">拠点の納品数は増やしません。販売員がレジ開始時に数えて入れます。</div>
+          <div class="sv-sec">どこに置きましたか？<span class="rv-req">必須</span></div>
+          <div class="sv-loc-grid" id="rv-loc-list"></div>
+          <div class="sv-sec">何を何個 下ろしましたか？</div>
+          <div id="rv-rows"></div>
+          <button type="button" class="rv-submit" id="rv-submit" onclick="rvSubmit_()">記録する</button>
+          <button type="button" class="sv-close" onclick="rvToggle_()">閉じる</button>
+        </div>
+      </div>
 
       <!-- ステップ1：拠点を選ぶ -->
       <div id="pt-step1">
@@ -5734,9 +5776,41 @@ async function ptRefresh_() {
   const st  = await loadVehicleStock_();
   const box = document.getElementById('pt-stock');
   if (box) {
-    box.innerHTML = st && st.remaining
-      ? ('車載の残り <b>' + st.remaining.total + '個</b>　（' + _esc(st.vehicle.name) + '）')
-      : '車載の残りが取れませんでした。登録はできます。';
+    if (!st || !st.remaining) {
+      box.className = 'sv-stock';
+      box.innerHTML = '車載の残りが取れませんでした。登録はできます。';
+    } else {
+      /* ★2026-08-21 v5.7【社長要望】メイン返却分を常に出す。
+           > 自分の手持ち、例えば昨日だったら22個が芝パーク分で20個がプラス分。
+           > ドライバーが22個を下回りそうだったら、芝パークに追加する分が足りないと
+           > 早めに分かるから、他のエリアから早めに持ってきてもらうよう指示が出せた。
+         ⚠ 返却分は**日ごとに違う**（実測 芝：8/19 25／8/20 25／8/21 22）。サーバーが日ごとに出す。
+         ⚠ 古いGASの応答には mainReturn が無い＝その時は従来の1行のまま（落ちない）。 */
+      const have = Number(st.remaining.total) || 0;
+      const mr   = st.mainReturn;
+      let html = '車載の残り <b>' + have + '個</b>　（' + _esc(st.vehicle.name) + '）';
+      let short = false;
+      if (mr && Number(mr.ret) > 0) {
+        const ret  = Number(mr.ret)  || 0;
+        const plus = Number(mr.plus) || 0;
+        short = (have < ret);
+        html += '<span class="pt-ret">'
+             +  '　└ <span class="pt-ret-n">' + ret + '個</span>は '
+             +  _esc(mr.mainName || 'メイン拠点') + 'へ戻す分'
+             +  '／<span class="pt-ret-n">' + plus + '個</span>が他拠点へ回せる分';
+        if (mr.overflow > 0) {
+          // 返却分が車載に載り切らなかった日。溢れた分はメイン拠点に置いたまま（社長仕様）
+          html += '<br>　（' + mr.overflow + '個は最初から ' + _esc(mr.mainName || 'メイン拠点') + ' に置いてあります）';
+        }
+        if (short) {
+          html += '<br>⚠ <b>' + _esc(mr.mainName || 'メイン拠点') + 'へ戻す分が ' + (ret - have) + '個 足りません。</b>'
+               +  '他のエリアから早めに持ってきてもらってください。';
+        }
+        html += '</span>';
+      }
+      box.className = 'sv-stock' + (short ? ' pt-short' : '');
+      box.innerHTML = html;
+    }
   }
   await Promise.all([ptLoadPlan_(), ptLoadPace_(), ptLoadRec_()]);
   if (ptPicked) ptRenderRows_(); else ptRenderLocs_();
@@ -5841,6 +5915,104 @@ function ptRenderLocs_() {
 
 function ptPickLoc(id) { ptPicked = id; ptRenderRows_(); }
 function ptBackToList() { ptPicked = ''; ptRenderLocs_(); }
+
+/* ══════════════════════════════════════════════════════════════
+   車載を減らす（開店前に下ろした分）★2026-08-21 v5.7【社長決定】
+   ══════════════════════════════════════════════════════════════
+   ⚠ **拠点の納品数は増やさない。**開店前は販売員がレジ開始時に実物を数えて入れるので、
+     ここで増やすと二重になる（だから `supplyFromVehicle` は使えない）。
+     サーバー側は `reduceVehicleStock` が移動ログに status='車載下ろし' の行を1本書くだけ。
+     `getMoveAdjByLocProduct_` は到着側を status==='完結' の時しか足さないので、
+     車載だけが減り、行き先は記録に残る。
+   ⚠ 行き先は**必須**（社長決定A案）。どこへ置いたか分からない下ろしは記録の意味が無い。 */
+let rvLoc = '';
+
+function rvToggle_() {
+  const p = document.getElementById('rv-panel');
+  const b = document.getElementById('rv-open');
+  if (!p) return;
+  const show = (p.style.display === 'none');
+  p.style.display = show ? '' : 'none';
+  if (b) b.textContent = show ? '🚚 車載を減らす（閉じる）' : '🚚 車載を減らす（開店前に下ろした分）';
+  if (show) rvRender_();
+}
+
+function rvRender_() {
+  // 行き先＝巡回と同じ拠点リスト（拠点IDの昇順で固定）
+  const box = document.getElementById('rv-loc-list');
+  if (box) {
+    const list = _svTargets_().slice().sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    box.innerHTML = list.map(l =>
+      `<button type="button" class="sv-loc${rvLoc === l.id ? ' on' : ''}" onclick="rvPick_('${_esc(l.id)}')">${_esc(l.name)}</button>`
+    ).join('');
+  }
+  // 商品＝いま車載にあるものだけ（無いものを下ろせるはずがない）
+  const rows = document.getElementById('rv-rows');
+  if (!rows) return;
+  const st = state.move && state.move.vehicle;
+  const items = (st && st.remaining && st.remaining.items) ? st.remaining.items : null;
+  if (!items || !Object.keys(items).length) {
+    rows.innerHTML = '<div class="rv-note">車載の残りが取れませんでした。先に画面を開き直してください。</div>';
+    return;
+  }
+  rows.innerHTML = Object.keys(items)
+    .filter(pid => (Number(items[pid]) || 0) > 0)
+    .map(pid => `<div class="rv-row">
+        <span class="rv-nm">${_esc(_moveProdName_(pid))}</span>
+        <span class="rv-have">車載 ${items[pid]}個</span>
+        <input type="number" inputmode="numeric" min="0" max="${items[pid]}" data-pid="${_esc(pid)}" placeholder="0">
+      </div>`).join('');
+  rvSync_();
+}
+
+function rvPick_(id) { rvLoc = id; rvRender_(); }
+
+function rvSync_() {
+  const btn = document.getElementById('rv-submit');
+  if (!btn) return;
+  let n = 0;
+  document.querySelectorAll('#rv-rows input').forEach(i => { n += parseInt(i.value, 10) || 0; });
+  btn.disabled = !(rvLoc && n > 0);
+  btn.textContent = rvLoc ? ('記録する（' + _moveLocName_(rvLoc) + 'へ ' + n + '個）') : '置いた拠点を選んでください';
+}
+document.addEventListener('input', e => {
+  if (e.target && e.target.closest && e.target.closest('#rv-rows')) rvSync_();
+});
+
+async function rvSubmit_() {
+  if (!rvLoc) { showToast('置いた拠点を選んでください', 'error'); return; }
+  const qty = {};
+  document.querySelectorAll('#rv-rows input').forEach(i => {
+    const pid = i.getAttribute('data-pid');
+    const q = parseInt(i.value, 10) || 0;
+    if (pid && q > 0) qty[pid] = q;
+  });
+  if (!Object.keys(qty).length) { showToast('個数を入れてください', 'error'); return; }
+
+  const btn = document.getElementById('rv-submit');
+  const orig = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '送信中…'; }
+  try {
+    const veh = _svVehicle_();
+    const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({
+      action: 'reduceVehicleStock', date: getDateStrOffset_(0),
+      driverUserId: state.userId, driverName: state.userName,
+      vehicleLocationId: veh ? veh.id : '',
+      toLocationId: rvLoc, toLocationName: _moveLocName_(rvLoc), qty: qty,
+    })});
+    const d = await res.json();
+    if (!d || !d.ok) throw new Error((d && d.error) || '記録に失敗しました');
+    showToast(_moveLocName_(rvLoc) + 'へ ' + d.total + '個 下ろした記録をつけました', 'success');
+    // 入力を空にして、車載の残りを取り直す（減った数を画面に反映する）
+    document.querySelectorAll('#rv-rows input').forEach(i => { i.value = ''; });
+    rvLoc = '';
+    await ptRefresh_();
+    rvRender_();
+  } catch (e) {
+    showToast(e.message || '記録に失敗しました', 'error');
+    if (btn) { btn.disabled = false; btn.textContent = orig; }
+  }
+}
 
 function ptRenderRows_() {
   const s1 = document.getElementById('pt-step1');
