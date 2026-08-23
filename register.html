@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>お江戸弁当 レジ</title>
+<!-- register v3.28 (2026-08-24) 【納品数を取り終わるまでスタート画面を触らせない】社長指示「レジをスタートする時、納品数をダウンロードするまで一切始められないようにしたい」。★これまでも v3.20/v3.22 で送信ボタンの無効化＋ハンドラ入口ガードは入れていたが、止まっていたのは**送信ボタンだけ**で、納品数の欄・開始金・金種は読み込み中でも触れた。手で先に打つと `loadPlannedDelivery` は「既に入力済みの欄は上書きしない」ため配分表の数が入らず、打ち込んだ数字だけでスタートできてしまう。★→ `#start-loading-cover`（position:fixed の全面カバー）でスタート画面ごと覆い、「納品数をダウンロード中です」を出す。ヘッダーも入力欄も送信ボタンもタップできない。取得が終わったら自動で消える。★**失敗時は自動で3回リトライ**（1.2秒→2.4秒→3.6秒）。/exec の GET は確率的に404を返すことがあるので、1回の失敗で手入力に落とさない。3回ダメなら「🔄 もう一度読み込む」と「手入力で進む」の2ボタンをカバー内に出す＝GASが落ちた日でもレジは打てる（手入力を選んでも合計10個以下は従来どおり弾かれる）。★毎回 `&_cb=` を付ける（/exec の GET はHTTPキャッシュに当たるため、リトライが同じ古い応答を掴むのを防ぐ）。★引き継ぎモード（`takeoverStartOnly`＝開始金だけ入力）はカバーしない。納品数は前の人のものを使うので待たせる理由が無い。GAS変更なし。 -->
 <!-- register v3.27 (2026-08-20) 【拠点振替：②から回ってきた弁当を、このレジで受け取って納品数に足す】社長要望「芝パーク②が終わる時、芝パークに残りを追加して終わる。それを紐づけて自動で追加できないか」→「ドライバーを介さないで終わらせたい」。★**数を確定するのはこの画面（受け取り側）**にした。理由＝渡す側がレジ拠点の日は締めの申告残数が既定値で入り、渡す側が**スポットの日**（当日バイト・レジ非使用＝締めが無い）は0から入れるだけで、**どちらの日も同じ画面で通る**。バイトにもドライバーにも作業が増えない（社長「渡す側がスポットの日もありえる」2026-08-20）。★販売画面の上に「📥 芝パーク② から受け取り」バナーを出す（`getPendingHandover`）。押すと商品別の数が並び、確定で `confirmHandover` → メインGASが拠点間移動ログに「完結」を1本立てる＝**納品数に即加算**。在庫表示は元から `state.moveAdj` を見ているので `refreshMoveAdj_` を叩けばその場で反映される。★**上限は渡す側にあった数**（締め済みなら申告残数／それ以外は納品数）でクランプする。超えると実在しない在庫を作るため。★**逃げ道＝締めで引き留める**（社長選択「すぐ確認できない場合があるから後からでもできるように」）。`enterFinalScreen` の冒頭で未受け取りがあれば止めて受け取り画面を開く。今日は来なかった日のために「今日は受け取りが無かった」も置いた（押すと記録だけ残して引き留めが外れる）。★読み込みは `showScreen('register')` に集約（入口が7か所あるので個別に付けると必ず漏れる）＋60秒スロットル。二次販売レジ（`?mode=2nd`）は対象外でAPIも叩かない。要: メインGAS @2026-08-20 以降＋拠点マスタに「自動振替先」列。 -->
 <!-- register v3.26 (2026-08-18) 【今日作らない日替わり商品をレジに出さない（献立表と連動）】社長指示「レジアプリの商品が今日あるかのチェックボックス無くしちゃったんだけど、日替わりメニューで今日ない商品を自動で表示しないようにしてほしい」。★これまでは dashboard「商品管理」タブの停止/稼働（`getProductSwitches`）を毎朝押す運用だったが、そのチェックを使わなくなったため、作らない日替わり（海苔弁系・満腹系）がレジに並びっぱなしになっていた。→ **kanri「📋 献立表」で決まっている今日の品目だけを出す**。★材料は既存API 2本だけで **GAS改修・再デプロイ不要**：`getMenuSelections&date=YYYY-MM-DD`（保存済みの日＝確定内容／未保存の日＝⚙ルールのローテ・曜日固定・定番からの自動解決／確定後にルールを変えた日＝後勝ちの新ルール）と `getMenuMeta`（定番の商品ID）。起動時の `Promise.all`（getMaster / getProductSwitches / getReport）に**相乗り**させたので待ち時間は増えない。★**触るのは日替わりの2カテゴリーだけ**。全六・他社商品・お茶（カテゴリー「全」）は献立表の管理外なので一切触らない。★**定番（銀しゃけ・あいもり等）は献立に無くても隠さない**（定番は対象カテゴリーの中に居るので、見落とすと毎日消える）。★**隠す側に倒れない安全弁を4つ**：①献立が取れない日（通信失敗・献立もルールも未登録）は1品も隠さない ②献立キャッシュは**日付一致の時だけ**使う（TTL24hだと前日の献立で隠す事故になる）③対象カテゴリーが全滅する結果になったら連動を見送る ④**納品数>0 か既に売った商品は献立に無くても必ず出す**（献立の入れ違いで違う種類が届いた日に売れなくなるのを防ぐ・`restoreState` の後に絞り込みをやり直す）。★逃げ道＝販売画面と納品数入力の両方に「＋ 隠れている商品も出す」バー（`offmenu-bar`）。押せば全商品に戻り、納品数入力では**打ち込み済みの数字を保持**したまま作り直す。★修正画面（`edit-delivery-inputs` 2か所）は `productsForEdit_` で「隠れていても数が記録されている商品」を必ず出す＝あとから直せる。★カテゴリーが1品も残らない場合はタブごと消えるので、選択中カテゴリーが消えたら先頭へ戻す（グリッドが空になるのを防ぐ）。★二次販売レジ（`?mode=2nd`）は300円・500円の2品だけなので連動しない（APIも叩かない）。★テストモード（`?test=1`）も本番と同じく献立連動を通す。 -->
 
@@ -82,6 +83,21 @@ body {
 .loading-logo { color: var(--white); text-align: center; }
 .loading-logo h1 { font-size: 28px; font-weight: 700; letter-spacing: .1em; margin-bottom: 8px; }
 .loading-logo p { font-size: 13px; opacity: .7; margin-bottom: 40px; }
+/* ★2026-08-24 v3.28 スタート画面の全面カバー（納品数の取得が終わるまで一切触らせない） */
+#start-loading-cover {
+  position: fixed; inset: 0; z-index: 900;
+  background: rgba(24,18,16,.94);
+  -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+  align-items: center; justify-content: center;
+  padding: 32px 26px; text-align: center; color: #fff;
+}
+#start-loading-cover h2 { font-size: 19px; font-weight: 700; margin: 20px 0 10px; letter-spacing: .02em; }
+#start-loading-cover p  { font-size: 13px; line-height: 1.85; opacity: .85; }
+#start-cover-actions { margin-top: 24px; flex-direction: column; gap: 10px; width: 100%; max-width: 300px; }
+/* 暗い背景の上に出るので、二次ボタンは白文字に上書きする（既定のクリーム地・濃い文字だと沈んで読めない） */
+#start-cover-actions .btn-secondary { background: transparent; color: #fff; border-color: rgba(255,255,255,.55); }
+#start-cover-actions .btn-secondary:active { background: rgba(255,255,255,.16); }
+
 .loader {
   width: 40px; height: 40px;
   border: 3px solid rgba(255,255,255,.3);
@@ -1020,6 +1036,18 @@ html, body { overscroll-behavior-y: contain; }
 
 <!-- START REPORT -->
 <div id="screen-start" class="screen">
+  <!-- ★2026-08-24 v3.28 納品数（配分表）を取り終わるまで画面ごと覆う。position:fixed なのでヘッダーも含めて触れない -->
+  <div id="start-loading-cover" style="display:none;">
+    <div>
+      <div class="loader"></div>
+      <h2 id="start-cover-title">納品数をダウンロード中です</h2>
+      <p id="start-cover-msg">終わるまで操作できません。<br>そのままお待ちください。</p>
+      <div id="start-cover-actions" style="display:none;">
+        <button class="btn-primary" onclick="retryPlannedDelivery()">🔄 もう一度読み込む</button>
+        <button class="btn-secondary" onclick="skipPlannedDelivery()">手入力で進む</button>
+      </div>
+    </div>
+  </div>
   <div class="app-header">
     <div>
       <div class="header-title" id="start-location-name">拠点名</div>
@@ -2547,10 +2575,14 @@ function renderDeliveryInputs() {
   // ★2026-08-07 v3.20【A案】配分表の取得完了まで送信ボタンを無効化。
   //   loadPlannedDelivery は async。GAS応答（2〜5秒）を待たずに送信を押すと
   //   全品目0で開始報告が飛び、戻しても1ずつしか変えられない状態になっていた。
+  // ★2026-08-24 v3.28【社長指示】ボタンだけでなく画面ごと覆う。
+  //   読み込み中でも納品数の欄は触れたため、先に手で打つと配分表の数が入らない
+  //   （loadPlannedDelivery は入力済みの欄を上書きしない）まま開始できてしまった。
   state.plannedDeliveryLoaded = false;
   if (!state.takeoverStartOnly) {
     const btn = document.getElementById('btn-start-submit');
     if (btn) { btn.disabled = true; btn.dataset.preloadText = btn.textContent; btn.textContent = '📋 配分表を読み込み中…'; }
+    showStartCover_();
   }
   // ★2026-07-31 Phase B：配分表の個数を既定値として流し込む（取得は非同期・待たせない）
   loadPlannedDelivery();
@@ -2565,44 +2597,105 @@ function renderDeliveryInputs() {
 //   ・違う数で開始すると、GAS側が担当ドライバーへ承認依頼を送る（handleStart 内）
 //   ★承認はゲートではない。承認前でもレジはスタートできる（社長決定）。
 // ═══════════════════════════════════════════════════════════════
-async function loadPlannedDelivery() {
+// ★2026-08-24 v3.28 スタート画面の全面カバー（納品数の取得が終わるまで一切触らせない）
+const PD_MAX_ATTEMPT = 3;   // 自動リトライ回数（社長選択 2026-08-24）
+
+function showStartCover_(msg) {
+  if (state.takeoverStartOnly) return;   // 引き継ぎ（開始金だけ）は納品数を待たない
+  const cov = document.getElementById('start-loading-cover');
+  if (!cov) return;
+  const t = document.getElementById('start-cover-title');
+  const m = document.getElementById('start-cover-msg');
+  const a = document.getElementById('start-cover-actions');
+  const ld = cov.querySelector('.loader');
+  if (t)  t.textContent = '納品数をダウンロード中です';
+  if (m)  m.innerHTML = msg || '終わるまで操作できません。<br>そのままお待ちください。';
+  if (a)  a.style.display = 'none';
+  if (ld) ld.style.display = '';
+  cov.style.display = 'flex';
+}
+
+function hideStartCover_() {
+  const cov = document.getElementById('start-loading-cover');
+  if (cov) cov.style.display = 'none';
+}
+
+// 3回とも失敗した時だけ販売員に判断を渡す。
+// GASが落ちている日・電波が悪い日にレジ自体が打てなくなるのを防ぐ逃げ道（合計10個以下の下限チェックは従来どおり効く）。
+function failStartCover_(errMsg) {
+  if (state.takeoverStartOnly) return;
+  const cov = document.getElementById('start-loading-cover');
+  if (!cov) return;
+  const t = document.getElementById('start-cover-title');
+  const m = document.getElementById('start-cover-msg');
+  const a = document.getElementById('start-cover-actions');
+  const ld = cov.querySelector('.loader');
+  if (t)  t.textContent = '⚠️ 納品数を取得できませんでした';
+  if (m)  m.innerHTML = '電波の良い場所で、もう一度お試しください。<br>急ぐ場合は手入力でも始められます。'
+                      + (errMsg ? `<br><span style="opacity:.6;font-size:11.5px;">${errMsg}</span>` : '');
+  if (ld) ld.style.display = 'none';
+  if (a)  a.style.display = 'flex';
+  cov.style.display = 'flex';
+}
+
+function retryPlannedDelivery() {
+  showStartCover_('もう一度取りに行きます…');
+  loadPlannedDelivery(1);
+}
+
+function skipPlannedDelivery() {
+  state.plannedDelivery = null;
+  const note = document.getElementById('delivery-plan-note');
+  if (note) {
+    note.innerHTML = '⚠️ 配分表を取得できませんでした。<b>実際に届いた個数を種類別に手入力してください。</b>';
+    note.style.display = 'block';
+  }
+  finishPlannedDelivery_();
+}
+
+// 読み込み完了（成功・手入力で続行）→ カバーを外し送信ボタンを戻す
+//   preloadText がある＝自分が無効化した。無い＝引き継ぎモードなどで触っていないので戻さない。
+function finishPlannedDelivery_() {
+  state.plannedDeliveryLoaded = true;
+  hideStartCover_();
+  const btn = document.getElementById('btn-start-submit');
+  if (btn && btn.dataset.preloadText) {
+    btn.textContent = btn.dataset.preloadText;
+    delete btn.dataset.preloadText;
+    btn.disabled = false;
+  }
+}
+
+async function loadPlannedDelivery(_attempt) {
+  const attempt = Number(_attempt) || 1;
   const note = document.getElementById('delivery-plan-note');
   // ★2026-08-10 v3.22 拠点が未選択の時は try の**手前**で return していたため finally が走らず、
   //   plannedDeliveryLoaded が false のまま固定＝送信ボタンが「📋 配分表を読み込み中…」で
-  //   永久に押せなくなる経路があった（v3.22 で入口ガードも同じフラグを見るので確実に詰まる）。
-  //   ここで拾って「読み込みは終わった（配分表は無い）」に倒す。
-  if (!state.location || !state.location.id) {
-    state.plannedDeliveryLoaded = true;
-    const btn0 = document.getElementById('btn-start-submit');
-    if (btn0 && btn0.dataset.preloadText) {
-      btn0.textContent = btn0.dataset.preloadText;
-      delete btn0.dataset.preloadText;
-      btn0.disabled = false;
-    }
-    return;
-  }
+  //   永久に押せなくなる経路があった。ここで拾って「読み込みは終わった（配分表は無い）」に倒す。
+  if (!state.location || !state.location.id) { finishPlannedDelivery_(); return; }
   try {
+    // ★2026-08-24 v3.28 /exec の GET はHTTPキャッシュに当たる。_cb を付けないと
+    //   リトライが同じ古い応答（＝同じ失敗）を掴んで3回とも無駄になる。
     const url = `${state.GAS_URL}?action=getPlannedDelivery`
               + `&date=${encodeURIComponent(ppToday())}`
-              + `&loc=${encodeURIComponent(state.location.id)}`;
+              + `&loc=${encodeURIComponent(state.location.id)}`
+              + `&_cb=${Date.now()}${Math.random().toString(36).slice(2, 7)}`;
     const res = await fetch(url, { redirect: 'follow' });
     const j = await res.json();
-    if (!j || !j.ok) { state.plannedDelivery = null; return; }
+    // ★2026-08-24 v3.28 ok:false は「配分表が無い」ではなくサーバー側エラー（基本数マスタが無い等）。
+    //   配分表が無い日は ok:true / total:0 で返るので、ここは失敗＝リトライに倒してよい。
+    if (!j || !j.ok) throw new Error((j && j.error) || '配分表を取得できませんでした');
 
     state.plannedDelivery = j.deliveryCount || {};
     // ★2026-08-04 配分調整で拠点ごとの数を決めていない商品（お茶・他社弁当）。
     //   既定値は入れず、「配分表と違います」の判定からも外す（GAS _dapDiffSummary_ と同じ規則）。
     state.plannedExcluded = {};
     (j.excludedPids || []).forEach(pid => { state.plannedExcluded[String(pid)] = true; });
-    let filled = 0;
     Object.keys(state.plannedDelivery).forEach(pid => {
       const el = document.getElementById(`delivery-${pid}`);
       if (!el) return;
       // 既に手入力されている欄は上書きしない
-      if (el.value === '' || el.value === null) {
-        el.value = state.plannedDelivery[pid];
-        filled++;
-      }
+      if (el.value === '' || el.value === null) el.value = state.plannedDelivery[pid];
     });
 
     if (note) {
@@ -2616,21 +2709,20 @@ async function loadPlannedDelivery() {
       note.style.display = 'block';
     }
     if (typeof saveState === 'function') { try { saveState(); } catch (e) {} }
+    finishPlannedDelivery_();
   } catch (e) {
-    console.warn('配分表の取得に失敗（手入力で続行できます）:', e);
+    console.warn(`配分表の取得に失敗（${attempt}/${PD_MAX_ATTEMPT}）:`, e);
     state.plannedDelivery = null;
-    if (note) { note.innerHTML = '⚠️ 配分表の取得に失敗しました。実際に届いた数を手入力してください。'; note.style.display = 'block'; }
-  } finally {
-    // ★2026-08-07 v3.20【A案】読み込み完了（成功・失敗とも）→ 送信ボタンを再有効化
-    //   preloadText がある＝自分が無効化した。無い＝引き継ぎモードなどで無効化していないので触らない。
-    //   無条件で btn.disabled=false にすると、引き継ぎ送信中に再有効化してしまう。
-    state.plannedDeliveryLoaded = true;
-    const btn = document.getElementById('btn-start-submit');
-    if (btn && btn.dataset.preloadText) {
-      btn.textContent = btn.dataset.preloadText;
-      delete btn.dataset.preloadText;
-      btn.disabled = false;
+    // ★2026-08-24 v3.28 /exec の GET は確率的に404を返すことがある（実測あり）。
+    //   1回の失敗で手入力に落とすと、配分表がある日でも0から打たせることになるので自動で取り直す。
+    if (attempt < PD_MAX_ATTEMPT) {
+      showStartCover_(`通信に失敗しました。もう一度取りに行きます…<br>`
+                    + `<span style="opacity:.7">（${attempt + 1} 回目 / 全 ${PD_MAX_ATTEMPT} 回）</span>`);
+      setTimeout(() => loadPlannedDelivery(attempt + 1), 1200 * attempt);
+      return;   // ★カバーは出したまま。ここでは finish しない
     }
+    if (state.takeoverStartOnly) { finishPlannedDelivery_(); return; }
+    failStartCover_(e && e.message ? e.message : '');
   }
 }
 
