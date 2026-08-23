@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- kanri.html v3.66 (2026-08-24) 【配分表：車載を前半12の直後へ／中計はその右】社長指定の並び＝前半12 → 車載（全エリア5列）→ 中計 → 神谷町・ぜん六神谷 → 残り → 置き弁。従来は車載5列（L901芝/L902銀座/L903赤坂/L904神谷/L905お茶）がセカンドの手前＝29〜33列目に居た。**中計は「左に並ぶ全部」＝前半12＋車載の合計**（社長決定 2026-08-24）。実装は renderSheet1 の中だけ＝拠点マスタもGASも触らない（同じ並びを盛り出し表・発注・配分調整が使っているため／v3.40 の0拠点自動非表示と同じライブ計算の作り）。①locations を head12＋車載＋残り に並べ替え subtotalSplit=17 ②商品行の中計はサーバーの row.subtotal（先頭12拠点ぶん）が使えないので s1Subtotal() で並べ替え後の先頭17列から数え直す ③isBoldBoundary に vehCount 引数を追加し区切り線を車載ぶんずらす（省略時0＝他タブは無変更）。GAS変更なし・デプロイはフロントのみ。 -->
 <!-- kanri.html v3.65 (2026-08-15) 【PWA化＝ホーム画面に置けるようにする】リッチメニュー統一の一環。kanri は **LIFF を1箇所も使っていない**ので、driver で問題になった「ホーム画面のPWAからLINEログインできない（iOSがSafariへ投げ出す）」に当たらず、そのまま置ける。追加したのは head の4行（`apple-mobile-web-app-capable` / `-status-bar-style` / `-title`＝配分表 / `apple-touch-icon`）＋ `<link rel="manifest">` ＋ `theme-color`、および新規 `kanri.webmanifest`（short_name=配分表・display=standalone・theme_color=#2471A3）。アイコン `kanri-icon.png`(180) / `kanri-icon-512.png`(512) は **リッチメニューの絵から切り出したもの**＝LINEのメニューとホーム画面で同じ絵になる。⚠ **kanri は本体に認証が無い**（パスワード1115は「勤怠承認」タブだけ）。PWA化しても今と同じ（URLを知っていれば誰でも開ける）＝新しい穴が開くわけではないが、ホーム画面に置くと端末を触れる人が開ける点は認識しておくこと。機能・数字の変更は無し。GAS変更なし。 -->
 <!-- kanri.html v3.64 (2026-08-07) 【エリア別の色が出なくなる件を修正】社長報告「配分調整・配分表にエリア別の色が出なくなった」。★調査＝GAS `getLocationsWithAssignment` は正常（8/7・8/10〜8/14 とも33拠点中32拠点に色あり）、デプロイ済みHTMLも正本と同一で、実機で開くと色は出る＝**一度こけると戻らない作り**が原因。`loadDriverColorMap` は取得に失敗すると**空マップ {} をキャッシュに保存して終わり**だったため、以降は全拠点が既定グレー #E9ECEF のままになり、日付を切り替えても再取得せず、ページを完全リロードするまで色が戻らなかった。配分調整タブは開いた瞬間にGASへ最大15本（当日4本＋週の先読み4日×3本）を同時に投げるので、GASが重い時間帯に色の1本だけタイムアウトすると丸ごと色無しに落ちる。★修正＝①`loadDriverColorMap` は**成功（配列で1件以上）した時だけキャッシュ**し、失敗/空はキャッシュせず空を返す（次の描画で自然に取り直す）＋同一呼び出し内で1回だけ自動リトライ（0.6秒後）。②`bmColorCache` も空を入れない（`bmLoadDate`／`bmPrefetchWeek`）。③`bmSetDate` のキャッシュ経路で色だけ欠けている日は、表は待たせず即出しして色は裏で取り直し、届いたら塗り直す。GAS変更なし＝デプロイ枠を消費しない。 -->
 <!-- kanri.html v3.63 (2026-08-04) 【印刷前チェックから置き弁を除外】実機検証で、印刷ボタンのアラートにアスエネ・シビックが「担当者が未割り当てなのに納品数が入っています」として毎回出ることを確認。置き弁は無人販売なので担当者がいないのが正常で、放置すると毎日出続けて本当に見るべき拠点が埋もれる（警告のノイズ化）。メインGAS `_okibenLocsLast_` が `loc.isOkiben` を付けるようにし（置き弁設定シート駆動）、kanri の `bmPrintWithCheck` はその拠点をスキップする。担当者ありなのに0件の判定は元々置き弁に当たらない。要メインGAS @427。 -->
@@ -3695,18 +3696,25 @@ function escHtml(str) {
 // @param n 拠点番号（1始まり・表示順）
 // @returns {boolean} n の右側に太字区切り線を入れるなら true
 // ═══════════════════════════════════════
-function isBoldBoundary(n) {
+function isBoldBoundary(n, vehCount) {
+  // ★2026-08-24 v3.66 vehCount＝前半12の直後へ差し込んだ車載列の本数。
+  //   配分表（renderSheet1）だけが渡す。他タブ（配分調整など）は従来どおり省略＝0で同じ動き。
+  const V = Number(vehCount) || 0;
   if (n >= 1 && n <= 12) {
     // 1-12: 3拠点ごと（3, 6, 9, 12 の右に線）
     return (n % 3 === 0);
   }
-  if (n === 14) {
-    // 13-14 の2拠点グループ終わり
+  if (V > 0 && n > 12 && n <= 12 + V) {
+    // 車載グループ（全エリア）の終わりにだけ線
+    return (n === 12 + V);
+  }
+  if (n === 14 + V) {
+    // 神谷町・ぜん六神谷 の2拠点グループ終わり
     return true;
   }
-  if (n >= 15) {
-    // 15以降は4拠点ごと（18, 22, 26, ... の右に線）
-    return ((n - 14) % 4 === 0);
+  if (n >= 15 + V) {
+    // 以降は4拠点ごと
+    return ((n - 14 - V) % 4 === 0);
   }
   return false;
 }
@@ -3752,7 +3760,27 @@ async function fetchSheet1() {
 
 function renderSheet1(data) {
   const body = document.getElementById('sheet1-body');
-  const { dateLabel, locations, rice, brown, subtotalSplit } = data;
+  const { dateLabel, rice, brown } = data;
+
+  // ★2026-08-24 v3.66【車載を前半12の直後へ／中計はその右】社長指定の並び＝
+  //   前半12 → 車載（全エリア）→ 中計 → 神谷町・ぜん六神谷 → 残り → 置き弁。
+  //   拠点マスタ側は触らない。同じ並びを盛り出し表・発注・配分調整も使っており、
+  //   マスタを直すと全画面が動くため。ここ（renderSheet1）だけで並べ替える
+  //   ＝GAS変更もデプロイも不要。v3.40 の「0拠点自動非表示」と同じ作り。
+  //   中計＝左に並ぶ全部（前半12＋車載）の合計【社長決定 2026-08-24】。
+  //   ⚠ サーバーの row.subtotal は先頭12拠点ぶんなので使えない。並べ替え後の
+  //     先頭 subtotalSplit 列から作り直す（s1Subtotal）。
+  //   車載の判定＝拠点ID `L9xx`（L901芝／L902銀座／L903赤坂／L904神谷／L905お茶）。
+  //   車載どうしの順番は拠点マスタの並びをそのまま使う（マスタを直せばここも直る）。
+  const srcLocs  = data.locations || [];
+  const srcSplit = Number(data.subtotalSplit) || 12;
+  const VEH_RE_S1 = /^L9\d\d$/;
+  const s1HeadLocs = srcLocs.slice(0, srcSplit).filter(l => !VEH_RE_S1.test(l.id));
+  const s1VehLocs  = srcLocs.filter(l => VEH_RE_S1.test(l.id));
+  const s1TailLocs = srcLocs.slice(srcSplit).filter(l => !VEH_RE_S1.test(l.id));
+  const locations     = s1HeadLocs.concat(s1VehLocs, s1TailLocs);
+  const subtotalSplit = s1HeadLocs.length + s1VehLocs.length;   // 中計の区切り
+
   const locIds = locations.map(l => l.id);
   const colorMap = data._driverColorMap || {};  // Phase 4: ドライバー色マップ
 
@@ -3779,9 +3807,20 @@ function renderSheet1(data) {
 
   // 中計の挿入位置（可視配列内）：本来位置が subtotalSplit 以上になる最初の可視拠点の直前
   //   → 先頭12拠点グループ（本来位置 0..subtotalSplit-1）の直後に中計列が来る（左詰め）。
-  //   値はサーバー計算の先頭12合計（row.subtotal 等）をそのまま使用＝不変（0拠点は元々0）。
+  //   ★2026-08-24 v3.66 subtotalSplit は前半12＋車載5＝17。値は下の s1Subtotal で数え直す。
   let subtotalInsertAt = visLocIds.findIndex(lid => origIndexById[lid] >= subtotalSplit);
   if (subtotalInsertAt < 0) subtotalInsertAt = visLocIds.length;
+
+  // 商品行の中計：サーバーの row.subtotal（先頭12拠点）ではなく、並べ替え後の
+  //   先頭 subtotalSplit 列＝前半12＋車載 から数え直す。0拠点で隠れた列も足す
+  //   （隠れる＝その日0なので値は変わらないが、定義を可視状態に依存させない）。
+  const s1SubIds = locations.slice(0, subtotalSplit).map(l => l.id);
+  function s1Subtotal(row) {
+    if (!row || row.isExternal || !row.byLocation) return 0;
+    let s = 0;
+    s1SubIds.forEach(lid => { s += Number(row.byLocation[lid]) || 0; });
+    return s;
+  }
 
   // 区切り線（本来位置ベース・左詰め集約）：
   //   可視 vIdx と次の可視拠点の「本来位置」の間に元の境界があれば vIdx の右に線。
@@ -3791,7 +3830,7 @@ function renderSheet1(data) {
     const posA = origIndexById[visLocIds[vIdx]];
     const posB = origIndexById[visLocIds[vIdx + 1]];
     for (let oi = posA; oi < posB; oi++) {
-      if (isBoldBoundary(oi + 1)) return ' cell-bold-boundary';  // isBoldBoundary は1始まり
+      if (isBoldBoundary(oi + 1, s1VehLocs.length)) return ' cell-bold-boundary';  // isBoldBoundary は1始まり
     }
     return '';
   }
@@ -3824,7 +3863,7 @@ function renderSheet1(data) {
                         ? loc.displayName
                         : fullName.slice(0, 2);
       if (vIdx === subtotalInsertAt) {
-        html += `<th class="cell-sub" title="中間計(前${subtotalSplit}拠点)">中計</th>`;
+        html += `<th class="cell-sub" title="中間計(前${s1HeadLocs.length}拠点＋車載${s1VehLocs.length}列)">中計</th>`;
       }
       // Phase 4: ドライバー色を背景色として適用
       const styleAttr = driverColorStyleAttr(lid, colorMap);
@@ -3856,7 +3895,7 @@ function renderSheet1(data) {
       } else {
         visLocIds.forEach((lid, vIdx) => {
           if (vIdx === subtotalInsertAt) {
-            html += `<td class="cell-sub">${row.subtotal || ''}</td>`;
+            html += `<td class="cell-sub">${s1Subtotal(row) || ''}</td>`;
           }
           const q = row.byLocation[lid];
           // v3.9/v3.40: 拠点グループ区切り線（本来位置ベース・左詰め）
