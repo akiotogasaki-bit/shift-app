@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- kanri.html v3.70 (2026-08-25) 【配分の「💾 保存」が失敗する件：GASの一括書き込み化＋フロントの自動リトライ】社長「今配分調整したら、保存できない」。★**原因は保存機能ではなく /exec の不安定**＝実測で保存POSTが 404（HTML）や、status 200 なのに中身が doGet の既定応答 `{"dates":[...]}` になるケースがあり、旧 `bmPostAction` は `res.json()` が落ちるか `ok` が undefined → いずれも「保存失敗」alert になっていた。応答時間も 4〜100秒（別プロジェクトの営業GASも普段1〜2秒→5〜6秒＝Google側が重い時間帯）。★**対応①GAS**＝`saveBasicMasterNumbers` のセルごと `setValue`（G列・J列で1セル2往復＝100セル編集で200往復）を、ヒット行の最小〜最大範囲を G列・J列それぞれ1回ずつ read/write する方式に変更。**API往復は編集量に関わらず固定4回**。範囲内の非対象行は読んだ値をそのまま書き戻すだけで値は変わらず、他列には触れない。★**対応②フロント**＝`bmPostAction` に自動リトライ（最大3回・2.5秒→5秒待ち）。404・非JSON・`ok` 無しの応答を失敗とみなして再送する。呼び出し8箇所は全て「与えた値をそのままセットする」冪等な処理と確認済み（confirm/unconfirm もトグルではなく別アクション）なので二重書き込みにならない。 -->
 <!-- kanri.html v3.69 (2026-08-24) 【配分表の印刷：右パネルを 拠点名5文字／販売員名4文字 で打ち切る】社長指示。★**効果**＝拠点名パネル **177px→103px**、表＋パネルの合計 **1033px→959px**。横向きの有効幅1085pxに対し余りは **52px→126px**（拠点があと6個ほど増えても収まる）。★⚠ **`table-layout: fixed` と表自身の `width: 102px` がセットで必要**＝v3.67 と同じ罠。auto レイアウトでは `width` は下限にすぎず文字が入る幅まで列が広がる。実測：fixed だけ入れて width を auto のままにすると、指定58/44pxに対し実際は **77/84px** に広がって効かなかった。★**文字数の根拠（実測）**＝拠点名セル内幅57px／8pt全角5文字=53.3px・6文字=64px → ちょうど5文字。販売員セル内幅43px／7pt全角4文字=37.3px・5文字=46.6px → ちょうど4文字（見出し「販売員名」37.3pxも収まる）。★**切り詰めるのは印刷だけ**＝画面表示は従来どおりフル表示（HTMLは無改修・CSSのみ）。GAS変更なし。 -->
 <!-- kanri.html v3.68 (2026-08-24) 【配分表の印刷：数字を 9.5pt→8pt に／v3.67の幅指定は効いていなかった】🔴 **v3.67（24px→20px）は1pxも縮まなかった**（実測：表の幅 1035px→1035px）。この表は `table-layout: auto` なので CSS の `width` は**下限**の意味しかなく、中身が入りきる幅まで勝手に広がる。9.5pt太字の「88」は18px＋罫線＝**ちょうど20px**で、**幅を決めていたのは文字サイズ**だった。→ **印刷幅で困ったら font-size を触る。width をいじっても動かない。**🔴 さらに 9.5pt のままでは**既に用紙からはみ出していた**＝表987px＋拠点名パネル177px＝**1164px** に対し横向きの有効幅は 291mm−余白4mm＝**1085px**（−83px）。★**実測（8/25・可視32拠点・表＋パネル合計）**＝9.5pt:1168px(−83)／9pt:1122px(−37)／8.5pt:1077px(+8)／**8pt:1033px(+52 ←採用)**／7.5pt:1000px(+85)。7ptまで下げても996pxでほぼ縮まない（商品名60px・中計・合計が下限）。★**採用＝8pt**（数字は従来の約84%・拠点があと2〜3個増えても収まる）＋データセル width 16px・中計/合計 23px（どちらも下限指定）。セルの高さ24pxは据え置き＝縦の見た目は不変。画面表示・シート2・3は無変更。GAS変更なし。 -->
 <!-- kanri.html v3.67 (2026-08-24) 【配分表：印刷の数字セルを細く】社長指示「配分表増えてきていて、印刷の時数字の部分の幅を少し縮めたい」。★**実測**＝印刷の有効幅は 291mm≒1085px、右の拠点名パネル約180px を引くと表に使えるのは**約900px**。8/26（可視33拠点）で表幅が **900px** ＝限界だった（拠点があと2〜3個増えると溢れる）。★**対応**＝`@media print` の `#tab-sheet1 .matrix-table th/td` を **24px→20px**（高さ24pxは据え置き＝縦の見た目は不変）。8/26で **900→768px（−132px）**、拠点があと6個増えても収まる。★⚠ **中計・合計は一緒に細くしない**＝拠点列は最大2桁だが中計は3桁（8/25で603）。`.cell-sub` / `.cell-tot` だけ **26px** に広げて桁溢れを防ぐ。画面表示（@media screen）は無変更。シート2・3も無変更。GAS変更なし・デプロイはフロントのみ。 -->
@@ -5206,16 +5207,37 @@ async function bmFetchMatrix(dateStr) {
 }
 
 async function bmPostAction(action, payload) {
-  try {
-    const res = await fetch(GAS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify(Object.assign({ action }, payload || {}))
-    });
-    return await res.json();
-  } catch(err) {
-    return { ok: false, error: String(err) };
+  // v3.70 (2026-08-25): /exec への POST は確率的に失敗する。実測で
+  //   ① HTTP 404（HTMLが返る）② status 200 だが中身が doGet の既定応答 {"dates":[...]}
+  //   の2パターンがあり、どちらも旧コードでは res.json() が落ちるか ok が undefined になり
+  //   「保存失敗」alert になっていた（＝画面上は「保存できない」）。
+  // ここで呼ぶアクションは全て「与えた値をそのままセットする」冪等な処理なので、再送しても二重にならない。
+  const TRIES = 3;
+  let lastErr = '';
+  for (let attempt = 1; attempt <= TRIES; attempt++) {
+    try {
+      const res = await fetch(GAS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(Object.assign({ action }, payload || {}))
+      });
+      const txt = await res.text();
+      let json = null;
+      try { json = JSON.parse(txt); } catch (e) { json = null; }
+      // 正常応答＝ok を持つJSON（このファイルから呼ぶGASアクションは全て ok を返す）
+      if (json && json.ok !== undefined) return json;
+      lastErr = (res.status !== 200)
+        ? ('HTTP ' + res.status)
+        : (json ? '想定外の応答' : 'JSONではない応答');
+    } catch (err) {
+      lastErr = String(err);
+    }
+    if (attempt < TRIES) {
+      console.warn('bmPostAction 再試行 ' + attempt + '/' + (TRIES - 1) + ' action=' + action + ' 理由=' + lastErr);
+      await new Promise(function(r){ setTimeout(r, attempt * 2500); });
+    }
   }
+  return { ok: false, error: lastErr + '（' + TRIES + '回試行しても応答が返りませんでした）' };
 }
 
 // 確定状態：拠点の全商品でG列に値があるか
