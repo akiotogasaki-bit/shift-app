@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v5.8 (2026-08-25) 【`getDriverState` が GAS 全体を詰まらせていたのを止めた：自動休止を端末に持たせる】社長「どうして固まるの？」→ **計測データで犯人が確定した。**★**実測（8/19〜8/25・doGet遅延ログ 14,344件＝5秒超だけ記録）**＝**11,923件（83%）がこの `getDriverState` 1本**。中央値9.0秒・最大306.5秒で、**97%が11〜14時のピークに集中**（11時3,289／12時5,014／13時2,499／14時766）。🔴 **混んでいるから遅いのではない**＝誰も使っていない**深夜4:30に単独で叩いても 12.0／17.8／28.4秒**かかった（返すデータは1.2KB）。**関数そのものが最初から遅い。**★**遅い理由＝1回で読むセル数の内訳**：**基本数マスタ 10,032行×11列≒110,000セル（93%）**／回収状態 1,272行×6列=7,632セル（6%）／休止拠点 84行×6列=504セル（0.4%）。基本数マスタを読むのは「納品数0の拠点を自動休止にする」判定のためだけで、**必要なのは当日の912行＝9%。残り91%は読んで捨てていた。**そこへ `DRIVER_STATE_POLL_MS = 10000`＝**1回9〜28秒かかる処理を10秒間隔で回していた**ので、前の実行が終わる前に次が始まって積み上がる。`executeAs: USER_DEPLOYING`＝**全員のリクエストが社長1人の実行枠（30本）を共有**するため、これが他の全アプリを巻き添えにしていた（同時実行の実測は最大18本）。★**直し方**＝自動休止は**朝決まれば1日ほぼ変わらない**。10秒ごとに8万セル読んで計算し直す理由がない。→ メインGASの `getDriverState` は**既定を軽量版**（自動休止を判定しない）にし、`&auto=1` を付けた時だけ従来どおり返す。driver は**起動時と60分ごと**に `&auto=1` で取り直して `state.autoInactiveIds` に保持し、10秒ポーリングが運んでくる**手動休止**と混ぜて `state.inactiveIds` を作る（`applyInactive_`）。v5.3「置く数の見込みを朝1回だけ配る」と同じ手。★**現場の見え方は変わらない**＝休止の判定結果は同じ。手動の⏸は従来どおり10秒で全端末に伝わる。★⚠ **取れなかった時に古い値を消さない**＝空で上書きすると納品0の拠点が回収リストに出る。サーバーが `autoJudged` を返すので**判定できた時だけ**差し替える（当日の基本数マスタ行がまだ無い時間帯は `false`）。★⚠ **既定を変えて大丈夫な理由**＝この action を見ているのは driver.html と dashboard.html だけで、**dashboard.html は 2026-08-13 の再編④⑤で解体済み**（ポータルにもリッチメニューにも導線が無い・最終更新 8/7）。生きている呼び出し元は driver.html だけ。★実況タブ（5分ポーリング）も既定＝軽量版になるので、そちらでも端末の自動休止を混ぜている。要: メインGAS @590 以降。 -->
 <!-- driver v5.7b (2026-08-21) 【車載を減らすボタン（開店前に下ろした分）】社長決定（2026-08-21 午前）「車載は**減らすだけ**。拠点には足さない（開店前は販売員が数えるので二重になる）。**行き先の拠点は必須で記録**（A案）」。★⚠ **既存の「車から補充」（supplyFromVehicle）を開店前に使ってはいけない**＝あちらは status=完結 で書くので`getMoveAdjByLocProduct_` が行き先の納品数をその場で増やし、販売員のレジ開始時の数え直しと**二重になる**。★**どうやって減らすだけにしたか**＝`getMoveAdjByLocProduct_` は「出発側は status に関係なく必ず引く／到着側は status===完結 の時だけ足す」という作り。だから status を **車載下ろし** にすれば「車載は減る・行き先は増えない・行き先は記録に残る」が既存の在庫計算に一切手を入れずに実現できる。新API＝`reduceVehicleStock`。⚠ **移動ログの19列目 車載下ろし を 完結 に変えると納品数が二重になる。**★画面＝移動タブの車載セクション直下に畳んだボタン。開くと「どこに置きましたか？（必須）」＋車載にある商品だけの個数欄。行き先未選択では送信ボタンが押せない。★🔑 これで「車載の積み込み実数が配分表と合わない」（8/17から続く宿題）も追える＝8/20は下ろし45個>積み込み42個だった。要: メインGAS @2026-08-21 以降（`reduceVehicleStock`）。 -->
 <!-- driver v5.7 (2026-08-21) 【車載に「メイン返却分」を常時表示し、割ったら警告】社長要望「自分の手持ち、例えば昨日だったら22個が芝パーク分で20個がプラス分。ドライバーが22個を下回りそうだったら、芝パークに追加する分が足りないと早めにわかるから、他のエリアから足りなくなりそうなものを早めに持ってきてもらうように指示が出せた」「だからエリア別に何個がメインに返却分というのがわかるようになっていた方がいい（個数でいい。商品別だとややこしくなりそう）」。★**返却分とは何か**＝メイン拠点の12:20以降の販売予定数＝**3区間予定の区間3の合計**。手で決める数字ではない。実測で芝パーク8/21＝22個・車載42なのでプラス分20個＝社長の言った数字とぴったり一致した。★⚠ **日ごとに違う**（芝：8/19 25／8/20 25／8/21 22）。固定値にしない＝サーバーがその日の3区間予定から出す。★⚠ **マイナスにならない**＝返却分が車載の総数を超える日は総数で頭打ちにし、溢れた分はメイン拠点に置いたまま（社長「溢れた分はメインの拠点に置くって仕様になってるはず」＝§2-1決定3）。実測でBizタワーは8/19:21／8/20:27／8/21:22と車載20個を超える。頭打ちにしないと積み込んだ瞬間から警告が鳴る。★画面は `#pt-stock` の1ブロックだけ。手持ちが返却分を割ると赤（`.pt-short`）にして不足個数を出す。**判定・置く数の計算は1行も変えていない。**★⚠ 古いGASの応答には `mainReturn` が無い＝その時は従来の1行のまま（落ちない）。要: メインGAS @2026-08-21 以降（`vehComputeReturnQty_` / `3区間予定` シート / getVehicleStock の `mainReturn`）。 -->
 <!-- driver v5.6 (2026-08-20) 【拠点振替：芝パーク②の残りを、ドライバーを介さず芝パークへ渡す】社長要望「芝パーク②とかが終わる時、芝パークに残りを追加して終わるんだけど、それを紐づけて自動で追加できないか」→「ドライバーを介さないで終わらせたい」。★仕組み＝拠点マスタの新しい列「自動振替先」でペアを持ち（芝パーク②の行に 芝パーク）、**数を確定するのは受け取り側のレジ**（register v3.27）。確定した瞬間にメインGASが拠点間移動ログへ「完結」の行を1本立てるので、そのぶんが芝パークの納品数に即加算され、芝パーク②の納品数からは同じだけ引かれる。★**driver 側の変更は表示だけ**＝回収モーダルを開いた時、受け取りが済んでいれば `getDeclaredResidual` が `handover:{total,toName,detail}` を返す。①申告残数からこのぶんを引いて既定値にする（引かないと同じ弁当を2拠点で二重に数える）②「🔁 残数◯個は 芝パーク へ追加されました」の案内を出す ③手元に何も残っていなければ**残数リストとテンキーを出さず、そのまま②金庫へ送る**（社長指示「金庫の金額だけドライバーが確認して入力」）。★**スポット拠点だけ①に残す**＝①にはクーポン枚数と「💰 売上を確定」があり、通さないと あるべき現金 が出ない（2026-08-06 の社長決定の順番）。残数リストだけ隠してクーポンを打たせる。売上は メインGAS `_spotSettle_` が振替ぶんを納品数から引いて計算するので水増しにならない。★ドライバーに**新しい操作は一切増えない**（回収の「🔄 移動」を押す手間が消えるだけ）。要: メインGAS @2026-08-20 以降（getPendingHandover / confirmHandover / 拠点振替ログ）。 -->
@@ -2119,7 +2120,9 @@ const state = {
   driverColors: {},                     // ★ NEW（v1.0 userId→色）
   todayAssignment: {},                  // ★ NEW（v1.0 locId→{color,name,type}）
   collectedIds: new Set(),
-  inactiveIds: new Set(),               // ★ NEW（A2/A3）
+  inactiveIds: new Set(),               // ★ NEW（A2/A3）＝手動休止 ∪ 自動休止（画面が見るのはこれ）
+  manualInactiveIds: new Set(),         // ★ v5.8 手動休止だけ（10秒ポーリングが運ぶ）
+  autoInactiveIds: new Set(),           // ★ v5.8 自動休止だけ（納品数0＝朝決まれば1日ほぼ変わらない）
   reportsByLoc: {},
   remindersSent: {},
   pendingReminderId: null,
@@ -2198,7 +2201,86 @@ function persistDrvDriverStateFromState() {
   saveDrvDriverStateCache({
     collected: Array.from(state.collectedIds),
     inactive:  Array.from(state.inactiveIds),
+    manual:    Array.from(state.manualInactiveIds),   // ★ v5.8
   });
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ★ v5.8（2026-08-25）自動休止（納品数0の拠点）を端末に持たせる
+   ───────────────────────────────────────────────────────────────
+   【なぜ】`getDriverState` は10秒ごとに叩かれるのに、毎回**基本数マスタを全行**
+   （10,032行×11列≒110,000セル）読んで「納品数0の拠点」を計算し直していた。
+   1回の呼び出しで読むセルの**93%がこれ**で、誰も使っていない深夜に単独で叩いても
+   **12〜28秒**かかっていた（返すデータは1.2KB）。8/19〜8/25 の遅延ログでは
+   5秒超の実行 14,344件のうち **11,923件（83%）がこの action**、その97%が11〜14時のピーク。
+   **1回9〜28秒の処理を10秒間隔で回す**＝前が終わる前に次が始まり、実行が積み上がって
+   他のアプリまで巻き添えにしていた（全員が社長1人の実行枠30本を共有しているため）。
+
+   【直し方】自動休止は**朝決まれば1日ほぼ変わらない**。10秒ごとに計算し直す理由がない。
+   → 起動時と60分ごとに `&auto=1` で取り直し、端末で保持する。
+     10秒ポーリングは既定（軽量版）で叩き、返ってきた**手動休止**と端末の**自動休止**を混ぜて使う。
+     v5.3「置く数の見込みを朝1回だけ配る」と同じ考え方。
+
+   ⚠ **取れなかった時に古い値を消さない。** 空で上書きすると納品0の拠点が回収リストに出る。
+     サーバーは `autoJudged` を返すので、**判定できた時だけ**差し替える
+     （当日の基本数マスタ行がまだ無い時間帯は判定できない＝false）。
+   ═══════════════════════════════════════════════════════════════ */
+const DRV_AUTOINACT_CACHE_KEY = 'oedo_driver_autoinact_cache_v1';
+const AUTO_INACTIVE_TTL_MS    = 60 * 60 * 1000;   // 60分ごとに取り直す
+let autoInactiveFetchedAt = 0;
+
+function _drvTodayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+// 起動時：前回の自動休止を復元（**同じ日のものだけ**）
+function loadAutoInactiveCache() {
+  try {
+    const raw = localStorage.getItem(DRV_AUTOINACT_CACHE_KEY);
+    if (!raw) return;
+    const obj = JSON.parse(raw);
+    if (!obj || obj.date !== _drvTodayStr()) return;   // 日が変わったら使わない
+    state.autoInactiveIds = new Set(obj.ids || []);
+    autoInactiveFetchedAt = Number(obj.savedAt) || 0;
+  } catch (e) { console.warn('loadAutoInactiveCache error:', e); }
+}
+function saveAutoInactiveCache() {
+  try {
+    localStorage.setItem(DRV_AUTOINACT_CACHE_KEY, JSON.stringify({
+      date: _drvTodayStr(), savedAt: Date.now(), ids: Array.from(state.autoInactiveIds),
+    }));
+  } catch (e) { console.warn('saveAutoInactiveCache error:', e); }
+}
+
+// 手動休止（サーバー）と自動休止（端末）を混ぜて state.inactiveIds を作る
+function applyInactive_(manualList) {
+  state.manualInactiveIds = new Set((manualList || []).map(i => i.locationId));
+  const merged = new Set(state.manualInactiveIds);
+  state.autoInactiveIds.forEach(id => merged.add(id));
+  return merged;
+}
+
+// 自動休止を取り直す（60分TTL。force=true で即取り直す）
+async function refreshAutoInactive(force) {
+  if (!force && Date.now() - autoInactiveFetchedAt < AUTO_INACTIVE_TTL_MS) return;
+  try {
+    const res  = await fetch(`${GAS_URL}?action=getDriverState&auto=1`, { redirect: 'follow' });
+    const data = await res.json();
+    // ⚠ 判定できなかった時（当日の基本数マスタ行がまだ無い等）は**古い値を残す**
+    if (!data || data.autoJudged !== true || !Array.isArray(data.inactive)) return;
+    state.autoInactiveIds = new Set(
+      data.inactive.filter(i => i && i.auto).map(i => i.locationId)
+    );
+    autoInactiveFetchedAt = Date.now();
+    saveAutoInactiveCache();
+    // 手動側は今の値を保ったままマージし直す
+    state.inactiveIds = applyInactive_(Array.from(state.manualInactiveIds).map(id => ({ locationId: id })));
+    try { persistDrvDriverStateFromState(); } catch (e) {}
+    try { renderCollectionList(); } catch (e) {}
+  } catch (e) {
+    console.warn('refreshAutoInactive error:', e);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2384,8 +2466,10 @@ async function init() {
     if (cachedReports && typeof cachedReports === 'object') {
       state.reportsByLoc = cachedReports;
     }
+    loadAutoInactiveCache();   // ★ v5.8 自動休止を先に復元（同じ日のものだけ）
     if (cachedDriverState) {
       state.collectedIds = new Set(cachedDriverState.collected || []);
+      state.manualInactiveIds = new Set(cachedDriverState.manual || cachedDriverState.inactive || []);
       state.inactiveIds  = new Set(cachedDriverState.inactive  || []);
     }
 
@@ -2421,7 +2505,8 @@ async function init() {
       fetch(`${GAS_URL}?action=getMaster`,             { redirect: 'follow' }).then(r => r.json()),
       fetch(`${GAS_URL}?action=getTodayReports`,        { redirect: 'follow' }).then(r => r.json()).catch(() => ({ data: [] })),
       fetch(`${GAS_URL}?action=getTodayIntermediate`,   { redirect: 'follow' }).then(r => r.json()).catch(() => ({ data: [] })),
-      fetch(`${GAS_URL}?action=getDriverState`,         { redirect: 'follow' }).then(r => r.json()).catch(() => ({ collected: [], inactive: [] })),
+      // ★ v5.8 起動時だけ auto=1（自動休止を取る）。以後の10秒ポーリングは既定＝軽量版。
+      fetch(`${GAS_URL}?action=getDriverState&auto=1`,  { redirect: 'follow' }).then(r => r.json()).catch(() => ({ collected: [], inactive: [] })),
       fetch(`${GAS_URL}?action=getLocationsWithAssignment&date=${todayStr}`, { redirect: 'follow' }).then(r => r.json()).catch(() => []),
       fetch(`${GAS_URL}?action=getDriverColors`,        { redirect: 'follow' }).then(r => r.json()).catch(() => ({})),
     ]);
@@ -2452,7 +2537,16 @@ async function init() {
 
     // ★ A1/A3：サーバーから回収状態と休止状態を初期同期
     state.collectedIds = new Set((driverStateRes.collected || []).map(c => c.locationId));
-    state.inactiveIds  = new Set((driverStateRes.inactive  || []).map(i => i.locationId));
+    // ★ v5.8 手動休止と自動休止を分けて持つ。auto:true が自動（納品数0）。
+    //   ⚠ 判定できなかった時（autoJudged!==true）はキャッシュから復元した値を残す。
+    if (driverStateRes.autoJudged === true) {
+      state.autoInactiveIds = new Set(
+        (driverStateRes.inactive || []).filter(i => i && i.auto).map(i => i.locationId)
+      );
+      autoInactiveFetchedAt = Date.now();
+      saveAutoInactiveCache();
+    }
+    state.inactiveIds = applyInactive_((driverStateRes.inactive || []).filter(i => !(i && i.auto)));
 
     // ─────────────────────────────────────────────────────────
     // キャッシュ保存（マスタ・レポート・ドライバー状態）
@@ -2531,7 +2625,8 @@ async function syncDriverState() {
     const res  = await fetch(GAS_URL + '?action=getDriverState', { redirect: 'follow' });
     const data = await res.json();
     const newCollected = new Set((data.collected || []).map(c => c.locationId));
-    const newInactive  = new Set((data.inactive  || []).map(i => i.locationId));
+    // ★ v5.8 軽量版なので data.inactive は**手動休止だけ**。端末が持つ自動休止と混ぜる。
+    const newInactive  = applyInactive_(data.inactive || []);
 
     let changed = false;
     if (!setsEqual(newCollected, state.collectedIds)) {
@@ -2614,10 +2709,12 @@ async function reloadCollectionData_(force) {
     if (driverStateRes && Array.isArray(driverStateRes.collected)
         && Date.now() - state.lastUserActionAt >= SELF_ACTION_GRACE_MS) {
       state.collectedIds = new Set(driverStateRes.collected.map(c => c.locationId));
-      state.inactiveIds  = new Set((driverStateRes.inactive || []).map(i => i.locationId));
+      state.inactiveIds  = applyInactive_(driverStateRes.inactive || []);   // ★ v5.8
       try { persistDrvDriverStateFromState(); } catch (e) {}
     }
     collectionReloadAt = Date.now();
+    // ★ v5.8 自動休止は60分TTL。期限切れの時だけ裏で取り直す（待たない）。
+    try { refreshAutoInactive(false); } catch (e) {}
     try { renderCollectionList(); } catch (e) {}
     const t = new Date();
     const el = document.getElementById('collection-updated-at');
@@ -6976,9 +7073,11 @@ async function rtLoadAll() {
     rtMasterData = master;
     rtMoveAdjMap = (moveAdj && moveAdj.adj) ? moveAdj.adj : {};  // v7
     // 本日の休止拠点IDをSetで保持
+    // ★ v5.8 getDriverState の既定は軽量版（手動休止だけ）。端末が持つ自動休止を混ぜる。
     rtInactiveLocationIds = new Set(
       (driverState.inactive || []).map(x => String(x.locationId || '').trim())
     );
+    state.autoInactiveIds.forEach(id => rtInactiveLocationIds.add(id));
     const finalMap = {};
     (reports.data || []).forEach(r => { finalMap[r.locationId] = r; });
     const merged = [...(reports.data || [])];
@@ -7542,9 +7641,11 @@ async function rtRefreshArea(key) {
       rtFetchJSON(`${GAS_URL}?action=getMoveAdjByLoc`).catch(() => ({ adj: {} })),  // v7
     ]);
     rtMoveAdjMap = (moveAdj && moveAdj.adj) ? moveAdj.adj : {};  // v7
+    // ★ v5.8 getDriverState の既定は軽量版（手動休止だけ）。端末が持つ自動休止を混ぜる。
     rtInactiveLocationIds = new Set(
       (driverState.inactive || []).map(x => String(x.locationId || '').trim())
     );
+    state.autoInactiveIds.forEach(id => rtInactiveLocationIds.add(id));
     const finalMap = {};
     (reports.data || []).forEach(r => { finalMap[r.locationId] = r; });
     const merged = [...(reports.data || [])];
