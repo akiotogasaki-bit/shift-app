@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v6.0 (2026-08-25) 【車載の積み込み実数をスタート時に確定する（レジと同じ流れ）】社長指示「**スタートする時にレジと同じように在庫の数を、デフォルト 配分表の納品数表示。そこから数字を変えれるように。アクシデントで何個か制作数が減った時に基本車載を減らして拠点の配分は合わせるため**」。★**何が問題だったか**＝車載には**レジが無いので開始ログが立たない**。積み込み数の出どころは **基本数マスタ G列（配分表）だけ**で、ドライバーが実数を入れる場所がどこにも無かった。配分42個に対して実際38個しか積めなくても画面はずっと42個のままで、**巡回の「置く数の上限」も42個ある前提で出る**。8/20 は「下ろし45個 > 積み込み42個」という辻褄の合わない日が実際にあった。★**画面**＝移動タブの「🚚 ○○から出します」バーの直下に `#vl-box`。**既定値はレジと同じ口 `getPlannedDelivery&loc=<車載ID>`**（車載の行も基本数マスタにあるのでそのまま返る。実測 L905＝12商品×2個＝24個）。合計と「配分表より −4個」の差を常時出し、［配分表どおり］で戻せる。**配分表に無い商品**（積み忘れの逆・臨時で積んだ物）は畳んだ一覧から足せる＝ここに出ない商品は**巡回で置けなくなる**ので逃げ道が要る。★**必須扱い**（社長選択）＝確定するまで「置く・下げる」「車載を減らす」「車載の残り」を出さない。⚠ **ただし止めるのは `st.load.found === false` と分かっている時だけ。**通信に失敗した／GASが古い時は `st.load` 自体が無いので**ゲートしない**（ピーク中に現場が何もできなくなる方が危険）。★**保存先は新しいシート「車載積み込み」**（社長選択A案）＝日付／車載ID／個数JSON／合計／**配分表JSON／配分表合計／差**／入力者／時刻。**基本数マスタは1セルも触らない**＝①拠点の配分を動かさない（社長の狙い）②配分表を上書きすると「配分42に対して38しか積めなかった」という**差が消える**（「車載の積み込み実数が配分表と合わない」＝8/17からの宿題がこれで測れる）。1日1台1行・やり直しは上書き。★**サーバー側**＝`_vehicleRemaining_` がこのシートに当日の行があれば**基本数マスタより優先**して積み込み数に使う。行が無い日は従来どおり（過去の日も数字は変わらない）。新API＝`getVehicleLoad`（doGet）／`saveVehicleLoad`（doPost）。`getVehicleStock` の応答に `load` を追加。要: メインGAS @2026-08-25 以降。 -->
 <!-- driver v5.9 (2026-08-25) 【ドライバーIDで担当車載を自動判定（「芝発になってる」の根治）】社長「入った時にLINE IDから誰かは識別できるんだから、選ばなくても自分のエリア表示できるようにして欲しい」。★**何が起きていたか**＝`_svVehicle_()` が「エリア＝車載 の**先頭**」を返していた。車載の表示順は L901=35／L904=36／L903=37／L902=38／L905=39 なので、**誰が開いても必ず L901（芝）**になる。画面の「車載の残り N個（車載（お茶））」だけは正しかった（あちらはサーバーが userId で解決するため）が、置く／下げる／車から補充／車へ回収／車載下ろし の**5つの書き込みは `vehicleLocationId: L901` を明示指定で上書き送信**していたので、移動ログの出発拠点が全部 L901 になった。「本日の移動」は `getMovesByDate`（**全員分**）のログをそのまま出すので、**他のドライバーが移動タブを開くと自分の巡回が「車載（芝）→○○」と並んで見えた**＝社長が見た「芝発になってる」。実測 2026-08-24＝車載補充20件すべて L901 発・80個（柚木31／戸賀崎33／TAKE15／大串1）、L902・L905 は出庫0のまま＝日次レポート④「車載の数の検証」が芝・銀座・お茶で成立しない。★**直し方**＝`_svVehicle_()` を **拠点マスタ K列「主担当userId」（`defaultDriverId`）で解決**する。`getMaster` が既に配っているので**新しいマスタ列も新しいAPIも要らない**。⚠ **一致しない人は null を返す（先頭に落とさない）**＝また黙って別の車から出た記録になるため。呼び出し側が「どの車載から出しますか？」を出して本人に選ばせ、**選ぶまで送信させない**。★画面＝巡回パネル最上部に「🚚 **車載（お茶）から出します**［変更］」の確認バーを常時表示。★**逃げ道**＝［変更］で他エリアの車を選べる（その日だけ localStorage `drv_veh_pick` に記憶）。手で選んだ時だけ `vehiclePicked:true` を送り、**GAS側の矯正を通り抜ける**。借りた車の主担当拠点も置き先に出す（8/24 に「神谷L904→虎ノ門②へ5個」が実在）。★**計算には一切触っていない**（置く数・配分の式は1行も変えていない）。要: メインGAS @2026-08-25 以降（`_vehicleLocationOf_` の矯正）。 -->
 <!-- driver v5.8 (2026-08-25) 【`getDriverState` が GAS 全体を詰まらせていたのを止めた：自動休止を端末に持たせる】社長「どうして固まるの？」→ **計測データで犯人が確定した。**★**実測（8/19〜8/25・doGet遅延ログ 14,344件＝5秒超だけ記録）**＝**11,923件（83%）がこの `getDriverState` 1本**。中央値9.0秒・最大306.5秒で、**97%が11〜14時のピークに集中**（11時3,289／12時5,014／13時2,499／14時766）。🔴 **混んでいるから遅いのではない**＝誰も使っていない**深夜4:30に単独で叩いても 12.0／17.8／28.4秒**かかった（返すデータは1.2KB）。**関数そのものが最初から遅い。**★**遅い理由＝1回で読むセル数の内訳**：**基本数マスタ 10,032行×11列≒110,000セル（93%）**／回収状態 1,272行×6列=7,632セル（6%）／休止拠点 84行×6列=504セル（0.4%）。基本数マスタを読むのは「納品数0の拠点を自動休止にする」判定のためだけで、**必要なのは当日の912行＝9%。残り91%は読んで捨てていた。**そこへ `DRIVER_STATE_POLL_MS = 10000`＝**1回9〜28秒かかる処理を10秒間隔で回していた**ので、前の実行が終わる前に次が始まって積み上がる。`executeAs: USER_DEPLOYING`＝**全員のリクエストが社長1人の実行枠（30本）を共有**するため、これが他の全アプリを巻き添えにしていた（同時実行の実測は最大18本）。★**直し方**＝自動休止は**朝決まれば1日ほぼ変わらない**。10秒ごとに8万セル読んで計算し直す理由がない。→ メインGASの `getDriverState` は**既定を軽量版**（自動休止を判定しない）にし、`&auto=1` を付けた時だけ従来どおり返す。driver は**起動時と60分ごと**に `&auto=1` で取り直して `state.autoInactiveIds` に保持し、10秒ポーリングが運んでくる**手動休止**と混ぜて `state.inactiveIds` を作る（`applyInactive_`）。v5.3「置く数の見込みを朝1回だけ配る」と同じ手。★**現場の見え方は変わらない**＝休止の判定結果は同じ。手動の⏸は従来どおり10秒で全端末に伝わる。★⚠ **取れなかった時に古い値を消さない**＝空で上書きすると納品0の拠点が回収リストに出る。サーバーが `autoJudged` を返すので**判定できた時だけ**差し替える（当日の基本数マスタ行がまだ無い時間帯は `false`）。★⚠ **既定を変えて大丈夫な理由**＝この action を見ているのは driver.html と dashboard.html だけで、**dashboard.html は 2026-08-13 の再編④⑤で解体済み**（ポータルにもリッチメニューにも導線が無い・最終更新 8/7）。生きている呼び出し元は driver.html だけ。★実況タブ（5分ポーリング）も既定＝軽量版になるので、そちらでも端末の自動休止を混ぜている。要: メインGAS @590 以降。 -->
 <!-- driver v5.7b (2026-08-21) 【車載を減らすボタン（開店前に下ろした分）】社長決定（2026-08-21 午前）「車載は**減らすだけ**。拠点には足さない（開店前は販売員が数えるので二重になる）。**行き先の拠点は必須で記録**（A案）」。★⚠ **既存の「車から補充」（supplyFromVehicle）を開店前に使ってはいけない**＝あちらは status=完結 で書くので`getMoveAdjByLocProduct_` が行き先の納品数をその場で増やし、販売員のレジ開始時の数え直しと**二重になる**。★**どうやって減らすだけにしたか**＝`getMoveAdjByLocProduct_` は「出発側は status に関係なく必ず引く／到着側は status===完結 の時だけ足す」という作り。だから status を **車載下ろし** にすれば「車載は減る・行き先は増えない・行き先は記録に残る」が既存の在庫計算に一切手を入れずに実現できる。新API＝`reduceVehicleStock`。⚠ **移動ログの19列目 車載下ろし を 完結 に変えると納品数が二重になる。**★画面＝移動タブの車載セクション直下に畳んだボタン。開くと「どこに置きましたか？（必須）」＋車載にある商品だけの個数欄。行き先未選択では送信ボタンが押せない。★🔑 これで「車載の積み込み実数が配分表と合わない」（8/17から続く宿題）も追える＝8/20は下ろし45個>積み込み42個だった。要: メインGAS @2026-08-21 以降（`reduceVehicleStock`）。 -->
@@ -991,6 +992,25 @@ body {
 .rv-submit{width:100%;margin-top:12px;padding:14px;border:0;border-radius:10px;
   background:#24405e;color:#fff;font-size:16px;font-weight:700;}
 .rv-submit:disabled{background:#b6bfc9;}
+/* ★2026-08-25 v6.0 車載の積み込み（スタート時の在庫確定） */
+.vl-card{background:#fff;border:2px solid #24405e;border-radius:12px;padding:12px;margin-bottom:12px;}
+.vl-title{font-size:15px;font-weight:800;color:#1A3C5E;margin-bottom:4px;}
+.vl-note{background:#eef4fb;border:1px solid #cfe0f2;border-radius:8px;padding:8px 10px;
+  font-size:12px;color:#24405e;line-height:1.6;margin-bottom:10px;}
+.vl-sum{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:700;color:#1A3C5E;
+  padding:8px 0 10px;border-bottom:1px solid #eef2f6;margin-bottom:6px;}
+.vl-sum .vl-diff{font-size:12px;font-weight:700;color:#8a1c1c;}
+.vl-sum .vl-same{font-size:12px;font-weight:700;color:#2e7d4f;}
+.vl-reset{margin-left:auto;background:#fff;border:1px solid #9db9d4;color:#1A3C5E;
+  border-radius:8px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;flex:none;}
+.vl-more{width:100%;margin-top:8px;padding:9px;border:1px dashed #cfd8e3;border-radius:8px;
+  background:#fff;font-size:13px;color:#3a4b5e;cursor:pointer;}
+.vl-done{display:flex;align-items:center;gap:8px;background:#eef7f1;border:1px solid #cfe6d8;
+  border-radius:10px;padding:9px 12px;font-size:13px;color:#1f5136;margin-bottom:10px;}
+.vl-done b{font-size:15px;}
+.vl-done.vl-short{background:#fdf3e7;border-color:#f0d9bb;color:#7c3d09;}
+.vl-chg{margin-left:auto;background:#fff;border:1px solid #9db9d4;color:#1A3C5E;
+  border-radius:8px;padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer;flex:none;}
 #rv-loc-list .sv-loc.on{background:#24405e;color:#fff;border-color:#24405e;}
 /* ★2026-08-21 v5.7 メイン返却分。手持ちが返却分を割ったら赤くする（社長「早めに分かる」ため） */
 .sv-stock.pt-short{background:#fdecec;border-color:#f3bcbc;color:#8a1c1c;}
@@ -1881,6 +1901,12 @@ body {
            ここに「どの車載から出すか」を常に出す。既定は拠点マスタK列の主担当。
            ⚠ 既定を「未選択」に戻さない＝主担当が取れた人は選ばせない（確認だけ見せる）。 -->
       <div class="pt-veh" id="pt-veh"></div>
+
+      <!-- ★2026-08-25 v6.0【社長】「スタートする時にレジと同じように在庫の数を、
+             デフォルト 配分表の納品数表示。そこから数字を変えれるように。
+             アクシデントで何個か制作数が減った時に基本車載を減らして拠点の配分は合わせるため」
+           確定するまで巡回（置く・下げる）は使えない＝レジと同じ扱い。 -->
+      <div id="vl-box"></div>
 
       <div class="sv-stock" id="pt-stock">車載の残り …</div>
 
@@ -5908,11 +5934,205 @@ function ptRenderVeh_() {
 
 function svVehAsk_() { svVehAskOpen = true; ptRenderVeh_(); }
 
+/* ══════════════════════════════════════════════════════════════
+   車載の積み込み（スタート時の在庫確定）  ★2026-08-25 v6.0【社長指示】
+   ══════════════════════════════════════════════════════════════
+   > スタートする時にレジと同じように在庫の数を、デフォルト 配分表の納品数表示。
+   > そこから数字を変えれるように。**アクシデントで何個か制作数が減った時に
+   > 基本車載を減らして拠点の配分は合わせるため。**
+
+   ★**なぜ要るか**＝車載にはレジが無いので開始ログが立たず、積み込み数の出どころは
+     基本数マスタ G列（配分表）**だけ**だった。配分42個に対して実際38個しか積めなくても
+     画面はずっと42個のままで、**巡回の「置く数の上限」も42個ある前提で出る**。
+     8/20 は「下ろし45個 > 積み込み42個」という辻褄の合わない日が実際にあった。
+   ★**拠点の配分は動かさない。**減るのは車載だけ（社長の狙いがそれ）。
+   ★既定値は `getPlannedDelivery&loc=<車載ID>`（レジのスタート画面と**同じ口**）。
+   ★確定するまで「置く・下げる」「車載を減らす」を出さない＝レジと同じ必須扱い（社長選択）。
+   ⚠ **サーバーの応答が取れなかった時はゲートしない**（`st.load` が無い＝古いGAS or 通信失敗）。
+     ここで閉じると現場がピーク中に何もできなくなる。分かっている時だけ止める。
+   ⚠ 保存先は**別シート「車載積み込み」**で、基本数マスタは1セルも触らない（社長選択A案）。
+     配分表を上書きすると「配分42に対して38しか積めなかった」という**差が消える**。
+   ══════════════════════════════════════════════════════════════ */
+
+let vlLoad    = null;   // サーバーの確定行（{found, qty, total, plannedTotal, at, by}）
+let vlPlanned = null;   // 配分表の既定値（{pid: n}）。取れるまで null
+let vlOpen    = false;  // 入力を開いているか（確定済みでも［修正］で開ける）
+let vlMore    = false;  // 「配分表に無い商品」も出しているか
+let vlDraft   = {};     // 入力中の数（再描画で消えないよう退避する）
+
+async function vlLoadPlanned_() {
+  const veh = _svVehicle_();
+  if (!veh) return null;
+  try {
+    // ⚠ /exec の GET はHTTPキャッシュに当たる。_cb を付けないと古い応答を掴む。
+    const url = `${GAS_URL}?action=getPlannedDelivery&date=${getDateStrOffset_(0)}`
+      + `&loc=${encodeURIComponent(veh.id)}&_cb=${Date.now()}${Math.random().toString(36).slice(2, 7)}`;
+    const j = await fetch(url, { redirect: 'follow' }).then(r => r.json());
+    if (!j || !j.ok) return null;
+    vlPlanned = j.deliveryCount || {};
+    return vlPlanned;
+  } catch (e) { console.warn('getPlannedDelivery(veh)', e); return null; }
+}
+
+// 表示する商品の並び（配分表にある物が先・その他は state.products の順）
+function vlRowPids_() {
+  const plan = vlPlanned || {};
+  const order = (state.products || []).map(p => String(p.id));
+  const inPlan = order.filter(id => Number(plan[id]) > 0);
+  // 確定済みで「配分表に無いのに積んだ」商品も必ず出す（消えると直せなくなる）
+  const extraFixed = Object.keys((vlLoad && vlLoad.qty) || {})
+    .filter(id => Number((vlLoad.qty || {})[id]) > 0 && inPlan.indexOf(id) < 0);
+  const rest = order.filter(id => inPlan.indexOf(id) < 0 && extraFixed.indexOf(id) < 0);
+  return { main: inPlan.concat(extraFixed), rest: rest };
+}
+
+function vlDefaultFor_(pid) {
+  if (Object.prototype.hasOwnProperty.call(vlDraft, pid)) return vlDraft[pid];
+  if (vlLoad && vlLoad.found && vlLoad.qty && Object.prototype.hasOwnProperty.call(vlLoad.qty, pid)) {
+    return Number(vlLoad.qty[pid]) || 0;
+  }
+  return Number((vlPlanned || {})[pid]) || 0;
+}
+
+function vlReadInputs_() {
+  const qty = {};
+  document.querySelectorAll('#vl-box input[data-vlpid]').forEach(inp => {
+    qty[inp.dataset.vlpid] = Math.max(0, parseInt(inp.value, 10) || 0);
+  });
+  return qty;
+}
+
+function vlStash_() { vlDraft = vlReadInputs_(); }
+
+function vlRender_() {
+  const box = document.getElementById('vl-box');
+  if (!box) return;
+  const veh = _svVehicle_();
+  if (!veh) { box.innerHTML = ''; return; }
+
+  const confirmed = !!(vlLoad && vlLoad.found);
+
+  // ── 確定済み＆閉じている：1行のまとめだけ ──
+  if (confirmed && !vlOpen) {
+    const d = Number(vlLoad.total) - Number(vlLoad.plannedTotal || 0);
+    box.innerHTML =
+      '<div class="vl-done' + (d < 0 ? ' vl-short' : '') + '">' +
+        '📦 今日積んだ数 <b>' + (Number(vlLoad.total) || 0) + '個</b>' +
+        (vlLoad.plannedTotal
+          ? '<span style="font-size:12px;">（配分表 ' + vlLoad.plannedTotal + '個'
+            + (d === 0 ? '・同じ' : (d > 0 ? '・+' + d : '・' + d)) + '）</span>'
+          : '') +
+        '<button type="button" class="vl-chg" onclick="vlOpenEdit_()">修正</button>' +
+      '</div>';
+    return;
+  }
+
+  // ── 未確定 or 修正中：レジと同じ入力カード ──
+  if (!vlPlanned && !confirmed) {
+    box.innerHTML = '<div class="vl-card"><div class="vl-title">📦 積み込んだ数を確認します</div>'
+                  + '<div class="vl-note">配分表を読み込み中です…</div></div>';
+    return;
+  }
+
+  const pids = vlRowPids_();
+  const row = pid =>
+    '<div class="rv-row">' +
+      '<span class="rv-nm">' + _esc(_moveProdName_(pid)) + '</span>' +
+      '<span class="rv-have">配分 ' + (Number((vlPlanned || {})[pid]) || 0) + '</span>' +
+      '<input type="number" inputmode="numeric" min="0" data-vlpid="' + _esc(pid) + '"' +
+        ' value="' + vlDefaultFor_(pid) + '" oninput="vlRecalc_()">' +
+    '</div>';
+
+  const planTotal = Object.keys(vlPlanned || {}).reduce((a, k) => a + (Number(vlPlanned[k]) || 0), 0);
+
+  box.innerHTML =
+    '<div class="vl-card">' +
+      '<div class="vl-title">📦 ' + _esc(veh.name) + ' に積んだ数</div>' +
+      '<div class="vl-note">配分表の数を入れてあります。<b>作れなかった分があればここで減らしてください。</b><br>' +
+        '拠点の配分は変わりません。減るのは車載だけです。</div>' +
+      '<div class="vl-sum">合計 <span id="vl-total">0</span>個' +
+        '<span id="vl-diff"></span>' +
+        '<button type="button" class="vl-reset" onclick="vlResetToPlan_()">配分表どおり（' + planTotal + '個）</button>' +
+      '</div>' +
+      pids.main.map(row).join('') +
+      (vlMore ? pids.rest.map(row).join('') : '') +
+      (pids.rest.length
+        ? '<button type="button" class="vl-more" onclick="vlToggleMore_()">'
+          + (vlMore ? '▲ 配分表に無い商品を閉じる' : '▼ 配分表に無い商品も出す（' + pids.rest.length + '種）')
+          + '</button>'
+        : '') +
+      '<button type="button" class="rv-submit" id="vl-submit" onclick="vlSubmit_()">' +
+        (confirmed ? 'この数に直す' : 'この数でスタートする') +
+      '</button>' +
+      (confirmed ? '<button type="button" class="sv-close" onclick="vlCancelEdit_()">やめる</button>' : '') +
+    '</div>';
+  vlRecalc_();
+}
+
+function vlRecalc_() {
+  const qty = vlReadInputs_();
+  let total = 0;
+  Object.keys(qty).forEach(k => { total += qty[k]; });
+  const planTotal = Object.keys(vlPlanned || {}).reduce((a, k) => a + (Number(vlPlanned[k]) || 0), 0);
+  const t = document.getElementById('vl-total');
+  if (t) t.textContent = String(total);
+  const d = document.getElementById('vl-diff');
+  if (d) {
+    const gap = total - planTotal;
+    d.className = gap === 0 ? 'vl-same' : 'vl-diff';
+    d.textContent = gap === 0 ? '（配分表どおり）'
+                  : (gap > 0 ? '（配分表より +' + gap + '個）' : '（配分表より ' + gap + '個）');
+  }
+}
+
+function vlToggleMore_() { vlStash_(); vlMore = !vlMore; vlRender_(); }
+async function vlOpenEdit_() { vlDraft = {}; vlOpen = true; if (!vlPlanned) await vlLoadPlanned_(); vlRender_(); }
+function vlCancelEdit_() { vlDraft = {}; vlOpen = false; vlMore = false; vlRender_(); }
+
+function vlResetToPlan_() {
+  vlDraft = {};
+  document.querySelectorAll('#vl-box input[data-vlpid]').forEach(inp => {
+    inp.value = String(Number((vlPlanned || {})[inp.dataset.vlpid]) || 0);
+  });
+  vlRecalc_();
+}
+
+async function vlSubmit_() {
+  const veh = _svVehicle_();
+  if (!veh) { showToast('どの車載から出すかを選んでください', 'error'); return; }
+  const qty = vlReadInputs_();
+  let total = 0;
+  Object.keys(qty).forEach(k => { total += qty[k]; });
+  if (total <= 0 && !confirm('合計0個で確定します。よろしいですか？')) return;
+
+  const btn = document.getElementById('vl-submit');
+  const orig = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '送信中…'; }
+  try {
+    const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({
+      action: 'saveVehicleLoad', date: getDateStrOffset_(0),
+      driverUserId: state.userId, driverName: state.userName,
+      vehicleLocationId: veh.id, vehiclePicked: _svVehPicked_(),
+      qty: qty, planned: vlPlanned || {},
+    })});
+    const d = await res.json();
+    if (!d.ok) throw new Error(d.error || '登録に失敗しました');
+    vlDraft = {}; vlOpen = false; vlMore = false;
+    showToast(veh.name + ' の積み込みを ' + total + '個 で確定しました', 'success', 3500);
+    await refreshSupplyButton_();          // ＝ ptRefresh_（残数と推奨を取り直す）
+  } catch (e) {
+    showToast('エラー：' + (e.message || e), 'error', 6000);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = orig; }
+  }
+}
+
 function svVehPick_(id) {
   svVehPick = { date: getDateStrOffset_(0), id: String(id) };
   try { localStorage.setItem(SV_VEH_PICK_KEY, JSON.stringify(svVehPick)); } catch (e) {}
   svVehAskOpen = false;
   ptPicked = '';                       // 車を替えたら拠点選択からやり直す（残数が変わるため）
+  vlLoad = null; vlPlanned = null; vlDraft = {}; vlOpen = false; vlMore = false;  // 積み込みも取り直す
   refreshSupplyButton_();              // ＝ ptRefresh_（車載の残りを取り直す）
 }
 
@@ -6016,6 +6236,25 @@ async function ptRefresh_() {
 
   const st  = await loadVehicleStock_();
   const box = document.getElementById('pt-stock');
+
+  /* ★2026-08-25 v6.0【積み込みの確定ゲート】レジと同じ必須扱い（社長選択）。
+     ⚠ **分かっている時だけ止める**＝`st.load.found === false` の時だけ。
+       通信に失敗した／GASが古い時は `st` や `st.load` が無いので**ゲートしない**。
+       ここで閉じるとピーク中に現場が何もできなくなる。 */
+  vlLoad = (st && st.load && st.load.found) ? st.load : null;
+  const vlUnconfirmed = !!(st && st.load && st.load.found === false);
+  if ((vlUnconfirmed || vlOpen) && !vlPlanned) await vlLoadPlanned_();
+  vlRender_();
+  if (vlUnconfirmed) {
+    ['rv-box', 'pt-step1', 'pt-step2'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'none';
+    });
+    if (box) box.style.display = 'none';   // 「車載の残り」は積み込みを確定してから出す
+    ptApplyFold_();
+    return;
+  }
+  if (box) box.style.display = '';
   if (box) {
     if (!st || !st.remaining) {
       box.className = 'sv-stock';
