@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v5.9 (2026-08-25) 【ドライバーIDで担当車載を自動判定（「芝発になってる」の根治）】社長「入った時にLINE IDから誰かは識別できるんだから、選ばなくても自分のエリア表示できるようにして欲しい」。★**何が起きていたか**＝`_svVehicle_()` が「エリア＝車載 の**先頭**」を返していた。車載の表示順は L901=35／L904=36／L903=37／L902=38／L905=39 なので、**誰が開いても必ず L901（芝）**になる。画面の「車載の残り N個（車載（お茶））」だけは正しかった（あちらはサーバーが userId で解決するため）が、置く／下げる／車から補充／車へ回収／車載下ろし の**5つの書き込みは `vehicleLocationId: L901` を明示指定で上書き送信**していたので、移動ログの出発拠点が全部 L901 になった。「本日の移動」は `getMovesByDate`（**全員分**）のログをそのまま出すので、**他のドライバーが移動タブを開くと自分の巡回が「車載（芝）→○○」と並んで見えた**＝社長が見た「芝発になってる」。実測 2026-08-24＝車載補充20件すべて L901 発・80個（柚木31／戸賀崎33／TAKE15／大串1）、L902・L905 は出庫0のまま＝日次レポート④「車載の数の検証」が芝・銀座・お茶で成立しない。★**直し方**＝`_svVehicle_()` を **拠点マスタ K列「主担当userId」（`defaultDriverId`）で解決**する。`getMaster` が既に配っているので**新しいマスタ列も新しいAPIも要らない**。⚠ **一致しない人は null を返す（先頭に落とさない）**＝また黙って別の車から出た記録になるため。呼び出し側が「どの車載から出しますか？」を出して本人に選ばせ、**選ぶまで送信させない**。★画面＝巡回パネル最上部に「🚚 **車載（お茶）から出します**［変更］」の確認バーを常時表示。★**逃げ道**＝［変更］で他エリアの車を選べる（その日だけ localStorage `drv_veh_pick` に記憶）。手で選んだ時だけ `vehiclePicked:true` を送り、**GAS側の矯正を通り抜ける**。借りた車の主担当拠点も置き先に出す（8/24 に「神谷L904→虎ノ門②へ5個」が実在）。★**計算には一切触っていない**（置く数・配分の式は1行も変えていない）。要: メインGAS @2026-08-25 以降（`_vehicleLocationOf_` の矯正）。 -->
 <!-- driver v5.8 (2026-08-25) 【`getDriverState` が GAS 全体を詰まらせていたのを止めた：自動休止を端末に持たせる】社長「どうして固まるの？」→ **計測データで犯人が確定した。**★**実測（8/19〜8/25・doGet遅延ログ 14,344件＝5秒超だけ記録）**＝**11,923件（83%）がこの `getDriverState` 1本**。中央値9.0秒・最大306.5秒で、**97%が11〜14時のピークに集中**（11時3,289／12時5,014／13時2,499／14時766）。🔴 **混んでいるから遅いのではない**＝誰も使っていない**深夜4:30に単独で叩いても 12.0／17.8／28.4秒**かかった（返すデータは1.2KB）。**関数そのものが最初から遅い。**★**遅い理由＝1回で読むセル数の内訳**：**基本数マスタ 10,032行×11列≒110,000セル（93%）**／回収状態 1,272行×6列=7,632セル（6%）／休止拠点 84行×6列=504セル（0.4%）。基本数マスタを読むのは「納品数0の拠点を自動休止にする」判定のためだけで、**必要なのは当日の912行＝9%。残り91%は読んで捨てていた。**そこへ `DRIVER_STATE_POLL_MS = 10000`＝**1回9〜28秒かかる処理を10秒間隔で回していた**ので、前の実行が終わる前に次が始まって積み上がる。`executeAs: USER_DEPLOYING`＝**全員のリクエストが社長1人の実行枠（30本）を共有**するため、これが他の全アプリを巻き添えにしていた（同時実行の実測は最大18本）。★**直し方**＝自動休止は**朝決まれば1日ほぼ変わらない**。10秒ごとに8万セル読んで計算し直す理由がない。→ メインGASの `getDriverState` は**既定を軽量版**（自動休止を判定しない）にし、`&auto=1` を付けた時だけ従来どおり返す。driver は**起動時と60分ごと**に `&auto=1` で取り直して `state.autoInactiveIds` に保持し、10秒ポーリングが運んでくる**手動休止**と混ぜて `state.inactiveIds` を作る（`applyInactive_`）。v5.3「置く数の見込みを朝1回だけ配る」と同じ手。★**現場の見え方は変わらない**＝休止の判定結果は同じ。手動の⏸は従来どおり10秒で全端末に伝わる。★⚠ **取れなかった時に古い値を消さない**＝空で上書きすると納品0の拠点が回収リストに出る。サーバーが `autoJudged` を返すので**判定できた時だけ**差し替える（当日の基本数マスタ行がまだ無い時間帯は `false`）。★⚠ **既定を変えて大丈夫な理由**＝この action を見ているのは driver.html と dashboard.html だけで、**dashboard.html は 2026-08-13 の再編④⑤で解体済み**（ポータルにもリッチメニューにも導線が無い・最終更新 8/7）。生きている呼び出し元は driver.html だけ。★実況タブ（5分ポーリング）も既定＝軽量版になるので、そちらでも端末の自動休止を混ぜている。要: メインGAS @590 以降。 -->
 <!-- driver v5.7b (2026-08-21) 【車載を減らすボタン（開店前に下ろした分）】社長決定（2026-08-21 午前）「車載は**減らすだけ**。拠点には足さない（開店前は販売員が数えるので二重になる）。**行き先の拠点は必須で記録**（A案）」。★⚠ **既存の「車から補充」（supplyFromVehicle）を開店前に使ってはいけない**＝あちらは status=完結 で書くので`getMoveAdjByLocProduct_` が行き先の納品数をその場で増やし、販売員のレジ開始時の数え直しと**二重になる**。★**どうやって減らすだけにしたか**＝`getMoveAdjByLocProduct_` は「出発側は status に関係なく必ず引く／到着側は status===完結 の時だけ足す」という作り。だから status を **車載下ろし** にすれば「車載は減る・行き先は増えない・行き先は記録に残る」が既存の在庫計算に一切手を入れずに実現できる。新API＝`reduceVehicleStock`。⚠ **移動ログの19列目 車載下ろし を 完結 に変えると納品数が二重になる。**★画面＝移動タブの車載セクション直下に畳んだボタン。開くと「どこに置きましたか？（必須）」＋車載にある商品だけの個数欄。行き先未選択では送信ボタンが押せない。★🔑 これで「車載の積み込み実数が配分表と合わない」（8/17から続く宿題）も追える＝8/20は下ろし45個>積み込み42個だった。要: メインGAS @2026-08-21 以降（`reduceVehicleStock`）。 -->
 <!-- driver v5.7 (2026-08-21) 【車載に「メイン返却分」を常時表示し、割ったら警告】社長要望「自分の手持ち、例えば昨日だったら22個が芝パーク分で20個がプラス分。ドライバーが22個を下回りそうだったら、芝パークに追加する分が足りないと早めにわかるから、他のエリアから足りなくなりそうなものを早めに持ってきてもらうように指示が出せた」「だからエリア別に何個がメインに返却分というのがわかるようになっていた方がいい（個数でいい。商品別だとややこしくなりそう）」。★**返却分とは何か**＝メイン拠点の12:20以降の販売予定数＝**3区間予定の区間3の合計**。手で決める数字ではない。実測で芝パーク8/21＝22個・車載42なのでプラス分20個＝社長の言った数字とぴったり一致した。★⚠ **日ごとに違う**（芝：8/19 25／8/20 25／8/21 22）。固定値にしない＝サーバーがその日の3区間予定から出す。★⚠ **マイナスにならない**＝返却分が車載の総数を超える日は総数で頭打ちにし、溢れた分はメイン拠点に置いたまま（社長「溢れた分はメインの拠点に置くって仕様になってるはず」＝§2-1決定3）。実測でBizタワーは8/19:21／8/20:27／8/21:22と車載20個を超える。頭打ちにしないと積み込んだ瞬間から警告が鳴る。★画面は `#pt-stock` の1ブロックだけ。手持ちが返却分を割ると赤（`.pt-short`）にして不足個数を出す。**判定・置く数の計算は1行も変えていない。**★⚠ 古いGASの応答には `mainReturn` が無い＝その時は従来の1行のまま（落ちない）。要: メインGAS @2026-08-21 以降（`vehComputeReturnQty_` / `3区間予定` シート / getVehicleStock の `mainReturn`）。 -->
@@ -961,6 +962,20 @@ body {
 .sv-stock{background:#eef7f1;border:1px solid #cfe6d8;border-radius:10px;padding:10px 12px;
   font-size:14px;color:#14532d;margin-bottom:12px;}
 .sv-stock b{font-size:18px;}
+/* ★2026-08-25 v5.9 どの車載から出すか（確認バー／未確定時の選択） */
+.pt-veh{margin:0 0 8px;}
+.pt-veh-bar{display:flex;align-items:center;gap:8px;background:#eaf1f8;border:1px solid #c7d9ea;
+  border-radius:10px;padding:9px 12px;font-size:13px;color:#1A3C5E;}
+.pt-veh-bar b{font-size:15px;}
+.pt-veh-chg{margin-left:auto;background:#fff;border:1px solid #9db9d4;color:#1A3C5E;
+  border-radius:8px;padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer;flex:none;}
+.pt-veh-manual{background:#fdf3e7;border-color:#f0d9bb;color:#7c3d09;}
+.pt-veh-ask{background:#fdecec;border:1px solid #f3bcbc;border-radius:10px;padding:10px 12px;
+  font-size:13px;color:#8a1c1c;line-height:1.6;}
+.pt-veh-grid{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+.pt-veh-grid button{background:#fff;border:1px solid #d0c0c0;border-radius:8px;padding:7px 12px;
+  font-size:13px;font-weight:700;color:#24405e;cursor:pointer;}
+.pt-veh-grid button.on{background:#24405e;color:#fff;border-color:#24405e;}
 /* ★2026-08-21 v5.7 車載を減らす（開店前に下ろす） */
 .rv-open{width:100%;padding:12px;margin-bottom:12px;border:1px solid #cfd8e3;border-radius:10px;
   background:#f6f9fc;font-size:15px;font-weight:700;color:#24405e;}
@@ -1861,6 +1876,12 @@ body {
            分かれていると2回開いて2回送ることになっていた。
          ★芝エリア以外の人には出ない（従来の移動フォームだけが見える）。 -->
     <div id="pt-wrap" style="display:none;">
+      <!-- ★2026-08-25 v5.9【社長】「入った時にLINE IDから誰かは識別できるんだから、
+             選ばなくても自分のエリア表示できるようにして欲しい」
+           ここに「どの車載から出すか」を常に出す。既定は拠点マスタK列の主担当。
+           ⚠ 既定を「未選択」に戻さない＝主担当が取れた人は選ばせない（確認だけ見せる）。 -->
+      <div class="pt-veh" id="pt-veh"></div>
+
       <div class="sv-stock" id="pt-stock">車載の残り …</div>
 
       <!-- ★2026-08-21 v5.7【社長決定】開店前に車載から下ろす用。
@@ -5788,8 +5809,111 @@ async function _submitDepart2_(fromId, qty, plannedTo) {
 const SUPPLY_STEP = { L001: 10, L002: 5, L003: 5, L019: 5, L033: 3 };
 let svPickedLoc = '';
 
+/* ★2026-08-25 v5.9【ドライバーIDで担当車載を自動判定】
+   ══════════════════════════════════════════════════════════════
+   ⚠ 直す前はここが `[0]`（＝先頭の車載）を返していた。
+     車載の表示順は L901=35 / L904=36 / L903=37 / L902=38 / L905=39 なので、
+     **誰が開いても必ず L901（芝）** になっていた。
+     画面の「車載の残り」だけは正しかった（あちらはサーバーが userId で解決するため）が、
+     置く／下げる／補充／回収／下ろし の5つの書き込みは `vehicleLocationId: L901` を
+     **明示指定で上書き送信**していたので、移動ログの出発拠点が全部 L901 になった。
+     実測 2026-08-24＝車載補充20件すべて L901 発・80個（柚木31／戸賀崎33／TAKE15／大串1）。
+     L902・L905 は出庫0のまま＝日次レポート④「車載の数の検証」が成立しない。
+   ★正は拠点マスタ K列「主担当userId」（`defaultDriverId`）。getMaster が既に配っているので
+     新しいマスタ列も新しいAPIも要らない。
+   ★一致しない人（応援・代走・userId が取れない）は **null を返す**。
+     ここで先頭に落とすと、また黙って別の車から出た記録になる。
+     呼び出し側（ptRenderVeh_）が「どの車載から出しますか？」を出して本人に選ばせる。
+   ★手で選んだ日は `svVehPick` が勝つ（他エリアの車から出す日の逃げ道・8/24も神谷L904→虎ノ門②があった）。
+     その時だけサーバーへ `vehiclePicked:true` を送る＝GAS側の矯正を通り抜けさせる。 */
+
+const SV_VEH_PICK_KEY = 'drv_veh_pick';
+let svVehPick = null;      // { date:'YYYY-MM-DD', id:'L905' }（当日だけ有効）
+let svVehAskOpen = false;  // 選択グリッドを開いているか
+
+function _svCars_() {
+  return (state.locations || []).filter(l => l && String(l.area || '').trim() === '車載');
+}
+
+function _svLoadVehPick_() {
+  if (svVehPick !== null) return svVehPick;
+  try {
+    const j = JSON.parse(localStorage.getItem(SV_VEH_PICK_KEY) || 'null');
+    svVehPick = (j && j.date === getDateStrOffset_(0) && j.id) ? j : {};
+  } catch (e) { svVehPick = {}; }
+  return svVehPick;
+}
+
+// 手で選んだ結果かどうか（サーバーの矯正を通り抜けさせる印）
+function _svVehPicked_() {
+  const p = _svLoadVehPick_();
+  if (!p || !p.id) return false;
+  return !!_svCars_().filter(c => String(c.id) === String(p.id))[0];
+}
+
 function _svVehicle_() {
-  return (state.locations || []).filter(l => l && String(l.area || '').trim() === '車載')[0] || null;
+  const cars = _svCars_();
+  if (!cars.length) return null;
+
+  const p = _svLoadVehPick_();
+  if (p && p.id) {
+    const hit = cars.filter(c => String(c.id) === String(p.id))[0];
+    if (hit) return hit;               // 今日だけの手動選択が最優先
+  }
+
+  const uid = String(state.userId   || '').trim();
+  const nm  = String(state.userName || '').trim();
+  if (uid) {
+    const mine = cars.filter(c => String(c.defaultDriverId || '').trim() === uid)[0];
+    if (mine) return mine;
+  }
+  if (nm) {                            // userId が取れない端末の保険（拠点マスタ J列）
+    const byName = cars.filter(c => String(c.defaultDriverName || '').trim() === nm)[0];
+    if (byName) return byName;
+  }
+  return null;                         // ★先頭（L901）に落とさない
+}
+
+// 「車載（お茶）から出します ［変更］」／未確定なら選択グリッド
+function ptRenderVeh_() {
+  const box = document.getElementById('pt-veh');
+  if (!box) return;
+  const cars = _svCars_();
+  if (!cars.length) { box.innerHTML = ''; return; }
+  const veh    = _svVehicle_();
+  const picked = _svVehPicked_();
+
+  if (veh && !svVehAskOpen) {
+    box.innerHTML =
+      '<div class="pt-veh-bar' + (picked ? ' pt-veh-manual' : '') + '">' +
+        '🚚 <b>' + _esc(veh.name) + '</b> から出します' +
+        (picked ? '<span style="font-size:12px;">（今日だけ手動で選んでいます）</span>' : '') +
+        '<button type="button" class="pt-veh-chg" onclick="svVehAsk_()">変更</button>' +
+      '</div>';
+    return;
+  }
+
+  const head = veh
+    ? 'どの車載から出しますか？'
+    : 'あなたの担当車載が分かりません。<b>どの車載から出しますか？</b><br>'
+      + '<span style="font-size:12px;">（選ぶまで置く・下げるは送れません。拠点マスタK列「主担当userId」に入っていれば次から自動になります）</span>';
+  box.innerHTML =
+    '<div class="pt-veh-ask">' + head +
+      '<div class="pt-veh-grid">' +
+        cars.map(c => '<button type="button" class="' + (veh && veh.id === c.id ? 'on' : '') + '"'
+          + ' onclick="svVehPick_(\'' + _esc(c.id) + '\')">' + _esc(c.name) + '</button>').join('') +
+      '</div>' +
+    '</div>';
+}
+
+function svVehAsk_() { svVehAskOpen = true; ptRenderVeh_(); }
+
+function svVehPick_(id) {
+  svVehPick = { date: getDateStrOffset_(0), id: String(id) };
+  try { localStorage.setItem(SV_VEH_PICK_KEY, JSON.stringify(svVehPick)); } catch (e) {}
+  svVehAskOpen = false;
+  ptPicked = '';                       // 車を替えたら拠点選択からやり直す（残数が変わるため）
+  refreshSupplyButton_();              // ＝ ptRefresh_（車載の残りを取り直す）
 }
 
 // ★2026-08-13 昼の画面（実況・補充先）に出してはいけない拠点。エリア列で見分ける。
@@ -5809,6 +5933,15 @@ function _svTargets_() {
   const all = (state.locations || []).filter(l =>
     l && l.id && l.name && !rtHiddenLoc_(l) && (!veh || l.id !== veh.id));   // ★2026-08-13 二次販売拠点にも補充しない
   const mine = all.filter(l => l.defaultDriverId && l.defaultDriverId === state.userId);
+  /* ★2026-08-25 v5.9 他エリアの車を手で選んだ日は、その車の主担当拠点も出す。
+       8/24 に「神谷 L904 → 虎ノ門② へ5個」が実際にあった。自分の担当拠点だけに絞ったままだと
+       借りた車で回っているのに置き先が1つも出ず、通常の移動フォームへ逃げるしかなくなる。
+       ⚠ 既定（自分の車）の時は従来どおり自分の担当拠点だけ＝ピーク中の押し間違いを増やさない。 */
+  if (_svVehPicked_() && veh && veh.defaultDriverId && veh.defaultDriverId !== state.userId) {
+    const seen = {};
+    return mine.concat(all.filter(l => l.defaultDriverId === veh.defaultDriverId))
+               .filter(l => (seen[l.id] ? false : (seen[l.id] = true)));
+  }
   return mine.length ? mine : all;
 }
 
@@ -5866,9 +5999,20 @@ async function refreshSupplyButton_() { await ptRefresh_(); }
 async function ptRefresh_() {
   const wrap = document.getElementById('pt-wrap');
   if (!wrap) return;
-  if (!_svVehicle_()) { wrap.style.display = 'none'; ptApplyFold_(); return; }
+  // ★2026-08-25 v5.9 ①車載が1台も無い＝従来どおり丸ごと隠す
+  //                    ②車載はあるが担当が決まっていない＝選択だけ出して先へ進ませない
+  if (!_svCars_().length) { wrap.style.display = 'none'; ptApplyFold_(); return; }
   wrap.style.display = 'block';
+  ptRenderVeh_();
+  const _veh = _svVehicle_();
+  ['rv-box', 'pt-step1', 'pt-step2'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = _veh ? (id === 'pt-step2' ? (ptPicked ? 'block' : 'none') : 'block') : 'none';
+  });
+  const _stockBox = document.getElementById('pt-stock');
+  if (_stockBox) _stockBox.style.display = _veh ? '' : 'none';
   ptApplyFold_();
+  if (!_veh) return;                    // 車載が決まるまで残数も推奨も取りに行かない
 
   const st  = await loadVehicleStock_();
   const box = document.getElementById('pt-stock');
@@ -6091,10 +6235,11 @@ async function rvSubmit_() {
   if (btn) { btn.disabled = true; btn.textContent = '送信中…'; }
   try {
     const veh = _svVehicle_();
+    if (!veh) throw new Error('どの車載から出すかを選んでください');
     const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({
       action: 'reduceVehicleStock', date: getDateStrOffset_(0),
       driverUserId: state.userId, driverName: state.userName,
-      vehicleLocationId: veh ? veh.id : '',
+      vehicleLocationId: veh ? veh.id : '', vehiclePicked: _svVehPicked_(),
       toLocationId: rvLoc, toLocationName: _moveLocName_(rvLoc), qty: qty,
     })});
     const d = await res.json();
@@ -6488,6 +6633,8 @@ function ptToggleFold() { ptFolded = !ptFolded; ptApplyFold_(); }
 function ptApplyFold_() {
   const panel = document.getElementById('tab-move');
   if (!panel) return;
+  // ★2026-08-25 v5.9 担当車載が決まっていない人は isPt=false ＝ 通常の移動フォームが開いたまま。
+  //   （巡回パネルは「どの車載から出しますか？」だけ出ている状態）
   const isPt = !!_svVehicle_();
   const btn  = document.getElementById('pt-fold-btn');
   let after = false;
@@ -6521,6 +6668,12 @@ async function ptSubmit() {
   const btn = document.getElementById('pt-send-btn');
   if (btn) { btn.disabled = true; btn.textContent = '送信中…'; }
   const veh  = _svVehicle_();
+  // ★2026-08-25 v5.9 担当車載が決まらないまま送らせない（黙って別の車から出た記録になるのを防ぐ）
+  if (!veh) {
+    showToast('どの車載から出すかを選んでください', 'error');
+    if (btn) { btn.disabled = false; btn.textContent = 'この内容で反映する'; }
+    ptRenderVeh_(); return;
+  }
   const name = _moveLocName_(ptPicked);
   const done = [];
   try {
@@ -6528,7 +6681,7 @@ async function ptSubmit() {
       const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({
         action: 'supplyFromVehicle', date: getDateStrOffset_(0),
         driverUserId: state.userId, driverName: state.userName,
-        vehicleLocationId: veh ? veh.id : '',
+        vehicleLocationId: veh ? veh.id : '', vehiclePicked: _svVehPicked_(),
         toLocationId: ptPicked, toLocationName: name, qty: put,
       })});
       const d = await res.json();
@@ -6539,7 +6692,7 @@ async function ptSubmit() {
       const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({
         action: 'collectToVehicle', date: getDateStrOffset_(0),
         driverUserId: state.userId, driverName: state.userName,
-        vehicleLocationId: veh ? veh.id : '',
+        vehicleLocationId: veh ? veh.id : '', vehiclePicked: _svVehPicked_(),
         fromLocationId: ptPicked, fromLocationName: name, qty: back,
       })});
       const d = await res.json();
@@ -6595,8 +6748,11 @@ async function ptSaveLog_(locId, locName, put, back, note) {
 
 async function loadVehicleStock_() {
   try {
+    // ★2026-08-25 v5.9 手で別の車を選んだ日は、その車の残数を出す（既定は送らず uid 解決に任せる）
+    const _v = _svVehicle_();
     const url = `${GAS_URL}?action=getVehicleStock&date=${getDateStrOffset_(0)}`
-      + `&driverUserId=${encodeURIComponent(state.userId || '')}`;
+      + `&driverUserId=${encodeURIComponent(state.userId || '')}`
+      + (_svVehPicked_() && _v ? `&vehicleLocationId=${encodeURIComponent(_v.id)}&vehiclePicked=1` : '');
     const data = await fetch(url, { redirect: 'follow' }).then(r => r.json());
     if (!data || !data.ok) return null;
     state.move.vehicle = data;
@@ -6648,12 +6804,13 @@ async function submitSupply() {
   if (btn) { btn.disabled = true; btn.textContent = '送信中…'; }
   try {
     const veh = _svVehicle_();
+    if (!veh) throw new Error('どの車載から出すかを選んでください');
     const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({
       action: 'supplyFromVehicle',
       date: getDateStrOffset_(0),
       driverUserId: state.userId,
       driverName: state.userName,
-      vehicleLocationId: veh ? veh.id : '',
+      vehicleLocationId: veh ? veh.id : '', vehiclePicked: _svVehPicked_(),
       toLocationId: svPickedLoc,
       toLocationName: _moveLocName_(svPickedLoc),
       qty: qty,
@@ -6723,12 +6880,13 @@ async function submitCollect() {
   if (btn) { btn.disabled = true; btn.textContent = '送信中…'; }
   try {
     const veh = _svVehicle_();
+    if (!veh) throw new Error('どの車載から出すかを選んでください');
     const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({
       action: 'collectToVehicle',
       date: getDateStrOffset_(0),
       driverUserId: state.userId,
       driverName: state.userName,
-      vehicleLocationId: veh ? veh.id : '',
+      vehicleLocationId: veh ? veh.id : '', vehiclePicked: _svVehPicked_(),
       fromLocationId: cvPickedLoc,
       fromLocationName: _moveLocName_(cvPickedLoc),
       qty: qty,
