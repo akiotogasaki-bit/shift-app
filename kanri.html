@@ -26,6 +26,7 @@
 <link rel="apple-touch-icon" href="kanri-icon.png">
 <link rel="manifest" href="kanri.webmanifest">
 <meta name="theme-color" content="#2471A3">
+<!-- kanri.html v3.60 (2026-08-28) 【先行発注を業者カードの中へ】社長「このカードは山商の発注欄に表示されるんだよね？」→ v3.59 は**発注タブの一番上の独立ブロック**に出していたので、業者カードの中に移した。山商カードを開くと**食材表のすぐ下**に「🕐 先行発注」セクションが出る（並び＝食材表 → 先行発注 → 定数発注 → 日別内訳）。**カードを開かなくても分かるよう見出しにバッジ**を出す（発注日超過＝赤／今日発注＝オレンジ／それ以外＝薄紫・件数つき）。品目数の表記も「（3品目＋先行2）」に。コピーボタンは束ごとに持たせたまま（納品日が業者カードのコピーとズレるため）＝`event.stopPropagation()` でカードの開閉を巻き込まない。先行発注しか無く通常の食材も定数発注も持たない業者は GAS 側でカードが作られないので、フロントでカードを足す。GAS変更なし（@620のまま）。 -->
 <!-- kanri.html v3.59 (2026-08-28) 【発注タブ：先行発注（納品日が使用日と違う食材）】社長指示「食材マスタのささみの発注表示のタイミングを変えたい」。ささみは山商へ**使う日より前に発注し、前もって納品される**ため、従来の発注タブ（選んだ日＝使用日＝納品日）では出るタイミングが合っていなかった。**食材マスタに K列「発注タイミング」を新設**し、`月:木/土, 火:金/月, 水:金/火, 木:金/火, 金:火/木`（＝使用曜日:発注曜日/納品曜日）と書くと、その食材だけ**業者カードから外れて**「🕐 先行発注」ブロックに移り、**発注日→納品日の束**で表示される（納品日は使用日から遡って直近の該当曜日）。コピーする発注文の `▼納品日` もその束の納品日になる。発注日が今日＝オレンジ、過ぎている＝赤で警告。K列が空欄の食材は従来どおり。要メインGAS v2026-08-28（`getShokunMaster_Compute_` のK列読み・`_parseOrderTiming_`／`_prevDowDate_`／`_buildTimedOrders_` 追加・`getOrderData` が `timedOrders` を返す）。⚠ 食材マスタは10分キャッシュ。K列を直した直後に画面が変わらない時は `clearAllMasterCache()`。 -->
 <!-- kanri.html v3.57 (2026-08-05) 【仕込みの読み込み高速化】社長報告「仕込みの読み込みがめちゃくちゃかかる」。実測＝`getKawariSelections` 3.4秒 ＋ `getSheet4Data` 13〜18秒の**直列2本で17〜22秒**。切り分け＝GASは**存在しないactionを叩くだけでも約5秒**（コード1.8MB）で、日数を1日→4日に増やしても時間が変わらない＝固定コスト（単価マスタ／基本数マスタ7,750行／配達データ）。**A＝1リクエスト化**：`fetchSheet4` から1本目の `getKawariSelections` を削除し、全六（日替わり選択）は**GAS側が先頭日のぶんを読む**（`getSheet4Data` の kawari 引数を省略可に）。表示は元から `data.kawari` を見ているので renderSheet4 は無改修。**B＝結果キャッシュ**：`getSheet4Data` の応答を CacheService に10分保持（GAS側）。数字が変わる操作＝配分の保存/確定・献立保存・日替わり選択の保存・配達取込・外部納品取込・便移動 で版番号を上げてキーごと捨てるので古い数字は出ない（`?fresh=1` で無条件に取り直し）。要メインGAS v2026-08-05（`_sheet4CacheVer_`／`_sheet4BumpCacheVer_`／`getSheet4Data` 改修＋`clearAllMasterCache` で版上げ）。 -->
 <!-- kanri.html v3.56 (2026-08-05) 【献立表：確定済みでも「あとからやった変更」を優先】社長報告「献立のローテーションを変えるとカレンダーを変更しましたと出るのに実際は変わらない。仕入れの関係などで確定後にメニューが変わることはよくある」。原因＝確定（保存）した日は献立表シートの保存値が無条件で最優先だったため、あとから⚙のローテ／曜日固定／定番を変えても一生反映されなかった（GAS `getMenuMonth` の `active: sv ? sv.active : auto.active`）。**修正＝時刻くらべの後勝ち**（GAS側 v2026-08-05）。確定日の更新日時（献立表C列）より⚙ルールの更新日時（設定 `menu_rules_updated_at`）が新しければ、その日は新ルールの自動値を採用する。対象は**今日以降だけ**（過去日は実際に作った記録として保存値のまま）。その日だけ違う献立にしたい時は日をタップして選び直し💾保存すれば、保存した方が新しくなるので**手で決めた内容が勝つ**。kanri側＝①カレンダーセルに `staleSaved` の表示（オレンジ帯＋`↻新ルール`バッジ・`.mn-cell.restale`）と凡例を追加。②日別パネルのピル `↻新ルールに更新` ＋注記（前の確定日時も表示）。③⚙保存後のステータスに「この月の確定済み N日 も新しいルールに切り替えました」と配分表の追従セル数を表示。④`mnSaveDay` は保存時に `staleSaved` を落とす。要メインGAS v2026-08-05（`menu_rules_updated_at`／`_menuSavedIsStale_`／`_menuResolveForDate_`／`saveMenuRules` の更新日時記録＋配分表追従）。 -->
@@ -900,7 +901,8 @@ body {
 }
 .order-sel-info { font-size: 12px; color: #555; margin-bottom: 10px; min-height: 18px; }
 /* ── 🕐 先行発注（食材マスタK列「発注タイミング」・2026-08-28） ── */
-.ot-wrap { margin-bottom: 14px; }
+.ot-wrap { margin-top: 12px; }
+.order-vendor-body > .ot-wrap:first-child { margin-top: 0; }
 .ot-head { font-size: 13px; font-weight: bold; color: #4527a0; margin-bottom: 6px; }
 .ot-hint { font-size: 11.5px; color: #666; margin-bottom: 8px; line-height: 1.6; }
 .ot-card {
@@ -919,6 +921,8 @@ body {
 .ot-badge-today { background: #ef6c00; color: #fff; }
 .ot-badge-late  { background: #c62828; color: #fff; }
 .ot-badge-warn  { background: #fff; color: #c62828; border: 1px solid #c62828; }
+.ot-badge-plain { background: #ede7f6; color: #4527a0; border: 1px solid #b39ddb; }
+.order-vendor-head .ot-badge { margin-left: 4px; }
 .ot-copy-btn {
   margin-left: auto; background: #7e57c2; color: #fff; border: none; border-radius: 6px;
   padding: 5px 12px; font-size: 12px; cursor: pointer;
@@ -4698,7 +4702,16 @@ function renderOrderData(data) {
     return;
   }
 
-  let html = orderBuildTimedHtml(timed, DOW);
+  // ★2026-08-28 v3.60 先行発注は業者カードの中に入れる。元のインデックス(gi)は
+  //   コピーボタンが data.timedOrders から引くので保持する。
+  const timedByVendor = {};
+  timed.forEach((g, gi) => {
+    const vn = g.vendorName || '未分類';
+    if (!timedByVendor[vn]) timedByVendor[vn] = [];
+    timedByVendor[vn].push({ gi: gi, g: g });
+  });
+
+  let html = '';
   vendors.forEach(v => {
     const cc    = getVendorColorClass(v.name);
     const safeN = v.name.replace(/[^\w\u3000-\u9FFF]/g, '_'); // CSSセーフなID用
@@ -4759,11 +4772,28 @@ function renderOrderData(data) {
       </div>`;
     }
 
+    // ★2026-08-28 v3.60 この業者の先行発注（山商のささみ等）
+    const timedEntries  = timedByVendor[v.name] || [];
+    const timedSection  = orderBuildTimedHtml(timedEntries);
+    const timedBadge    = orderBuildTimedBadge(timedEntries);
+    delete timedByVendor[v.name];
+
+    const itemTable = v.items.length === 0 ? '' : `
+          <table class="order-table">
+            <thead><tr>
+              <th style="text-align:left">食材名</th>
+              <th style="text-align:right;width:28%">必要量</th>
+              <th style="text-align:right;width:22%">パック数</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>`;
+
     html += `
       <div class="order-vendor-card ${cc}${isDone ? ' done' : ''}" id="ovc-${safeN}">
         <div class="order-vendor-head" onclick="toggleOrderCard('${safeN}')">
           <span class="order-vendor-name">${escHtml(v.name)}</span>
-          <span class="order-vendor-summary">（${v.items.length}品目${consts.length > 0 ? '＋定数' + consts.length : ''}）</span>
+          <span class="order-vendor-summary">（${v.items.length}品目${consts.length > 0 ? '＋定数' + consts.length : ''}${timedEntries.length > 0 ? '＋先行' + timedEntries.length : ''}）</span>
+          ${timedBadge}
           <div style="display:flex;align-items:center;gap:8px;margin-left:auto;" onclick="event.stopPropagation()">
             <label class="order-done-wrap">
               <input type="checkbox" class="order-done-cb" data-vendor="${escHtml(v.name)}"
@@ -4774,40 +4804,66 @@ function renderOrderData(data) {
           </div>
         </div>
         <div class="order-vendor-body" id="ovcb-${safeN}">
-          <table class="order-table">
-            <thead><tr>
-              <th style="text-align:left">食材名</th>
-              <th style="text-align:right;width:28%">必要量</th>
-              <th style="text-align:right;width:22%">パック数</th>
-            </tr></thead>
-            <tbody>${rows}</tbody>
-          </table>
+          ${itemTable}
+          ${timedSection}
           ${constSection}
           ${bdSection}
         </div>
       </div>`;
   });
+
+  // ★2026-08-28 v3.60 先行発注しか無い業者（通常の食材も定数発注も持たない）は
+  //   サーバー側で業者カードが作られないので、ここでカードを足す。
+  Object.keys(timedByVendor).forEach(vn => {
+    const entries = timedByVendor[vn];
+    const cc      = getVendorColorClass(vn);
+    const safeN   = vn.replace(/[^\w\u3000-\u9FFF]/g, '_');
+    const isDone  = _orderDoneFlags[vn] || false;
+    html += `
+      <div class="order-vendor-card ${cc}${isDone ? ' done' : ''}" id="ovc-${safeN}">
+        <div class="order-vendor-head" onclick="toggleOrderCard('${safeN}')">
+          <span class="order-vendor-name">${escHtml(vn)}</span>
+          <span class="order-vendor-summary">（先行${entries.length}）</span>
+          ${orderBuildTimedBadge(entries)}
+          <div style="display:flex;align-items:center;gap:8px;margin-left:auto;" onclick="event.stopPropagation()">
+            <label class="order-done-wrap">
+              <input type="checkbox" class="order-done-cb" data-vendor="${escHtml(vn)}"
+                ${isDone ? 'checked' : ''} onchange="onOrderDone('${escHtml(vn)}',this.checked)">
+              発注済み
+            </label>
+          </div>
+        </div>
+        <div class="order-vendor-body" id="ovcb-${safeN}">
+          ${orderBuildTimedHtml(entries)}
+        </div>
+      </div>`;
+  });
+
   body.innerHTML = html;
   window._orderData = data;
 }
 
-// ★2026-08-28 先行発注ブロック（食材マスタK列「発注タイミング」を持つ食材だけ）
-//   使用日ではなく「発注日 → 納品日」の束で表示する。通常の業者カードからは外れている。
-function orderBuildTimedHtml(timed, DOW) {
-  if (!timed || timed.length === 0) return '';
+// ★2026-08-28 先行発注セクション（食材マスタK列「発注タイミング」を持つ食材だけ）
+//   ★2026-08-28 v3.60 業者カードの中に入れる（社長「山商の発注欄に出したい」）。
+//   使用日ではなく「発注日 → 納品日」の束で表示する。通常の食材表からは外れている。
+//   entries = [{ gi, g }]（gi は data.timedOrders の元インデックス＝コピーボタンが引く）
+function orderBuildTimedHtml(entries) {
+  if (!entries || entries.length === 0) return '';
+  const DOW = ['日','月','火','水','木','金','土'];
 
   const fmt = ds => {
     const dt = new Date(String(ds).replace(/-/g, '/'));
     return `${dt.getMonth()+1}/${dt.getDate()}(${DOW[dt.getDay()]})`;
   };
-  const todayStr = new Date(Date.now() + 9*3600*1000).toISOString().slice(0, 10);
+  const todayStr = orderTodayStr();
 
   let h = '<div class="ot-wrap">'
         + '<div class="ot-head">🕐 先行発注（納品日が使用日と違う食材）</div>'
         + '<div class="ot-hint">食材マスタ K列「発注タイミング」に曜日ルールがある食材です。使う日ではなく<b>発注日ごと</b>にまとめています。'
-        + 'この食材は下の業者カードには出ません（二重発注を防ぐため）。</div>';
+        + '上の食材表には出ません（二重発注を防ぐため）。</div>';
 
-  timed.forEach((g, gi) => {
+  entries.forEach(en => {
+    const g = en.g;
     let cls = '', badge = '';
     if (g.orderDate < todayStr) {
       cls = ' ot-late';  badge = '<span class="ot-badge ot-badge-late">発注日を過ぎています</span>';
@@ -4830,10 +4886,9 @@ function orderBuildTimedHtml(timed, DOW) {
 
     h += `<div class="ot-card${cls}">
       <div class="ot-card-head">
-        <span class="ot-vendor">${escHtml(g.vendorName)}</span>
         <span class="ot-flow">発注 <b>${fmt(g.orderDate)}</b> → 納品 <b>${fmt(g.deliveryDate)}</b></span>
         ${badge}
-        <button class="ot-copy-btn" onclick="copyTimedOrderText(${gi})">📋 コピー</button>
+        <button class="ot-copy-btn" onclick="event.stopPropagation();copyTimedOrderText(${en.gi})">📋 コピー</button>
       </div>
       <table class="ot-table">
         <thead><tr>
@@ -4848,6 +4903,24 @@ function orderBuildTimedHtml(timed, DOW) {
   });
 
   return h + '</div>';
+}
+
+// 業者カードの見出しに出すバッジ（カードを開かなくても発注日が来ているのが分かるように）
+function orderBuildTimedBadge(entries) {
+  if (!entries || entries.length === 0) return '';
+  const todayStr = orderTodayStr();
+  let late = 0, today = 0;
+  entries.forEach(en => {
+    if (en.g.orderDate < todayStr) late++;
+    else if (en.g.orderDate === todayStr) today++;
+  });
+  if (late)  return '<span class="ot-badge ot-badge-late">🕐 先行発注 発注日超過' + late + '件</span>';
+  if (today) return '<span class="ot-badge ot-badge-today">🕐 先行発注 今日発注' + today + '件</span>';
+  return '<span class="ot-badge ot-badge-plain">🕐 先行発注' + entries.length + '件</span>';
+}
+
+function orderTodayStr() {
+  return new Date(Date.now() + 9*3600*1000).toISOString().slice(0, 10);
 }
 
 // ★2026-08-28 先行発注のコピー（納品日は使用日ではなく、その束の納品日を書く）
