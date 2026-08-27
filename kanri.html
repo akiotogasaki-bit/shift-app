@@ -26,6 +26,7 @@
 <link rel="apple-touch-icon" href="kanri-icon.png">
 <link rel="manifest" href="kanri.webmanifest">
 <meta name="theme-color" content="#2471A3">
+<!-- kanri.html v3.59 (2026-08-28) 【発注タブ：先行発注（納品日が使用日と違う食材）】社長指示「食材マスタのささみの発注表示のタイミングを変えたい」。ささみは山商へ**使う日より前に発注し、前もって納品される**ため、従来の発注タブ（選んだ日＝使用日＝納品日）では出るタイミングが合っていなかった。**食材マスタに K列「発注タイミング」を新設**し、`月:木/土, 火:金/月, 水:金/火, 木:金/火, 金:火/木`（＝使用曜日:発注曜日/納品曜日）と書くと、その食材だけ**業者カードから外れて**「🕐 先行発注」ブロックに移り、**発注日→納品日の束**で表示される（納品日は使用日から遡って直近の該当曜日）。コピーする発注文の `▼納品日` もその束の納品日になる。発注日が今日＝オレンジ、過ぎている＝赤で警告。K列が空欄の食材は従来どおり。要メインGAS v2026-08-28（`getShokunMaster_Compute_` のK列読み・`_parseOrderTiming_`／`_prevDowDate_`／`_buildTimedOrders_` 追加・`getOrderData` が `timedOrders` を返す）。⚠ 食材マスタは10分キャッシュ。K列を直した直後に画面が変わらない時は `clearAllMasterCache()`。 -->
 <!-- kanri.html v3.57 (2026-08-05) 【仕込みの読み込み高速化】社長報告「仕込みの読み込みがめちゃくちゃかかる」。実測＝`getKawariSelections` 3.4秒 ＋ `getSheet4Data` 13〜18秒の**直列2本で17〜22秒**。切り分け＝GASは**存在しないactionを叩くだけでも約5秒**（コード1.8MB）で、日数を1日→4日に増やしても時間が変わらない＝固定コスト（単価マスタ／基本数マスタ7,750行／配達データ）。**A＝1リクエスト化**：`fetchSheet4` から1本目の `getKawariSelections` を削除し、全六（日替わり選択）は**GAS側が先頭日のぶんを読む**（`getSheet4Data` の kawari 引数を省略可に）。表示は元から `data.kawari` を見ているので renderSheet4 は無改修。**B＝結果キャッシュ**：`getSheet4Data` の応答を CacheService に10分保持（GAS側）。数字が変わる操作＝配分の保存/確定・献立保存・日替わり選択の保存・配達取込・外部納品取込・便移動 で版番号を上げてキーごと捨てるので古い数字は出ない（`?fresh=1` で無条件に取り直し）。要メインGAS v2026-08-05（`_sheet4CacheVer_`／`_sheet4BumpCacheVer_`／`getSheet4Data` 改修＋`clearAllMasterCache` で版上げ）。 -->
 <!-- kanri.html v3.56 (2026-08-05) 【献立表：確定済みでも「あとからやった変更」を優先】社長報告「献立のローテーションを変えるとカレンダーを変更しましたと出るのに実際は変わらない。仕入れの関係などで確定後にメニューが変わることはよくある」。原因＝確定（保存）した日は献立表シートの保存値が無条件で最優先だったため、あとから⚙のローテ／曜日固定／定番を変えても一生反映されなかった（GAS `getMenuMonth` の `active: sv ? sv.active : auto.active`）。**修正＝時刻くらべの後勝ち**（GAS側 v2026-08-05）。確定日の更新日時（献立表C列）より⚙ルールの更新日時（設定 `menu_rules_updated_at`）が新しければ、その日は新ルールの自動値を採用する。対象は**今日以降だけ**（過去日は実際に作った記録として保存値のまま）。その日だけ違う献立にしたい時は日をタップして選び直し💾保存すれば、保存した方が新しくなるので**手で決めた内容が勝つ**。kanri側＝①カレンダーセルに `staleSaved` の表示（オレンジ帯＋`↻新ルール`バッジ・`.mn-cell.restale`）と凡例を追加。②日別パネルのピル `↻新ルールに更新` ＋注記（前の確定日時も表示）。③⚙保存後のステータスに「この月の確定済み N日 も新しいルールに切り替えました」と配分表の追従セル数を表示。④`mnSaveDay` は保存時に `staleSaved` を落とす。要メインGAS v2026-08-05（`menu_rules_updated_at`／`_menuSavedIsStale_`／`_menuResolveForDate_`／`saveMenuRules` の更新日時記録＋配分表追従）。 -->
 <!-- kanri.html v3.55 (2026-08-03) 【シフト閲覧＝販売員の名前タップでプロフィール】「📅 シフト閲覧」の販売員シフト表で名前をタップすると、顔写真・職業（学生）・生年月日（＋年齢）をモーダル表示（閲覧専用）。データ源＝別SS「販売スタッフ管理表」(1Yh29o…Xg6w / gid=471776451)。①タブを開いた時に getStaffProfiles を1回取得（写真なし・軽量・GAS側10分キャッシュ）。②顔写真はタップした人のぶんだけ getStaffPhoto で遅延取得＋メモリキャッシュ（表の描画は重くしない）。Driveは非公開のままbase64で返すので共有設定を広げない。③未登録の人をタップすると「プロフィール未登録」と出る＝誰が未提出か分かる。④取得失敗しても表の閲覧には影響しない。関数は全て sp* 接頭辞。キッチンモードのチップは対象外（販売スタッフのみ・社長決定2026-08-03）。登録は index.html v2026-08-03 の初回登録フォームから。要メインGAS v2026-08-03（getStaffProfiles / getStaffPhoto / saveStaffProfile）。 -->
@@ -898,6 +899,35 @@ body {
   word-break: break-all;
 }
 .order-sel-info { font-size: 12px; color: #555; margin-bottom: 10px; min-height: 18px; }
+/* ── 🕐 先行発注（食材マスタK列「発注タイミング」・2026-08-28） ── */
+.ot-wrap { margin-bottom: 14px; }
+.ot-head { font-size: 13px; font-weight: bold; color: #4527a0; margin-bottom: 6px; }
+.ot-hint { font-size: 11.5px; color: #666; margin-bottom: 8px; line-height: 1.6; }
+.ot-card {
+  border: 1px solid #b39ddb; border-left: 5px solid #7e57c2; border-radius: 8px;
+  background: #f7f4ff; padding: 10px 12px; margin-bottom: 8px;
+}
+.ot-card.ot-today { border-color: #ffb74d; border-left-color: #ef6c00; background: #fff8e1; }
+.ot-card.ot-late  { border-color: #ef9a9a; border-left-color: #c62828; background: #ffebee; }
+.ot-card-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.ot-vendor { font-weight: bold; font-size: 14px; }
+.ot-flow { font-size: 13px; color: #333; }
+.ot-flow b { color: #4527a0; }
+.ot-card.ot-today .ot-flow b { color: #ef6c00; }
+.ot-card.ot-late  .ot-flow b { color: #c62828; }
+.ot-badge { font-size: 11px; font-weight: bold; border-radius: 10px; padding: 2px 8px; }
+.ot-badge-today { background: #ef6c00; color: #fff; }
+.ot-badge-late  { background: #c62828; color: #fff; }
+.ot-badge-warn  { background: #fff; color: #c62828; border: 1px solid #c62828; }
+.ot-copy-btn {
+  margin-left: auto; background: #7e57c2; color: #fff; border: none; border-radius: 6px;
+  padding: 5px 12px; font-size: 12px; cursor: pointer;
+}
+.ot-copy-btn:hover { background: #673ab7; }
+.ot-table { width: 100%; border-collapse: collapse; font-size: 13px; background: #fff; }
+.ot-table th, .ot-table td { border: 1px solid #d7cbf0; padding: 5px 8px; }
+.ot-table th { background: #ede7f6; font-size: 12px; }
+.ot-use { font-size: 11.5px; color: #555; margin-top: 6px; }
 .order-vendor-list { display: flex; flex-direction: column; gap: 10px; }
 .order-vendor-card { border: 2px solid #bbb; border-radius: 6px; overflow: hidden; background: white; }
 .order-vendor-head {
@@ -4654,6 +4684,7 @@ function formatNeedAmount(total, unit) {
 function renderOrderData(data) {
   const { dates, vendors, dailyBreakdown } = data;
   const DOW = ['日','月','火','水','木','金','土'];
+  const timed = data.timedOrders || [];   // ★2026-08-28 先行発注
 
   const datesLabel = dates.map(d => {
     const dt = new Date(d.replace(/-/g, '/'));
@@ -4662,12 +4693,12 @@ function renderOrderData(data) {
   document.getElementById('order-sel-info').textContent = `選択中：${datesLabel}（${dates.length}日分合計）`;
 
   const body = document.getElementById('order-body');
-  if (!vendors || vendors.length === 0) {
+  if ((!vendors || vendors.length === 0) && timed.length === 0) {
     body.innerHTML = '<div class="placeholder-msg">発注データがありません<br><small>食材マスタと単価マスタの食材ID/仕込みID列を確認してください</small></div>';
     return;
   }
 
-  let html = '';
+  let html = orderBuildTimedHtml(timed, DOW);
   vendors.forEach(v => {
     const cc    = getVendorColorClass(v.name);
     const safeN = v.name.replace(/[^\w\u3000-\u9FFF]/g, '_'); // CSSセーフなID用
@@ -4758,6 +4789,112 @@ function renderOrderData(data) {
   });
   body.innerHTML = html;
   window._orderData = data;
+}
+
+// ★2026-08-28 先行発注ブロック（食材マスタK列「発注タイミング」を持つ食材だけ）
+//   使用日ではなく「発注日 → 納品日」の束で表示する。通常の業者カードからは外れている。
+function orderBuildTimedHtml(timed, DOW) {
+  if (!timed || timed.length === 0) return '';
+
+  const fmt = ds => {
+    const dt = new Date(String(ds).replace(/-/g, '/'));
+    return `${dt.getMonth()+1}/${dt.getDate()}(${DOW[dt.getDay()]})`;
+  };
+  const todayStr = new Date(Date.now() + 9*3600*1000).toISOString().slice(0, 10);
+
+  let h = '<div class="ot-wrap">'
+        + '<div class="ot-head">🕐 先行発注（納品日が使用日と違う食材）</div>'
+        + '<div class="ot-hint">食材マスタ K列「発注タイミング」に曜日ルールがある食材です。使う日ではなく<b>発注日ごと</b>にまとめています。'
+        + 'この食材は下の業者カードには出ません（二重発注を防ぐため）。</div>';
+
+  timed.forEach((g, gi) => {
+    let cls = '', badge = '';
+    if (g.orderDate < todayStr) {
+      cls = ' ot-late';  badge = '<span class="ot-badge ot-badge-late">発注日を過ぎています</span>';
+    } else if (g.orderDate === todayStr) {
+      cls = ' ot-today'; badge = '<span class="ot-badge ot-badge-today">今日発注</span>';
+    }
+    if (g.ruleOk === false) {
+      badge += '<span class="ot-badge ot-badge-warn">この曜日のルール未設定</span>';
+    }
+
+    const rows = (g.items || []).map(it =>
+      `<tr>
+         <td>${escHtml(it.name)}</td>
+         <td style="text-align:right">${formatNeedAmount(it.total, it.unit)}</td>
+         <td style="text-align:right">${it.packCeil}P</td>
+       </tr>`
+    ).join('');
+
+    const useLbl = (g.useDates || []).map(fmt).join('・');
+
+    h += `<div class="ot-card${cls}">
+      <div class="ot-card-head">
+        <span class="ot-vendor">${escHtml(g.vendorName)}</span>
+        <span class="ot-flow">発注 <b>${fmt(g.orderDate)}</b> → 納品 <b>${fmt(g.deliveryDate)}</b></span>
+        ${badge}
+        <button class="ot-copy-btn" onclick="copyTimedOrderText(${gi})">📋 コピー</button>
+      </div>
+      <table class="ot-table">
+        <thead><tr>
+          <th style="text-align:left">食材名</th>
+          <th style="text-align:right;width:28%">必要量</th>
+          <th style="text-align:right;width:22%">パック数</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div class="ot-use">使用日：${useLbl}</div>
+    </div>`;
+  });
+
+  return h + '</div>';
+}
+
+// ★2026-08-28 先行発注のコピー（納品日は使用日ではなく、その束の納品日を書く）
+function copyTimedOrderText(gi) {
+  const data = window._orderData;
+  if (!data || !data.timedOrders || !data.timedOrders[gi]) return;
+  const g = data.timedOrders[gi];
+  const DOW = ['日','月','火','水','木','金','土'];
+  const dt = new Date(String(g.deliveryDate).replace(/-/g, '/'));
+  const dateLabel = `${dt.getMonth()+1}/${dt.getDate()}(${DOW[dt.getDay()]})`;
+
+  const itemLines = (g.items || []).map(it => {
+    const need = formatNeedAmount(it.total, it.unit);
+    const pack = `${it.packCeil}パック`;
+    const unitMode = it.unitMode || 'pack';
+    let qty;
+    if (unitMode === 'kg')       qty = need;
+    else if (unitMode === 'both') qty = `${need} / ${pack}`;
+    else                          qty = pack;
+    return `・${it.name} ${qty}`;
+  });
+
+  const sep = '━━━━━━━━━━━━━━━━';
+  const text = [
+    'お世話になっております。お江戸弁当です。',
+    '下記、発注をお願いいたします。',
+    '',
+    `▼納品日：${dateLabel}`,
+    sep,
+    ...itemLines,
+    sep,
+    '',
+    'よろしくお願いいたします。'
+  ].join('\n');
+
+  navigator.clipboard.writeText(text).then(
+    () => { orderSetStatus(g.vendorName + '（納品 ' + dateLabel + '）のコピー完了'); setTimeout(() => orderSetStatus(''), 2500); },
+    () => {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); orderSetStatus('コピー完了'); setTimeout(() => orderSetStatus(''), 2500); }
+      catch(e2) { orderSetStatus('コピー失敗', true); }
+      finally { document.body.removeChild(ta); }
+    }
+  );
 }
 
 function toggleOrderCard(safeN) {
