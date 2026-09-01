@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<!--
+  お江戸弁当 スタート納品 適正数 記入用紙  v1.0 (2026-09-01)
+  ─────────────────────────────────────────────────────────
+  用途: ドライバーに「スタート時の納品の適正数」をエリア別・拠点別・商品別で
+        手書きしてもらうための印刷用紙。A4横・1エリア1枚。完全白紙。
+  ・列 = 6系統 ×（白米／玄米）= 12列（全六はあり／なしを分けている）
+  ・車載（L901〜905）の行は入れない（split12 が自動で決めるため）
+  ・置き弁3拠点（L026 アスエネ／L027 シビック／L028 竹早）と
+    スポット（L030 芝新規／L032 森②）は納品数が別ロジックなので対象外
+  ・他社商品3品（南蛮・油淋鶏・メンチカツ）とお茶は対象外
+  ⚠ 拠点マスタが変わったら下の AREAS を直す（拠点ID・エリア・表示順）。
+-->
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>スタート納品 適正数 記入用紙｜お江戸弁当</title>
+<style>
+  :root{ --line:#222; --thin:#999; --muted:#666; --skip:#e8e8e8; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; padding:12px; background:#f2f2f2;
+        font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif; color:#111; }
+
+  /* ── 画面のときだけ出る操作バー ── */
+  .bar{ max-width:1100px; margin:0 auto 12px; display:flex; gap:12px; align-items:center;
+        flex-wrap:wrap; background:#fff; border:1px solid #ccc; border-radius:8px; padding:10px 14px; }
+  .bar h1{ font-size:15px; margin:0 8px 0 0; }
+  .bar label{ font-size:13px; color:var(--muted); }
+  .bar input[type=date]{ font-size:14px; padding:4px 6px; }
+  .bar button{ font-size:14px; padding:6px 16px; cursor:pointer; border:1px solid #444;
+               background:#333; color:#fff; border-radius:6px; }
+  .bar .note{ font-size:12px; color:var(--muted); }
+
+  /* ── 用紙 ── */
+  .sheet{ width:281mm; min-height:194mm; margin:0 auto 14px; background:#fff; padding:6mm 5mm;
+          border:1px solid #ccc; }
+  .head{ display:flex; align-items:flex-end; gap:14px; margin-bottom:4mm; }
+  .head .area{ font-size:22px; font-weight:700; letter-spacing:.05em; }
+  .head .ttl{ font-size:14px; }
+  .head .fill{ flex:1; }
+  .head .box{ font-size:12px; color:#111; border-bottom:1px solid var(--line);
+              min-width:46mm; padding:0 4px 2px; }
+  .head .box b{ font-weight:600; color:var(--muted); font-size:11px; margin-right:6px; }
+
+  table{ width:100%; border-collapse:collapse; table-layout:fixed; }
+  th,td{ border:1px solid var(--line); text-align:center; }
+  thead th{ font-size:11px; font-weight:600; padding:2px 1px; line-height:1.25; background:#f7f7f7; }
+  thead tr.g1 th{ font-size:12px; }
+  th.loc{ width:30mm; }
+  th.memo{ width:34mm; }
+  td.loc{ font-size:13px; font-weight:600; text-align:left; padding:0 5px; }
+  td.loc small{ display:block; font-weight:400; font-size:9px; color:var(--muted); }
+  tbody td{ height:15mm; }
+  td.w{ background:#fff; }
+  td.b{ background:#fafafa; }           /* 玄米列は薄く色を変える */
+  td.skip{ background:var(--skip); }
+  td.skip::after{ content:"—"; color:#999; font-size:12px; }
+  .foot{ margin-top:3mm; font-size:10px; color:var(--muted); line-height:1.5; }
+
+  @media print{
+    body{ background:#fff; padding:0; }
+    .bar{ display:none; }
+    .sheet{ width:auto; margin:0; border:0; padding:0; page-break-after:always; }
+    .sheet:last-child{ page-break-after:auto; }
+  }
+  @page{ size:A4 landscape; margin:8mm; }
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <h1>スタート納品 適正数 記入用紙</h1>
+  <label>日付 <input type="date" id="d"></label>
+  <button id="p">印刷</button>
+  <span class="note">A4横・エリアごとに1枚（全5枚）。日付を空にすると日付欄も手書きになります。</span>
+</div>
+
+<div id="out"></div>
+
+<script>
+/* ── 商品の列（6系統 × 白/玄）────────────────────────────
+   skip は BM_MIN_SKIP_BY_LOC_（メインGAS）と同じ考え方で、
+   その拠点に置かない系統を灰色にするための目印。 */
+const COLS = [
+  { key:'銀しゃけ',       label:'銀しゃけ' },
+  { key:'あいもり',       label:'あいもり' },
+  { key:'日替わりのり弁', label:'日替わり<br>のり弁' },
+  { key:'全六あり',       label:'全六<br>あり' },
+  { key:'全六なし',       label:'全六<br>なし' },
+  { key:'満腹',           label:'満腹' },
+];
+
+/* 拠点でその系統を置かない（神谷町＝全六・満腹なし／ぜん六神谷＝海苔弁系なし） */
+const SKIP = {
+  'L013': ['全六あり','全六なし','満腹'],
+  'L014': ['銀しゃけ','あいもり','日替わりのり弁'],
+};
+
+/* ── エリア × 拠点（拠点マスタの有効拠点・表示順）──────── */
+const AREAS = [
+  { area:'芝パーク', locs:[
+    ['L001','芝パーク'], ['L002','浜松町スクエア'], ['L003','ソフバン'],
+    ['L019','芝パーク②'], ['L033','ソフバン②'], ['L034','新規1'] ] },
+  { area:'銀座', locs:[
+    ['L004','虎ノ門②'], ['L010','銀座'], ['L011','京橋'],
+    ['L016','ダイビル'], ['L023','虎ノ門①'], ['L029','銀座2'] ] },
+  { area:'神谷', locs:[
+    ['L005','森ビル'], ['L013','神谷町'], ['L014','ぜん六神谷'],
+    ['L015','六本木'], ['L022','大学院大学'] ] },
+  { area:'お茶の水', locs:[
+    ['L006','神保町'], ['L007','大手町'], ['L017','神田スクエア'], ['L021','お茶の水'] ] },
+  { area:'赤坂', locs:[
+    ['L012','青山'], ['L008','Bizタワー'], ['L009','平河町'],
+    ['L020','元赤坂'], ['L024','パソナ'], ['L031','パソナ②'] ] },
+];
+
+function esc(s){ return String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
+function dateLabel(v){
+  if(!v) return '　　　　年　　　月　　　日（　　）';
+  const [y,m,d] = v.split('-').map(Number);
+  const w = '日月火水木金土'[new Date(y, m-1, d).getDay()];
+  return `${y}年${m}月${d}日（${w}）`;
+}
+
+function render(){
+  const dv = document.getElementById('d').value;
+  document.getElementById('out').innerHTML = AREAS.map(a => {
+    const g1 = COLS.map(c => `<th colspan="2">${c.label}</th>`).join('');
+    const g2 = COLS.map(() => '<th>白</th><th>玄</th>').join('');
+    const rows = a.locs.map(([id, name]) => {
+      const sk = SKIP[id] || [];
+      const tds = COLS.map(c => {
+        if (sk.includes(c.key)) return '<td class="skip"></td><td class="skip"></td>';
+        return '<td class="w"></td><td class="b"></td>';
+      }).join('');
+      return `<tr><td class="loc">${esc(name)}<small>${id}</small></td>${tds}<td></td></tr>`;
+    }).join('');
+    return `
+<section class="sheet">
+  <div class="head">
+    <div class="area">${esc(a.area)}エリア</div>
+    <div class="ttl">スタート納品 適正数 記入用紙</div>
+    <div class="fill"></div>
+    <div class="box"><b>日付</b>${dateLabel(dv)}</div>
+    <div class="box"><b>記入者</b>　</div>
+  </div>
+  <table>
+    <thead>
+      <tr class="g1"><th class="loc" rowspan="2">拠点</th>${g1}<th class="memo" rowspan="2">気づいた事</th></tr>
+      <tr>${g2}</tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <div class="foot">
+    ※ スタート（初回納品）の時点で、その拠点に<b>何個置くのが適正か</b>を数字で書いてください。置かない商品は空欄のままで結構です。<br>
+    ※ 灰色（—）の欄はその拠点で扱っていない商品です。／ 車載の数は書かなくて構いません（棚の適正数から自動で決まります）。<br>
+    ※ 他社商品（南蛮・油淋鶏・メンチカツ）とお茶は対象外です。置き弁（アスエネ・シビック・竹早）とスポット（芝新規・森②）もこの用紙には入りません。
+  </div>
+</section>`;
+  }).join('');
+}
+
+document.getElementById('d').addEventListener('input', render);
+document.getElementById('p').addEventListener('click', () => window.print());
+render();
+</script>
+</body>
+</html>
