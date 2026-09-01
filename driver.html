@@ -1,5 +1,6 @@
 <!DOCTYPE html>
-<!-- driver v6.5 (2026-09-01) 【実況のマトリクスに「売り切れそう」を追加】社長「今完売になると薄緑で表示されるんだけど、売り切れそうになっているもの（在庫の50%を切っているもの）をオレンジでわかるようにしたい」。★エリア別マトリクスのセル（販売数/納品数）に `matrix-cell short` を新設し、**残り（納品数−販売数）が納品数の50%未満**の時に薄オレンジ #FDEBD0 で塗る。完売（販売数≧納品数）の薄緑が先に当たるので、**完売の見た目は1pxも変わらない**。★社長決定＝①**ちょうど半分（残り50%）はまだ白**＝「50%を切っている」を厳密に取る ②**納品数が少ない商品も同じ割合で判定する**（2個中1個売れた＝残り50%なので白、2個中2個で完売の緑。3個中2個売れると残り33%で橙）。★セルの判定順は minus（納品マイナス）→ soldout → short → 通常。GAS変更なし・見ている数字も従来と同じ（`delivery` と `sales` の2つだけ）。 -->
+<!-- driver v6.6 (2026-09-02) 【回収タブを速くする／更新ボタンを大きく】社長「ドライバーアプリの回収タブの読み込みを早くしたい。あと、更新ボタンを少し大きくしたい」。★**遅さの正体は重い処理ではなく往復の回数**。2026-09-02 実測＝`getTodayReports` 4.9〜5.9秒／`getTodayIntermediate` 4.1〜6.1秒／`getDriverState` 5.6〜7.0秒（**1回だけ65秒**）。**11バイトしか返っていないのに5秒**で、/exec は1往復あたり約5秒の固定コストがある。シートも小さく（報告ログ497行・販売中ログ1804行・回収状態1398行・休止拠点85行）**行数は原因ではない**（→ memory「アプリが遅い時の調べ方」＝犯人は重さより頻度）。★**直した内容**＝①メインGASに **`getCollectionBundle`**（v2026-09-02）を新設し、回収タブが使う3本を**1往復**にまとめた。更新ボタン/タブ切替は **3往復→1往復**、起動時は **6往復→4往復**。②1本あたり **12秒で打ち切る**（`COLLECTION_FETCH_TIMEOUT_MS`）。従来は `Promise.all` なので1本詰まると全部待ち、65秒のあいだボタンが「更新中…」で固まっていた。③更新ボタンを 11px/padding 4px12px（タップ範囲 約24px）→ **14px/padding 9px20px・min-height 40px** に拡大。★⚠ **数字の作り方は1つも変えていない。**サーバーは既存3関数をそのまま呼んで1つのJSONで返すだけ。★⚠ **古いGASには `getCollectionBundle` が無い**＝`bundle:true` が返らなければ**従来どおり3本を叩く**（落ちない）。doGet は未知の action でも200で別JSONを返すのでステータスコードでは判定できない（→ memory「doGetは未知のactionでも200を返す」）。★⚠ **起動時に取れなかった場合、キャッシュの報告を空で潰さないよう直した**。従来は失敗しても空配列で作り直しており、通信が詰まった起動では報告済みの拠点が全部「未報告」に戻ってリマインドが誤発射される形だった（`reloadCollectionData_` には元からあったガードを起動側にも合わせた）。要: メインGAS v2026-09-02 以降。 -->
+<!-- driver v6.5 (2026-09-01)【実況のマトリクスに「売り切れそう」を追加】社長「今完売になると薄緑で表示されるんだけど、売り切れそうになっているもの（在庫の50%を切っているもの）をオレンジでわかるようにしたい」。★エリア別マトリクスのセル（販売数/納品数）に `matrix-cell short` を新設し、**残り（納品数−販売数）が納品数の50%未満**の時に薄オレンジ #FDEBD0 で塗る。完売（販売数≧納品数）の薄緑が先に当たるので、**完売の見た目は1pxも変わらない**。★社長決定＝①**ちょうど半分（残り50%）はまだ白**＝「50%を切っている」を厳密に取る ②**納品数が少ない商品も同じ割合で判定する**（2個中1個売れた＝残り50%なので白、2個中2個で完売の緑。3個中2個売れると残り33%で橙）。★セルの判定順は minus（納品マイナス）→ soldout → short → 通常。GAS変更なし・見ている数字も従来と同じ（`delivery` と `sales` の2つだけ）。 -->
 <!-- driver v6.4 (2026-08-28) 【巡回パネルの「必要数」を全拠点へ／必要数＝区間2+3】社長決定「**ドライバーの巡回には全ての拠点で残数・ピーク時必要数を出す。デフォルト表示されるのは単純にピーク時−残数**」「**基本は12:20までは置くだけ**」「**ピーク時までに必要なのは2.3区分の合計　これは今日から全拠点で大丈夫**」。★**ピーク時必要数＝区間2＋区間3**（12:20の時点で棚に持っていたい数）。**時刻を一切見ない固定値**なので、朝から12:20までは「売れた分を戻す」動きになる。★**8/26版（芝限定）からの変更**＝①対象を芝エリア5拠点→**全拠点**（`PT_NEED_LOCS_` を空にし、サーバーの旗 `peakNeedByIsNeed` だけで判断）②必要数の定義を「その日の納品数（1日分）」→「**区間2+3**」。1日分だと12時を過ぎても満タンを求めるため、実測8/26は12時台の推奨31個に対し**車が空で13個しか渡せなかった**。区間2+3で頭打ちになるのが正しい。★**前提**＝車載がその日の**区間1**を積んでいること（メインGAS `split12`・8/31以降の配分は反映済み）。**順番を逆にすると渡せない指示が増えるだけ。**★⚠ **巡回ログ33列の意味が8/28から全拠点で「必要数」に変わる。**8/27以前は 芝＝必要数／他4エリア＝ピーク必要 なので**期間をまたいで比べない**。★⚠ サーバーが3区間予定を持たない日は null を返し、従来のカーブ由来の値に落ちる（落ちない）。要: メインGAS @621 以降。→ [[車載システム_2026-08-31改訂]] -->
 <!-- driver v6.3 (2026-08-26) 【残数タブ：確認済みと未確認を分けて出す】社長「理論上の数字はいらない。実際に申告された数字を足すだけなんだけど、**申告されてないなら数字は少なく表示されるはず。多いのはおかしい**」。★**なぜ多く出ていたか**＝申告残は**販売員が締めた瞬間の棚の数**で、そのあとドライバーが回収しても更新されない。集計は「実査残数詳細JSONがあればそちら、無ければ申告」という作りなので、**実査が記録されない拠点は締め時点の数字を持ち続ける**。だから合計が実態より多く出る。★**実測 8/25**＝合計425個の内訳が **実査あり16拠点で235個／実査なし7拠点で190個**。実査なしの中身＝芝パーク58・セカンド神谷43・アスエネ27・お茶の水25・ソフバン②22・神谷町15・ダイビル0。**置き弁（アスエネ）・スポット（ソフバン②）・二次販売（セカンド神谷）はドライバーの回収そのものが無い拠点**なので、構造的に永久に実査が入らない。残り（芝パーク・お茶の水・神谷町）は通常拠点なのに回収の記録が飛んでいる（8/21＝8拠点・8/24＝11拠点・8/25＝7拠点で毎日発生）。★**直した内容**＝メインGAS `_oedoResidualByDate_` の各行に `confirmed`（実査JSONがあったか）を持たせ、`getResidualByLocation` が `confirmedTotal` / `unconfirmedTotal` / `unconfirmedLocs` を返す。`getResidualSummary` が `locationConfirmed` / `locationUnconfirmed` / `locationUnconfirmedLocs` として画面へ渡す。driver は**大きい数字を「確認済み」だけにし、未確認は「⚠ 未確認 N個（回収の記録なし：拠点名+個数）」として下に別で出す**。★⚠ **数字の作り方は1つも変えていない。分けて出しているだけ。**従来の `locationTotal` も残してある。★⚠ 古いGASの応答には `locationConfirmed` が無い＝その時は従来どおり合計を出す（落ちない）。★**これは原因の修正ではなく表示の分離**。回収の記録が飛ぶ原因（通常拠点で毎日3〜11件）は別途追う。→ [[巡回検証レポート_2026-08-25]] -->
 <!-- driver v6.2 (2026-08-26) 【芝エリアだけ：巡回パネルの置く数を『必要数 − 残数』にした】社長決定「**今出来上がってる配分表のエリアの総数は変えずに全拠点の1区分を車載に、2、3区分を各拠点に配分。芝エリアの巡回アプリには2.3区分の必要数と残数を表示。その差が置く数**」。★**考え方**＝棚の目標在庫を1本決めて、減った分を戻すだけ。**時刻を一切見ない**（いまの式は「いまの区間の残り＋先の区間」を見ている）。★**必要数＝その日の納品数**。同日に配分表を「**各拠点＝区間2+3（しゃけ・あいもりは最低3個／それ以外2個・スポットのソフバン②は定数のまま）／車載＝残り**」へ付け替えたので、拠点の納品数がそのまま棚の目標在庫になっている。実測 8/26 芝：芝パーク52・浜松町28・ソフバン32・芝パーク②29・ソフバン②22・**車載39**（エリア総数202個は据え置き）。★🔴 **3区間予定（band）から必要数を出してはいけない。**社長の指摘「これは車載のプラス分も入ってるよね？」で発覚＝`_bp_currentByUnit_` は**車載L901のG列を全量そのまま主力拠点の区間3に付ける**ので、芝パークの区間3に**プラス分も他4拠点ぶんの区間1も混ざる**（band で出すと必要数が 52 ではなく 69 になる）。**納品数を直接見ればこの取り違えを踏まない。**★⚠ **`_rt_bandNeedAt_` のコメントにある「毎回『売れた分を満タンに戻す』式にしてはいけない（12時前の予定370個に対し車載138個＝成立しない）」は、この設計では当てはまらない。**あれは「車載＝返却分＋プラス」が前提。今回は**車載＝その日の区間1をまるごと積む**ので渡す物が車に載っている。**他エリアに広げる時は、先に車載の積み方を変えること。**順番を逆にすると渡せない指示が増えるだけ。★**直した3か所**＝①メインGAS `bandQtyOf` に芝分岐（`need23Of` ＝ `ctx.delivBy[拠点][商品]`・移動を含まない納品数）②`peakNeedBy` を芝だけ必要数にし、`peakNeedByIsNeed` の旗を3段（judge → slim → byLoc）すべてに載せる ③driver：見出しを旗で「ピーク」→「**必要数**」に切替、サーバーが答えられない時のフォールバックも `納品数 − 残り` に揃える（朝の便の分岐へ落とさない＝式が2本になるため）。★⚠ **芝は表示専用ではなく判定そのもの。**巡回ログ33列を読む時は**芝＝必要数／他4エリア＝ピーク必要**で意味が違う。★⚠ 旗が無い古いGASの応答では従来どおり「ピーク」（落ちない）。要: メインGAS 2026-08-26 以降。→ [[巡回検証レポート_2026-08-25]] -->
@@ -1743,10 +1744,14 @@ body {
   <div id="tab-collection" class="tab-panel active">
     <!-- ★2026-08-20 v5.2 回収タブの更新バー。**レジの報告は起動時に1回しか取っていなかった**ので、
          アプリを開いたあとにレジが開いた拠点は永久に「未報告」のままだった（→ ヘッダのコメント）。 -->
-    <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:8px;">
-      <span style="font-size:11px;color:var(--ink-mute);" id="collection-updated-at">--:-- 更新</span>
+    <!-- ★2026-09-02 v6.6 更新ボタンを大きくした（社長指示「更新ボタンを少し大きくしたい」）。
+         11px/padding 4px12px（タップ範囲 約24px）→ 14px/padding 9px 20px（約40px）。
+         走行の合間に片手で押す前提なので、Appleの推奨44ptに近い 40px を下限にしている。
+         `min-height` を置いているのは「更新中…」に化けた時に高さが動かないようにするため。 -->
+    <div style="display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-bottom:8px;">
+      <span style="font-size:12px;color:var(--ink-mute);" id="collection-updated-at">--:-- 更新</span>
       <button id="collection-refresh-btn" onclick="reloadCollectionData_(true)"
-              style="background:var(--blue);border:none;color:#FFF;font-size:11px;padding:4px 12px;border-radius:10px;cursor:pointer;font-family:inherit;">🔄 更新</button>
+              style="background:var(--blue);border:none;color:#FFF;font-size:14px;font-weight:700;padding:9px 20px;min-height:40px;border-radius:12px;cursor:pointer;font-family:inherit;">🔄 更新</button>
     </div>
     <div id="collection-list"></div>
   </div>
@@ -2561,16 +2566,21 @@ async function init() {
     // ─────────────────────────────────────────────────────────
     // Phase B：6API完全並列で取得（v1.0：色連動2APIを追加）
     // ─────────────────────────────────────────────────────────
+    /* ★2026-09-02 v6.6 起動時も回収タブの3本を1本にまとめた（6往復 → 4往復）。
+       ⚠ 起動時だけ auto=1（自動休止を取る）。以後の10秒ポーリングは既定＝軽量版。 */
     const todayStr = new Date().toISOString().slice(0, 10);
-    const [masterRes, reportsRes, intermediateRes, driverStateRes, assignmentRes, colorsRes] = await Promise.all([
+    const [masterRes, collectionRes, assignmentRes, colorsRes] = await Promise.all([
       fetch(`${GAS_URL}?action=getMaster`,             { redirect: 'follow' }).then(r => r.json()),
-      fetch(`${GAS_URL}?action=getTodayReports`,        { redirect: 'follow' }).then(r => r.json()).catch(() => ({ data: [] })),
-      fetch(`${GAS_URL}?action=getTodayIntermediate`,   { redirect: 'follow' }).then(r => r.json()).catch(() => ({ data: [] })),
-      // ★ v5.8 起動時だけ auto=1（自動休止を取る）。以後の10秒ポーリングは既定＝軽量版。
-      fetch(`${GAS_URL}?action=getDriverState&auto=1`,  { redirect: 'follow' }).then(r => r.json()).catch(() => ({ collected: [], inactive: [] })),
+      fetchCollectionData_(true).catch(() => ({ reportsRes: null, intermediateRes: null, driverStateRes: null })),
       fetch(`${GAS_URL}?action=getLocationsWithAssignment&date=${todayStr}`, { redirect: 'follow' }).then(r => r.json()).catch(() => []),
       fetch(`${GAS_URL}?action=getDriverColors`,        { redirect: 'follow' }).then(r => r.json()).catch(() => ({})),
     ]);
+    /* ⚠ 取れなかった時に**空で上書きしない**ため、既定値は下の分岐で使う形にそろえておく。
+       従来は .catch(() => ({data:[]})) で空配列を入れていたが、起動直後は state が
+       キャッシュ復元済みなので、空で潰すとカードが一瞬「未報告」に戻る。 */
+    const reportsRes      = collectionRes.reportsRes;
+    const intermediateRes = collectionRes.intermediateRes;
+    const driverStateRes  = collectionRes.driverStateRes || { collected: [], inactive: [] };
     state.locations = masterRes.locations || [];
     state.products  = masterRes.products  || [];
     state.staffList = masterRes.staffList || [];               // ★ NEW
@@ -2586,15 +2596,23 @@ async function init() {
     });
 
     // 拠点ごとにレポート状況をまとめる（最終報告 > 中間 > 未報告 の順で優先）
-    state.reportsByLoc = {};
-    (reportsRes.data || []).forEach(r => {
-      state.reportsByLoc[r.locationId] = { ...r, status: 'final' };
-    });
-    (intermediateRes.data || []).forEach(r => {
-      if (!state.reportsByLoc[r.locationId]) {
-        state.reportsByLoc[r.locationId] = { ...r, status: 'intermediate' };
+    /* ⚠ 2026-09-02 v6.6 取れなかった時は**キャッシュから復元した値を残す**。
+       従来は失敗しても空配列で state.reportsByLoc を作り直していたので、通信が詰まった起動では
+       報告済みの拠点が全部「未報告」に戻り、リマインドが誤発射される形だった
+       （reloadCollectionData_ には元から入っているガードを、起動側にも合わせた）。 */
+    if (reportsRes && Array.isArray(reportsRes.data)) {
+      state.reportsByLoc = {};
+      reportsRes.data.forEach(r => {
+        state.reportsByLoc[r.locationId] = { ...r, status: 'final' };
+      });
+      if (intermediateRes && Array.isArray(intermediateRes.data)) {
+        intermediateRes.data.forEach(r => {
+          if (!state.reportsByLoc[r.locationId]) {
+            state.reportsByLoc[r.locationId] = { ...r, status: 'intermediate' };
+          }
+        });
       }
-    });
+    }
 
     // ★ A1/A3：サーバーから回収状態と休止状態を初期同期
     state.collectedIds = new Set((driverStateRes.collected || []).map(c => c.locationId));
@@ -2742,6 +2760,66 @@ let collectionReloadAt = 0;              // 最後に取り直した時刻（ms�
 let collectionReloading = false;
 const COLLECTION_RELOAD_MIN_MS = 60000;  // 自動の時だけ効くスロットル
 
+/* ★2026-09-02 v6.6【固まりを止める】1本あたりの打ち切り時間。
+   実測 2026-09-02 に `getDriverState` が **65秒** かかった回があり、その間ボタンは
+   「更新中…」のまま固まっていた（`Promise.all` なので他の2本が返っていても待つ）。
+   12秒で打ち切って**古い値を残す**＝画面は動き続ける。取れなかった項目は上書きしない作りなので、
+   打ち切っても報告済みの拠点が「未報告」へ戻ることはない。
+   ⚠ 通常は5〜7秒で返る。12秒は「明らかに詰まっている」だけを切る線。短くしすぎない。 */
+const COLLECTION_FETCH_TIMEOUT_MS = 12000;
+
+function fetchJsonWithTimeout_(url, ms) {
+  /* AbortController が無い端末でも落ちないようにする（古いWebView対策）。 */
+  if (typeof AbortController === 'undefined') {
+    return fetch(url, { redirect: 'follow' }).then(r => r.json());
+  }
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), ms || COLLECTION_FETCH_TIMEOUT_MS);
+  return fetch(url, { redirect: 'follow', signal: ac.signal })
+    .then(r => r.json())
+    .finally(() => clearTimeout(timer));
+}
+
+/* ★2026-09-02 v6.6【往復を減らす】回収タブの3本を1本にまとめる（社長指示）。
+   【なぜ要るか】2026-09-02 実測＝`getTodayReports` 4.9〜5.9秒／`getTodayIntermediate` 4.1〜6.1秒／
+   `getDriverState` 5.6〜7.0秒（**1回だけ65秒**）。**11バイトしか返っていないのに5秒**で、
+   /exec は1往復あたり約5秒の固定コストがある。シートは小さいので**行数は原因ではない**。
+   → 速くする手は往復を減らすことだけ。→ メインGAS `getCollectionBundle`（v2026-09-02）。
+   ⚠ 古いGASには この口が無い。その時は**従来どおり3本を叩く**（落とさない）。
+   ⚠ サーバーが `bundle:true` を返さない＝口が無い、という判定にする。doGet は未知の action でも
+     200 で別のJSONを返すため（→ memory「doGetは未知のactionでも200を返す」）、
+     ステータスコードでは判定できない。 */
+let collectionBundleOk = null;   // null=未判定 / true=使える / false=古いGAS
+
+async function fetchCollectionData_(withAuto) {
+  const auto = withAuto ? '&auto=1' : '';
+  if (collectionBundleOk !== false) {
+    try {
+      const b = await fetchJsonWithTimeout_(`${GAS_URL}?action=getCollectionBundle${auto}`, COLLECTION_FETCH_TIMEOUT_MS);
+      if (b && b.bundle === true) {
+        collectionBundleOk = true;
+        /* ⚠ サーバーが1本だけコケた時（`reportsError` 等）は**その項目を null で返す**。
+           サーバー側は初期値の空配列を持っているので、エラー印を見ずに Array.isArray だけで
+           判定すると「空で上書きしない」ガードをすり抜けて報告が全部消える。 */
+        return {
+          reportsRes:      (!b.reportsError      && Array.isArray(b.reports))      ? { data: b.reports }      : null,
+          intermediateRes: (!b.intermediateError && Array.isArray(b.intermediate)) ? { data: b.intermediate } : null,
+          driverStateRes:  (!b.driverStateError) ? (b.driverState || null) : null,
+        };
+      }
+      collectionBundleOk = false;   // 200 は返ったが bundle ではない＝古いGAS
+    } catch (e) {
+      /* タイムアウト/通信断は「口が無い」ではない。判定を確定させず従来経路へ落ちる。 */
+    }
+  }
+  const [reportsRes, intermediateRes, driverStateRes] = await Promise.all([
+    fetchJsonWithTimeout_(`${GAS_URL}?action=getTodayReports`,          COLLECTION_FETCH_TIMEOUT_MS).catch(() => null),
+    fetchJsonWithTimeout_(`${GAS_URL}?action=getTodayIntermediate`,     COLLECTION_FETCH_TIMEOUT_MS).catch(() => null),
+    fetchJsonWithTimeout_(`${GAS_URL}?action=getDriverState${auto}`,    COLLECTION_FETCH_TIMEOUT_MS).catch(() => null),
+  ]);
+  return { reportsRes, intermediateRes, driverStateRes };
+}
+
 async function reloadCollectionData_(force) {
   if (collectionReloading) return false;
   if (!force && Date.now() - collectionReloadAt < COLLECTION_RELOAD_MIN_MS) return false;
@@ -2749,11 +2827,7 @@ async function reloadCollectionData_(force) {
   const btn = document.getElementById('collection-refresh-btn');
   if (btn && force) { btn.disabled = true; btn.textContent = '更新中…'; }
   try {
-    const [reportsRes, intermediateRes, driverStateRes] = await Promise.all([
-      fetch(`${GAS_URL}?action=getTodayReports`,      { redirect: 'follow' }).then(r => r.json()).catch(() => null),
-      fetch(`${GAS_URL}?action=getTodayIntermediate`, { redirect: 'follow' }).then(r => r.json()).catch(() => null),
-      fetch(`${GAS_URL}?action=getDriverState`,       { redirect: 'follow' }).then(r => r.json()).catch(() => null),
-    ]);
+    const { reportsRes, intermediateRes, driverStateRes } = await fetchCollectionData_(false);
     /* ⚠ 取れなかった時は**古い値を消さない**。空で上書きすると
        報告済みの拠点がカードごと「未報告」に戻り、リマインドが誤発射される。
        （置き弁のリストで同じ事故を一度やっている＝loadSpotToday のコメント参照） */
