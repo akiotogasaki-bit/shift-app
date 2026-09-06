@@ -2695,7 +2695,10 @@ async function loadDriverColorMap(dateStr) {
 function driverColorStyleAttr(locId, colorMap) {
   if (!colorMap) return '';
   const info = colorMap[locId];
-  const color = (info && info.areaColor) ? info.areaColor : DRIVER_DEFAULT_BG;
+  // ⚠ 2026-09-07 時点で拠点マスタのエリア列は**無地**（41拠点すべて塗りなし）。
+  //   エリアを塗るまでは従来どおりドライバー色に落とす＝画面が真っ白／全部グレーにならない。
+  //   シートを塗った拠点から順に、自動でエリア色へ切り替わる。
+  const color = (info && (info.areaColor || info.color)) ? (info.areaColor || info.color) : DRIVER_DEFAULT_BG;
   return ' style="background-color:' + color + ' !important;"';
 }
 
