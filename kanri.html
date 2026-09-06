@@ -2667,6 +2667,7 @@ async function loadDriverColorMap(dateStr) {
           if (item && item.locationId) {
             map[item.locationId] = {
               color: item.color || '',
+              areaColor: item.areaColor || '',   // ★2026-09-07 拠点マスタ エリア列の塗り
               name:  item.name  || '',
               type:  item.type  || '',
             };
@@ -2687,10 +2688,14 @@ async function loadDriverColorMap(dateStr) {
 
 // 拠点IDからinline style属性文字列を生成（先頭半角スペース含む）
 // 例: ' style="background-color:#FFF0D9 !important;"'
+/* ★2026-09-07 拠点の色は**拠点マスタ「エリア」列の塗り**を使う（社長指示）。
+   ドライバー色（info.color）は担当が変わると日ごとに動くので、拠点の見分けに使えなかった。
+   エリアの塗りが無い拠点だけ既定グレーに落とす（ドライバー色へは戻さない＝色の意味を1つに保つ）。
+   配分調整タブ・拠点配分タブとも同じこの関数を通るので、ここ1箇所で両方に効く。 */
 function driverColorStyleAttr(locId, colorMap) {
   if (!colorMap) return '';
   const info = colorMap[locId];
-  const color = (info && info.color) ? info.color : DRIVER_DEFAULT_BG;
+  const color = (info && info.areaColor) ? info.areaColor : DRIVER_DEFAULT_BG;
   return ' style="background-color:' + color + ' !important;"';
 }
 
