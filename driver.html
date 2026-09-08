@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v6.9 (2026-09-09) 【残数タブを速くする／取れなかった事を分かるようにする／見ていない間は止める】オーナー要望「正確な数字をなるべく早く（軽く）見たい」の後半。★**数字の意味は一切変えていない。速さだけ。**★**何が重かったか**＝`getResidualSummary` は1回の呼び出しで**フルシート読みを5〜6本**していた（①残数ログ ②報告ログ `getTodayReports` ③販売中ログ `getTodayIntermediate`＝単独でも平均13.5秒の最重量 ④`getLocationsWithAssignment` ⑤拠点間移動ログ ⑥`getResidualByLocation`＝残数照合ログ＋移動ログ再読み）。実測＝直近6営業日で**平均25.9秒・最大124.5秒**、誰も使っていない時間に単独で叩いても**17.7秒**。そして driver は**これを30秒ごとに叩いていた**。★**気づき**＝画面に大きく出ている数字（`locationConfirmed`／`locationTotal`／`locationAreas`）に要るのは**⑥の1本だけ**。残りは `calculatedTotal`（小さく出る参考値）と `drivers[]`（ドライバー行）のためだけに毎回走っていた。★**直し方**＝メインGAS `getResidualSummary(part)` に読む範囲の引数を足し、doGet で `&part=` を受ける。`part=loc`＝⑥だけ／`part=drivers`＝①②③④⑤だけ／**part 無し＝従来どおり全部**（既存の呼び出しは1つも壊れない）。driver は**30秒の周回を `part=loc` にし、`calculatedTotal` とドライバー行は `part=drivers` で5分ごと**に取る。★🔴 **画面から消したものは無い。**出る頻度が違うだけで、🔄更新／残数タブを開いた時／アプリを前面に戻した時は**今までどおり全部**取り直す。★**実測（2026-09-09 朝・同条件）**＝改善前 10.1〜16.1秒（6回平均**11.9秒**）→ `part=loc` **3.6〜4.6秒（平均4.0秒）＝約1/3**。`part=drivers` は7.6〜9.6秒だが**5分に1回**なので、30秒あたりの負荷は 11.9秒→約4.7秒＝**6割減**。★**② 取れなかった事を分かるようにした**＝従来は `catch` で握りつぶしており、**通信が詰まった端末は古い数字を何時間でも黙って出し続けていた**（現場の「アプリの数字が合っていない」の正体がこれの可能性）。⚠ 赤いエラーは大きく出さない（誤リマインドを嫌って握りつぶした経緯があるため）。1回の失敗では何も出さず（電波の谷は日常）、**2回続いた時＝約1分**から「HH:MM更新 ・接続待ち」と薄い琥珀色で出すだけ。時刻を見れば古さが分かる。★**③ 見ていない間はポーリングを止めた**＝`syncDriverState` は v5.3 で `visibilitychange` の対象に入れたのに**この30秒タイマーだけ外れていた**。残数タブを開いたままポケットに入れると、見ていない30分の間も60回叩き続ける。同じ仕組みに乗せた。★⚠ **取れていない側は絶対に上書きしない**（空で塗るとドライバー行や数字が消えたように見える）。拠点の入力がまだ1件も無い時間帯（`residualLocEmpty`）は軽い口に出す物が無いので**従来どおり全部取る周回に自動で戻る**。★⚠ **古いGASでも壊れない**＝part を知らない版は余計なパラメータを無視して全部返すだけ。要: メインGAS @671 以降。 -->
 <!-- driver v6.8 (2026-09-02) 【回収タブを速くする／更新ボタンを大きく】社長「ドライバーアプリの回収タブの読み込みを早くしたい。あと、更新ボタンを少し大きくしたい」。★**遅さの正体は重い処理ではなく往復の回数**。2026-09-02 実測＝`getTodayReports` 4.9〜5.9秒／`getTodayIntermediate` 4.1〜6.1秒／`getDriverState` 5.6〜7.0秒（**1回だけ65秒**）。**11バイトしか返っていないのに5秒**で、/exec は1往復あたり約5秒の固定コストがある。シートも小さく（報告ログ497行・販売中ログ1804行・回収状態1398行・休止拠点85行）**行数は原因ではない**（→ memory「アプリが遅い時の調べ方」＝犯人は重さより頻度）。★**直した内容**＝①メインGASに **`getCollectionBundle`**（v2026-09-02）を新設し、回収タブが使う3本を**1往復**にまとめた。更新ボタン/タブ切替は **3往復→1往復**、起動時は **6往復→4往復**。②1本あたり **12秒で打ち切る**（`COLLECTION_FETCH_TIMEOUT_MS`）。従来は `Promise.all` なので1本詰まると全部待ち、65秒のあいだボタンが「更新中…」で固まっていた。③更新ボタンを 11px/padding 4px12px（タップ範囲 約24px）→ **14px/padding 9px20px・min-height 40px** に拡大。★⚠ **数字の作り方は1つも変えていない。**サーバーは既存3関数をそのまま呼んで1つのJSONで返すだけ。★⚠ **古いGASには `getCollectionBundle` が無い**＝`bundle:true` が返らなければ**従来どおり3本を叩く**（落ちない）。doGet は未知の action でも200で別JSONを返すのでステータスコードでは判定できない（→ memory「doGetは未知のactionでも200を返す」）。★⚠ **起動時に取れなかった場合、キャッシュの報告を空で潰さないよう直した**。従来は失敗しても空配列で作り直しており、通信が詰まった起動では報告済みの拠点が全部「未報告」に戻ってリマインドが誤発射される形だった（`reloadCollectionData_` には元からあったガードを起動側にも合わせた）。要: メインGAS v2026-09-02 以降。 -->
 <!-- driver v6.7 (2026-09-02) 【実況マトリクスの完売を薄緑→薄赤に】社長「ドライバーマトリクスのリアルタイムの完売の色を緑→赤に変えて欲しい」。★エリア別マトリクスの完売セル（販売数≧納品数）を 背景 var(--green-light) #D5F5E3 ／文字 #1A7A42 から **背景 #FDECEC ／文字 var(--red) #C0392B** に変更。★あわせて**納品マイナスのセルの色付けを外した**（社長「納品マイナスはいろつけなくていい」）＝`.matrix-cell.minus` / `.matrix-total-cell.minus` の背景・文字色のCSSを削除。完売と同じ薄赤だったため、色を変えると見分けがつかなくなるのを避ける。判定ロジック（minus→soldout→short→通常の順・50%の閾値）は1行も触っていない。売り切れそうの薄オレンジ #FDEBD0 も従来どおり。★完売率ベスト3のヘッダーと「報告済み」バッジの薄緑はマトリクスとは別物なので変えていない。GAS変更なし。 -->
 <!-- driver v6.5 (2026-09-01)【実況のマトリクスに「売り切れそう」を追加】社長「今完売になると薄緑で表示されるんだけど、売り切れそうになっているもの（在庫の50%を切っているもの）をオレンジでわかるようにしたい」。★エリア別マトリクスのセル（販売数/納品数）に `matrix-cell short` を新設し、**残り（納品数−販売数）が納品数の50%未満**の時に薄オレンジ #FDEBD0 で塗る。完売（販売数≧納品数）の薄緑が先に当たるので、**完売の見た目は1pxも変わらない**。★社長決定＝①**ちょうど半分（残り50%）はまだ白**＝「50%を切っている」を厳密に取る ②**納品数が少ない商品も同じ割合で判定する**（2個中1個売れた＝残り50%なので白、2個中2個で完売の緑。3個中2個売れると残り33%で橙）。★セルの判定順は minus（納品マイナス）→ soldout → short → 通常。GAS変更なし・見ている数字も従来と同じ（`delivery` と `sales` の2つだけ）。 -->
@@ -4664,10 +4665,66 @@ function toggleDriverDetail(idx, uid) {
   else        window._openDriverRows[uid] = true;
 }
 
-async function loadResidualSummary() {
+/* ★2026-09-09 v6.4【速さだけの改修。画面に出る数字も、その作り方も変えていない】
+   【何が重かったか】`getResidualSummary` は1回の呼び出しで**フルシート読みを5〜6本**していた
+     （残数ログ／報告ログ／販売中ログ／拠点担当／拠点間移動ログ／残数照合ログ）。
+     実測＝直近6営業日で**平均25.9秒・最大124.5秒**。誰も使っていない時間でも17.7秒かかる。
+     そして**この関数を30秒ごとに叩いていた**。
+   【気づき】画面に大きく出ている数字（確認済み残数・拠点数・エリア別内訳）に要るのは
+     **残数照合ログの1本だけ**。残りは `calculatedTotal`（小さく出る参考値）と
+     ドライバー行のためだけに毎回走っていた。
+   【直し方】30秒の周回は `&part=loc`（拠点の数字だけ）にし、
+     `calculatedTotal` とドライバー行は `&part=drivers` で**5分ごと**に取る。
+     ⚠ **画面から消したものは無い。**出る頻度が違うだけで、🔄更新／タブを開いた時／
+        アプリを前面に戻した時は**今までどおり全部**取り直す。
+   【古いGASでも壊れない】part を知らない版は余計なパラメータを無視して全部返すので、
+     loc の周回に全部入ってくるだけ。どちらでも表示は正しい。 */
+const RESIDUAL_LOC_POLL_MS  = 30000;    // 拠点の数字（軽い）
+const RESIDUAL_FULL_POLL_MS = 300000;   // calculatedTotal とドライバー行（重い）＝5分
+let residualFullTimer  = null;
+let residualLocEmpty   = true;   // 拠点の入力がまだ1件も無い＝軽い側に出す数字が無いので従来どおり全部取る
+let residualFailCount  = 0;      // ★② 連続で取れなかった回数
+let residualLastOkAt   = null;   // ★② 最後に取れた時刻
+let residualLogTotal   = 0;      // 残数ログ側の合計（拠点の入力が無い時間帯の代替表示に使う）
+
+/* ★2026-09-09 ② 取れなかった事を分かるようにする。
+   【なぜ要るか】これまでは catch で握りつぶしていたので、
+   **通信が詰まった端末は古い数字を何時間でも黙って出し続けていた。**
+   現場から見た「アプリの数字が合っていない」の正体がこれである可能性がある。
+   ⚠ 赤いエラーは大きく出さない（誤リマインドを嫌って握りつぶした経緯があるため）。
+     1回の失敗では何も出さず（電波の谷は日常）、**2回続いた時＝約1分**から
+     時刻の横に控えめに「接続待ち」と出すだけにする。時刻を見れば古さは分かる。 */
+function renderResidualStamp_() {
+  const el = document.getElementById('residual-updated-at');
+  if (!el) return;
+  const t = residualLastOkAt;
+  const hhmm = t ? (String(t.getHours()).padStart(2,'0') + ':' + String(t.getMinutes()).padStart(2,'0')) : '--:--';
+  const stale = residualFailCount >= 2;
+  el.textContent = hhmm + '更新' + (stale ? ' ・接続待ち' : '');
+  el.style.color = stale ? 'rgba(255,193,7,.85)' : 'rgba(255,255,255,.5)';
+}
+
+/** mode: 'loc'（拠点の数字だけ）／'drivers'（計算上残数とドライバー行だけ）／それ以外＝全部 */
+async function loadResidualSummary(mode) {
+  const part = (mode === 'loc' || mode === 'drivers') ? mode : '';
   try {
-    const res  = await fetch(GAS_URL + '?action=getResidualSummary', { redirect: 'follow' });
+    const res  = await fetch(GAS_URL + '?action=getResidualSummary' + (part ? '&part=' + part : ''), { redirect: 'follow' });
     const data = JSON.parse(await res.text());
+    if (data && data.error) throw new Error(data.error);
+    // ⚠ 取れていない側は絶対に上書きしない（空で塗ると数字が消えたように見える）
+    if (part !== 'drivers') renderResidualLoc_(data);
+    if (part !== 'loc')     renderResidualDrivers_(data);
+    residualFailCount = 0;
+    residualLastOkAt  = new Date();
+  } catch (e) {
+    residualFailCount++;
+    console.warn('loadResidualSummary error:', e);
+  }
+  renderResidualStamp_();
+}
+
+/** ⑥ 残数照合ログ側＝画面に大きく出る数字。中身は従来の loadResidualSummary から動かしていない。 */
+function renderResidualLoc_(data) {
     // ★2026-08-03 上の数字は「拠点毎に確認した残数の合算」（社長決定）。
     //   まだ拠点の入力が1件も無い時間帯は、従来の入力済合計（残数ログ）を出しておく。
     const hasLoc = (data.locationTotal !== undefined && data.locationTotal !== null);
@@ -4684,8 +4741,13 @@ async function loadResidualSummary() {
        ⚠ 数字の作り方は変えていない。分けて出しているだけ。
        ⚠ 古いGASの応答には `locationConfirmed` が無い＝その時は従来どおり合計を出す（落ちない）。 */
     const hasSplit = hasLoc && (data.locationConfirmed !== undefined && data.locationConfirmed !== null);
+    /* ★2026-09-09 拠点の入力がまだ無い時間帯の代替表示は「残数ログの合計」。
+       part='loc' の応答には残数ログが入っていないので、直近に取れた値（residualLogTotal）を使う。
+       ＝この時間帯は下の residualLocEmpty で**従来どおり全部取る**周回に戻るので、実質は同じ数字。 */
     document.getElementById('all-residual-total').textContent =
-      hasSplit ? data.locationConfirmed : (hasLoc ? data.locationTotal : (data.total || 0));
+      hasSplit ? data.locationConfirmed
+               : (hasLoc ? data.locationTotal
+                         : (data.part === 'loc' ? residualLogTotal : (data.total || 0)));
     const locNote = document.getElementById('all-residual-loccount');
     if (locNote) {
       if (hasSplit) {
@@ -4700,6 +4762,25 @@ async function loadResidualSummary() {
           : '未入力（回収入力の合計を表示中）';
       }
     }
+    // ★2026-08-03 内訳も拠点合算に合わせる（拠点の入力が無い間だけ従来の残数ログ内訳）
+    if (hasLoc) {
+      window._allResidualProducts = data.locationProducts || [];
+      window._allResidualIsByLoc  = true;
+      // ★2026-08-06 エリア別×種別（社長要望）
+      window._allResidualAreas    = data.locationAreas || [];
+    } else if (data.part !== 'loc') {
+      window._allResidualProducts = data.products || [];
+      window._allResidualIsByLoc  = false;
+      window._allResidualAreas    = [];
+    }
+    /* ★2026-09-09 拠点の数字がまだ1件も無い間は、軽い口に出す物が無い＝従来どおり全部取る周回に戻す。
+       実測では朝7時台には既に拠点行が立っているので、通常はこちらには落ちない。 */
+    residualLocEmpty = !hasLoc;
+}
+
+/** ①②③④⑤ 側＝calculatedTotal（小さく出る参考値）とドライバー行。5分ごと／全部取る時だけ通る。 */
+function renderResidualDrivers_(data) {
+    residualLogTotal = Number(data.total) || 0;
     // v1.2: 計算上の全ドライバー合計を表示
     const calcEl = document.getElementById('all-residual-calculated');
     if (calcEl) {
@@ -4734,15 +4815,6 @@ async function loadResidualSummary() {
     } else {
       driverList.innerHTML = '<div style="color:rgba(255,255,255,.4);font-size:12px;text-align:center;padding:8px 0;">まだ報告がありません</div>';
     }
-    const now = new Date();
-    document.getElementById('residual-updated-at').textContent =
-      String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0') + '更新';
-    // ★2026-08-03 内訳も拠点合算に合わせる（拠点の入力が無い間だけ従来の残数ログ内訳）
-    window._allResidualProducts = hasLoc ? (data.locationProducts || []) : (data.products || []);
-    window._allResidualIsByLoc  = hasLoc;
-    // ★2026-08-06 エリア別×種別（社長要望）。拠点の入力がまだ無い時間帯は空＝従来の商品別リストに落ちる。
-    window._allResidualAreas    = hasLoc ? (data.locationAreas || []) : [];
-  } catch(e) { console.warn('loadResidualSummary error:', e); }
 }
 
 // ★2026-08-06 エリアの開閉状態（エリア名 → true）。モーダルを開き直しても保持する。
@@ -4827,15 +4899,38 @@ function closeAllBreakdown() {
   document.getElementById('all-breakdown-modal').style.display = 'none';
 }
 
+/* ★2026-09-09 v6.4 30秒の周回は軽い口（拠点の数字）だけを叩く。
+   拠点の入力がまだ1件も無い時間帯だけ、従来どおり全部取る（軽い口に出す物が無いため）。 */
+function residualTick_() {
+  if (residualLocEmpty) loadResidualSummary();          // 従来どおり全部
+  else                  loadResidualSummary('loc');     // 拠点の数字だけ
+}
+
 function startResidualSummaryTimer() {
-  loadResidualSummary();
-  if (residualSummaryTimer) clearInterval(residualSummaryTimer);
-  residualSummaryTimer = setInterval(loadResidualSummary, 30000);
+  stopResidualSummaryTimer();
+  loadResidualSummary();                                 // 開いた瞬間は必ず全部（ドライバー行も出す）
+  /* ★2026-09-09 v6.4【③ 画面を見ていない間はポーリングを止める】
+     `syncDriverState` は v5.3 で対象に入れたのに、**この30秒タイマーだけ外れていた**。
+     残数タブを開いたままポケットに入れると、見ていない30分の間も60回叩き続ける。
+     同じ仕組みに乗せる＝隠れたら止め、戻ったら1回取り直して回し直す。 */
+  if (document.visibilityState === 'hidden') return;
+  residualSummaryTimer = setInterval(residualTick_, RESIDUAL_LOC_POLL_MS);
+  // 重い側（calculatedTotal・ドライバー行）は5分ごと。※全部取る周回に落ちている時は二重に叩かない。
+  residualFullTimer = setInterval(function () {
+    if (!residualLocEmpty) loadResidualSummary('drivers');
+  }, RESIDUAL_FULL_POLL_MS);
 }
 
 function stopResidualSummaryTimer() {
   if (residualSummaryTimer) { clearInterval(residualSummaryTimer); residualSummaryTimer = null; }
+  if (residualFullTimer)    { clearInterval(residualFullTimer);    residualFullTimer    = null; }
 }
+
+document.addEventListener('visibilitychange', function () {
+  if (document.visibilityState === 'hidden') { stopResidualSummaryTimer(); return; }
+  const tab = document.getElementById('tab-residual');
+  if (tab && tab.classList.contains('active')) startResidualSummaryTimer();  // 戻った瞬間に1回取り直して回し直す
+});
 
 // ═══════════════════════════════════════════════════════════════
 // ★2026-07-31 【Phase B】納品数の承認
