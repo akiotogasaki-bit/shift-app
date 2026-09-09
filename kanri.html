@@ -5686,7 +5686,8 @@ function bmRenderStageNote() {
   if (bmViewMode === 'shelf') {
     el.innerHTML = veh > 0
       ? ('棚 <b>' + shelf + '</b> ＋ 車載 <b>' + veh + '</b> ＝ <b>作る数 ' + (shelf + veh) + '</b>'
-         + '（増産 +' + plus + '／車載へ −' + toVeh + '）　※この表は機械の出力です。直すときは①へ')
+         + '（増産 +' + plus + '／車載へ −' + toVeh + '）'
+         + '　※ここで<b>拠点ごとの初回納品数と車載の個数</b>を調整できます。拠点をやる／やらないは①で')
       : ('<span style="color:#c62828;font-weight:bold;">この日はまだ初回納品に分けていません</span>'
          + '（車載0）。前日20:00の分割で作られます。今すぐなら '
          + '<code>?action=runfix&amp;name=shelfsplit&amp;date=' + bmCurrentDate + '&amp;go=1</code>');
