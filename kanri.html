@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- kanri.html v3.76 (2026-09-10) 【配分表：車載の後ろに「車載計」列】社長指示「前半12拠点の後ろに車載が表示されていて、そこまではいいんだけど、**車載の後ろ（中計の前）に車載のみの合計数**を出したい」。★中計は「前半12＋車載」の合計なので、そこから**車載ぶんだけを抜き出した列**を中計の1つ左に足す。商品行・拠点合計・カテゴリー別合計の3種すべてに出す。色は中計（藍）と区別して**薄い緑**。⚠ 0拠点で隠れた車載列も足す（定義を可視状態に依存させない＝中計と同じ考え方）。⚠ 他社弁当の横断1マス（colspan）は中計＋車載計の2列ぶん広げる。印刷幅は中計・合計と同じ扱い（桁溢れ防止）。**配分調整タブには影響しない**（あちらは別データ・別描画）。GAS変更なし。 -->
 <!-- kanri.html v3.75 (2026-09-10) 【置き弁を一番後ろへ／車載の右に増産数】社長指示①「置き弁は車載に関係ないから一番後ろで良い」②「各エリアの車載の後ろに**何が何個増産になっているのか**分かりやすく出してほしい」→「車載の右側の数字は**今のプラス値はいらないから、そこに増産の数を出そう**」。★①置き弁（アスエネ・シビック・竹早）はエリアの中に混ぜず**末尾にまとめる**（shelfsplitの対象外で車載へ抜くことも増産もしないため）。★②**車載セルの右の数字を「そのエリアの増産数」に置き換えた**（`+3` の形。0なら—）。車載のL列（当日配分）は0なので右の数字は元々意味がなかった。増産＝そのエリアの拠点で **max(初回納品 − 当日配分, 0)** を商品ごとに合計＝**固定数に届かない拠点に足した分＝実際に余分に作る数**。車載そのものと置き弁は数えない。ツールチップに「増産 +N ／ 車載へ −N」を出す。車載セルでは▲▼と±を出さない（右が増産数なので大小比較の意味がない）。 -->
 <!-- kanri.html v3.74 (2026-09-10) 【配分調整をエリア別に並べた】社長指示「配分調整はエリア毎に並んでいる方が見やすいかも」「**メインが一番前で車載も含めてのエリア別**」。★並び＝**エリアごとに ①メイン拠点 → ②その他 → ③そのエリアの車載**。エリアの順序は拠点マスタの出現順、エリアが空の拠点（竹早）は一番最後。**区切り線もエリアの切れ目**に引く。★実装は `bmApplyData` で `locations` 自体を並べ替えるだけ＝配分調整が32か所で参照している所が全部そろう（合計・コピー・確定は拠点IDで引くので順序に依存しない）。★**配分表（拠点配分タブ）は今のまま**（`getSheet1Data` の別データで描いているので影響しない）。⚠ 車載は拠点マスタのエリアが「車載」なので**名前で本来のエリアへ寄せる**（`vehLoadPlan_` の対応はL902銀座←虎ノ門②でエリア名がねじれているため使わない）。エリア情報が無い古い応答なら並べ替えず従来表示に戻る。要メインGAS @692（locations に area と isMain を追加）。 -->
 <!-- kanri.html v3.73 (2026-09-10) 【②初回納品も編集できるようにした】社長指示「①当日配分で急遽やる拠点・やらない拠点を決める／②初回納品の方で細かい拠点の初回納品の数や車載の個数の調整をする、ができるようになっていて欲しい」。★v3.71で②を読み取り専用にしたのは設計ミス。**②も編集可**にし、**保存先を開いている段で切り替える**＝①→L列（当日配分）／②→G列（初回納品）。車載列も②なら編集できる（①では車載を触らせない＝当日配分に車載の数字は無いため）。「✓全拠点確定」は①のときだけ（確定は当日配分に対する操作）。保存トーストに「①当日配分に保存」「②初回納品＋車載に保存」と出す。★**未保存の編集があるときは段を切り替えない**（書き込み先の列が違うので、どちらに書くつもりだったか分からなくなる）。★社長報告「当日配分が初回納品数になってる」＝**分割済みなのにL列の記録が無い日**（9/10以前に分割された日。L列は9/9に作った）は①に棚の数字が出る。黙って出すと誤解するので**赤字で「当日配分の記録がありません・車載N個ぶんが含まれていません」と明示**する。今夜以降に分割される日は shelfsplit が土台をL列へ書き戻すのでこの帯は出ない。 -->
@@ -242,6 +243,9 @@ body {
 
 /* 中間計・合計 */
 .matrix-table td.cell-sub  { background: #e8eaf6; font-weight: bold; }
+/* ★2026-09-10 車載だけの合計（中計の1つ左）。中計と区別できるよう少し違う色にする */
+.matrix-table td.cell-veh  { background: #e0f2f1; font-weight: bold; }
+.matrix-table th.cell-veh  { background: #b2dfdb; }
 .matrix-table td.cell-tot  { background: #c5cae9; font-weight: bold; }
 .matrix-table th.cell-sub  { background: #c5cae9; }
 .matrix-table th.cell-tot  { background: #9fa8da; color: #fff; }
@@ -1210,6 +1214,8 @@ body {
     padding: 0;
   }
   /* 中計・合計は3桁〜4桁が入る（中計600台／総合計1000台）ので下限を広めに取る */
+  #tab-sheet1 .matrix-table th.cell-veh,
+  #tab-sheet1 .matrix-table td.cell-veh,
   #tab-sheet1 .matrix-table th.cell-sub,
   #tab-sheet1 .matrix-table td.cell-sub,
   #tab-sheet1 .matrix-table th.cell-tot,
@@ -4014,6 +4020,19 @@ function renderSheet1(data) {
     return s;
   }
 
+  /* ★2026-09-10【社長指示】**車載の後ろ（中計の前）に「車載だけの合計」列を出す。**
+     社長「前半12拠点の後ろに車載が表示されていて、そこまではいいんだけど、
+     　　　車載の後ろ（中計の前）に**車載のみの合計数**を出したい」
+     中計は「前半12＋車載」の合計なので、そこから車載ぶんだけを抜き出して見えるようにする。
+     ⚠ 0拠点で隠れた車載列も足す（定義を可視状態に依存させない＝中計と同じ考え方）。 */
+  const s1VehIds = s1VehLocs.map(l => l.id);
+  function s1VehTotal(row) {
+    if (!row || row.isExternal || !row.byLocation) return 0;
+    let s = 0;
+    s1VehIds.forEach(lid => { s += Number(row.byLocation[lid]) || 0; });
+    return s;
+  }
+
   // 区切り線（本来位置ベース・左詰め集約）：
   //   可視 vIdx と次の可視拠点の「本来位置」の間に元の境界があれば vIdx の右に線。
   //   隠れた境界は左の可視拠点へ集約され、末尾の可視拠点には線を出さない（v3.40 確定）。
@@ -4055,6 +4074,7 @@ function renderSheet1(data) {
                         ? loc.displayName
                         : fullName.slice(0, 2);
       if (vIdx === subtotalInsertAt) {
+        html += `<th class="cell-veh" title="車載だけの合計(${s1VehLocs.length}台)">車載計</th>`;
         html += `<th class="cell-sub" title="中間計(前${s1HeadLocs.length}拠点＋車載${s1VehLocs.length}列)">中計</th>`;
       }
       // Phase 4: ドライバー色を背景色として適用
@@ -4081,12 +4101,13 @@ function renderSheet1(data) {
             + '</td>';
       if (row.isExternal) {
         // 拠点列は横断して1マス＝「1まとめ」であることが印刷でも分かるようにする
-        const span = visLocIds.length + (subtotalInsertAt <= visLocIds.length ? 1 : 0);
+        const span = visLocIds.length + (subtotalInsertAt <= visLocIds.length ? 2 : 0);
         html += `<td class="cell-data" colspan="${span}" style="text-align:center;font-weight:700;">`
               + `総数 ${row.total} 個（拠点ごとの内訳なし）</td>`;
       } else {
         visLocIds.forEach((lid, vIdx) => {
           if (vIdx === subtotalInsertAt) {
+            html += `<td class="cell-veh">${s1VehTotal(row) || ''}</td>`;
             html += `<td class="cell-sub">${s1Subtotal(row) || ''}</td>`;
           }
           const q = row.byLocation[lid];
@@ -4110,18 +4131,20 @@ function renderSheet1(data) {
     // ★2026-08-04 v3.62 拠点合計はカテゴリー別合計の「上」に出す（社長指定）。
     //   拠点ごとに何個持っていくかが先に目に入る方が、配る時に見やすいため。
     const grandByLoc = {};
-    let grandSub = 0, grandTotal = 0;
+    let grandSub = 0, grandTotal = 0, grandVeh = 0;   // ★2026-09-10 grandVeh＝車載だけの合計
     locIds.forEach((lid, idx) => {
       let sum = 0;
       allRows.forEach(r => { sum += Number(r.byLocation[lid]) || 0; });
       grandByLoc[lid] = sum;
       grandTotal += sum;
       if (idx < subtotalSplit) grandSub += sum;
+      if (VEH_RE_S1.test(lid)) grandVeh += sum;
     });
     html += '<tr class="cat-row cat-grand">';
     html += '<td class="cell-name cat-label">拠点合計</td>';
     visLocIds.forEach((lid, vIdx) => {
       if (vIdx === subtotalInsertAt) {
+        html += `<td class="cell-veh">${grandVeh || ''}</td>`;
         html += `<td class="cell-sub">${grandSub || ''}</td>`;
       }
       const bcls = visBoundaryCls(vIdx);
@@ -4142,7 +4165,7 @@ function renderSheet1(data) {
       //   （社長報告：カテゴリー別集計に他社製品が出ない／合計数が合わない）。
       //   拠点分と総数分を分けて数え、合計には両方を含める。
       const byLocation = {};
-      let subtotal = 0, total = 0;
+      let subtotal = 0, total = 0, catVeh = 0;   // ★2026-09-10 catVeh＝このカテゴリーの車載ぶん
       const catLocRows = catRows.filter(r => !r.isExternal);
       const catExtRows = catRows.filter(r =>  r.isExternal);
       const extTotal   = catExtRows.reduce((a, r) => a + (Number(r.total) || 0), 0);
@@ -4152,6 +4175,7 @@ function renderSheet1(data) {
         byLocation[lid] = sum;
         total += sum;
         if (idx < subtotalSplit) subtotal += sum;
+        if (VEH_RE_S1.test(lid)) catVeh += sum;
       });
       total += extTotal;                       // ★総数管理ぶんを合計に加える
       if (total === 0) return;  // 全拠点ゼロなら行ごと省略
@@ -4164,7 +4188,7 @@ function renderSheet1(data) {
             + (catIsAllExternal ? '<span class="s2-ext-badge" title="他社弁当：拠点ごとの配分は決めない（総数のみ）">他社</span>' : '')
             + '</td>';
       if (catIsAllExternal) {
-        const span = visLocIds.length + (subtotalInsertAt <= visLocIds.length ? 1 : 0);
+        const span = visLocIds.length + (subtotalInsertAt <= visLocIds.length ? 2 : 0);
         html += `<td class="cell-data" colspan="${span}" style="text-align:center;font-weight:700;">`
               + `総数 ${extTotal} 個（拠点ごとの内訳なし）</td>`;
         html += `<td class="cell-tot">${total}</td>`;
@@ -4173,6 +4197,7 @@ function renderSheet1(data) {
       }
       visLocIds.forEach((lid, vIdx) => {
         if (vIdx === subtotalInsertAt) {
+          html += `<td class="cell-veh">${catVeh || ''}</td>`;
           html += `<td class="cell-sub">${subtotal || ''}</td>`;
         }
         const v = byLocation[lid];
@@ -4193,7 +4218,7 @@ function renderSheet1(data) {
     //   同じ内容の行を重ねず、総合計だけを足す（v3.60 は他社の行が2回出て読みにくかった）。
     const extGrand = allRows.reduce((a, r) => a + (r.isExternal ? (Number(r.total) || 0) : 0), 0);
     if (extGrand > 0) {
-      const spanG = visLocIds.length + (subtotalInsertAt <= visLocIds.length ? 1 : 0);
+      const spanG = visLocIds.length + (subtotalInsertAt <= visLocIds.length ? 2 : 0);
       html += '<tr class="cat-row cat-grand">';
       html += '<td class="cell-name cat-label">総合計</td>';
       html += `<td class="cell-data" colspan="${spanG}" style="text-align:center;">`
