@@ -1438,6 +1438,9 @@ body {
 #tab-master .bm-stage-tab.bm-active { background: #00695c; color: #fff; border-color: #00695c; }
 #tab-master .bm-stage-tab:not(.bm-active):hover { background: #e0e0e0; }
 #tab-master .bm-stage-note { margin-top: 5px; font-size: 11px; color: #555; line-height: 1.6; }
+/* 段階2では保存・確定を押せなくするので、押せないことが見て分かるようにする */
+#tab-master .bm-save-btn:disabled,
+#tab-master .bm-confirm-all-btn:disabled { opacity: .4; cursor: not-allowed; }
 /* 段階2の表示（読み取り専用）。増産＝黄／車載へ抜いた＝薄い青 */
 #tab-master .bm-view-shelf .bm-cell-sales { background: #f7f7f7; cursor: default; }
 #tab-master .bm-cell-plus  .bm-cell-sales { background: #fff3cd; color: #7a5200; }
@@ -2317,7 +2320,8 @@ body {
         </div>
         <div class="bm-day-tabs" id="bm-day-tabs"></div>
         <div class="bm-legend">
-          <b>左</b>=販売(編集) <b>右</b>=提案
+          <!-- ★2026-09-09 段階で意味が変わるのでここだけ差し替える（→ bmSetView） -->
+          <span id="bm-legend-lead"><b>左</b>=当日配分(編集) <b>右</b>=推奨</span>
           <span class="bm-sw" style="background:#e8eaed;border:1px solid #888;"></span>確定
           <span class="bm-sw" style="background:#ffe0b2;"></span>編集
           <span class="bm-sw" style="background:#e1f5fe;"></span>推奨
@@ -5602,11 +5606,20 @@ function bmSetView(v) {
   });
   const wrap = document.getElementById('bm-matrix-wrap');
   if (wrap) wrap.classList.toggle('bm-view-shelf', bmViewMode === 'shelf');
-  // 段階2は機械の出力なので人が触らせない（保存・確定・プリセットを止める）
+  // 段階2は機械の出力なので人が触らせない（保存・確定を止める）
   ['bm-save-btn', 'bm-confirm-all'].forEach(function (id) {
     const el = document.getElementById(id);
     if (el) el.disabled = (bmViewMode === 'shelf');
   });
+  // 凡例は段階で意味が変わる（左右の数字が別のものになる）
+  const lead = document.getElementById('bm-legend-lead');
+  if (lead) {
+    lead.innerHTML = (bmViewMode === 'shelf')
+      ? '<b>左</b>=納品数 <b>右</b>=当日配分'
+        + '<span class="bm-sw" style="background:#fff3cd;"></span>増産'
+        + '<span class="bm-sw" style="background:#e3f2fd;"></span>車載へ'
+      : '<b>左</b>=当日配分(編集) <b>右</b>=推奨';
+  }
   bmRenderStageNote();
   if (bmServerData) bmRenderMatrix();
 }
