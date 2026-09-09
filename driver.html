@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v7.0 (2026-09-09) 【スポット拠点でも「残数だけ保存」できるようにした】オーナー決定「3つとも直す」。★何が問題だったか＝スポット拠点は①残数 → クーポン → 「💰 売上を確定」（サーバー往復）→ ②あるべき現金 → レジの現金 という順番を**全部通さないと1文字も残らない**作りだった。確定ボタンの解禁条件が `ccIsSpot ? (!ccSpot || cashInput === '')` で、`ccSpot`（spotPreview の成功応答）が無いと押せないため。置き弁は1画面で終わるのにスポットだけ全手順必須で、**14:00 のリマインドが「完売した拠点も『0』で送ってください」と書いているのに、スポットでは 0 だけ送ることが構造的にできなかった**（残数の未報告が出る主因）。★変更＝①の画面に「💾 残数だけ保存」を足した。押すと `submitCollectionCheck` を **`residualOnly:true`** で投げ、サーバーは**実査残数・実査残数詳細JSON・実査時刻・ドライバー名だけ**を書く。🔴 **判定列は触らない**＝判定は `getCollectionCheckTargets` などで「'未回収' 以外＝回収済み」という回収フラグとして読まれているので、ここを書くと**その拠点が回収リストから消えて、あとから現金を入れられなくなる**。触らないので拠点はリストに残り、売上確定・PayPay取込・現金入力は**あとから通常の締めでそのまま通せる**（手順は1つも消していない・増やしてもいない＝途中で抜けられるようにしただけ）。★あわせて、一度保存した残数を開き直した時に**拠点振替ぶんが二重に引かれる**のを直した（`it.actual` は振替を引いた後の実数なので、そこからさらに引いてはいけない）。★スポット以外の拠点には出さない＝金庫を数えさせる2段階の縛りは従来どおり。要: メインGAS 2026-09-09 以降（`submitCollectionCheck` の `residualOnly`）。 -->
 <!-- driver v6.9 (2026-09-09) 【残数タブを速くする／取れなかった事を分かるようにする／見ていない間は止める】オーナー要望「正確な数字をなるべく早く（軽く）見たい」の後半。★**数字の意味は一切変えていない。速さだけ。**★**何が重かったか**＝`getResidualSummary` は1回の呼び出しで**フルシート読みを5〜6本**していた（①残数ログ ②報告ログ `getTodayReports` ③販売中ログ `getTodayIntermediate`＝単独でも平均13.5秒の最重量 ④`getLocationsWithAssignment` ⑤拠点間移動ログ ⑥`getResidualByLocation`＝残数照合ログ＋移動ログ再読み）。実測＝直近6営業日で**平均25.9秒・最大124.5秒**、誰も使っていない時間に単独で叩いても**17.7秒**。そして driver は**これを30秒ごとに叩いていた**。★**気づき**＝画面に大きく出ている数字（`locationConfirmed`／`locationTotal`／`locationAreas`）に要るのは**⑥の1本だけ**。残りは `calculatedTotal`（小さく出る参考値）と `drivers[]`（ドライバー行）のためだけに毎回走っていた。★**直し方**＝メインGAS `getResidualSummary(part)` に読む範囲の引数を足し、doGet で `&part=` を受ける。`part=loc`＝⑥だけ／`part=drivers`＝①②③④⑤だけ／**part 無し＝従来どおり全部**（既存の呼び出しは1つも壊れない）。driver は**30秒の周回を `part=loc` にし、`calculatedTotal` とドライバー行は `part=drivers` で5分ごと**に取る。★🔴 **画面から消したものは無い。**出る頻度が違うだけで、🔄更新／残数タブを開いた時／アプリを前面に戻した時は**今までどおり全部**取り直す。★**実測（2026-09-09 朝・同条件）**＝改善前 10.1〜16.1秒（6回平均**11.9秒**）→ `part=loc` **3.6〜4.6秒（平均4.0秒）＝約1/3**。`part=drivers` は7.6〜9.6秒だが**5分に1回**なので、30秒あたりの負荷は 11.9秒→約4.7秒＝**6割減**。★**② 取れなかった事を分かるようにした**＝従来は `catch` で握りつぶしており、**通信が詰まった端末は古い数字を何時間でも黙って出し続けていた**（現場の「アプリの数字が合っていない」の正体がこれの可能性）。⚠ 赤いエラーは大きく出さない（誤リマインドを嫌って握りつぶした経緯があるため）。1回の失敗では何も出さず（電波の谷は日常）、**2回続いた時＝約1分**から「HH:MM更新 ・接続待ち」と薄い琥珀色で出すだけ。時刻を見れば古さが分かる。★**③ 見ていない間はポーリングを止めた**＝`syncDriverState` は v5.3 で `visibilitychange` の対象に入れたのに**この30秒タイマーだけ外れていた**。残数タブを開いたままポケットに入れると、見ていない30分の間も60回叩き続ける。同じ仕組みに乗せた。★⚠ **取れていない側は絶対に上書きしない**（空で塗るとドライバー行や数字が消えたように見える）。拠点の入力がまだ1件も無い時間帯（`residualLocEmpty`）は軽い口に出す物が無いので**従来どおり全部取る周回に自動で戻る**。★⚠ **古いGASでも壊れない**＝part を知らない版は余計なパラメータを無視して全部返すだけ。要: メインGAS @671 以降。 -->
 <!-- driver v6.8 (2026-09-02) 【回収タブを速くする／更新ボタンを大きく】社長「ドライバーアプリの回収タブの読み込みを早くしたい。あと、更新ボタンを少し大きくしたい」。★**遅さの正体は重い処理ではなく往復の回数**。2026-09-02 実測＝`getTodayReports` 4.9〜5.9秒／`getTodayIntermediate` 4.1〜6.1秒／`getDriverState` 5.6〜7.0秒（**1回だけ65秒**）。**11バイトしか返っていないのに5秒**で、/exec は1往復あたり約5秒の固定コストがある。シートも小さく（報告ログ497行・販売中ログ1804行・回収状態1398行・休止拠点85行）**行数は原因ではない**（→ memory「アプリが遅い時の調べ方」＝犯人は重さより頻度）。★**直した内容**＝①メインGASに **`getCollectionBundle`**（v2026-09-02）を新設し、回収タブが使う3本を**1往復**にまとめた。更新ボタン/タブ切替は **3往復→1往復**、起動時は **6往復→4往復**。②1本あたり **12秒で打ち切る**（`COLLECTION_FETCH_TIMEOUT_MS`）。従来は `Promise.all` なので1本詰まると全部待ち、65秒のあいだボタンが「更新中…」で固まっていた。③更新ボタンを 11px/padding 4px12px（タップ範囲 約24px）→ **14px/padding 9px20px・min-height 40px** に拡大。★⚠ **数字の作り方は1つも変えていない。**サーバーは既存3関数をそのまま呼んで1つのJSONで返すだけ。★⚠ **古いGASには `getCollectionBundle` が無い**＝`bundle:true` が返らなければ**従来どおり3本を叩く**（落ちない）。doGet は未知の action でも200で別JSONを返すのでステータスコードでは判定できない（→ memory「doGetは未知のactionでも200を返す」）。★⚠ **起動時に取れなかった場合、キャッシュの報告を空で潰さないよう直した**。従来は失敗しても空配列で作り直しており、通信が詰まった起動では報告済みの拠点が全部「未報告」に戻ってリマインドが誤発射される形だった（`reloadCollectionData_` には元からあったガードを起動側にも合わせた）。要: メインGAS v2026-09-02 以降。 -->
 <!-- driver v6.7 (2026-09-02) 【実況マトリクスの完売を薄緑→薄赤に】社長「ドライバーマトリクスのリアルタイムの完売の色を緑→赤に変えて欲しい」。★エリア別マトリクスの完売セル（販売数≧納品数）を 背景 var(--green-light) #D5F5E3 ／文字 #1A7A42 から **背景 #FDECEC ／文字 var(--red) #C0392B** に変更。★あわせて**納品マイナスのセルの色付けを外した**（社長「納品マイナスはいろつけなくていい」）＝`.matrix-cell.minus` / `.matrix-total-cell.minus` の背景・文字色のCSSを削除。完売と同じ薄赤だったため、色を変えると見分けがつかなくなるのを避ける。判定ロジック（minus→soldout→short→通常の順・50%の閾値）は1行も触っていない。売り切れそうの薄オレンジ #FDEBD0 も従来どおり。★完売率ベスト3のヘッダーと「報告済み」バッジの薄緑はマトリクスとは別物なので変えていない。GAS変更なし。 -->
@@ -942,6 +943,9 @@ body {
 /* ★2026-08-13 回収を2段階に（①残った弁当 → ②金庫）※社長指示 */
 .cash-modal-btn.next{background:var(--blue);color:#FFF;}
 .cash-modal-btn.next:disabled{opacity:.45;}
+/* ★2026-09-09 v7.0 ①の画面の「残数だけ保存」。確定ではないので緑（ok）にはしない。 */
+.cash-modal-btn.resonly{background:#0F766E;color:#FFF;}
+.cash-modal-btn.resonly:disabled{opacity:.45;}
 /* ★2026-08-20 v5.6 拠点振替の案内（受け取り側のレジが確定済み） */
 .cc-handover{background:#E8F5E9;border:1px solid #A5D6A7;border-radius:10px;padding:10px 12px;
   margin-bottom:10px;font-size:13px;line-height:1.6;color:#1B5E20;font-weight:700;}
@@ -3501,6 +3505,8 @@ let ccCoupon   = '0';     // 枚数（文字列）
 let ccCouponYen = 300;    // 1枚あたりの値引き額。サーバーが返した値で上書きする
 let ccSpot     = null;    // spotPreview の結果 {sales, payPay, payPayFound, expectCash, ...}
 let ccSpotBusy = false;
+// ★2026-09-09 v7.0 「残数だけ保存」の二度押し防止（スポット拠点のみ）
+let ccRoBusy   = false;
 
 // ★2026-08-13 回収は2段階（社長指示）。①残数を入力して確認 → ②金庫を入力して確認。
 //   1 = 残った弁当を数える／2 = 金庫の現金を数える。
@@ -3591,8 +3597,16 @@ async function openCashModal(id) {
       ccItems = Array.isArray(j.items) ? j.items : [];
       ccItems.forEach(it => {
         // 既に実査を入れ直している場合はその値、無ければ申告値（置き弁は納品数）
-        const v = (it.actual !== null && it.actual !== undefined) ? it.actual : it.declared;
-        const left = (Number(v) || 0) - (Number(hoDet[it.productId]) || 0);
+        /* ★2026-09-09 v7.0 実査が既に入っている時は**振替を引かない**。
+           `it.actual` はドライバーが自分の目で数えて保存した実数＝振替で渡した分は
+           もう手元に無く、この数字には入っていない。そこからさらに hoDet を引くと**二重に減る**。
+           引くのは申告値（it.declared＝販売員が締めた時点の棚の数）へ倒れた時だけ。
+           ⚠ v7.0 で「残数だけ保存」を足して開き直す操作が普通になったので、ここを直さないと
+             開くたびに数が減っていく。 */
+        const hasAct = (it.actual !== null && it.actual !== undefined);
+        const left = hasAct
+          ? (Number(it.actual) || 0)
+          : ((Number(it.declared) || 0) - (Number(hoDet[it.productId]) || 0));
         ccVals[it.productId] = String(left > 0 ? left : 0);
       });
       residualLoaded = ccItems.length > 0;
@@ -3707,6 +3721,50 @@ async function runSpotPreview() {
   }
 }
 
+/* ★2026-09-09 v7.0【残数だけ保存】スポット拠点は「残数 → クーポン → 💰売上を確定 → あるべき現金 → 現金」を
+   全部通さないと1文字も残らなかった。14:00 のリマインドは「完売した拠点も『0』で送ってください」と
+   書いているのに、スポットでは 0 だけ送ることが構造的にできない＝そのぶん残数が未報告のまま残る。
+   → **残数だけ先に確定して抜けられる**ようにする。手順は1つも消していない（増やしてもいない）。
+   🔴 サーバーは residualOnly で **判定列を触らない**＝この拠点は回収リストに残る。
+      売上確定・PayPay取込・現金入力はあとから通常の締めでそのまま通せる。
+   🔴 **回収済みにはしない**（setCollected を呼ばない）。お金がまだ締まっていないので。 */
+async function ccSaveResidualOnly() {
+  if (!cashModalLocId || ccRoBusy) return;
+  const id  = cashModalLocId;
+  const tot = ccResidualTotal_();
+  // 完売＝0 は「事実」なので送る。欄が1つも無い時だけ止める（driver v2.7 の教訓と同じ区別）。
+  if (tot === null) { showToast('残った数を入力してください（完売なら 0 のままで押せます）', 'error', 4000); return; }
+  ccRoBusy = true;
+  refreshCashModal_();
+  try {
+    const j = await (await fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        action:               'submitCollectionCheck',
+        residualOnly:         true,          // ★これがサーバー側の分岐
+        date:                 ccToday_(),
+        locationId:           id,
+        userId:               state.userId,
+        userName:             state.userName,
+        actualResidual:       tot,
+        actualResidualDetail: ccResidualDetail_(),
+        // ★現金・クーポン・種別は送らない。まだ数えていないので書く数字が無い。
+      }),
+      redirect: 'follow',
+    })).json();
+    if (!j || !j.ok) throw new Error((j && j.error) || '保存できませんでした');
+    state.lastUserActionAt = Date.now();
+    showToast('残数 ' + tot + '個 を保存しました。売上とレジはあとで大丈夫です', 'success', 5000);
+    closeCashModal();
+  } catch (e) {
+    // ★黙って閉じない。閉じると「保存できた」と見分けがつかない。
+    showToast('残数を保存できませんでした：' + (e && e.message ? e.message : e), 'error', 6000);
+  } finally {
+    ccRoBusy = false;
+    if (cashModalLocId === id) refreshCashModal_();
+  }
+}
+
 function closeCashModal() {
   document.getElementById('cash-modal-bg').classList.remove('show');
   cashModalLocId = null;
@@ -3716,6 +3774,7 @@ function closeCashModal() {
   ccField = 'cash';
   ccPlannedTo = [];   // ★2026-08-07 次の拠点に行き先を持ち越さない
   ccIsSpot = false; ccCoupon = '0'; ccSpot = null; ccSpotBusy = false;   // ★2026-08-06
+  ccRoBusy = false;   // ★2026-09-09 v7.0
   ccStep = 1;         // ★2026-08-13 次に開く拠点も①残数から
   ccTransport = ''; ccIs2nd = false;   // ★2026-08-13 交通費を次の拠点へ持ち越さない
   ccHandover = null;  // ★2026-08-20 振替の案内を次の拠点へ持ち越さない
@@ -3986,6 +4045,20 @@ function renderCashModal_(net) {
   //   ①で確定できてしまうと2段階にした意味が無くなる（金庫を数えずに締められる）。
   const step1Box = document.getElementById('cc-step1-btns');
   if (step1Box) step1Box.style.display = onStep1 ? '' : 'none';
+  /* ★2026-09-09 v7.0【残数だけ保存】①の画面で、スポット拠点にだけ出す。
+     通常拠点には出さない＝「金庫を数えてから締める」2段階の縛りを崩さないため（2026-08-13 の社長指示）。
+     置き弁（ccNoCash）はもともと1画面で残数だけで確定できるので要らない。 */
+  const roShow = onStep1 && ccIsSpot && ccFound && ccItems.length > 0;
+  const roBox  = document.getElementById('cc-resonly-box');
+  const roHint = document.getElementById('cc-resonly-hint');
+  const roBtn  = document.getElementById('cc-btn-resonly');
+  if (roBox)  roBox.style.display  = roShow ? '' : 'none';
+  if (roHint) roHint.style.display = roShow ? '' : 'none';
+  if (roBtn) {
+    roBtn.disabled    = ccRoBusy || (tot === null);
+    roBtn.textContent = ccRoBusy ? '保存中…' : '💾 残数だけ保存';
+  }
+
   const nextBtn = document.getElementById('cc-btn-next');
   if (nextBtn) {
     // スポットは「売上を確定」を通してからでないと、あるべき現金が出ない（2026-08-06 の順番）
@@ -8647,6 +8720,14 @@ function rtEscapeHtml(s) {
     <div class="cash-modal-btns" id="cc-step1-btns" style="display:none;">
       <button class="cash-modal-btn cancel" onclick="closeCashModal()">キャンセル</button>
       <button class="cash-modal-btn next" id="cc-btn-next" onclick="ccGoStep2()">残数を確認 ▶</button>
+    </div>
+    <!-- ★2026-09-09 v7.0 スポット拠点だけ：残数を先に確定して抜けられる口。
+         売上確定・PayPay取込・現金入力は消していない（あとから通常の締めでそのまま通す）。 -->
+    <div class="cash-modal-btns" id="cc-resonly-box" style="display:none;">
+      <button class="cash-modal-btn resonly" id="cc-btn-resonly" onclick="ccSaveResidualOnly()">💾 残数だけ保存</button>
+    </div>
+    <div class="cc-kind-hint" id="cc-resonly-hint" style="display:none;">
+      完売なら 0 のままで押せます。売上とレジはあとで大丈夫です（この拠点は回収リストに残ります）
     </div>
     <div class="cash-modal-btns" id="cc-confirm-btns">
       <button class="cash-modal-btn cancel" id="cc-btn-cancel" onclick="closeCashModal()">キャンセル</button>
