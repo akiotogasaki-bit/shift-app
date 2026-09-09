@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- kanri.html v3.71 (2026-09-09) 【配分調整を2段階に分けた】社長決定「配分表作成まで2段階用意しておいた方がいいね。推奨の数と当日配分がわかる表 → 拠点の数字を当てた初回納品表（溢れた分を車載へ／足りない分を拠点にプラス）」。★**①当日配分（予定販売数）＝L列**…人が数字を当てるのはここだけ。車載は出てこない。欠勤・天候プリセット・手入力はこの表。保存先は `col:'L'`（GASは未分割の日ならG列にも写すので、分割前の日は今までと同じ見え方）。★**②初回納品＋車載＝G列**…`shelfsplit` の出力で**読み取り専用**。左＝実際に納品する数、右＝もとの当日配分。**増産したセルは黄・車載へ抜いたセルは薄い青**で、右に `+3` `−2` を出す。保存と全拠点確定は押せない。★どちらも**同じ1本の `getBasicMasterMatrix`** で描くので**切り替えで再取得しない**（追加の待ち時間ゼロ）。★段階タブの下に1行で「棚N＋車載N＝作る数N（増産+N／車載へ−N）」を出し、**まだ分割していない日は赤字で「初回納品に分けていません」と `shelfsplit` の叩き方まで書く**＝「走ってない・効いていない」をその場で気づけるようにする。★画面の段階1は **L→G** の順に落とす（GAS側の `_bmDailyBase_` は L→H だが、H列はグループ二重計上で1日+300個前後ふくらむので画面には出さない）。要メインGAS @678（doPost の saveBasicMasterNumbers が `col` を受ける）。 -->
 <!-- kanri.html v3.70 (2026-08-25) 【配分の「💾 保存」が失敗する件：GASの一括書き込み化＋フロントの自動リトライ】社長「今配分調整したら、保存できない」。★**原因は保存機能ではなく /exec の不安定**＝実測で保存POSTが 404（HTML）や、status 200 なのに中身が doGet の既定応答 `{"dates":[...]}` になるケースがあり、旧 `bmPostAction` は `res.json()` が落ちるか `ok` が undefined → いずれも「保存失敗」alert になっていた。応答時間も 4〜100秒（別プロジェクトの営業GASも普段1〜2秒→5〜6秒＝Google側が重い時間帯）。★**対応①GAS**＝`saveBasicMasterNumbers` のセルごと `setValue`（G列・J列で1セル2往復＝100セル編集で200往復）を、ヒット行の最小〜最大範囲を G列・J列それぞれ1回ずつ read/write する方式に変更。**API往復は編集量に関わらず固定4回**。範囲内の非対象行は読んだ値をそのまま書き戻すだけで値は変わらず、他列には触れない。★**対応②フロント**＝`bmPostAction` に自動リトライ（最大3回・2.5秒→5秒待ち）。404・非JSON・`ok` 無しの応答を失敗とみなして再送する。呼び出し8箇所は全て「与えた値をそのままセットする」冪等な処理と確認済み（confirm/unconfirm もトグルではなく別アクション）なので二重書き込みにならない。 -->
 <!-- kanri.html v3.69 (2026-08-24) 【配分表の印刷：右パネルを 拠点名5文字／販売員名4文字 で打ち切る】社長指示。★**効果**＝拠点名パネル **177px→103px**、表＋パネルの合計 **1033px→959px**。横向きの有効幅1085pxに対し余りは **52px→126px**（拠点があと6個ほど増えても収まる）。★⚠ **`table-layout: fixed` と表自身の `width: 102px` がセットで必要**＝v3.67 と同じ罠。auto レイアウトでは `width` は下限にすぎず文字が入る幅まで列が広がる。実測：fixed だけ入れて width を auto のままにすると、指定58/44pxに対し実際は **77/84px** に広がって効かなかった。★**文字数の根拠（実測）**＝拠点名セル内幅57px／8pt全角5文字=53.3px・6文字=64px → ちょうど5文字。販売員セル内幅43px／7pt全角4文字=37.3px・5文字=46.6px → ちょうど4文字（見出し「販売員名」37.3pxも収まる）。★**切り詰めるのは印刷だけ**＝画面表示は従来どおりフル表示（HTMLは無改修・CSSのみ）。GAS変更なし。 -->
 <!-- kanri.html v3.68 (2026-08-24) 【配分表の印刷：数字を 9.5pt→8pt に／v3.67の幅指定は効いていなかった】🔴 **v3.67（24px→20px）は1pxも縮まなかった**（実測：表の幅 1035px→1035px）。この表は `table-layout: auto` なので CSS の `width` は**下限**の意味しかなく、中身が入りきる幅まで勝手に広がる。9.5pt太字の「88」は18px＋罫線＝**ちょうど20px**で、**幅を決めていたのは文字サイズ**だった。→ **印刷幅で困ったら font-size を触る。width をいじっても動かない。**🔴 さらに 9.5pt のままでは**既に用紙からはみ出していた**＝表987px＋拠点名パネル177px＝**1164px** に対し横向きの有効幅は 291mm−余白4mm＝**1085px**（−83px）。★**実測（8/25・可視32拠点・表＋パネル合計）**＝9.5pt:1168px(−83)／9pt:1122px(−37)／8.5pt:1077px(+8)／**8pt:1033px(+52 ←採用)**／7.5pt:1000px(+85)。7ptまで下げても996pxでほぼ縮まない（商品名60px・中計・合計が下限）。★**採用＝8pt**（数字は従来の約84%・拠点があと2〜3個増えても収まる）＋データセル width 16px・中計/合計 23px（どちらも下限指定）。セルの高さ24pxは据え置き＝縦の見た目は不変。画面表示・シート2・3は無変更。GAS変更なし。 -->
@@ -1428,6 +1429,20 @@ body {
   padding: 4px 10px; font-size: 10pt; border: 1px solid #999;
   background: #fafafa; cursor: pointer; border-radius: 3px; font-weight: bold;
 }
+/* ── ★2026-09-09 配分表の2段階（①当日配分＝人が触る／②初回納品＋車載＝機械の出力） ── */
+#tab-master .bm-stage-tabs { display: inline-flex; gap: 4px; margin-top: 6px; }
+#tab-master .bm-stage-tab {
+  padding: 5px 14px; font-size: 10.5pt; border: 1px solid #999;
+  background: #fafafa; cursor: pointer; border-radius: 4px; font-weight: bold; color: #555;
+}
+#tab-master .bm-stage-tab.bm-active { background: #00695c; color: #fff; border-color: #00695c; }
+#tab-master .bm-stage-tab:not(.bm-active):hover { background: #e0e0e0; }
+#tab-master .bm-stage-note { margin-top: 5px; font-size: 11px; color: #555; line-height: 1.6; }
+/* 段階2の表示（読み取り専用）。増産＝黄／車載へ抜いた＝薄い青 */
+#tab-master .bm-view-shelf .bm-cell-sales { background: #f7f7f7; cursor: default; }
+#tab-master .bm-cell-plus  .bm-cell-sales { background: #fff3cd; color: #7a5200; }
+#tab-master .bm-cell-toveh .bm-cell-sales { background: #e3f2fd; color: #10457e; }
+#tab-master .bm-cell-delta { font-size: 9px; margin-left: 2px; opacity: .85; }
 #tab-master .bm-week-tab.bm-active { background: #ef6c00; color: white; border-color: #ef6c00; }
 #tab-master .bm-week-tab:not(.bm-active):hover { background: #e0e0e0; }
 #tab-master .bm-day-tab {
@@ -2284,6 +2299,12 @@ body {
       <div class="bm-title-left">
         <div class="bm-title">📐 配分調整</div>
         <div class="bm-subtitle" id="bm-subtitle">読み込み中...</div>
+        <!-- ★2026-09-09 配分表の2段階（社長決定）。①で人が数字を当て、②は機械の出力を見るだけ -->
+        <div class="bm-stage-tabs" id="bm-stage-tabs">
+          <button class="bm-stage-tab bm-active" data-view="daily" onclick="bmSetView('daily')">① 当日配分（予定販売数）</button>
+          <button class="bm-stage-tab" data-view="shelf" onclick="bmSetView('shelf')">② 初回納品＋車載</button>
+        </div>
+        <div class="bm-stage-note" id="bm-stage-note"></div>
         <!-- ★2026-08-03 v3.57 献立と配分表のズレ警告（読み取り専用・数字は動かさない） -->
         <div id="bm-menu-warn" style="display:none;white-space:pre-line;margin-top:6px;padding:8px 11px;
              background:#fff3e0;border-left:4px solid #ef6c00;border-radius:6px;
@@ -5522,18 +5543,104 @@ function bmMenuExcluded(pid) {
 // セルの「表示する販売数」を取得（編集値 > サーバーweekSales）
 // v3.21: 表示優先順「編集値 > confirmed（G列）> weekSales（先週実績）」
 // v3.49: 献立表が保存済みの日は「献立に無い日替わり商品」を0で表示（編集値だけは尊重）
+/* ══════════════════════════════════════════════════════════════
+   ★2026-09-09【社長決定】配分表の2段階
+   ══════════════════════════════════════════════════════════════
+   社長「推奨の数をそのまま入った状態のものを見るタブ／そこから定数を引いて車載まで
+         出ている（足りなくてプラス分も含めた　これが調理の仕込みに反映される）」
+
+   ① `daily` … **当日配分（予定販売数）＝L列。**人が数字を当てるのはここだけ。車載は出てこない。
+   ② `shelf` … **初回納品（棚）＋車載＝G列。**`shelfsplit` の出力。**読み取り専用**。
+                固定数を当てて 溢れ→車載／不足→増産。ここが仕込みと発注に流れる。
+   ⚠ どちらも**同じ1本のデータ**（`getBasicMasterMatrix`）で描く。切り替えで再取得はしない。
+   ══════════════════════════════════════════════════════════════ */
+let bmViewMode = 'daily';
+
+/** 段階1（当日配分）の実効値。**L列があればL列、無ければ今のG列**。
+    ⚠ GAS側の `_bmDailyBase_` は L→H の順だが、画面は **L→G** にしてある。
+      L列が空の日にH列を出すと、H列のグループ二重計上（1日+300個前後）がそのまま画面に出るため。 */
+function bmDailyBase(c) {
+  if (!c) return 0;
+  if (c.daily !== null && c.daily !== undefined) return Number(c.daily) || 0;
+  if (c.confirmed !== null && c.confirmed !== undefined) return Number(c.confirmed) || 0;
+  return 0;
+}
+
+/** 段階2で「増産」か「車載へ抜いた」かの差分。＋＝増産／−＝車載へ。L列が無い日は0（差が出せない）。 */
+function bmShelfDelta(c) {
+  if (!c || c.daily === null || c.daily === undefined) return 0;
+  const g = (c.confirmed !== null && c.confirmed !== undefined) ? Number(c.confirmed) : 0;
+  return g - (Number(c.daily) || 0);
+}
+
 function bmGetDisplaySales(pid, lid) {
-  const edit = bmGetEdit(bmCurrentDate, pid, lid);
-  if (edit !== null && edit !== undefined && edit !== '') return Number(edit);
   if (!bmServerData) return 0;
   const c = bmServerData.cells[pid + '_' + lid];
   if (!c) return 0;
-  // v3.49: その日作らない種類は0（G列に古い数字が残っていても0で見せる。実際の0化は夜間バッチ側）
+  // ── ② 初回納品＋車載＝G列そのまま（編集値は反映しない＝読み取り専用）
+  if (bmViewMode === 'shelf') {
+    return (c.confirmed !== null && c.confirmed !== undefined) ? Number(c.confirmed) : 0;
+  }
+  // ── ① 当日配分＝L列（無ければ今のG列）
+  const edit = bmGetEdit(bmCurrentDate, pid, lid);
+  if (edit !== null && edit !== undefined && edit !== '') return Number(edit);
+  // v3.49: その日作らない種類は0（古い数字が残っていても0で見せる。実際の0化は夜間バッチ側）
   if (bmMenuExcluded(pid)) return 0;
-  // G列確定値（confirmed）があれば優先表示
+  if (c.daily !== null && c.daily !== undefined) return Number(c.daily);
   if (c.confirmed !== null && c.confirmed !== undefined) return Number(c.confirmed);
   // 確定値なし → 先週実績
   return c.weekSales || 0;
+}
+
+/** 段階の切り替え。データは取り直さず描き直すだけ。 */
+function bmSetView(v) {
+  const next = (v === 'shelf') ? 'shelf' : 'daily';
+  if (next === bmViewMode) return;
+  bmViewMode = next;
+  document.querySelectorAll('#bm-stage-tabs .bm-stage-tab').forEach(function (b) {
+    b.classList.toggle('bm-active', b.dataset.view === bmViewMode);
+  });
+  const wrap = document.getElementById('bm-matrix-wrap');
+  if (wrap) wrap.classList.toggle('bm-view-shelf', bmViewMode === 'shelf');
+  // 段階2は機械の出力なので人が触らせない（保存・確定・プリセットを止める）
+  ['bm-save-btn', 'bm-confirm-all'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el) el.disabled = (bmViewMode === 'shelf');
+  });
+  bmRenderStageNote();
+  if (bmServerData) bmRenderMatrix();
+}
+
+/** 段階タブの下の1行。**その日が分割済みかどうかを数字で言う**（「走ってない」を目で見えるようにする）。 */
+function bmRenderStageNote() {
+  const el = document.getElementById('bm-stage-note');
+  if (!el) return;
+  if (!bmServerData) { el.textContent = ''; return; }
+  let veh = 0, shelf = 0, daily = 0, plus = 0, toVeh = 0;
+  const cells = bmServerData.cells || {};
+  for (const k in cells) {
+    const p = k.indexOf('_'); if (p < 0) continue;
+    const lid = k.substring(p + 1);
+    const c = cells[k];
+    const g = (c.confirmed !== null && c.confirmed !== undefined) ? Number(c.confirmed) : 0;
+    if (/^L9\d\d$/.test(lid)) { veh += g; continue; }
+    shelf += g;
+    daily += bmDailyBase(c);
+    const d = bmShelfDelta(c);
+    if (d > 0) plus += d; else if (d < 0) toVeh += -d;
+  }
+  if (bmViewMode === 'shelf') {
+    el.innerHTML = veh > 0
+      ? ('棚 <b>' + shelf + '</b> ＋ 車載 <b>' + veh + '</b> ＝ <b>作る数 ' + (shelf + veh) + '</b>'
+         + '（増産 +' + plus + '／車載へ −' + toVeh + '）　※この表は機械の出力です。直すときは①へ')
+      : ('<span style="color:#c62828;font-weight:bold;">この日はまだ初回納品に分けていません</span>'
+         + '（車載0）。前日20:00の分割で作られます。今すぐなら '
+         + '<code>?action=runfix&amp;name=shelfsplit&amp;date=' + bmCurrentDate + '&amp;go=1</code>');
+  } else {
+    el.innerHTML = '拠点に置く予定の合計 <b>' + daily + '</b>（車載は含みません）。'
+      + '欠勤・天候プリセット・手入力はこの表で当てます。'
+      + (veh > 0 ? '　※この日はもう分割済みなので、直したら②を作り直す必要があります' : '');
+  }
 }
 
 // レンダリング
@@ -5726,8 +5833,12 @@ function bmRenderCell(pid, lid, idx0) {
   const c = bmServerData.cells[pid + '_' + lid];
   if (!c) return '<td class="bm-data-cell' + bcls + '"></td>';
   const sales = bmGetDisplaySales(pid, lid);
-  const pro = c.proposed;
+  /* ★2026-09-09 段階2では右の数字を「推奨(H)」ではなく**当日配分(L)**にする。
+     左＝実際に納品する数、右＝そのもとになった予定販売数。差が増産／車載へ抜いた分。 */
+  const isShelfView = (bmViewMode === 'shelf');
+  const pro = isShelfView ? bmDailyBase(c) : c.proposed;
   const diff = pro - sales;
+  const shelfDelta = isShelfView ? bmShelfDelta(c) : 0;
   const isLocC = bmIsLocConfirmed(lid);
   // v3.24/v3.25: 未来日付(isFallback)は反映元(直近同曜=先週)の完売、過去日・当日は表示日自身の完売。時刻は必ずHH:MMに整形
   const isFuture = !!c.isFallback;
@@ -5745,6 +5856,9 @@ function bmRenderCell(pid, lid, idx0) {
   // v3.49: 献立に無い＝その日作らない種類（グレー・編集は可＝手で戻せる）
   const menuOff = bmMenuExcluded(pid) && !isEdited;
   if (menuOff) cls += ' bm-menu-off';
+  // ★2026-09-09 段階2：増産したセル＝黄／車載へ抜いたセル＝薄い青
+  if (shelfDelta > 0) cls += ' bm-cell-plus';
+  else if (shelfDelta < 0) cls += ' bm-cell-toveh';
   cls += bcls;  // v3.9 NEW: 区切り線クラス追加
 
   let salesCls = 'bm-cell-sales';
@@ -5757,7 +5871,11 @@ function bmRenderCell(pid, lid, idx0) {
   const salStr = (sales || sales === 0) && pro ? String(sales) : (sales ? String(sales) : '–');
 
   let ind = '';
-  if (diff > 0 && pro > 0) ind = '<span class="bm-ind-up">▲</span>';
+  if (isShelfView) {
+    // 段階2は▲▼ではなく「+3」「−2」で増産／車載へを出す（色と合わせて読む）
+    if (shelfDelta > 0) ind = '<span class="bm-cell-delta">+' + shelfDelta + '</span>';
+    else if (shelfDelta < 0) ind = '<span class="bm-cell-delta">−' + (-shelfDelta) + '</span>';
+  } else if (diff > 0 && pro > 0) ind = '<span class="bm-ind-up">▲</span>';
   else if (diff < 0 && pro > 0) ind = '<span class="bm-ind-down">▼</span>';
   // v3.25: 過去日・当日は絶対配置の赤ドット。未来日付は上部ストリップ(soLine)に🔴＋時刻（推奨数と重ならない）
   let badge = '';
@@ -5772,7 +5890,8 @@ function bmRenderCell(pid, lid, idx0) {
     }
   }
 
-  const editable = true;
+  // ★2026-09-09 段階2（初回納品＋車載）は機械の出力なので編集させない
+  const editable = !isShelfView;
   const rangeAttrs = ' onmousedown="bmOnCellMouseDown(event,\'' + pid + '\',\'' + lid + '\')" onmouseenter="bmOnCellMouseEnter(event,\'' + pid + '\',\'' + lid + '\')"';
   const editAttrs = editable
     ? 'contenteditable="true" inputmode="numeric" data-pid="' + pid + '" data-lid="' + lid + '" onkeydown="bmOnSalesKey(event)" onblur="bmOnSalesBlur(this)" onfocus="bmOnSalesFocus(this)"' + rangeAttrs
@@ -6133,6 +6252,7 @@ function bmApplyData(dateStr, r, colorMap) {
   bmPurgeOldEdits(allDates);
   bmRenderAll();
   bmUpdateSaveDirty();             // v3.19: 保存ボタン状態更新
+  bmRenderStageNote();             // ★2026-09-09 段階タブの下の1行（分割済みか・作る数）
   bmRenderMenuWarn(dateStr);       // ★2026-08-03 v3.57 献立と配分表のズレを帯で表示（非同期・待たせない）
 }
 
@@ -6355,8 +6475,14 @@ async function bmConfirmAll() {
   wpToast('全拠点を確定（更新' + (r.updated || 0) + '件）', 'success');
 }
 async function bmSaveAll() {
-  // v3.23: 「数字の保存」のみ。編集セルだけG列に書く（K列=確定フラグは一切触らない＝確定にならない）。
+  // v3.23: 「数字の保存」のみ。編集セルだけ書く（K列=確定フラグは一切触らない＝確定にならない）。
   if (!bmServerData) return;
+  /* ★2026-09-09 段階2（初回納品＋車載）からは保存させない。あれは機械の出力なので、
+     直すなら①当日配分で直して分割し直す。 */
+  if (bmViewMode === 'shelf') {
+    wpToast('②初回納品＋車載は直せません。①当日配分で直してください', 'info');
+    return;
+  }
   const itemsByLoc = {};
   const locSet = new Set();
   let cellCount = 0;
@@ -6385,9 +6511,12 @@ async function bmSaveAll() {
 
   const btn = document.getElementById('bm-save-btn');
   if (btn) { btn.disabled = true; btn.textContent = '保存中...'; }
+  /* ★2026-09-09 **書き込み先はL列（当日配分）**。GAS側は、その日がまだ分割されていなければ
+     G列にも同じ値を写す（`mirrorG`）ので、分割前の日は今までと同じ見え方のまま保存できる。 */
   const r = await bmPostAction('saveBasicMasterNumbers', {
     date: bmCurrentDate,
-    itemsByLoc: itemsByLoc
+    itemsByLoc: itemsByLoc,
+    col: 'L'
   });
   if (btn) btn.disabled = false;
   if (!r.ok) {
