@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- kanri.html v3.77 (2026-09-10) 【車載セルは積み込み数と増産数を必ず両方出す】社長指示「配分調整の左側は積み込みの数、右がその種類の増産の数／**車載の数と右の数字、両方いるはず**」「**車載がない種類に関してはもちろん左は0表示**」。★v3.75では車載も増産も0の商品が「—」のグレーセルになって数字が消えていた。→ **車載セルは `isZero`（グレーの空セル扱い）にせず、左は0でも「0」・右は増産0なら「0」**と書く。編集後の描き直し（bmUpdateCellsDOM）でも同じ扱いにする。 -->
 <!-- kanri.html v3.76 (2026-09-10) 【配分表：車載の後ろに「車載計」列】社長指示「前半12拠点の後ろに車載が表示されていて、そこまではいいんだけど、**車載の後ろ（中計の前）に車載のみの合計数**を出したい」。★中計は「前半12＋車載」の合計なので、そこから**車載ぶんだけを抜き出した列**を中計の1つ左に足す。商品行・拠点合計・カテゴリー別合計の3種すべてに出す。色は中計（藍）と区別して**薄い緑**。⚠ 0拠点で隠れた車載列も足す（定義を可視状態に依存させない＝中計と同じ考え方）。⚠ 他社弁当の横断1マス（colspan）は中計＋車載計の2列ぶん広げる。印刷幅は中計・合計と同じ扱い（桁溢れ防止）。**配分調整タブには影響しない**（あちらは別データ・別描画）。GAS変更なし。 -->
 <!-- kanri.html v3.75 (2026-09-10) 【置き弁を一番後ろへ／車載の右に増産数】社長指示①「置き弁は車載に関係ないから一番後ろで良い」②「各エリアの車載の後ろに**何が何個増産になっているのか**分かりやすく出してほしい」→「車載の右側の数字は**今のプラス値はいらないから、そこに増産の数を出そう**」。★①置き弁（アスエネ・シビック・竹早）はエリアの中に混ぜず**末尾にまとめる**（shelfsplitの対象外で車載へ抜くことも増産もしないため）。★②**車載セルの右の数字を「そのエリアの増産数」に置き換えた**（`+3` の形。0なら—）。車載のL列（当日配分）は0なので右の数字は元々意味がなかった。増産＝そのエリアの拠点で **max(初回納品 − 当日配分, 0)** を商品ごとに合計＝**固定数に届かない拠点に足した分＝実際に余分に作る数**。車載そのものと置き弁は数えない。ツールチップに「増産 +N ／ 車載へ −N」を出す。車載セルでは▲▼と±を出さない（右が増産数なので大小比較の意味がない）。 -->
 <!-- kanri.html v3.74 (2026-09-10) 【配分調整をエリア別に並べた】社長指示「配分調整はエリア毎に並んでいる方が見やすいかも」「**メインが一番前で車載も含めてのエリア別**」。★並び＝**エリアごとに ①メイン拠点 → ②その他 → ③そのエリアの車載**。エリアの順序は拠点マスタの出現順、エリアが空の拠点（竹早）は一番最後。**区切り線もエリアの切れ目**に引く。★実装は `bmApplyData` で `locations` 自体を並べ替えるだけ＝配分調整が32か所で参照している所が全部そろう（合計・コピー・確定は拠点IDで引くので順序に依存しない）。★**配分表（拠点配分タブ）は今のまま**（`getSheet1Data` の別データで描いているので影響しない）。⚠ 車載は拠点マスタのエリアが「車載」なので**名前で本来のエリアへ寄せる**（`vehLoadPlan_` の対応はL902銀座←虎ノ門②でエリア名がねじれているため使わない）。エリア情報が無い古い応答なら並べ替えず従来表示に戻る。要メインGAS @692（locations に area と isMain を追加）。 -->
@@ -6039,7 +6040,11 @@ function bmRenderCell(pid, lid, idx0) {
   const rawSO = isFuture ? (c.refSelloutTime || null) : (c.selloutTime || null);
   const soTime = rawSO ? bmFmtSelloutTime(rawSO) : '';
   const hasSO = !!soTime;
-  const isZero = !pro && !sales;
+  /* ★2026-09-10 **車載セルは「積み込みの数」と「その種類の増産の数」を必ず両方出す。**
+     社長「配分調整の左側は積み込みの数、右がその種類の増産の数／**車載の数と右の数字、両方いるはず**」
+     　　「**車載がない種類に関してはもちろん左は0表示**」
+     → 車載セルはグレーの空セル扱い（`isZero`）にしない。0でも0と書く。 */
+  const isZero = !isVehCell && !pro && !sales;
   const edit = bmGetEdit(bmCurrentDate, pid, lid);
   const isEdited = (edit !== null && edit !== undefined);
 
@@ -6062,8 +6067,10 @@ function bmRenderCell(pid, lid, idx0) {
   if (isZero) salesCls += ' bm-no-sales';
 
   /* ★2026-09-10 車載セルの右は「そのエリアの増産数」なので **+N** と出す（0なら—）。 */
-  const proStr = isVehCell ? (pro ? '+' + pro : '–') : (pro || '–');
-  const salStr = (sales || sales === 0) && pro ? String(sales) : (sales ? String(sales) : '–');
+  const proStr = isVehCell ? (pro ? '+' + pro : '0') : (pro || '–');
+  // ★2026-09-10 車載セルの左（積み込みの数）は**0でも「0」と出す**（→ isZero の上のコメント）
+  const salStr = isVehCell ? String(sales || 0)
+               : ((sales || sales === 0) && pro ? String(sales) : (sales ? String(sales) : '–'));
 
   let ind = '';
   if (isVehCell) {
@@ -6262,8 +6269,11 @@ function bmUpdateCellsDOM(changes) {
     const edit = bmGetEdit(bmCurrentDate, pid, lid);
     const isEdited = (edit !== null && edit !== undefined);
     const pro = c ? c.proposed : 0;
-    const isZero = !pro && !sales;
-    const salStr = (sales || sales === 0) && pro ? String(sales) : (sales ? String(sales) : '–');
+    // ★2026-09-10 車載セルは0でも「0」（描き直しでも消えないように）
+    const isVehCell2 = !!BM_VEH_AREA_[String(lid)];
+    const isZero = !isVehCell2 && !pro && !sales;
+    const salStr = isVehCell2 ? String(sales || 0)
+                 : ((sales || sales === 0) && pro ? String(sales) : (sales ? String(sales) : '–'));
     el.textContent = salStr;
     el.classList.remove('bm-fallback', 'bm-edited', 'bm-no-sales');
     if (c && c.isFallback && !isEdited) el.classList.add('bm-fallback');
