@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- kanri.html v3.75 (2026-09-10) 【置き弁を一番後ろへ／車載の右に増産数】社長指示①「置き弁は車載に関係ないから一番後ろで良い」②「各エリアの車載の後ろに**何が何個増産になっているのか**分かりやすく出してほしい」→「車載の右側の数字は**今のプラス値はいらないから、そこに増産の数を出そう**」。★①置き弁（アスエネ・シビック・竹早）はエリアの中に混ぜず**末尾にまとめる**（shelfsplitの対象外で車載へ抜くことも増産もしないため）。★②**車載セルの右の数字を「そのエリアの増産数」に置き換えた**（`+3` の形。0なら—）。車載のL列（当日配分）は0なので右の数字は元々意味がなかった。増産＝そのエリアの拠点で **max(初回納品 − 当日配分, 0)** を商品ごとに合計＝**固定数に届かない拠点に足した分＝実際に余分に作る数**。車載そのものと置き弁は数えない。ツールチップに「増産 +N ／ 車載へ −N」を出す。車載セルでは▲▼と±を出さない（右が増産数なので大小比較の意味がない）。 -->
 <!-- kanri.html v3.74 (2026-09-10) 【配分調整をエリア別に並べた】社長指示「配分調整はエリア毎に並んでいる方が見やすいかも」「**メインが一番前で車載も含めてのエリア別**」。★並び＝**エリアごとに ①メイン拠点 → ②その他 → ③そのエリアの車載**。エリアの順序は拠点マスタの出現順、エリアが空の拠点（竹早）は一番最後。**区切り線もエリアの切れ目**に引く。★実装は `bmApplyData` で `locations` 自体を並べ替えるだけ＝配分調整が32か所で参照している所が全部そろう（合計・コピー・確定は拠点IDで引くので順序に依存しない）。★**配分表（拠点配分タブ）は今のまま**（`getSheet1Data` の別データで描いているので影響しない）。⚠ 車載は拠点マスタのエリアが「車載」なので**名前で本来のエリアへ寄せる**（`vehLoadPlan_` の対応はL902銀座←虎ノ門②でエリア名がねじれているため使わない）。エリア情報が無い古い応答なら並べ替えず従来表示に戻る。要メインGAS @692（locations に area と isMain を追加）。 -->
 <!-- kanri.html v3.73 (2026-09-10) 【②初回納品も編集できるようにした】社長指示「①当日配分で急遽やる拠点・やらない拠点を決める／②初回納品の方で細かい拠点の初回納品の数や車載の個数の調整をする、ができるようになっていて欲しい」。★v3.71で②を読み取り専用にしたのは設計ミス。**②も編集可**にし、**保存先を開いている段で切り替える**＝①→L列（当日配分）／②→G列（初回納品）。車載列も②なら編集できる（①では車載を触らせない＝当日配分に車載の数字は無いため）。「✓全拠点確定」は①のときだけ（確定は当日配分に対する操作）。保存トーストに「①当日配分に保存」「②初回納品＋車載に保存」と出す。★**未保存の編集があるときは段を切り替えない**（書き込み先の列が違うので、どちらに書くつもりだったか分からなくなる）。★社長報告「当日配分が初回納品数になってる」＝**分割済みなのにL列の記録が無い日**（9/10以前に分割された日。L列は9/9に作った）は①に棚の数字が出る。黙って出すと誤解するので**赤字で「当日配分の記録がありません・車載N個ぶんが含まれていません」と明示**する。今夜以降に分割される日は shelfsplit が土台をL列へ書き戻すのでこの帯は出ない。 -->
 <!-- kanri.html v3.72 (2026-09-10) 【配分の進捗バッジ】社長「毎日の配分の時の**走ってない、効いてない**が起こらないようにしたい」。★段階タブの下に **①推奨 ②当日配分 ③初回納品＋車載 ④3区間予定 ⑤予定納品数** の到達を色つきで並べる。**走った段＝緑（時刻つき）／走っていない段＝赤（直す口をそのまま表示）／まだその時期でない段＝灰色の「待ち」**。⚠ 明後日以降の分割は**前日20:00に走るので未実行が正常**＝赤くしない（毎日赤いと誰も見なくなる）。翌営業日ぶんも20:00前は待ち扱い。★データ源は新しい `?action=bmstat&date=…`（**読み取り専用・tokenなし**。kanriは公開URLなのでトークンを埋めない）。**表の描画は待たせず別便で投げ、届いたら注記行に足すだけ**＝取得に失敗しても表は普通に出る。★夜23:30と朝7:15の点検も同じ `bmstat` を見るので、監視の口が1本になる。要メインGAS @685。 -->
@@ -3865,8 +3866,11 @@ function bmSortLocationsByArea(locs) {
     const areaOf = l => BM_VEH_AREA_[String(l.id)] || String(l.area || '');
     // エリア情報がまったく無い（古い応答）なら並べ替えない
     if (!locs.some(l => areaOf(l))) { bmAreaBreaks = null; return locs; }
-    const g = {}, order = [];
+    const g = {}, order = [], okiben = [];
     locs.forEach(l => {
+      /* ★2026-09-10 **置き弁は一番後ろ**（社長「置き弁は車載に関係ないから一番後ろで良い」）。
+         置き弁は `shelfsplit` の対象外＝車載へ抜くことも増産もしないので、エリアの中に混ぜない。 */
+      if (l.isOkiben) { okiben.push(l); return; }
       const a = areaOf(l);
       if (!g[a]) { g[a] = { main: [], sub: [], veh: [] }; order.push(a); }
       if (BM_VEH_AREA_[String(l.id)]) g[a].veh.push(l);
@@ -3883,8 +3887,33 @@ function bmSortLocationsByArea(locs) {
       gg.veh.forEach(x => out.push(x));
       bmAreaBreaks.add(out.length - 1);      // このエリアの右端に線
     });
-    return out.length === locs.length ? out : locs;   // 数が合わなければ元のまま（安全側）
+    okiben.forEach(x => out.push(x));
+    if (okiben.length) bmAreaBreaks.add(out.length - 1);
+    // 疑似列を足したぶんだけ増えるのが正しい（元より減っていたら並べ替えを諦める）
+    return out.length >= locs.length ? out : locs;
   } catch (e) { bmAreaBreaks = null; return locs; }
+}
+
+/* ★2026-09-10【社長指示】**車載セルの右の数字を「そのエリアの増産数」にする。**
+   社長「各エリアの車載の後ろに**何が何個増産になっているのか**分かりやすく出してほしい」
+   　　「車載の右側の数字は**今のプラス値はいらないから、そこに増産の数を出そう**」
+   車載のL列（当日配分）は0なので右の数字は元々意味がなかった。そこを使う。
+   増産＝そのエリアの拠点で **max(初回納品 − 当日配分, 0)** を商品ごとに合計したもの
+   （固定数に届かない拠点に足した分＝**実際に余分に作る数**）。
+   ⚠ 車載そのもの・置き弁は数えない（置き弁は `shelfsplit` の対象外で増産しない）。 */
+function bmAreaPlusOf(vehLid, pid) {
+  const area = BM_VEH_AREA_[String(vehLid)];
+  if (!area || !bmServerData) return { plus: 0, minus: 0 };
+  let plus = 0, minus = 0;
+  (bmServerData.locations || []).forEach(l => {
+    if (l.isOkiben || BM_VEH_AREA_[String(l.id)]) return;
+    if (String(l.area || '') !== area) return;
+    const c = bmServerData.cells[pid + '_' + l.id];
+    if (!c) return;
+    const d = bmShelfDelta(c);
+    if (d > 0) plus += d; else if (d < 0) minus += -d;
+  });
+  return { plus: plus, minus: minus };
 }
 
 // ═══════════════════════════════════════
@@ -5973,9 +6002,12 @@ function bmRenderCell(pid, lid, idx0) {
   /* ★2026-09-09 段階2では右の数字を「推奨(H)」ではなく**当日配分(L)**にする。
      左＝実際に納品する数、右＝そのもとになった予定販売数。差が増産／車載へ抜いた分。 */
   const isShelfView = (bmViewMode === 'shelf');
-  const pro = isShelfView ? bmDailyBase(c) : c.proposed;
+  // ★2026-09-10 車載セルの右は「そのエリアの増産数」（→ bmAreaPlusOf の上のコメント）
+  const isVehCell = !!BM_VEH_AREA_[String(lid)];
+  const areaPlus = isVehCell ? bmAreaPlusOf(lid, pid) : null;
+  const pro = isVehCell ? areaPlus.plus : (isShelfView ? bmDailyBase(c) : c.proposed);
   const diff = pro - sales;
-  const shelfDelta = isShelfView ? bmShelfDelta(c) : 0;
+  const shelfDelta = (isShelfView && !isVehCell) ? bmShelfDelta(c) : 0;
   const isLocC = bmIsLocConfirmed(lid);
   // v3.24/v3.25: 未来日付(isFallback)は反映元(直近同曜=先週)の完売、過去日・当日は表示日自身の完売。時刻は必ずHH:MMに整形
   const isFuture = !!c.isFallback;
@@ -6004,14 +6036,19 @@ function bmRenderCell(pid, lid, idx0) {
   if (!sales && !isZero) salesCls += ' bm-no-sales';
   if (isZero) salesCls += ' bm-no-sales';
 
-  const proStr = pro || '–';
+  /* ★2026-09-10 車載セルの右は「そのエリアの増産数」なので **+N** と出す（0なら—）。 */
+  const proStr = isVehCell ? (pro ? '+' + pro : '–') : (pro || '–');
   const salStr = (sales || sales === 0) && pro ? String(sales) : (sales ? String(sales) : '–');
 
   let ind = '';
-  if (isShelfView) {
+  if (isVehCell) {
+    ind = '';   // 車載は▲▼も±も出さない（右の数字＝そのエリアの増産数）
+  } else if (isShelfView) {
     // 段階2は▲▼ではなく「+3」「−2」で増産／車載へを出す（色と合わせて読む）
     if (shelfDelta > 0) ind = '<span class="bm-cell-delta">+' + shelfDelta + '</span>';
     else if (shelfDelta < 0) ind = '<span class="bm-cell-delta">−' + (-shelfDelta) + '</span>';
+  } else if (isVehCell) {
+    ind = '';   // 車載は▲▼を出さない（右は増産数なので大小比較の意味がない）
   } else if (diff > 0 && pro > 0) ind = '<span class="bm-ind-up">▲</span>';
   else if (diff < 0 && pro > 0) ind = '<span class="bm-ind-down">▼</span>';
   // v3.25: 過去日・当日は絶対配置の赤ドット。未来日付は上部ストリップ(soLine)に🔴＋時刻（推奨数と重ならない）
