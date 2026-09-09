@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- kanri.html v3.73 (2026-09-10) 【②初回納品も編集できるようにした】社長指示「①当日配分で急遽やる拠点・やらない拠点を決める／②初回納品の方で細かい拠点の初回納品の数や車載の個数の調整をする、ができるようになっていて欲しい」。★v3.71で②を読み取り専用にしたのは設計ミス。**②も編集可**にし、**保存先を開いている段で切り替える**＝①→L列（当日配分）／②→G列（初回納品）。車載列も②なら編集できる（①では車載を触らせない＝当日配分に車載の数字は無いため）。「✓全拠点確定」は①のときだけ（確定は当日配分に対する操作）。保存トーストに「①当日配分に保存」「②初回納品＋車載に保存」と出す。★**未保存の編集があるときは段を切り替えない**（書き込み先の列が違うので、どちらに書くつもりだったか分からなくなる）。★社長報告「当日配分が初回納品数になってる」＝**分割済みなのにL列の記録が無い日**（9/10以前に分割された日。L列は9/9に作った）は①に棚の数字が出る。黙って出すと誤解するので**赤字で「当日配分の記録がありません・車載N個ぶんが含まれていません」と明示**する。今夜以降に分割される日は shelfsplit が土台をL列へ書き戻すのでこの帯は出ない。 -->
 <!-- kanri.html v3.72 (2026-09-10) 【配分の進捗バッジ】社長「毎日の配分の時の**走ってない、効いてない**が起こらないようにしたい」。★段階タブの下に **①推奨 ②当日配分 ③初回納品＋車載 ④3区間予定 ⑤予定納品数** の到達を色つきで並べる。**走った段＝緑（時刻つき）／走っていない段＝赤（直す口をそのまま表示）／まだその時期でない段＝灰色の「待ち」**。⚠ 明後日以降の分割は**前日20:00に走るので未実行が正常**＝赤くしない（毎日赤いと誰も見なくなる）。翌営業日ぶんも20:00前は待ち扱い。★データ源は新しい `?action=bmstat&date=…`（**読み取り専用・tokenなし**。kanriは公開URLなのでトークンを埋めない）。**表の描画は待たせず別便で投げ、届いたら注記行に足すだけ**＝取得に失敗しても表は普通に出る。★夜23:30と朝7:15の点検も同じ `bmstat` を見るので、監視の口が1本になる。要メインGAS @685。 -->
 <!-- kanri.html v3.71 (2026-09-09) 【配分調整を2段階に分けた】社長決定「配分表作成まで2段階用意しておいた方がいいね。推奨の数と当日配分がわかる表 → 拠点の数字を当てた初回納品表（溢れた分を車載へ／足りない分を拠点にプラス）」。★**①当日配分（予定販売数）＝L列**…人が数字を当てるのはここだけ。車載は出てこない。欠勤・天候プリセット・手入力はこの表。保存先は `col:'L'`（GASは未分割の日ならG列にも写すので、分割前の日は今までと同じ見え方）。★**②初回納品＋車載＝G列**…`shelfsplit` の出力で**読み取り専用**。左＝実際に納品する数、右＝もとの当日配分。**増産したセルは黄・車載へ抜いたセルは薄い青**で、右に `+3` `−2` を出す。保存と全拠点確定は押せない。★どちらも**同じ1本の `getBasicMasterMatrix`** で描くので**切り替えで再取得しない**（追加の待ち時間ゼロ）。★段階タブの下に1行で「棚N＋車載N＝作る数N（増産+N／車載へ−N）」を出し、**まだ分割していない日は赤字で「初回納品に分けていません」と `shelfsplit` の叩き方まで書く**＝「走ってない・効いていない」をその場で気づけるようにする。★画面の段階1は **L→G** の順に落とす（GAS側の `_bmDailyBase_` は L→H だが、H列はグループ二重計上で1日+300個前後ふくらむので画面には出さない）。要メインGAS @678（doPost の saveBasicMasterNumbers が `col` を受ける）。 -->
 <!-- kanri.html v3.70 (2026-08-25) 【配分の「💾 保存」が失敗する件：GASの一括書き込み化＋フロントの自動リトライ】社長「今配分調整したら、保存できない」。★**原因は保存機能ではなく /exec の不安定**＝実測で保存POSTが 404（HTML）や、status 200 なのに中身が doGet の既定応答 `{"dates":[...]}` になるケースがあり、旧 `bmPostAction` は `res.json()` が落ちるか `ok` が undefined → いずれも「保存失敗」alert になっていた。応答時間も 4〜100秒（別プロジェクトの営業GASも普段1〜2秒→5〜6秒＝Google側が重い時間帯）。★**対応①GAS**＝`saveBasicMasterNumbers` のセルごと `setValue`（G列・J列で1セル2往復＝100セル編集で200往復）を、ヒット行の最小〜最大範囲を G列・J列それぞれ1回ずつ read/write する方式に変更。**API往復は編集量に関わらず固定4回**。範囲内の非対象行は読んだ値をそのまま書き戻すだけで値は変わらず、他列には触れない。★**対応②フロント**＝`bmPostAction` に自動リトライ（最大3回・2.5秒→5秒待ち）。404・非JSON・`ok` 無しの応答を失敗とみなして再送する。呼び出し8箇所は全て「与えた値をそのままセットする」冪等な処理と確認済み（confirm/unconfirm もトグルではなく別アクション）なので二重書き込みにならない。 -->
@@ -5582,12 +5583,16 @@ function bmGetDisplaySales(pid, lid) {
   if (!bmServerData) return 0;
   const c = bmServerData.cells[pid + '_' + lid];
   if (!c) return 0;
-  // ── ② 初回納品＋車載＝G列そのまま（編集値は反映しない＝読み取り専用）
+  const edit = bmGetEdit(bmCurrentDate, pid, lid);
+  /* ── ② 初回納品＋車載＝G列。★2026-09-10 **ここも編集できる**（社長指示）。
+       社長「①当日配分で急遽やる拠点・やらない拠点を決める／
+             ②初回納品の方で細かい拠点の初回納品の数や車載の個数の調整をする」
+       ＝②は「機械の出した結果を人が最後に微調整する場所」。保存先はG列。 */
   if (bmViewMode === 'shelf') {
+    if (edit !== null && edit !== undefined && edit !== '') return Number(edit);
     return (c.confirmed !== null && c.confirmed !== undefined) ? Number(c.confirmed) : 0;
   }
   // ── ① 当日配分＝L列（無ければ今のG列）
-  const edit = bmGetEdit(bmCurrentDate, pid, lid);
   if (edit !== null && edit !== undefined && edit !== '') return Number(edit);
   // v3.49: その日作らない種類は0（古い数字が残っていても0で見せる。実際の0化は夜間バッチ側）
   if (bmMenuExcluded(pid)) return 0;
@@ -5597,21 +5602,32 @@ function bmGetDisplaySales(pid, lid) {
   return c.weekSales || 0;
 }
 
-/** 段階の切り替え。データは取り直さず描き直すだけ。 */
+/** 段階の切り替え。データは取り直さず描き直すだけ。
+    ⚠ **未保存の編集があるときは切り替えない。**①と②は書き込み先が違う列（L／G）なので、
+      片方で編集したまま切り替えると**どちらの列に書くつもりだったのか分からなくなる**。 */
 function bmSetView(v) {
   const next = (v === 'shelf') ? 'shelf' : 'daily';
   if (next === bmViewMode) return;
+  const cache = bmEditsCache[bmCurrentDate] || {};
+  const dirty = Object.keys(cache).filter(k => cache[k] !== null && cache[k] !== undefined && cache[k] !== '').length;
+  if (dirty) {
+    alert('未保存の変更が ' + dirty + 'セルあります。\n'
+        + '①と②は書き込み先が違うので、先に「💾 保存」するか「🔄 再取得」で破棄してください。');
+    return;
+  }
   bmViewMode = next;
   document.querySelectorAll('#bm-stage-tabs .bm-stage-tab').forEach(function (b) {
     b.classList.toggle('bm-active', b.dataset.view === bmViewMode);
   });
   const wrap = document.getElementById('bm-matrix-wrap');
   if (wrap) wrap.classList.toggle('bm-view-shelf', bmViewMode === 'shelf');
-  // 段階2は機械の出力なので人が触らせない（保存・確定を止める）
-  ['bm-save-btn', 'bm-confirm-all'].forEach(function (id) {
-    const el = document.getElementById(id);
-    if (el) el.disabled = (bmViewMode === 'shelf');
-  });
+  /* ★2026-09-10 ②でも保存できる（社長指示＝②で初回納品と車載の個数を調整する）。
+     「✓ 全拠点確定」だけは①のときだけ＝**確定は当日配分に対する操作**なので。 */
+  const cAll = document.getElementById('bm-confirm-all');
+  if (cAll) cAll.disabled = (bmViewMode === 'shelf');
+  const sv = document.getElementById('bm-save-btn');
+  if (sv) { sv.disabled = false; sv.title = (bmViewMode === 'shelf')
+    ? '②の変更を保存（初回納品＝G列に書きます）' : '①の変更を保存（当日配分＝L列に書きます）'; }
   // 凡例は段階で意味が変わる（左右の数字が別のものになる）
   const lead = document.getElementById('bm-legend-lead');
   if (lead) {
@@ -5653,7 +5669,7 @@ function bmRenderStageNote() {
   const el = document.getElementById('bm-stage-note');
   if (!el) return;
   if (!bmServerData) { el.textContent = ''; return; }
-  let veh = 0, shelf = 0, daily = 0, plus = 0, toVeh = 0;
+  let veh = 0, shelf = 0, daily = 0, plus = 0, toVeh = 0, dailyCells = 0;
   const cells = bmServerData.cells || {};
   for (const k in cells) {
     const p = k.indexOf('_'); if (p < 0) continue;
@@ -5663,6 +5679,7 @@ function bmRenderStageNote() {
     if (/^L9\d\d$/.test(lid)) { veh += g; continue; }
     shelf += g;
     daily += bmDailyBase(c);
+    if (c.daily !== null && c.daily !== undefined) dailyCells++;
     const d = bmShelfDelta(c);
     if (d > 0) plus += d; else if (d < 0) toVeh += -d;
   }
@@ -5674,9 +5691,18 @@ function bmRenderStageNote() {
          + '（車載0）。前日20:00の分割で作られます。今すぐなら '
          + '<code>?action=runfix&amp;name=shelfsplit&amp;date=' + bmCurrentDate + '&amp;go=1</code>');
   } else {
-    el.innerHTML = '拠点に置く予定の合計 <b>' + daily + '</b>（車載は含みません）。'
-      + '欠勤・天候プリセット・手入力はこの表で当てます。'
-      + (veh > 0 ? '　※この日はもう分割済みなので、直したら②を作り直す必要があります' : '');
+    /* 🔴 ★2026-09-10 **分割済みなのにL列が空の日は、ここに出ているのは「棚」であって予定販売数ではない。**
+       社長「当日配分(予定販売数)が初回納品数になってる」＝この状態を見て言われた。
+       9/10 以前に分割された日はL列の記録が無い（L列は9/9に作った）。黙って棚を出すと誤解するので明示する。
+       ⚠ 今夜以降に分割される日は `shelfsplit` が土台をL列へ書き戻すので、この帯は出なくなる。 */
+    const noDaily = (dailyCells === 0 && veh > 0);
+    el.innerHTML = (noDaily
+        ? '<span style="color:#b71c1c;font-weight:bold;">⚠ この日は当日配分の記録がありません。'
+          + 'いま出ているのは初回納品（棚）の数字で、車載 ' + veh + '個ぶんが含まれていません。</span><br>'
+        : '')
+      + '拠点に置く予定の合計 <b>' + daily + '</b>（車載は含みません）。'
+      + '急にやらなくなった拠点・天候プリセット・手入力はこの表で当てます。'
+      + (veh > 0 ? '　※この日はもう分割済みなので、直したら②で車載も見直してください' : '');
   }
   // ★2026-09-10 進捗（どの段まで進んだか）。届いていれば足す＝表示は待たせない
   const st = bmStatCache[bmCurrentDate];
@@ -5957,8 +5983,10 @@ function bmRenderCell(pid, lid, idx0) {
     }
   }
 
-  // ★2026-09-09 段階2（初回納品＋車載）は機械の出力なので編集させない
-  const editable = !isShelfView;
+  /* ★2026-09-10 **①も②も編集できる**（社長指示）。書き込み先だけが違う（①=L列／②=G列）。
+     ⚠ ただし**①では車載（L9xx）を触らせない**。当日配分は拠点の予定販売数で、
+       車載は②で分割した結果として立つ数字だから（①に車載の数字は無い）。 */
+  const editable = !(!isShelfView && /^L9\d\d$/.test(String(lid)));
   const rangeAttrs = ' onmousedown="bmOnCellMouseDown(event,\'' + pid + '\',\'' + lid + '\')" onmouseenter="bmOnCellMouseEnter(event,\'' + pid + '\',\'' + lid + '\')"';
   const editAttrs = editable
     ? 'contenteditable="true" inputmode="numeric" data-pid="' + pid + '" data-lid="' + lid + '" onkeydown="bmOnSalesKey(event)" onblur="bmOnSalesBlur(this)" onfocus="bmOnSalesFocus(this)"' + rangeAttrs
@@ -6545,12 +6573,6 @@ async function bmConfirmAll() {
 async function bmSaveAll() {
   // v3.23: 「数字の保存」のみ。編集セルだけ書く（K列=確定フラグは一切触らない＝確定にならない）。
   if (!bmServerData) return;
-  /* ★2026-09-09 段階2（初回納品＋車載）からは保存させない。あれは機械の出力なので、
-     直すなら①当日配分で直して分割し直す。 */
-  if (bmViewMode === 'shelf') {
-    wpToast('②初回納品＋車載は直せません。①当日配分で直してください', 'info');
-    return;
-  }
   const itemsByLoc = {};
   const locSet = new Set();
   let cellCount = 0;
@@ -6579,12 +6601,15 @@ async function bmSaveAll() {
 
   const btn = document.getElementById('bm-save-btn');
   if (btn) { btn.disabled = true; btn.textContent = '保存中...'; }
-  /* ★2026-09-09 **書き込み先はL列（当日配分）**。GAS側は、その日がまだ分割されていなければ
-     G列にも同じ値を写す（`mirrorG`）ので、分割前の日は今までと同じ見え方のまま保存できる。 */
+  /* ★2026-09-10 **書き込み先は開いている段で決まる。**
+       ① 当日配分 → **L列**（GASは未分割の日ならG列にも写す＝`mirrorG`）
+       ② 初回納品＋車載 → **G列**（＝実際に納品する数の微調整。L列＝予定販売数は動かさない）
+     社長「①で急遽やる拠点・やらない拠点を決める／②で細かい初回納品の数や車載の個数を調整する」 */
+  const saveCol = (bmViewMode === 'shelf') ? 'G' : 'L';
   const r = await bmPostAction('saveBasicMasterNumbers', {
     date: bmCurrentDate,
     itemsByLoc: itemsByLoc,
-    col: 'L'
+    col: saveCol
   });
   if (btn) btn.disabled = false;
   if (!r.ok) {
@@ -6613,7 +6638,9 @@ async function bmSaveAll() {
   // サーバーから取り直し＋全画面再描画
   await bmLoadDate(bmCurrentDate);
   const bmSaveExtra = appendedCount > 0 ? ('・うち新規' + appendedCount) : '';
-  wpToast('保存完了（' + locSet.size + '拠点・' + savedCount + 'セル' + bmSaveExtra + '）', 'success');
+  // ★2026-09-10 どちらの段に保存したかを必ず言う（①と②で書き込み先の列が違うため）
+  const bmSaveWhere = (saveCol === 'G') ? '②初回納品＋車載' : '①当日配分';
+  wpToast(bmSaveWhere + 'に保存（' + locSet.size + '拠点・' + savedCount + 'セル' + bmSaveExtra + '）', 'success');
 }
   function bmEscape(s) {
   return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;').replace(/"/g,'&quot;');
