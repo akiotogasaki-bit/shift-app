@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- kanri.html v3.78 (2026-09-10) 【仕込み表をA4 1枚で印刷／朝の一括印刷に仕込み3枚】社長指示「仕込み表もプリントアウトできる様にレイアウトを変えたい。今の情報でA4 1枚でプリントアウトしたい」「朝の一括印刷で、当日の午前便・午後便・翌日の1日の仕込みの3枚が印刷できればベスト。午後便はなかったらなし」「仕込みのおかずの名前・数量を大きく出したい。空白が多いのを無くしたい。2列になっても構わない」「背景グレーじゃなくて白がいい」。★**改修前は同じ内容がA4で2ページに割れていた**（9/10の実データで実測）。★**効かせ方＝2列（columns:2）にして、空いた縦を文字の大きさに回す**。仕込みは1日28行前後（仕込み11本＋食材直接5〜6件）しかないので、2列にすると1列14行＝縦が半分で済み、そのぶん文字を約1.5倍にできる。おかず名・数量とも30px、材料名22px。⚠ **2列にするには DOM が「見出し＋その材料」で1ブロックになっている必要がある**（新 `.prep-blk`／`s4BuildSectionHTML`）。フラットなままだと見出しだけ列の末尾に残り、材料が次の列の頭に飛ぶ。★**背景は全部白**（社長指示）＝仕込み見出しの薄青・食材直接の薄橙・米の黄色グラデを落とし、左の色線と黒罫線で区別する。★米と解凍は**上に2段の帯**。横1本に詰めると数字が重なって読めない（試作で実測）。★印刷専用の見出し `.s4-print-head`（日付／区分「当日 午前便(1便)」／全六の主菜）を新設。画面用の 🍙 全六ボックス・トグル・件数メタ・タイトルは印刷では隠す（縦を食うため）。★**一括印刷に仕込み3枚を追加**＝拠点配分2部→午前便→(午後便)→仕込み(当日 午前便)→仕込み(当日 午後便)→仕込み(翌日)。**午後便が無い日は仕込みの午後便も出さない**（`sections.pm` が無い日）。🔴 **3枚目の「翌日」は、金曜だけ「土・日・月」の3日合算**（社長決定 2026-09-10・`_prepNextDates`）。月〜木は翌日1日ぶん。⚠ キューの要素を文字列→オブジェクト `{tab,data,view,day}` に変更（同じ仕込みタブを3回使い回すため）。⚠ 印刷後は当日ぶん・合計表示に描き直す（`_printAllPrepToday`）。戻さないと次に仕込みタブを開いた時に翌日の数字が残る。★仕込みタブに単体の「🖨 印刷」ボタンを追加（v3.44 で一括から外した時から個別ボタンも無かった）。画面表示（@media screen）は一切変えていない。GAS変更なし。 -->
 <!-- kanri.html v3.77 (2026-09-10) 【車載セルは積み込み数と増産数を必ず両方出す】社長指示「配分調整の左側は積み込みの数、右がその種類の増産の数／**車載の数と右の数字、両方いるはず**」「**車載がない種類に関してはもちろん左は0表示**」。★v3.75では車載も増産も0の商品が「—」のグレーセルになって数字が消えていた。→ **車載セルは `isZero`（グレーの空セル扱い）にせず、左は0でも「0」・右は増産0なら「0」**と書く。編集後の描き直し（bmUpdateCellsDOM）でも同じ扱いにする。 -->
 <!-- kanri.html v3.76 (2026-09-10) 【配分表：車載の後ろに「車載計」列】社長指示「前半12拠点の後ろに車載が表示されていて、そこまではいいんだけど、**車載の後ろ（中計の前）に車載のみの合計数**を出したい」。★中計は「前半12＋車載」の合計なので、そこから**車載ぶんだけを抜き出した列**を中計の1つ左に足す。商品行・拠点合計・カテゴリー別合計の3種すべてに出す。色は中計（藍）と区別して**薄い緑**。⚠ 0拠点で隠れた車載列も足す（定義を可視状態に依存させない＝中計と同じ考え方）。⚠ 他社弁当の横断1マス（colspan）は中計＋車載計の2列ぶん広げる。印刷幅は中計・合計と同じ扱い（桁溢れ防止）。**配分調整タブには影響しない**（あちらは別データ・別描画）。GAS変更なし。 -->
 <!-- kanri.html v3.75 (2026-09-10) 【置き弁を一番後ろへ／車載の右に増産数】社長指示①「置き弁は車載に関係ないから一番後ろで良い」②「各エリアの車載の後ろに**何が何個増産になっているのか**分かりやすく出してほしい」→「車載の右側の数字は**今のプラス値はいらないから、そこに増産の数を出そう**」。★①置き弁（アスエネ・シビック・竹早）はエリアの中に混ぜず**末尾にまとめる**（shelfsplitの対象外で車載へ抜くことも増産もしないため）。★②**車載セルの右の数字を「そのエリアの増産数」に置き換えた**（`+3` の形。0なら—）。車載のL列（当日配分）は0なので右の数字は元々意味がなかった。増産＝そのエリアの拠点で **max(初回納品 − 当日配分, 0)** を商品ごとに合計＝**固定数に届かない拠点に足した分＝実際に余分に作る数**。車載そのものと置き弁は数えない。ツールチップに「増産 +N ／ 車載へ −N」を出す。車載セルでは▲▼と±を出さない（右が増産数なので大小比較の意味がない）。 -->
@@ -710,6 +711,10 @@ body {
   margin-top: 6px;
 }
 .prep-header:first-child { margin-top: 0; }
+/* ★v3.77 印刷の2列化で仕込み1本を .prep-blk で包んだため、先頭判定をブロック側にも用意 */
+.prep-blk:first-child .prep-header { margin-top: 0; }
+/* ★v3.77 印刷専用の見出し（日付／区分／全六）。画面には出さない */
+.s4-print-head { display: none; }
 .prep-portion {
   margin-left: 6px;
   font-size: 13px;
@@ -1404,14 +1409,125 @@ body {
     font-size: 12pt;
   }
 
-  /* ════════ シート4・発注：縦流し（維持） ════════ */
-  #tab-sheet4.active,
+  /* ════════ 発注：縦流し（維持） ════════ */
   #tab-order.active {
     display: block !important;
     padding: 2mm;
   }
+
+  /* ════════════════════════════════════════════════════════════
+     ★v3.77（2026-09-10）シート4＝仕込み表：A4縦 1枚 に収める印刷レイアウト
+       社長指示「今の情報でA4 1枚でプリントしたい」「おかずの名前・数量を大きく出したい。
+       空白が多いのを無くしたい。2列になっても構わない」「背景グレーじゃなくて白がいい」。
+       ⚠ 改修前は同じ内容が **A4で2ページ**に割れていた（9/10の実データで実測）。
+       ★効かせ方＝**2列（columns: 2）にして空いた縦を文字の大きさに回す**。
+         仕込みは1日28行前後（仕込み11本＋食材直接5〜6件）しかないので、
+         2列にすると1列14行＝縦が半分で済み、そのぶん文字を約1.5倍にできる。
+       ⚠ 2列にするには DOM が「見出し＋その材料」で1ブロックになっている必要がある
+         （.prep-blk／s4BuildSectionHTML）。フラットなままだと見出しだけ列末尾に残る。
+       ⚠ 画面表示（@media screen）は一切変えていない。ここは印刷だけ。
+     ════════════════════════════════════════════════════════════ */
+  #tab-sheet4.active {
+    display: block !important;
+    padding: 3mm;               /* @page margin 3mm と合わせて実効6mm（端切れ防止） */
+    background: #fff;
+  }
+  /* 画面用UIは紙に出さない（トグル・週選択・全六ボックス・件数メタ・タイトル） */
+  #tab-sheet4 .s4-ctrl,
+  #tab-sheet4 .s4-date-row,
+  #tab-sheet4 .s4-sel-info,
   #tab-sheet4 .kawari-box,
-  #tab-sheet4 .kaito-box { page-break-inside: avoid; }
+  #tab-sheet4 .s4-meta,
+  #tab-sheet4 .s4-section-title,
+  #tab-sheet4 .page-title { display: none !important; }
+
+  /* ── 見出し：日付／区分（当日 午前便 等）／全六の主菜 を1行に ── */
+  /* ⚠ flex-wrap を外さないこと。金曜の「土日月」は日付が長く、1行に収めようとすると
+     全六の主菜が紙の外へ押し出されて消える（実測 2026-09-10）。入らなければ2行目に落とす。 */
+  #tab-sheet4 .s4-print-head {
+    display: flex !important; align-items: baseline; gap: 10px; flex-wrap: wrap;
+    border-bottom: 2.5px solid #111; padding-bottom: 3px; margin-bottom: 5px;
+  }
+  #tab-sheet4 .ph-date { font-size: 33px; font-weight: bold; letter-spacing: .5px; white-space: nowrap; }
+  #tab-sheet4 .ph-date-long { font-size: 25px; }   /* 複数日を合算した日は日付が長い */
+  #tab-sheet4 .ph-bin  {
+    font-size: 25px; font-weight: bold; background: #111 !important; color: #fff !important;
+    padding: 1px 10px; border-radius: 4px; white-space: nowrap;
+  }
+  #tab-sheet4 .ph-zen  { margin-left: auto; font-size: 19px; color: #222; white-space: nowrap; }
+  #tab-sheet4 .ph-zen b { font-size: 15px; background: #eee !important; border-radius: 3px; padding: 0 5px; }
+
+  /* ── 米・解凍：紙の上に2段の帯（横1本に詰めると数字が重なる） ── */
+  #tab-sheet4 .rice-box,
+  #tab-sheet4 .kaito-box {
+    background: #fff !important; border: 1.5px solid #444; border-radius: 5px;
+    box-shadow: none !important; padding: 2px 8px; margin: 0 0 3px 0;
+    display: flex; align-items: center; gap: 8px; page-break-inside: avoid;
+  }
+  #tab-sheet4 .rice-title  { font-size: 21px; }
+  #tab-sheet4 .kaito-title { font-size: 21px; font-weight: bold; color: #333; }
+  #tab-sheet4 .rice-items  { gap: 6px; }
+  #tab-sheet4 .rice-item {
+    flex-direction: row; align-items: baseline; justify-content: center; gap: 5px;
+    background: #fff !important; border: none !important; padding: 0;
+  }
+  #tab-sheet4 .rice-name      { font-size: 21px; margin: 0; }
+  #tab-sheet4 .rice-order     { font-size: 30px; }
+  #tab-sheet4 .rice-order-sub { font-size: 16px; margin: 0; }
+  #tab-sheet4 .rice-amount    { font-size: 19px; margin: 0; }
+  #tab-sheet4 .rice-pack      { font-size: 26px; margin: 0; }
+  #tab-sheet4 .rice-pack-sub  { display: none; }
+  #tab-sheet4 .kaito-item  { flex-direction: row; align-items: baseline; gap: 4px; }
+  #tab-sheet4 .kaito-main  { font-size: 30px; }
+  #tab-sheet4 .kaito-actual{ font-size: 16px; }
+  #tab-sheet4 .kaito-sub   { font-size: 21px; color: #333; font-weight: bold; margin: 0; order: -1; }
+  #tab-sheet4 .kaito-divider { margin: 2px 6px; }
+
+  /* ── 仕込み本体：2列 ── */
+  /* 🔴 column-fill は balance（既定）でなければならない。
+     `auto` にすると Chrome は高さの制約が無い限り1列目に流し続け、
+     溢れたぶんを**2列目ではなく次のページ**へ送る（＝2列にならずA4 3枚になった。実測 2026-09-10）。 */
+  #tab-sheet4 .prep-list {
+    columns: 2; column-gap: 6mm; column-fill: balance;
+    background: #fff !important; border: none !important; border-radius: 0; padding: 0;
+  }
+  #tab-sheet4 .prep-blk {
+    break-inside: avoid; page-break-inside: avoid; margin-bottom: 6px;
+  }
+  #tab-sheet4 .prep-header {
+    background: #fff !important; color: #000 !important;
+    border-top: none; border-bottom: 1.5px solid #333; border-left: 5px solid #1565c0;
+    padding: 2px 7px; margin: 0;
+    font-size: 30px; letter-spacing: .3px;
+    display: flex; align-items: baseline; gap: 6px;
+  }
+  #tab-sheet4 .prep-portion {
+    margin: 0 0 0 auto; white-space: nowrap;
+    font-size: 22px; font-weight: bold; color: #222;
+  }
+  #tab-sheet4 .prep-ing {
+    display: flex; align-items: baseline; gap: 6px;
+    padding: 3px 7px 3px 14px; border-bottom: 1px dotted #bbb;
+  }
+  #tab-sheet4 .prep-ing-name { font-size: 22px; flex: 1; }
+  #tab-sheet4 .prep-ing-amt  { font-size: 30px; font-family: inherit; white-space: nowrap; }
+  #tab-sheet4 .prep-ing-pack { font-size: 21px; font-family: inherit; width: 69px; white-space: nowrap; }
+
+  /* ── 食材直接 ── */
+  #tab-sheet4 .prep-direct-section {
+    break-inside: avoid; background: #fff !important; color: #000 !important;
+    border-top: none; border-bottom: 1.5px solid #333; border-left: 5px solid #e65100;
+    text-align: left; padding: 2px 7px; margin: 0 0 6px 0; font-size: 25px;
+  }
+  #tab-sheet4 .prep-direct {
+    break-inside: avoid; display: flex; align-items: baseline; gap: 6px;
+    padding: 3px 7px; border-bottom: 1px solid #ddd;
+  }
+  #tab-sheet4 .prep-direct-name  { font-size: 24px; font-weight: bold; flex: 1; white-space: nowrap; }
+  #tab-sheet4 .prep-direct-order { font-size: 17px; color: #444; font-family: inherit; white-space: nowrap; }
+  #tab-sheet4 .prep-direct-amt   { font-size: 27px; color: #000; font-family: inherit; white-space: nowrap; }
+  #tab-sheet4 .prep-direct-pack  { font-size: 19px; color: #444; font-family: inherit; width: 58px; text-align: right; white-space: nowrap; }
+  #tab-sheet4 .pds-deco { display: none; }   /* 「───── 食材直接 ─────」の飾り罫は紙では出さない */
 }
 
 /* ============================================================
@@ -2288,6 +2404,7 @@ body {
     <button class="s4-week-btn" id="s4-btn-week0">今週 月〜日</button>
     <button class="s4-week-btn" id="s4-btn-week1">来週 月〜日</button>
     <button class="btn btn-primary" id="s4-btn-fetch">取得</button>
+    <button class="btn btn-print" onclick="window.print()">🖨 印刷</button>
     <span class="status-msg" id="s4-status-msg"></span>
   </div>
   <div class="s4-date-row" id="s4-date-row"></div>
@@ -3026,6 +3143,33 @@ let s4LastData = null;
 let s4Sections = null;
 let s4View = 'total';   // 'total' | 'am' | 'pm'
 
+// ★v3.77 印刷見出しに出す「いつの分か」。一括印刷が '当日' / '翌日' などを入れる。
+//   画面から手で印刷した時は空＝日付だけが出る（日付は dateLabels から別に出している）。
+let s4PrintDay = '';
+
+// 印刷見出しの区分ラベル（合計＝1日分／午前＝1便／午後＝2便）
+function s4PrintBinLabel() {
+  const bin = (s4View === 'am') ? '午前便(1便)'
+            : (s4View === 'pm') ? '午後便(2便)'
+            : '1日分';
+  return (s4PrintDay ? s4PrintDay + ' ' : '') + bin;
+}
+
+// 全六の主菜を1行のテキストにする（印刷見出し用）。値は仕込みIDなので名前に引き直す。
+function s4ZenrokuTextHTML(kawari, candMap) {
+  kawari = kawari || {};
+  const parts = [];
+  ['全六あり', '全六なし'].forEach(k => {
+    const cands = (candMap || {})[k] || [];
+    const shu = ['主菜1', '主菜2'].map(slot => {
+      const nm = s4ZenrokuName(cands, kawari[k + slot] || '');
+      return String(nm || '').replace(/^全六(あり|なし)_/, '').trim();
+    }).filter(Boolean);
+    if (shu.length) parts.push('<b>' + escHtml(k.replace('全六', '')) + '</b> ' + escHtml(shu.join('・')));
+  });
+  return parts.length ? '全六 ' + parts.join('　') : '';
+}
+
 function renderSheet4(data) {
   const body = document.getElementById('sheet4-body');
   if (!body) return;
@@ -3084,8 +3228,21 @@ function renderSheet4(data) {
     warnHtml += `</div>`;
   }
 
+  // ★v3.77 印刷専用の見出し（画面では非表示）。紙には「いつの・どの便の仕込みか」が要る。
+  //   全六の主菜もここに畳んで入れる（画面用の 🍙 ボックスは印刷では隠す＝縦を食うため）。
+  // 複数日を選んだ時は「9/12(土)〜9/14(月)」に畳む（' / ' で全部並べると紙の幅を食い切る）
+  const _dl = data.dateLabels || [];
+  const headDate = (_dl.length >= 3) ? (_dl[0] + '〜' + _dl[_dl.length - 1]) : dateLabel;
+  const printHead = `
+    <div class="s4-print-head">
+      <span class="ph-date${_dl.length > 1 ? ' ph-date-long' : ''}">${escHtml(headDate)}${dateCount > 1 ? '（' + dateCount + '日分合算）' : ''}</span>
+      <span class="ph-bin" id="s4-print-bin">${escHtml(s4PrintBinLabel())}</span>
+      <span class="ph-zen">${s4ZenrokuTextHTML(kawari, { '全六あり': zrC, '全六なし': znC })}</span>
+    </div>`;
+
   body.innerHTML = `
     <div class="page-title">🍳 ${escHtml(dateLabel)}　仕込み表${dateCount > 1 ? ' (' + dateCount + '日分合算)' : ''}</div>
+    ${printHead}
     ${kawariHTML}
     ${toggleHTML}
     <div id="s4-section-wrap">${sectionHTML}</div>
@@ -3103,6 +3260,8 @@ function renderSheet4(data) {
       s4View = btn.dataset.view;
       const wrap = document.getElementById('s4-section-wrap');
       if (wrap) wrap.innerHTML = s4BuildSectionHTML(s4Sections[s4View] || s4Sections.total);
+      const binEl = document.getElementById('s4-print-bin');    // ★v3.77 印刷見出しの区分も追従
+      if (binEl) binEl.textContent = s4PrintBinLabel();
       document.querySelectorAll('.s4-toggle-btn').forEach(b => {
         b.classList.toggle('active', b.dataset.view === s4View);
       });
@@ -3175,22 +3334,32 @@ function s4BuildSectionHTML(sec) {
   if (rows.length === 0) {
     tableContent = '<div class="no-delivery-msg">この区分の仕込みデータはありません</div>';
   } else {
+    // ★v3.77 印刷の2列化のため「仕込み1本＝1ブロック（見出し＋その材料行）」で包む。
+    //   包まないと columns: 2 で見出しだけ列の末尾に残り、材料が次の列の頭に飛ぶ。
+    //   画面表示は div が1枚増えるだけで従来と同じ見た目（.prep-blk に装飾は付けない）。
     let listHtml = '<div class="prep-list">';
     let directSectionStarted = false;
+    let blk = [];                                   // 組み立て中の1ブロック
+    const flushBlk = () => {
+      if (blk.length) { listHtml += '<div class="prep-blk">' + blk.join('') + '</div>'; blk = []; }
+    };
     rows.forEach(r => {
       if (r.type === 'shikomi_header') {
-        listHtml += `<div class="prep-header">${escHtml(r.shikomiName)}<span class="prep-portion">(${r.portion}人前)</span></div>`;
+        flushBlk();
+        blk.push(`<div class="prep-header">${escHtml(r.shikomiName)}<span class="prep-portion">(${r.portion}人前)</span></div>`);
       } else if (r.type === 'shikomi_ing') {
         const amt = (r.amount != null) ? (r.amount + (r.unit || '')) : '–';
         const pack = (r.packCount != null) ? (r.packCount.toFixed(1) + 'P') : '';
-        listHtml += `<div class="prep-ing">
+        blk.push(`<div class="prep-ing">
           <span class="prep-ing-name">${escHtml(r.ingName)}</span>
           <span class="prep-ing-amt">${escHtml(amt)}</span>
           <span class="prep-ing-pack">${escHtml(pack)}</span>
-        </div>`;
+        </div>`);
       } else if (r.type === 'direct') {
+        flushBlk();
         if (!directSectionStarted) {
-          listHtml += `<div class="prep-direct-section">───── 食材直接 ─────</div>`;
+          // ★v3.77 飾りの罫線は印刷では隠す（紙では幅を食って「食材直接」が2行に折り返す）
+          listHtml += `<div class="prep-direct-section"><span class="pds-deco">─────</span> 食材直接 <span class="pds-deco">─────</span></div>`;
           directSectionStarted = true;
         }
         const amt = (r.amount != null) ? (r.amount + (r.unit || '')) : '–';
@@ -3203,6 +3372,7 @@ function s4BuildSectionHTML(sec) {
         </div>`;
       }
     });
+    flushBlk();
     listHtml += '</div>';
     tableContent = listHtml;
   }
@@ -8101,9 +8271,14 @@ function wpEnsureSettingsLoaded() {
 // sheet1の日付を全シートに同期 → 拠点配分(2部) → 午前便 → (午後便あれば) → 仕込み
 // の順に afterprint イベントで連鎖印刷
 // ═══════════════════════════════════════════════════════════════
-let _printAllQueue = [];      // 印刷順序の配列 例: ['sheet1','sheet1','sheet2','sheet3','sheet4']
+// ★v3.77 キューの要素は {tab} または {tab:'sheet4', data, view, day}
+//   例: [{tab:'sheet1'},{tab:'sheet1'},{tab:'sheet2'},{tab:'sheet3'},
+//        {tab:'sheet4',view:'am',day:'当日'},{tab:'sheet4',view:'pm',day:'当日'},
+//        {tab:'sheet4',view:'total',day:'翌日'}]
+let _printAllQueue = [];      // 印刷順序の配列
 let _printAllIdx = 0;          // 現在の印刷インデックス
 let _printAllBound = false;    // afterprint ハンドラ登録済みフラグ
+let _printAllPrepToday = null; // 当日ぶんの仕込みデータ（印刷後に画面を戻すため保持）
 
 async function printAllForDay() {
   // ① sheet1日付取得
@@ -8120,7 +8295,10 @@ async function printAllForDay() {
   // ② 事前確認
   const okConfirm = confirm(
     dateVal + ' の一括印刷を開始します。\n\n' +
-    '印刷ダイアログが順番に 3〜4 回開きます。\n' +
+    '拠点配分(2部) → 午前便 → (午後便) →\n' +
+    '仕込み(当日 午前便) → 仕込み(当日 午後便) → 仕込み(翌日)\n' +
+    '※金曜は3枚目が「土日月」の合算になります。\n\n' +
+    '印刷ダイアログが順番に 6〜7 回開きます。\n' +
     '各ダイアログで「印刷」を押してください。\n' +
     '(キャンセルしても次のダイアログが開きます)\n\n' +
     '開始しますか?'
@@ -8149,6 +8327,7 @@ async function printAllForDay() {
 
   // ⑤ sheet1〜3 のデータを並列取得 + 描画
   s1SetStatus('一括印刷の準備中... データ取得');
+  const nextInfo = _prepNextDates(dateVal);   // ★v3.77 3枚目の仕込みが何日ぶんか
   let hasAfternoon = false;
   try {
     const [s1Res, s2Res, s3Res, colorMap] = await Promise.all([
@@ -8178,19 +8357,42 @@ async function printAllForDay() {
     return;
   }
 
-  // ⑥ sheet4 取得 (既存fetchSheet4をそのまま使う)
+  // ⑥ 仕込みを2本まとめて取得（当日ぶん／翌日ぶん）
+  //    ★v3.77 朝の一括印刷に仕込み3枚（当日午前・当日午後・翌日1日分）を足した（社長指示）。
+  //    当日は am/pm の2枚に割るので1リクエストで足りる（sections に両方入っている）。
   s1SetStatus('一括印刷の準備中... 仕込み取得');
+  let prepToday = null, prepNext = null;
   try {
-    await fetchSheet4();
+    const [t, n] = await Promise.all([
+      fetch(GAS_URL + '?action=getSheet4Data&dates=' + dateVal).then(r => r.json()),
+      fetch(GAS_URL + '?action=getSheet4Data&dates=' + nextInfo.dates.join(',')).then(r => r.json())
+    ]);
+    if (!t || !t.ok) throw new Error('当日: ' + ((t && t.error) || '不明'));
+    prepToday = t;
+    // 翌日ぶんは取れなくても当日ぶんの印刷は止めない（3枚目だけ飛ばす）
+    prepNext = (n && n.ok) ? n : null;
+    if (!prepNext) console.warn('仕込み(翌日)の取得に失敗したので3枚目を飛ばします:', n && n.error);
   } catch (e) {
     s1SetStatus('仕込み取得失敗: ' + e.message, true);
     return;
   }
+  _printAllPrepToday = prepToday;
 
-  // ⑦ 印刷キュー構築
-  _printAllQueue = ['sheet1', 'sheet1', 'sheet2'];  // 拠点配分は2部
+  // ⑦ 印刷キュー構築（要素はオブジェクト。仕込みは data と区分を持つ）
+  _printAllQueue = [{ tab: 'sheet1' }, { tab: 'sheet1' }, { tab: 'sheet2' }];  // 拠点配分は2部
   if (hasAfternoon) {
-    _printAllQueue.push('sheet3');
+    _printAllQueue.push({ tab: 'sheet3' });
+  }
+  const secT = prepToday.sections || {};
+  // 当日 午前便（am が無い日＝盛り出しの区分が立たない日は 1日分で出す）
+  _printAllQueue.push({ tab: 'sheet4', data: prepToday, view: secT.am ? 'am' : 'total', day: '当日' });
+  // 当日 午後便（無い日は出さない＝社長指示「午後便はなかったらなし」）
+  if (secT.pm) {
+    _printAllQueue.push({ tab: 'sheet4', data: prepToday, view: 'pm', day: '当日' });
+  }
+  // 翌日ぶん 1日分（金曜だけ 土日月の合算）
+  if (prepNext) {
+    _printAllQueue.push({ tab: 'sheet4', data: prepNext, view: 'total', day: nextInfo.label });
   }
   _printAllIdx = 0;
 
@@ -8211,7 +8413,16 @@ function _printAllStartCurrent() {
     _printAllFinish();
     return;
   }
-  const tabName = _printAllQueue[_printAllIdx];
+  const item = _printAllQueue[_printAllIdx];
+  const tabName = item.tab;
+
+  // ★v3.77 仕込みは同じタブを日付・区分を差し替えて3回使う
+  if (tabName === 'sheet4' && item.data) {
+    s4PrintDay = item.day || '';
+    s4View     = item.view || 'total';
+    renderSheet4(item.data);      // renderSheet4 は s4View をそのまま使う（無い区分は total に落ちる）
+  }
+
   // タブ切替
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
@@ -8234,8 +8445,7 @@ function _printAllOnAfter() {
     _printAllFinish();
     return;
   }
-  const tabName = _printAllQueue[_printAllIdx];
-  s1SetStatus('一括印刷中... (' + (_printAllIdx + 1) + '/' + _printAllQueue.length + ') ' + _printAllLabel(tabName));
+  s1SetStatus('一括印刷中... (' + (_printAllIdx + 1) + '/' + _printAllQueue.length + ') ' + _printAllLabel(_printAllQueue[_printAllIdx]));
   // ブラウザがブロックしないよう遅延
   setTimeout(_printAllStartCurrent, 500);
 }
@@ -8244,6 +8454,14 @@ function _printAllOnAfter() {
 function _printAllFinish() {
   _printAllQueue = [];
   _printAllIdx = 0;
+  // ★v3.77 仕込みタブは最後に翌日ぶんを描いているので、当日ぶん・合計表示に戻す
+  //   （戻さないと次に社長が仕込みタブを開いた時に翌日の数字が出たままになる）
+  s4PrintDay = '';
+  if (_printAllPrepToday) {
+    s4View = 'total';
+    try { renderSheet4(_printAllPrepToday); } catch (e) { console.warn('仕込みの復帰描画に失敗:', e); }
+    _printAllPrepToday = null;
+  }
   // sheet1に戻す
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
@@ -8255,15 +8473,37 @@ function _printAllFinish() {
   setTimeout(function() { s1SetStatus(''); }, 4000);
 }
 
-// タブ名→日本語ラベル
-function _printAllLabel(tabName) {
+// キュー要素→日本語ラベル
+function _printAllLabel(item) {
   const labels = {
     'sheet1': '拠点配分',
     'sheet2': '午前便盛り出し',
-    'sheet3': '午後便盛り出し',
-    'sheet4': '仕込み'
+    'sheet3': '午後便盛り出し'
   };
-  return labels[tabName] || tabName;
+  if (item && item.tab === 'sheet4') {
+    const bin = (item.view === 'am') ? '午前便' : (item.view === 'pm') ? '午後便' : '1日分';
+    return '仕込み(' + (item.day || '') + ' ' + bin + ')';
+  }
+  return labels[item && item.tab] || (item && item.tab) || '';
+}
+
+// ★v3.77 3枚目の仕込みが何日ぶんかを決める（社長決定 2026-09-10）
+//   月〜木 … 翌日1日ぶん
+//   金     … **土・日・月の3日ぶんを合算**（土日に仕込む物まで金曜のうちに出す）
+//   ※土日に押した時は素直に翌日1日ぶん。
+function _prepNextDates(dateVal) {
+  const p = String(dateVal).split('-').map(Number);
+  const base = new Date(Date.UTC(p[0], p[1] - 1, p[2]));       // JSTの日付をUTCの箱で扱う（ズレ防止）
+  const add = function (n) {
+    const t = new Date(base.getTime() + n * 86400000);
+    return t.getUTCFullYear() + '-'
+         + String(t.getUTCMonth() + 1).padStart(2, '0') + '-'
+         + String(t.getUTCDate()).padStart(2, '0');
+  };
+  if (base.getUTCDay() === 5) {                                // 5 = 金曜
+    return { dates: [add(1), add(2), add(3)], label: '土日月' };
+  }
+  return { dates: [add(1)], label: '翌日' };
 }
 
 
