@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- kanri.html v3.81 (2026-09-11) 【決定 → 初回納品を計算】社長決定「①当日配分で数字を決める → 決定を押したら②初回納品を計算する流れの方が分かりやすい」「L→Gという順番を間違えないで。**Gは必ずLから計算する。直接書き込まない**」。★メインGAS @706 から**分割済みの日は天候プリセットも `minfill` も L列にしか書かない**（G列は棚＝shelfsplitの計算結果なので直接書かない）。その代わりG列を作り直す導線が要る＝このボタン。押すと `?action=bmDecide&date=…`（@707・中身は `shelfsplit`）が走り、②へ自動で切り替わる。**何度押しても同じ結果**（土台がL列なので冪等）。ただし②で手調整した数字は作り直されるので確認を出す。★①に保存した日は**「②へ未反映」**として決定ボタンをオレンジで点滅させ、段階タブの下にも帯を出す（localStorage に保持＝リロードしても残る）。★夜間バッチの初回生成は今までどおり自動（社長「最初に推奨を書き出すタイミングでG列は計算して欲しい」＝発注・仕込みが前夜に決まる）。要メインGAS @707。 -->
 <!-- kanri.html v3.80 (2026-09-11) 【全六の未設定警告を「本当に困る日」だけにした】社長報告「これがまだ出る」＝土日月を選ぶと **9/12(土)・9/13(日) の全六が未設定です** と警告が出ていた。★土日は**そもそも営業しておらず拠点配分が無い**ので、献立が空なのが正常。毎週末に必ず出る＝オオカミ少年。★原因＝v3.78 の画面側が「その日の献立が空か」だけで判定し、**納品数量を見ていなかった**。GAS(@705)は `kawariMissingDates` で「**その日に全六の納品があるのに主菜が未設定**」の日だけを返しており（土日は入らない・実測で空配列）、そちらが正しい。★直し＝警告も日別の行も **GASの `kawariMissingDates` を唯一の判定材料**にする。納品が無い日は行ごと出さず、警告もしない。全六の納品自体が無い期間は「この期間は全六の納品がありません」と静かに出す。 -->
 <!-- kanri.html v3.79 (2026-09-11) 【仕込み：複数日でも日ごとの全六が出る】社長報告「9/14月曜日の仕込みだけだと仕込み表示されるのに、土日月で合算で出そうとすると献立が入ってないと正しい数字が出ないと出て、全六の分の仕込みが正しく出ない」。★原因＝メインGAS `getSheet4Data` が**選んだ日の先頭日の献立だけ**を読み（`getKawariSelections(firstDate)`）、`_aggregateOrderItems_` が**全日合算の数量に主菜1つ**を当てていた。土日月なら先頭＝9/12(土)が空で**全六の主菜が丸ごと出ない**。さらに主菜が違う日を合算すると**片方が作り忘れ**になる（実測：9/17木と9/18金は主菜4種とも別）。★直し＝**日ごとに主菜を解決して積む**（メインGAS @705。拠点分の日別数量 `baseQtyByDate` を持ち、6-1の全六展開を日別ループに）。米・解凍・食材・パック数は主菜に依存しないので**合算のまま＝数字は1つも動かない**。★画面＝複数日選択時は**日ごとに主菜を並べて表示**し、献立が無い日は**その日を名指しで警告**（前は「先頭日の献立を表示」と出るだけだった）。検証＝9/17単独と9/18単独の全六仕込みを足した値が、9/17+9/18の合算と**8品目すべて一致**。要メインGAS @705。 -->
 <!-- kanri.html v3.78 (2026-09-10) 【仕込み表をA4 1枚で印刷／朝の一括印刷に仕込み3枚】社長指示「仕込み表もプリントアウトできる様にレイアウトを変えたい。今の情報でA4 1枚でプリントアウトしたい」「朝の一括印刷で、当日の午前便・午後便・翌日の1日の仕込みの3枚が印刷できればベスト。午後便はなかったらなし」「仕込みのおかずの名前・数量を大きく出したい。空白が多いのを無くしたい。2列になっても構わない」「背景グレーじゃなくて白がいい」。★**改修前は同じ内容がA4で2ページに割れていた**（9/10の実データで実測）。★**効かせ方＝2列（columns:2）にして、空いた縦を文字の大きさに回す**。仕込みは1日28行前後（仕込み11本＋食材直接5〜6件）しかないので、2列にすると1列14行＝縦が半分で済み、そのぶん文字を約1.5倍にできる。おかず名・数量とも30px、材料名22px。⚠ **2列にするには DOM が「見出し＋その材料」で1ブロックになっている必要がある**（新 `.prep-blk`／`s4BuildSectionHTML`）。フラットなままだと見出しだけ列の末尾に残り、材料が次の列の頭に飛ぶ。★**背景は全部白**（社長指示）＝仕込み見出しの薄青・食材直接の薄橙・米の黄色グラデを落とし、左の色線と黒罫線で区別する。★米と解凍は**上に2段の帯**。横1本に詰めると数字が重なって読めない（試作で実測）。★印刷専用の見出し `.s4-print-head`（日付／区分「当日 午前便(1便)」／全六の主菜）を新設。画面用の 🍙 全六ボックス・トグル・件数メタ・タイトルは印刷では隠す（縦を食うため）。★**一括印刷に仕込み3枚を追加**＝拠点配分2部→午前便→(午後便)→仕込み(当日 午前便)→仕込み(当日 午後便)→仕込み(翌日)。**午後便が無い日は仕込みの午後便も出さない**（`sections.pm` が無い日）。🔴 **3枚目の「翌日」は、金曜だけ「土・日・月」の3日合算**（社長決定 2026-09-10・`_prepNextDates`）。月〜木は翌日1日ぶん。⚠ キューの要素を文字列→オブジェクト `{tab,data,view,day}` に変更（同じ仕込みタブを3回使い回すため）。⚠ 印刷後は当日ぶん・合計表示に描き直す（`_printAllPrepToday`）。戻さないと次に仕込みタブを開いた時に翌日の数字が残る。★仕込みタブに単体の「🖨 印刷」ボタンを追加（v3.44 で一括から外した時から個別ボタンも無かった）。画面表示（@media screen）は一切変えていない。GAS変更なし。 -->
@@ -1865,6 +1866,14 @@ body {
 #tab-master .bm-confirm-prod-btn.bm-confirmed:hover { background: #1b5e20; }
 #tab-master tr.bm-prod-confirmed .bm-product-cell { background: #e8f5e9; font-weight: bold; }
   /* ── v3.19 💾 保存ボタン ── */
+/* ★v3.81（2026-09-11）決定ボタン（①→②の計算） */
+#tab-master .bm-decide-btn {
+  background:#1565c0;color:#fff;border:none;border-radius:6px;
+  padding:7px 14px;font-size:13px;font-weight:700;cursor:pointer;margin-right:6px;
+}
+#tab-master .bm-decide-btn:hover { background:#0d47a1; }
+#tab-master .bm-decide-btn:disabled { background:#b0bec5;cursor:default; }
+#tab-master .bm-decide-btn.bm-need { animation: bm-save-pulse 1.5s ease-in-out infinite; background:#e65100; }
 #tab-master .bm-save-btn {
   font-size: 10pt;
   padding: 5px 14px;
@@ -2464,6 +2473,9 @@ body {
         <button class="bm-redo-btn" id="bm-redo-btn" onclick="bmDoRedo()" title="やり直す (Ctrl+Y)" disabled>↷ やり直す</button>
         <button class="bm-preset-btn" onclick="wpOpenPresetSelector()" title="天候プリセットを適用">📋 プリセット</button>
         <button class="bm-confirm-all-btn" id="bm-confirm-all" onclick="bmConfirmAll()">✓ 全拠点確定</button>
+        <!-- ★v3.81（2026-09-11）社長決定「決定を押したら初回納品を計算するって流れにした方が分かりやすい」 -->
+        <button class="bm-decide-btn" id="bm-decide-btn" onclick="bmDecide()"
+                title="いまの当日配分(①)から、初回納品(②)＋車載を計算し直します">決定 → 初回納品を計算</button>
         <button class="bm-save-btn" id="bm-save-btn" onclick="bmSaveAll()" title="ローカル変更をサーバーに保存して再描画">💾 保存</button>
         <button class="bm-reload-btn" onclick="bmReload()" title="サーバーから取り直す（ローカル編集は破棄）">🔄 再取得</button>
         <button class="bm-ext-import-btn" id="bm-ext-import-btn" onclick="bmImportExternal()" title="他社弁当（メンチカツ/チキン南蛮/油淋鶏）の納品数を外部SSから取込→総数を更新">🔄 他社弁当を取込</button>
@@ -5967,6 +5979,7 @@ function bmSetView(v) {
         + '<span class="bm-sw" style="background:#e3f2fd;"></span>車載へ'
       : '<b>左</b>=当日配分(編集) <b>右</b>=推奨';
   }
+  bmUpdateDecideBtn();          // ★v3.81 ①のときだけ「決定」を出す
   bmRenderStageNote();
   if (bmServerData) bmRenderMatrix();
 }
@@ -5992,6 +6005,56 @@ async function bmLoadStat(dateStr) {
       if (dateStr === bmCurrentDate) bmRenderStageNote();
     }
   } catch (e) { /* 取れなくても表示は止めない */ }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ★v3.81（2026-09-11）決定 → 初回納品を計算
+   ══════════════════════════════════════════════════════════════
+   社長決定「①当日配分で数字を決める → 決定を押したら②初回納品を計算する」
+           「L→Gという順番を間違えないで。Gは必ずLから計算する。直接書き込まない」
+   【なぜ要るか】メインGAS @706 から、**分割済みの日は天候プリセットも下限も L列にしか書かない**。
+     G列（＝実際に納品する数）は `shelfsplit` の計算結果なので、押すまで変わらない。
+     押さないと「①を直したのに納品数が変わらない」ことになるので、**未反映の日は目立たせる**。
+   ⚠ 夜間バッチの初回生成は今までどおり自動（社長「最初に推奨を書き出すタイミングでG列は計算して欲しい」）。
+   ⚠ 何度押しても同じ結果（土台がL列なので冪等）。ただし**②で手で調整した数字は作り直される**ので確認を出す。 */
+let bmPendingDecide = {};
+try { bmPendingDecide = JSON.parse(localStorage.getItem('bmPendingDecide') || '{}'); } catch (e) { bmPendingDecide = {}; }
+function bmSetPendingDecide(ds, v) {
+  if (!ds) return;
+  if (v) bmPendingDecide[ds] = true; else delete bmPendingDecide[ds];
+  try { localStorage.setItem('bmPendingDecide', JSON.stringify(bmPendingDecide)); } catch (e) {}
+  bmUpdateDecideBtn();
+}
+function bmUpdateDecideBtn() {
+  const b = document.getElementById('bm-decide-btn');
+  if (!b) return;
+  // ①のときだけ押せる（②はG列を直接触る画面なので、そこから計算し直すと自分の編集が消える）
+  b.style.display = (bmViewMode === 'shelf') ? 'none' : '';
+  b.classList.toggle('bm-need', !!bmPendingDecide[bmCurrentDate]);
+}
+async function bmDecide() {
+  if (!bmCurrentDate) return;
+  if (!confirm(bmCurrentDate + ' の初回納品＋車載を、いまの当日配分から計算し直します。\n\n'
+             + '②で手で調整した数字は作り直されます。よろしいですか。')) return;
+  const b = document.getElementById('bm-decide-btn');
+  const label = b ? b.textContent : '';
+  if (b) { b.disabled = true; b.textContent = '計算中…'; }
+  try {
+    const res = await fetch(GAS_URL + '?action=bmDecide&date=' + encodeURIComponent(bmCurrentDate)
+                            + '&_cb=' + Date.now());
+    const r = await res.json();
+    if (!r || !r.ok) { alert('計算できませんでした: ' + ((r && r.error) || '不明なエラー')); return; }
+    bmSetPendingDecide(bmCurrentDate, false);
+    bmStatCache[bmCurrentDate] = null;          // 進捗バッジを取り直す
+    await bmLoadDate(bmCurrentDate);
+    bmLoadStat(bmCurrentDate);
+    bmSetView('shelf');                         // 結果が見える②へ切り替える
+    wpToast('②初回納品＋車載を計算しました（' + (r.locs || 0) + '拠点・車載 ' + (r.vehTotal || 0) + '個）', 'success');
+  } catch (e) {
+    alert('計算できませんでした: ' + e.message);
+  } finally {
+    if (b) { b.disabled = false; b.textContent = label || '決定 → 初回納品を計算'; }
+  }
 }
 
 /** 段階タブの下の1行。**その日が分割済みかどうかを数字で言う**（「走ってない」を目で見えるようにする）。 */
@@ -6035,6 +6098,14 @@ function bmRenderStageNote() {
       + '急にやらなくなった拠点・天候プリセット・手入力はこの表で当てます。'
       + (veh > 0 ? '　※この日はもう分割済みなので、直したら②で車載も見直してください' : '');
   }
+  // ★v3.81（2026-09-11）①を直したが②に反映していない日は目立たせる
+  if (bmPendingDecide[bmCurrentDate]) {
+    el.innerHTML = '<span style="display:inline-block;margin-bottom:4px;padding:4px 10px;border-radius:6px;'
+      + 'background:#fff3e0;border-left:4px solid #e65100;color:#5d3a00;font-weight:bold;">'
+      + '① 当日配分を変更しました。②初回納品に反映するには「決定 → 初回納品を計算」を押してください。</span><br>'
+      + el.innerHTML;
+  }
+  bmUpdateDecideBtn();
   // ★2026-09-10 進捗（どの段まで進んだか）。届いていれば足す＝表示は待たせない
   const st = bmStatCache[bmCurrentDate];
   if (st) el.innerHTML += bmStageBadges(st);
@@ -6993,7 +7064,10 @@ async function bmSaveAll() {
   const bmSaveExtra = appendedCount > 0 ? ('・うち新規' + appendedCount) : '';
   // ★2026-09-10 どちらの段に保存したかを必ず言う（①と②で書き込み先の列が違うため）
   const bmSaveWhere = (saveCol === 'G') ? '②初回納品＋車載' : '①当日配分';
-  wpToast(bmSaveWhere + 'に保存（' + locSet.size + '拠点・' + savedCount + 'セル' + bmSaveExtra + '）', 'success');
+  // ★v3.81（2026-09-11）①に保存した日は「②へ未反映」にする（→ bmDecide）
+  if (saveCol === 'L') bmSetPendingDecide(bmCurrentDate, true);
+  wpToast(bmSaveWhere + 'に保存（' + locSet.size + '拠点・' + savedCount + 'セル' + bmSaveExtra + '）'
+        + (saveCol === 'L' ? '／②に反映するには「決定」を押してください' : ''), 'success');
 }
   function bmEscape(s) {
   return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;').replace(/"/g,'&quot;');
