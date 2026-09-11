@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>お江戸弁当 レジ</title>
+<!-- register v3.29 (2026-09-11) 【配分外の試作品は「納品のある拠点」のレジにだけ出す】社長指示「今日試しでタレカツ重を作った。配分には入っていないけど、納品確認・納品ある拠点にはレジのアイテムに出して欲しい」（単価マスタ P127 で登録済み）。★**背景**＝単価マスタに「有効」で1行足すと、その商品は無条件で `getMaster` に乗るので**全41拠点の販売画面に出る**。実測 2026-09-11：タレカツ重は登録直後から全拠点のレジ（全六タブ）に並んでいた。作っていない拠点でも押せてしまう。★**直し方**＝単価マスタに「**配分外**」列を作り○を入れた商品を、レジ側で**納品連動**にする。判定は既存の献立連動（v3.26）と同じ「**納品数>0 か既に売った**」。★**納品数入力（納品確認）・修正画面・在庫編集モードには必ず出す。**ここまで隠すと販売員が納品数を打てず、販売画面にも永久に出てこない（鶏と卵になる）。隠すのは**販売画面のグリッドとカテゴリータブだけ**。★逃げ道は献立連動と共用＝「＋ 隠れている商品も出す」バー（`state.showOffMenu`）を押せば出る。バーの文言を「献立に無い日替わり N品／納品の無い試作品 M品」の2本立てにした。★**古いGASでも壊れない**＝`noPlan` が返ってこない（列が無い・未デプロイ）と隠す対象が0件になり、従来どおり全商品が出る。★二次販売レジ（`?mode=2nd`）は対象外。★要: メインGAS @2026-09-11（単価マスタ「配分外」列／`getProducts_Compute_` の `noPlan`／`bmLoadProducts_`・`calculateNextWeekProposals_` の除外／`getPlannedDelivery`・`_dapDiffSummary_` の差異除外／runfix `noplan`）。GAS側が配分の行を作らないので、**この商品の納品数を入れてもドライバーへ承認依頼は飛ばない**。 -->
 <!-- register v3.28 (2026-08-24) 【納品数を取り終わるまでスタート画面を触らせない】社長指示「レジをスタートする時、納品数をダウンロードするまで一切始められないようにしたい」。★これまでも v3.20/v3.22 で送信ボタンの無効化＋ハンドラ入口ガードは入れていたが、止まっていたのは**送信ボタンだけ**で、納品数の欄・開始金・金種は読み込み中でも触れた。手で先に打つと `loadPlannedDelivery` は「既に入力済みの欄は上書きしない」ため配分表の数が入らず、打ち込んだ数字だけでスタートできてしまう。★→ `#start-loading-cover`（position:fixed の全面カバー）でスタート画面ごと覆い、「納品数をダウンロード中です」を出す。ヘッダーも入力欄も送信ボタンもタップできない。取得が終わったら自動で消える。★**失敗時は自動で3回リトライ**（1.2秒→2.4秒→3.6秒）。/exec の GET は確率的に404を返すことがあるので、1回の失敗で手入力に落とさない。3回ダメなら「🔄 もう一度読み込む」と「手入力で進む」の2ボタンをカバー内に出す＝GASが落ちた日でもレジは打てる（手入力を選んでも合計10個以下は従来どおり弾かれる）。★毎回 `&_cb=` を付ける（/exec の GET はHTTPキャッシュに当たるため、リトライが同じ古い応答を掴むのを防ぐ）。★引き継ぎモード（`takeoverStartOnly`＝開始金だけ入力）はカバーしない。納品数は前の人のものを使うので待たせる理由が無い。GAS変更なし。 -->
 <!-- register v3.27 (2026-08-20) 【拠点振替：②から回ってきた弁当を、このレジで受け取って納品数に足す】社長要望「芝パーク②が終わる時、芝パークに残りを追加して終わる。それを紐づけて自動で追加できないか」→「ドライバーを介さないで終わらせたい」。★**数を確定するのはこの画面（受け取り側）**にした。理由＝渡す側がレジ拠点の日は締めの申告残数が既定値で入り、渡す側が**スポットの日**（当日バイト・レジ非使用＝締めが無い）は0から入れるだけで、**どちらの日も同じ画面で通る**。バイトにもドライバーにも作業が増えない（社長「渡す側がスポットの日もありえる」2026-08-20）。★販売画面の上に「📥 芝パーク② から受け取り」バナーを出す（`getPendingHandover`）。押すと商品別の数が並び、確定で `confirmHandover` → メインGASが拠点間移動ログに「完結」を1本立てる＝**納品数に即加算**。在庫表示は元から `state.moveAdj` を見ているので `refreshMoveAdj_` を叩けばその場で反映される。★**上限は渡す側にあった数**（締め済みなら申告残数／それ以外は納品数）でクランプする。超えると実在しない在庫を作るため。★**逃げ道＝締めで引き留める**（社長選択「すぐ確認できない場合があるから後からでもできるように」）。`enterFinalScreen` の冒頭で未受け取りがあれば止めて受け取り画面を開く。今日は来なかった日のために「今日は受け取りが無かった」も置いた（押すと記録だけ残して引き留めが外れる）。★読み込みは `showScreen('register')` に集約（入口が7か所あるので個別に付けると必ず漏れる）＋60秒スロットル。二次販売レジ（`?mode=2nd`）は対象外でAPIも叩かない。要: メインGAS @2026-08-20 以降＋拠点マスタに「自動振替先」列。 -->
 <!-- register v3.26 (2026-08-18) 【今日作らない日替わり商品をレジに出さない（献立表と連動）】社長指示「レジアプリの商品が今日あるかのチェックボックス無くしちゃったんだけど、日替わりメニューで今日ない商品を自動で表示しないようにしてほしい」。★これまでは dashboard「商品管理」タブの停止/稼働（`getProductSwitches`）を毎朝押す運用だったが、そのチェックを使わなくなったため、作らない日替わり（海苔弁系・満腹系）がレジに並びっぱなしになっていた。→ **kanri「📋 献立表」で決まっている今日の品目だけを出す**。★材料は既存API 2本だけで **GAS改修・再デプロイ不要**：`getMenuSelections&date=YYYY-MM-DD`（保存済みの日＝確定内容／未保存の日＝⚙ルールのローテ・曜日固定・定番からの自動解決／確定後にルールを変えた日＝後勝ちの新ルール）と `getMenuMeta`（定番の商品ID）。起動時の `Promise.all`（getMaster / getProductSwitches / getReport）に**相乗り**させたので待ち時間は増えない。★**触るのは日替わりの2カテゴリーだけ**。全六・他社商品・お茶（カテゴリー「全」）は献立表の管理外なので一切触らない。★**定番（銀しゃけ・あいもり等）は献立に無くても隠さない**（定番は対象カテゴリーの中に居るので、見落とすと毎日消える）。★**隠す側に倒れない安全弁を4つ**：①献立が取れない日（通信失敗・献立もルールも未登録）は1品も隠さない ②献立キャッシュは**日付一致の時だけ**使う（TTL24hだと前日の献立で隠す事故になる）③対象カテゴリーが全滅する結果になったら連動を見送る ④**納品数>0 か既に売った商品は献立に無くても必ず出す**（献立の入れ違いで違う種類が届いた日に売れなくなるのを防ぐ・`restoreState` の後に絞り込みをやり直す）。★逃げ道＝販売画面と納品数入力の両方に「＋ 隠れている商品も出す」バー（`offmenu-bar`）。押せば全商品に戻り、納品数入力では**打ち込み済みの数字を保持**したまま作り直す。★修正画面（`edit-delivery-inputs` 2か所）は `productsForEdit_` で「隠れていても数が記録されている商品」を必ず出す＝あとから直せる。★カテゴリーが1品も残らない場合はタブごと消えるので、選択中カテゴリーが消えたら先頭へ戻す（グリッドが空になるのを防ぐ）。★二次販売レジ（`?mode=2nd`）は300円・500円の2品だけなので連動しない（APIも叩かない）。★テストモード（`?test=1`）も本番と同じく献立連動を通す。 -->
@@ -2223,6 +2224,54 @@ function offMenuProductIds_() {
   return off;
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   ★2026-09-11 v3.29【配分外の試作品は「納品のある拠点」にだけ出す】
+
+     社長指示「今日試しでタレカツ重を作った。配分には入っていないけど、
+              納品確認・納品ある拠点にはレジのアイテムに出して欲しい」
+
+     単価マスタ「配分外」列に○が入った商品は GAS が `noPlan:true` で返す。
+     配分（基本数マスタ）に行が無いので**どの拠点に何個届いたかを誰も知らない**＝
+     販売員が納品数を入れるまでは、その拠点に在るかどうか判断できない。
+     → 判定は献立連動と同じ「**納品数>0 か既に売った**」1本にする。
+
+   ⚠ **納品数入力（納品確認）・修正画面・在庫編集モードからは絶対に隠さない。**
+     そこまで隠すと納品数を打つ手段が無くなり、販売画面にも永久に出てこない。
+     隠すのは販売画面のグリッド（`getProductsForActiveTab`）と
+     カテゴリータブ（`getCategories`）だけ。
+
+   ⚠ 古いGAS（`noPlan` を返さない）では集合が空になり、従来どおり全商品が出る＝安全側。
+   ═══════════════════════════════════════════════════════════════ */
+function noPlanHiddenIds_() {
+  const empty = new Set();
+  if (IS_2ND) return empty;                 // 二次販売レジは300円・500円だけ
+  if (state.showOffMenu) return empty;      // 販売員が「隠れている商品も出す」を押している
+  const dc = state.deliveryCount || {};
+  const ps = state.productSales  || {};
+  const base = (Array.isArray(state.allProducts) && state.allProducts.length)
+             ? state.allProducts
+             : (Array.isArray(state.products) ? state.products : []);
+  const off = new Set();
+  base.forEach(p => {
+    if (!p || !p.noPlan) return;
+    if (Number(dc[p.id]) > 0 || Number(ps[p.id]) > 0) return;   // 届いた／売れた拠点には必ず出す
+    off.add(String(p.id));
+  });
+  return off;
+}
+
+// 「隠れている商品も出す」を押していない状態での件数（案内バーの文言に使う）
+function noPlanHiddenCount_() {
+  if (state.showOffMenu) {
+    const saved = state.showOffMenu;
+    state.showOffMenu = false;
+    const n = noPlanHiddenIds_().size;
+    state.showOffMenu = saved;
+    return n;
+  }
+  return noPlanHiddenIds_().size;
+}
+
 // 隠している商品の数（案内文とボタンの出し分けに使う）
 function offMenuHiddenCount_() {
   if (state.showOffMenu) {
@@ -2296,16 +2345,24 @@ function toggleOffMenu(from) {
 }
 
 // 販売画面の下に出す案内バー
+// ★2026-09-11 v3.29 隠している理由が2つになったので、文言も2本立てにする。
+//   ①今日の献立に無い日替わり（v3.26）②この拠点に納品の無い配分外の試作品（v3.29）
+//   どちらも同じ `state.showOffMenu` で一度に出せる（逃げ道は1つのままにする）。
 function renderOffMenuBar() {
   const bar = document.getElementById('offmenu-bar');
   if (!bar) return;
-  const hidden = offMenuHiddenCount_();
+  const hiddenMenu = offMenuHiddenCount_();
+  const hiddenNP   = noPlanHiddenCount_();
+  const hidden     = hiddenMenu + hiddenNP;
   if (hidden === 0 && !state.showOffMenu) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
+  const parts = [];
+  if (hiddenMenu > 0) parts.push(`今日の献立に無い日替わり ${hiddenMenu}品`);
+  if (hiddenNP   > 0) parts.push(`この拠点に納品の無い商品 ${hiddenNP}品`);
   bar.style.display = '';   // CSS の flex に戻す（block だと横並びが崩れる）
   bar.innerHTML = state.showOffMenu
-    ? `<span>今日の献立に無い商品も表示中です</span>
-       <button type="button" onclick="toggleOffMenu('register')">献立の商品だけにする</button>`
-    : `<span>今日の献立に無い日替わり ${hidden}品を隠しています</span>
+    ? `<span>隠れている商品も表示中です</span>
+       <button type="button" onclick="toggleOffMenu('register')">いつもの商品だけにする</button>`
+    : `<span>${parts.join('／')}を隠しています</span>
        <button type="button" onclick="toggleOffMenu('register')">＋ 隠れている商品も出す</button>`;
 }
 
@@ -2979,7 +3036,11 @@ async function ensureStartReported() {
 // ═══════════════════════════════════════════════════════════════
 function getCategories() {
   const cats = [];
+  // ★2026-09-11 v3.29 配分外（納品の無い試作品）はタブの判定からも外す。
+  //   残さないと、その商品しか居ないカテゴリーのタブだけ出てグリッドが空になる。
+  const npOff = noPlanHiddenIds_();
   state.products.forEach(p => {
+    if (npOff.has(String(p.id))) return;
     const c = (p.category || '').trim();
     if (!c) return;
     if (c === '全') return; // お茶等は全タブに表示するためここでは除外
@@ -3011,11 +3072,16 @@ function switchCategory(cat) {
 }
 
 function getProductsForActiveTab() {
+  /* ★2026-09-11 v3.29 配分外（試作品）は**この拠点に納品が無ければ販売画面に出さない**。
+     ⚠ ここだけで絞る。`state.products` 自体は削らない
+       （削ると納品数入力＝納品確認からも消え、納品数を打つ手段が無くなる）。 */
+  const npOff = noPlanHiddenIds_();
+  const src = npOff.size ? state.products.filter(p => !npOff.has(String(p.id))) : state.products;
   const cat = state.activeCategory;
-  if (!cat) return state.products;
+  if (!cat) return src;
   // 該当カテゴリーの商品 + 「全」のお茶を末尾に
-  const inCat = state.products.filter(p => (p.category || '').trim() === cat);
-  const all   = state.products.filter(p => (p.category || '').trim() === '全');
+  const inCat = src.filter(p => (p.category || '').trim() === cat);
+  const all   = src.filter(p => (p.category || '').trim() === '全');
   return [...inCat, ...all];
 }
 
