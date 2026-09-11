@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- kanri.html v3.82 (2026-09-11) 【他社弁当を車載5台の内訳で出す】社長指示「他社製品の車載積み　現地配りの個数なんだけど、納品で指定された個数を**エリアの予定販売数/全体の予定販売数**で車載の欄に自動で書き込んで欲しい」。★メインGAS `extveh`（`extApplyVehicleSplit_`）が納品総数をエリアの予定販売数で按分して**車載のG列**へ書くようにしたので、配分調整の他社弁当行も**拠点列を横断する1マス（総数だけ）から、車載5台は普通のセル・通常拠点は「–」**に変えた。車載セルは編集もできる（手で直したら、その日は自動按分が上書きしない＝サーバー側 `onlyIfMismatch`）。★行頭のバッジは「総数 30」、合計列は**車載計 / 総数**を出し、**食い違う日は赤**（総数が入る前＝0/30 も赤で分かる）。★通常拠点の「–」は現地でドライバーが割り振るという意味（今までと同じ）。配分表・盛り出し表（シート1/2）は今までどおり総数行1行のまま。要メインGAS @708。 -->
 <!-- kanri.html v3.81 (2026-09-11) 【決定 → 初回納品を計算】社長決定「①当日配分で数字を決める → 決定を押したら②初回納品を計算する流れの方が分かりやすい」「L→Gという順番を間違えないで。**Gは必ずLから計算する。直接書き込まない**」。★メインGAS @706 から**分割済みの日は天候プリセットも `minfill` も L列にしか書かない**（G列は棚＝shelfsplitの計算結果なので直接書かない）。その代わりG列を作り直す導線が要る＝このボタン。押すと `?action=bmDecide&date=…`（@707・中身は `shelfsplit`）が走り、②へ自動で切り替わる。**何度押しても同じ結果**（土台がL列なので冪等）。ただし②で手調整した数字は作り直されるので確認を出す。★①に保存した日は**「②へ未反映」**として決定ボタンをオレンジで点滅させ、段階タブの下にも帯を出す（localStorage に保持＝リロードしても残る）。★夜間バッチの初回生成は今までどおり自動（社長「最初に推奨を書き出すタイミングでG列は計算して欲しい」＝発注・仕込みが前夜に決まる）。要メインGAS @707。 -->
 <!-- kanri.html v3.80 (2026-09-11) 【全六の未設定警告を「本当に困る日」だけにした】社長報告「これがまだ出る」＝土日月を選ぶと **9/12(土)・9/13(日) の全六が未設定です** と警告が出ていた。★土日は**そもそも営業しておらず拠点配分が無い**ので、献立が空なのが正常。毎週末に必ず出る＝オオカミ少年。★原因＝v3.78 の画面側が「その日の献立が空か」だけで判定し、**納品数量を見ていなかった**。GAS(@705)は `kawariMissingDates` で「**その日に全六の納品があるのに主菜が未設定**」の日だけを返しており（土日は入らない・実測で空配列）、そちらが正しい。★直し＝警告も日別の行も **GASの `kawariMissingDates` を唯一の判定材料**にする。納品が無い日は行ごと出さず、警告もしない。全六の納品自体が無い期間は「この期間は全六の納品がありません」と静かに出す。 -->
 <!-- kanri.html v3.79 (2026-09-11) 【仕込み：複数日でも日ごとの全六が出る】社長報告「9/14月曜日の仕込みだけだと仕込み表示されるのに、土日月で合算で出そうとすると献立が入ってないと正しい数字が出ないと出て、全六の分の仕込みが正しく出ない」。★原因＝メインGAS `getSheet4Data` が**選んだ日の先頭日の献立だけ**を読み（`getKawariSelections(firstDate)`）、`_aggregateOrderItems_` が**全日合算の数量に主菜1つ**を当てていた。土日月なら先頭＝9/12(土)が空で**全六の主菜が丸ごと出ない**。さらに主菜が違う日を合算すると**片方が作り忘れ**になる（実測：9/17木と9/18金は主菜4種とも別）。★直し＝**日ごとに主菜を解決して積む**（メインGAS @705。拠点分の日別数量 `baseQtyByDate` を持ち、6-1の全六展開を日別ループに）。米・解凍・食材・パック数は主菜に依存しないので**合算のまま＝数字は1つも動かない**。★画面＝複数日選択時は**日ごとに主菜を並べて表示**し、献立が無い日は**その日を名指しで警告**（前は「先頭日の献立を表示」と出るだけだった）。検証＝9/17単独と9/18単独の全六仕込みを足した値が、9/17+9/18の合算と**8品目すべて一致**。要メインGAS @705。 -->
@@ -331,6 +332,9 @@ body {
 }
 .bm-matrix tr.bm-ext-row td.bm-ext-total b { font-size: 16px; }
 .bm-ext-note  { font-size: 10px; color: #7e57c2; }
+/* ★2026-09-11 他社弁当行：通常拠点は「現地割り」＝数字を持たないセル／車載計と総数の食い違いは赤 */
+.bm-matrix tr.bm-ext-row td.bm-ext-loc { color: #b39ddb; background: #faf7ff; text-align: center; }
+.bm-matrix tr.bm-ext-row td.bm-total-col.bm-ext-mismatch { color: #c62828; font-weight: 700; }
 .bm-ext-badge { display: inline-block; margin-left: 4px; padding: 0 5px; font-size: 9px;
   color: #fff; background: #7e57c2; border-radius: 8px; vertical-align: middle; }
 .bm-ext-import-btn { background: #ede7f6; color: #4527a0; border: 1px solid #b39ddb;
@@ -6297,15 +6301,33 @@ function bmRenderMatrix() {
 function bmRenderRow(p) {
   // ★外部納品（他社弁当・総数管理）：拠点に配らず、拠点列を横断する「総数」セルだけ表示（外部SSから自動取込）
   if (p.isExternal) {
+    /* ★2026-09-11 他社弁当は「総数だけの1マス」から **車載5台の内訳** に変えた。
+       社長「納品で指定された個数を エリアの予定販売数/全体の予定販売数 で車載の欄に自動で書き込んで欲しい」
+       → メインGAS `extveh` が車載（L901〜905）のG列へ按分して書く。ここはそれを見せる場所。
+       ⚠ **通常拠点は今までどおり数字を持たない**（現地でドライバーが割り振る）ので「–」を出す。
+       ⚠ 車載セルは普通のセルとして描く＝**手で直せる**。直した日はサーバーが上書きしない
+         （`onlyIfMismatch`＝車載計と総数が合っていれば触らない）。
+       ⚠ 合計列は「車載計 / 総数」。前日21時の取込前は総数が0なので **0 / 0**、
+         按分前は **0 / 30** のように食い違い、その時だけ赤くなる。 */
     const exName = (p.displayName && p.displayName.length > 0) ? p.displayName : p.name;
     const exTitle = (p.displayName && p.displayName !== p.name) ? (' title="' + bmEscape(p.name) + '"') : '';
     const tot = (bmServerData.externalTotals && bmServerData.externalTotals[p.id]) || 0;
-    const nLoc = bmServerData.locations.length;
+    let vehSum = 0, cells = '';
+    bmServerData.locations.forEach((loc, idx) => {
+      if (BM_VEH_AREA_[String(loc.id)]) {
+        vehSum += bmGetDisplaySales(p.id, loc.id);
+        cells += bmRenderCell(p.id, loc.id, idx);
+      } else {
+        cells += '<td class="bm-data-cell bm-ext-loc' + boundaryCls(idx)
+               + '" title="他社弁当は拠点に配らない（現地でドライバーが割り振る）">–</td>';
+      }
+    });
+    const mis = (vehSum !== tot) ? ' bm-ext-mismatch' : '';
     return '<tr class="bm-ext-row"><td class="bm-product-cell"' + exTitle + '>' + bmEscape(exName)
-      + '<span class="bm-ext-badge">総数</span></td>'
-      + '<td class="bm-ext-total" colspan="' + nLoc + '" title="他社弁当：現地でドライバーが割り振り／外部SSから自動取込。ご飯のみ仕込みに反映">'
-      + '総数 <b>' + tot + '</b><span class="bm-ext-note">　現地割り・ご飯のみ仕込み反映</span></td>'
-      + '<td class="bm-total-col">' + tot + '</td></tr>';
+      + '<span class="bm-ext-badge">総数 ' + tot + '</span></td>'
+      + cells
+      + '<td class="bm-total-col' + mis + '" title="車載の合計 ／ 納品総数（外部SSから自動取込）">'
+      + vehSum + ' / ' + tot + '</td></tr>';
   }
   const copyBtn = '<span class="bm-copy-btn" onclick="event.stopPropagation();bmCopyProductRow(\'' + p.id + '\')" title="この商品の行をコピー（推奨値）">⧉</span>';
   const clearBtn = '<span class="bm-clear-btn" onclick="event.stopPropagation();bmClearProductRow(\'' + p.id + '\')" title="この商品の全拠点を0にする">🗑</span>';
