@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v7.3 (2026-09-14) 【取り置きタブに「配達」を追加】社長指示「拠点名に配達を追加／配達を選んだ時に住所・支払い方法（請求書払い・当日現金払い）・当日必要な帳票（納品書・請求書・領収書）・帳票の宛名を入れる欄／配達を選んだ時は自動でオーダーSSの新しい行に書き込み」。★拠点セレクトの末尾（店前の次）に「🚚 配達」を足し、選んだ時だけ黄色い配達ブロックが出る。配達商品の表示スイッチは自動でONになる（配達の単価は配達商品の名前から引かれるため）。★登録すると サーバー(saveTorioki) が 配達オーダー受付表SS の「◯◯年◯月配達分」シートへ1行書く。オーダー番号＝`取置-<取り置きID>`。編集は同じ行を上書き、削除は受付内容='キャンセル'（行は消さない＝10行おきのヘッダーがずれて印刷が壊れるため）。★注文内容は「商品名xN」を改行で並べるだけ。単価マスタの配達商品名が `【竹】浅草の銀鮭海苔弁当（白米）` の形なので、21時の帳票バッチ(order-parser.py)がそのまま梅/竹/松/大盛を読んで単価を引ける（梅は無印＝既定値）。名前を加工しないこと。★会計種別はオーダーSSの既存表記に合わせて `請求書払い` / `現金払い` で書く（画面の文言は「当日現金払い」のまま）。帳票バッチはこの文字列だけで 請求書＋納品書／領収書 を決めるので、表記を変えると帳票が黙って飛ぶ。🔴 二重計上の防止＝メインGAS の importDeliveryOrdersDaily が「オーダー番号が取置-で始まる行」を読み飛ばす。仕込み・盛り出しは従来どおり rebuildToriokiInDelivery_ の「取置-」行だけで乗り、オーダー表の行は帳票専用。片方だけ入れると同じ弁当が2回発注に乗る。要: メインGAS @717 以降（取り置きデータ R〜U列／_syncToriokiToOrderSS_／取込の取置-除外）。 -->
 <!-- driver v7.0 (2026-09-09) 【スポット拠点でも「残数だけ保存」できるようにした】オーナー決定「3つとも直す」。★何が問題だったか＝スポット拠点は①残数 → クーポン → 「💰 売上を確定」（サーバー往復）→ ②あるべき現金 → レジの現金 という順番を**全部通さないと1文字も残らない**作りだった。確定ボタンの解禁条件が `ccIsSpot ? (!ccSpot || cashInput === '')` で、`ccSpot`（spotPreview の成功応答）が無いと押せないため。置き弁は1画面で終わるのにスポットだけ全手順必須で、**14:00 のリマインドが「完売した拠点も『0』で送ってください」と書いているのに、スポットでは 0 だけ送ることが構造的にできなかった**（残数の未報告が出る主因）。★変更＝①の画面に「💾 残数だけ保存」を足した。押すと `submitCollectionCheck` を **`residualOnly:true`** で投げ、サーバーは**実査残数・実査残数詳細JSON・実査時刻・ドライバー名だけ**を書く。🔴 **判定列は触らない**＝判定は `getCollectionCheckTargets` などで「'未回収' 以外＝回収済み」という回収フラグとして読まれているので、ここを書くと**その拠点が回収リストから消えて、あとから現金を入れられなくなる**。触らないので拠点はリストに残り、売上確定・PayPay取込・現金入力は**あとから通常の締めでそのまま通せる**（手順は1つも消していない・増やしてもいない＝途中で抜けられるようにしただけ）。★あわせて、一度保存した残数を開き直した時に**拠点振替ぶんが二重に引かれる**のを直した（`it.actual` は振替を引いた後の実数なので、そこからさらに引いてはいけない）。★スポット以外の拠点には出さない＝金庫を数えさせる2段階の縛りは従来どおり。要: メインGAS 2026-09-09 以降（`submitCollectionCheck` の `residualOnly`）。 -->
 <!-- driver v7.1 (2026-09-10) 【実況のマトリクスを「レジ開始」で埋める】社長指示A。★**問題**＝マトリクスの数字は `getTodayIntermediate`（＝**販売中ログ**）から作るので、**1個売れるまで納品数すら出ず**、11時台は虫食いに見える。ドライバーから「1個売れないと表示されないのでは」と指摘があり実測でも正しかった。📌 2026-09-10 の初回販売は **10:58〜11:47** に散らばり、**11:30時点では半分しか埋まらない**（銀座エリア＝京橋11:28・銀座11:29・ダイビル11:35・銀座2は終日なし＝社長報告「11:30に銀座エリアが出ていなかった」の正体）。★**直し方**＝`getTodayIntermediate` に `&withStarted=1` を足し、**レジ開始ログにあって販売中ログに無い拠点**を「販売数0・納品数だけ」で返す（`startedOnly:true`）。実況タブの2か所（`rtLoadAll`／`rtRefreshArea`）だけ付ける。★⚠ **回収タブは従来どおり**（`getCollectionBundle` 経由も含め `withStarted` を付けない）＝「販売中の拠点」を数えている所の挙動を変えないため。★⚠ 古いGASでも壊れない（未知のパラメータは無視されて従来の結果が返る）。要メインGAS @702。 -->
 <!-- driver v7.2 (2026-09-13) 【エリアの売れ行き棒／担当エリアを一番上へ】社長指示「ドライバーアプリのリアルタイムのマトリクス、自分の担当拠点が一番上に表示されるように」「エリア別で販売予定数に対しての進捗率」「いつもより売れ行きがいいのか悪いのか」。★**①並べ替え**＝エリア別マトリクスのブロック順を「**自分の担当エリアが先頭**」にした。社長「基本的にドライバーは自分のエリアを見る。だから一番上に表示」。判定は当日の担当（`state.todayAssignment`＝`getLocationsWithAssignment`＝主担当＋担当例外）で、拠点数がいちばん多いエリアを1つ選ぶ。取れない時だけ拠点マスタK列の主担当に落とし、それも取れなければ**従来どおりの並び**（`_rtMyArea_`）。★**②売れ行き棒**＝マトリクスの一番上に「エリア別 売れ行き」カードを新設。担当エリアだけ大きく、下に「ほかのエリア」を細い行で縦に並べる。各エリアブロックの見出しにも同じ棒を出す（ブロックの中まで来た人がカードへ戻らなくて済む）。★**進捗率＝実販売数 ÷ いまいる区間までの販売予定数の合計**（社長決定）。〜12:00＝区間1／12:00〜12:20＝区間1+2／12:20〜＝区間1+2+3。社長「11:50なら1区分の販売予定個数に対する実販売数、12:10だったら1、2区分の合計」。⚠ **区間の途中で按分しない。**分母が区間の頭で丸ごと立つので区間の途中は必ず100%を割り、12:00と12:20で数字がいったん落ちる。**これは仕様。**★🔴 **色分けのしきい値は入れていない**（社長決定 2026-09-13「とりあえず1（棒グラフだけ）でいい」）。実測 9/11 で ±20% を当てると**12:15まで5エリア全部が赤**になり、赤が合図にならなかったため。棒は 濃い＝売れた分／斜線＝いつもに届いていない分／緑＝いつもを超えた分、縦線＝いつもどおり。目盛りは**0〜140%固定で全エリア共通**（可変にすると棒の見比べが壊れる）。★**なぜ予定＝いつもどおりと言えるか**＝3区間予定は `当日配分(L列) × その拠点の販売カーブの3区間比率` で前夜に作るので、中身は「その拠点が普段その時間までに売っている割合」。実測 9/11 の区間1の割合＝銀座61%／赤坂55%／お茶の水45%／芝41%／神谷40%で、**前半に強い銀座と後半に強い拠点では同じ販売数でも判定が変わる**（社長の見立てどおり）。★⚠ **3区間予定を持たない拠点は分子からも分母からも外す**（置き弁・スポット・新規は納品数の決まり方が違う）。外した拠点は棒の下に「予定なし: ◯◯」と必ず出す。9/11 実測で外れたのは芝新規・新規1・大学院大学・森②・大手町・シビック・銀座2。★⚠ 販売数からは**お茶と「配分外」の商品だけ**を除く。**他社製3商品は除かない**（3区間予定側に載っているので、外すと分子だけ痩せる）。★**取得**＝メインGASに読み取り専用の `?action=getBandPlan&date=` を新設。拠点単位の `[区間1,区間2,区間3]` だけ返す（商品ユニット286行はスマホへ送らない）。端末は**その日1回だけ**取って localStorage に置き、5分周回に混ぜても2回目以降はサーバーへ行かない。取れない日は**棒が出ないだけ**で従来どおり動く。要: メインGAS @2026-09-13 以降（`getBandPlan`）。 -->
@@ -331,6 +332,20 @@ body {
   border: 1.5px solid var(--border); border-radius: 8px; background: var(--white); color: var(--ink); font-family: inherit;
 }
 .tk-qty.filled { border-color: var(--blue); background: #EAF2FB; font-weight: 700; }
+
+/* ★2026-09-14 配達の取り置き（拠点＝配達 を選んだ時だけ出る） */
+.tk-deliv-box {
+  display: none;
+  background: #FFF7E6; border: 1.5px solid #F0C36D; border-radius: 8px;
+  padding: 10px 12px 2px; margin: 4px 0 10px;
+}
+.tk-deliv-box.show { display: block; }
+.tk-deliv-head {
+  font-size: 12px; font-weight: 700; color: #8A6D00; margin-bottom: 8px;
+}
+.tk-deliv-box .tk-field-label { color: #8A6D00; }
+/* 帳票は3択なので文字を1段落とす（375px で「納品書/請求書/領収書」が収まるように） */
+.tk-doc-btn { font-size: 13px; }
 
 .tk-editing-banner {
   display: none; align-items: center; justify-content: space-between;
@@ -1934,7 +1949,7 @@ body {
       <div class="tk-row-2">
         <div class="tk-field">
           <label class="tk-field-label">拠点</label>
-          <select id="tk-location" class="tk-select"></select>
+          <select id="tk-location" class="tk-select" onchange="onToriokiLocationChange()"></select>
         </div>
         <div class="tk-field">
           <label class="tk-field-label">時間</label>
@@ -1959,6 +1974,35 @@ body {
       <div class="tk-field">
         <label class="tk-field-label">備考</label>
         <textarea id="tk-note" class="tk-textarea" placeholder="メモ（任意）"></textarea>
+      </div>
+
+      <!-- ★2026-09-14 配達を選んだ時だけ出る。ここの内容は登録と同時に
+           配達オーダー受付表SSの新しい行へ自動で書き込まれる（帳票はそこから作られる）。 -->
+      <div class="tk-deliv-box" id="tk-deliv-box">
+        <div class="tk-deliv-head">🚚 配達の情報（オーダー表に自動で書き込まれます）</div>
+        <div class="tk-field">
+          <label class="tk-field-label">お届け先住所</label>
+          <input type="text" id="tk-addr" class="tk-input" placeholder="東京都◯◯区◯◯1-2-3 ◯◯ビル3階">
+        </div>
+        <div class="tk-field">
+          <label class="tk-field-label">支払い方法</label>
+          <div class="tk-pay-toggle">
+            <button type="button" class="tk-pay-btn active" id="tk-paym-invoice" onclick="setToriokiPayMethod('請求書払い')">請求書払い</button>
+            <button type="button" class="tk-pay-btn" id="tk-paym-cash" onclick="setToriokiPayMethod('当日現金払い')">当日現金払い</button>
+          </div>
+        </div>
+        <div class="tk-field">
+          <label class="tk-field-label">当日必要な帳票</label>
+          <div class="tk-pay-toggle">
+            <button type="button" class="tk-pay-btn tk-doc-btn active" id="tk-doc-納品書" onclick="setToriokiDocType('納品書')">納品書</button>
+            <button type="button" class="tk-pay-btn tk-doc-btn" id="tk-doc-請求書" onclick="setToriokiDocType('請求書')">請求書</button>
+            <button type="button" class="tk-pay-btn tk-doc-btn" id="tk-doc-領収書" onclick="setToriokiDocType('領収書')">領収書</button>
+          </div>
+        </div>
+        <div class="tk-field">
+          <label class="tk-field-label">帳票の宛名</label>
+          <input type="text" id="tk-atena" class="tk-input" placeholder="株式会社◯◯（空ならお名前を使います）">
+        </div>
       </div>
 
       <div class="tk-section-title">商品（個数）</div>
@@ -2260,6 +2304,9 @@ const STORAGE_KEY_REMINDERS = 'oedo_driver_reminders';
 const SELF_ACTION_GRACE_MS = 5000;       // 自操作後5秒はサーバー同期を抑制（A3）
 const DRIVER_STATE_POLL_MS = 10000;      // 10秒間隔ポーリング（A3）
 
+// ★2026-09-14 取り置きタブの拠点セレクトで「配達」を表す値（GAS 側の TORIOKI_DELIVERY_LOC_ と対）
+const TK_DELIV_LOC = '配達';
+
 const state = {
   userId: '',
   userName: '',
@@ -2292,6 +2339,9 @@ const state = {
     editingId: '',
     showDelivery: false,
     payment: '未会計',
+    // ★2026-09-14 配達の取り置き（拠点='配達' の時だけ使う）
+    payMethod: '請求書払い',
+    docType:   '納品書',
   },
   move: {                               // ★ NEW（v1.5 拠点移動）
     inited: false,
@@ -5678,7 +5728,50 @@ async function populateToriokiLocations_() {
 
   const opts = names.map(n => `<option value="${_esc(n)}">${_esc(n)}</option>`);
   opts.push(`<option value="店前">店前</option>`);   // 末尾に店前
+  opts.push(`<option value="${TK_DELIV_LOC}">🚚 ${TK_DELIV_LOC}</option>`);   // ★2026-09-14 その次に配達
   sel.innerHTML = opts.join('');
+  onToriokiLocationChange();
+}
+
+/* ★2026-09-14 配達の取り置き ─────────────────────────────────────
+   拠点で「配達」を選ぶと、住所・支払い方法・当日必要な帳票・宛名の欄が出る。
+   登録すると サーバー側が 配達オーダー受付表SS の新しい行にそのまま書き込む
+   （帳票は21時のバッチがその行から作る）。
+   ⚠ 仕込み・盛り出しは従来どおり「取置-」行で乗るので、オーダー表の行は帳票専用。
+   ⚠ TK_DELIV_LOC は state の直前で宣言してある（const は巻き上がらないので、
+      ここに置くと先に呼ばれた時に ReferenceError でスクリプトごと死ぬ）。 */
+
+function isToriokiDelivery_() {
+  const sel = document.getElementById('tk-location');
+  return !!sel && sel.value === TK_DELIV_LOC;
+}
+
+function onToriokiLocationChange() {
+  const box = document.getElementById('tk-deliv-box');
+  if (!box) return;
+  const on = isToriokiDelivery_();
+  box.classList.toggle('show', on);
+  // 配達の時は配達商品が要る。勝手にONにする（OFFには戻さない＝手で出した人の意図を消さない）
+  if (on && !state.torioki.showDelivery) {
+    state.torioki.showDelivery = true;
+    const sw = document.getElementById('tk-show-delivery');
+    if (sw) sw.checked = true;
+    renderToriokiProducts_();
+  }
+}
+
+function setToriokiPayMethod(val) {
+  state.torioki.payMethod = val;
+  document.getElementById('tk-paym-invoice').classList.toggle('active', val === '請求書払い');
+  document.getElementById('tk-paym-cash').classList.toggle('active', val === '当日現金払い');
+}
+
+function setToriokiDocType(val) {
+  state.torioki.docType = val;
+  ['納品書', '請求書', '領収書'].forEach(k => {
+    const b = document.getElementById('tk-doc-' + k);
+    if (b) b.classList.toggle('active', k === val);
+  });
 }
 
 async function loadToriokiProducts_() {
@@ -5815,6 +5908,7 @@ function renderToriokiList_() {
         </div>
         <div class="tk-card-loc">${_esc(rv.location || '')}</div>
         <div class="tk-card-name">👤 ${_esc(rv.name || '(名前なし)')}${rv.contact ? '　📞 ' + _esc(rv.contact) : ''}</div>
+        ${rv.location === TK_DELIV_LOC ? `<div class="tk-card-note">🚚 ${_esc(rv.address || '(住所なし)')}<br>💳 ${_esc(rv.payMethod || '')}　📄 ${_esc(rv.docType || '')}${rv.atena ? '　宛名 ' + _esc(rv.atena) : ''}</div>` : ''}
         <div class="tk-card-items">${itemsHtml || '（商品なし）'}</div>
         ${rv.note ? `<div class="tk-card-note">📝 ${_esc(rv.note)}</div>` : ''}
         <div class="tk-card-btns">
@@ -5836,6 +5930,13 @@ function loadToriokiToForm(toriokiId) {
   document.getElementById('tk-contact').value   = rv.contact || '';
   document.getElementById('tk-note').value      = rv.note || '';
   setToriokiPayment(rv.payment === '会計済み' ? '会計済み' : '未会計');
+
+  // ★2026-09-14 配達の4項目
+  document.getElementById('tk-addr').value  = rv.address || '';
+  document.getElementById('tk-atena').value = rv.atena   || '';
+  setToriokiPayMethod(rv.payMethod === '当日現金払い' ? '当日現金払い' : '請求書払い');
+  setToriokiDocType(['納品書', '請求書', '領収書'].indexOf(rv.docType) >= 0 ? rv.docType : '納品書');
+  onToriokiLocationChange();
 
   // 配達商品が含まれる場合は配達商品表示をON
   const hasDelivery = (rv.items || []).some(it => {
@@ -5890,6 +5991,12 @@ function resetToriokiForm() {
   document.getElementById('tk-note').value = '';
   document.getElementById('tk-time').value = '';
   setToriokiPayment('未会計');
+  // ★2026-09-14 配達の4項目（拠点セレクトは触らない＝続けて同じ配達先を入れる時に楽）
+  document.getElementById('tk-addr').value  = '';
+  document.getElementById('tk-atena').value = '';
+  setToriokiPayMethod('請求書払い');
+  setToriokiDocType('納品書');
+  onToriokiLocationChange();
   // 数量クリア（表示状態は維持）
   renderToriokiProducts_({});
   const btn = document.getElementById('tk-save-btn');
@@ -5905,6 +6012,10 @@ async function saveToriokiForm() {
   const contact  = document.getElementById('tk-contact').value.trim();
   const note     = document.getElementById('tk-note').value.trim();
   const payment  = state.torioki.payment || '未会計';
+  // ★2026-09-14 配達の4項目（拠点='配達' の時だけ送る）
+  const isDeliv  = (location === TK_DELIV_LOC);
+  const address  = document.getElementById('tk-addr').value.trim();
+  const atena    = document.getElementById('tk-atena').value.trim();
 
   // 商品収集
   const qtys = collectToriokiQtys_();
@@ -5918,12 +6029,19 @@ async function saveToriokiForm() {
   if (!location) { alert('拠点を選択してください'); return; }
   if (!time)     { alert('時間を入力してください'); return; }
   if (items.length === 0) { alert('商品の個数を1つ以上入力してください'); return; }
+  if (isDeliv && !address) { alert('お届け先住所を入力してください'); return; }
 
   const payload = {
     action: 'saveTorioki',
     toriokiId: state.torioki.editingId || '',
     date, location, name, contact, time, payment, note, items,
   };
+  if (isDeliv) {
+    payload.address   = address;
+    payload.payMethod = state.torioki.payMethod || '請求書払い';
+    payload.docType   = state.torioki.docType   || '納品書';
+    payload.atena     = atena;
+  }
 
   const btn = document.getElementById('tk-save-btn');
   const orig = btn.textContent;
@@ -5936,6 +6054,12 @@ async function saveToriokiForm() {
       alert('登録に失敗しました：' + ((data && data.error) || '不明なエラー'));
       btn.disabled = false; btn.textContent = orig;
       return;
+    }
+    // ★2026-09-14 オーダー表へ書けなかった時は必ず出す。
+    //   黙って落ちると帳票が作られないまま当日を迎える。
+    if (data.orderSync && data.orderSync.ok === false) {
+      alert('取り置きは登録しましたが、配達オーダー受付表への書き込みに失敗しました。\n'
+          + '手でオーダー表に入れてください。\n理由：' + (data.orderSync.error || '不明'));
     }
     btn.textContent = state.torioki.editingId ? '✅ 更新しました' : '✅ 登録しました';
     resetToriokiForm();
