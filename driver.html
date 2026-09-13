@@ -8290,13 +8290,22 @@ async function rtLoadBandPlan_() {
       if (ok_(o)) { rtBandPlan = o; return; }
     }
   } catch (e) {}
-  try {
-    const d = await rtFetchJSON(`${GAS_URL}?action=getBandPlan&date=${encodeURIComponent(today)}`);
-    if (d && d.ok && d.loc) {
-      rtBandPlan = d;
-      try { localStorage.setItem(RT_BAND_KEY, JSON.stringify(d)); } catch (e) {}
-    }
-  } catch (e) { console.warn('getBandPlan', e); }
+  /* ⚠ **3回まで試す。**`/exec` は確率的にHTMLのエラーページを返すことがあり（→ memory `gas-exec-flaky-404`）、
+     `rtFetchJSON` は JSON.parse でそのまま落ちる。ここは**その日1回きりの取得**なので、
+     1回スカを引くと次の5分周回まで棒が出ない。取れるまで待つ価値がある。 */
+  for (let i = 0; i < 3; i++) {
+    try {
+      const d = await rtFetchJSON(
+        `${GAS_URL}?action=getBandPlan&date=${encodeURIComponent(today)}&_cb=${Date.now()}_${i}`);
+      if (d && d.ok && d.loc) {
+        rtBandPlan = d;
+        try { localStorage.setItem(RT_BAND_KEY, JSON.stringify(d)); } catch (e) {}
+        return;
+      }
+      if (d && d.ok === false) return;          // 「その日の3区間予定がありません」＝叩き直しても同じ
+    } catch (e) { console.warn('getBandPlan', i, e); }
+    await new Promise(r => setTimeout(r, 1200));
+  }
 }
 
 /* いまが何区間目までか（1＝〜12:00 / 2＝〜12:20 / 3＝それ以降） */
