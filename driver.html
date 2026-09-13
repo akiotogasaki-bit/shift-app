@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <!-- driver v7.0 (2026-09-09) 【スポット拠点でも「残数だけ保存」できるようにした】オーナー決定「3つとも直す」。★何が問題だったか＝スポット拠点は①残数 → クーポン → 「💰 売上を確定」（サーバー往復）→ ②あるべき現金 → レジの現金 という順番を**全部通さないと1文字も残らない**作りだった。確定ボタンの解禁条件が `ccIsSpot ? (!ccSpot || cashInput === '')` で、`ccSpot`（spotPreview の成功応答）が無いと押せないため。置き弁は1画面で終わるのにスポットだけ全手順必須で、**14:00 のリマインドが「完売した拠点も『0』で送ってください」と書いているのに、スポットでは 0 だけ送ることが構造的にできなかった**（残数の未報告が出る主因）。★変更＝①の画面に「💾 残数だけ保存」を足した。押すと `submitCollectionCheck` を **`residualOnly:true`** で投げ、サーバーは**実査残数・実査残数詳細JSON・実査時刻・ドライバー名だけ**を書く。🔴 **判定列は触らない**＝判定は `getCollectionCheckTargets` などで「'未回収' 以外＝回収済み」という回収フラグとして読まれているので、ここを書くと**その拠点が回収リストから消えて、あとから現金を入れられなくなる**。触らないので拠点はリストに残り、売上確定・PayPay取込・現金入力は**あとから通常の締めでそのまま通せる**（手順は1つも消していない・増やしてもいない＝途中で抜けられるようにしただけ）。★あわせて、一度保存した残数を開き直した時に**拠点振替ぶんが二重に引かれる**のを直した（`it.actual` は振替を引いた後の実数なので、そこからさらに引いてはいけない）。★スポット以外の拠点には出さない＝金庫を数えさせる2段階の縛りは従来どおり。要: メインGAS 2026-09-09 以降（`submitCollectionCheck` の `residualOnly`）。 -->
 <!-- driver v7.1 (2026-09-10) 【実況のマトリクスを「レジ開始」で埋める】社長指示A。★**問題**＝マトリクスの数字は `getTodayIntermediate`（＝**販売中ログ**）から作るので、**1個売れるまで納品数すら出ず**、11時台は虫食いに見える。ドライバーから「1個売れないと表示されないのでは」と指摘があり実測でも正しかった。📌 2026-09-10 の初回販売は **10:58〜11:47** に散らばり、**11:30時点では半分しか埋まらない**（銀座エリア＝京橋11:28・銀座11:29・ダイビル11:35・銀座2は終日なし＝社長報告「11:30に銀座エリアが出ていなかった」の正体）。★**直し方**＝`getTodayIntermediate` に `&withStarted=1` を足し、**レジ開始ログにあって販売中ログに無い拠点**を「販売数0・納品数だけ」で返す（`startedOnly:true`）。実況タブの2か所（`rtLoadAll`／`rtRefreshArea`）だけ付ける。★⚠ **回収タブは従来どおり**（`getCollectionBundle` 経由も含め `withStarted` を付けない）＝「販売中の拠点」を数えている所の挙動を変えないため。★⚠ 古いGASでも壊れない（未知のパラメータは無視されて従来の結果が返る）。要メインGAS @702。 -->
+<!-- driver v7.2 (2026-09-13) 【エリアの売れ行き棒／担当エリアを一番上へ】社長指示「ドライバーアプリのリアルタイムのマトリクス、自分の担当拠点が一番上に表示されるように」「エリア別で販売予定数に対しての進捗率」「いつもより売れ行きがいいのか悪いのか」。★**①並べ替え**＝エリア別マトリクスのブロック順を「**自分の担当エリアが先頭**」にした。社長「基本的にドライバーは自分のエリアを見る。だから一番上に表示」。判定は当日の担当（`state.todayAssignment`＝`getLocationsWithAssignment`＝主担当＋担当例外）で、拠点数がいちばん多いエリアを1つ選ぶ。取れない時だけ拠点マスタK列の主担当に落とし、それも取れなければ**従来どおりの並び**（`_rtMyArea_`）。★**②売れ行き棒**＝マトリクスの一番上に「エリア別 売れ行き」カードを新設。担当エリアだけ大きく、下に「ほかのエリア」を細い行で縦に並べる。各エリアブロックの見出しにも同じ棒を出す（ブロックの中まで来た人がカードへ戻らなくて済む）。★**進捗率＝実販売数 ÷ いまいる区間までの販売予定数の合計**（社長決定）。〜12:00＝区間1／12:00〜12:20＝区間1+2／12:20〜＝区間1+2+3。社長「11:50なら1区分の販売予定個数に対する実販売数、12:10だったら1、2区分の合計」。⚠ **区間の途中で按分しない。**分母が区間の頭で丸ごと立つので区間の途中は必ず100%を割り、12:00と12:20で数字がいったん落ちる。**これは仕様。**★🔴 **色分けのしきい値は入れていない**（社長決定 2026-09-13「とりあえず1（棒グラフだけ）でいい」）。実測 9/11 で ±20% を当てると**12:15まで5エリア全部が赤**になり、赤が合図にならなかったため。棒は 濃い＝売れた分／斜線＝いつもに届いていない分／緑＝いつもを超えた分、縦線＝いつもどおり。目盛りは**0〜140%固定で全エリア共通**（可変にすると棒の見比べが壊れる）。★**なぜ予定＝いつもどおりと言えるか**＝3区間予定は `当日配分(L列) × その拠点の販売カーブの3区間比率` で前夜に作るので、中身は「その拠点が普段その時間までに売っている割合」。実測 9/11 の区間1の割合＝銀座61%／赤坂55%／お茶の水45%／芝41%／神谷40%で、**前半に強い銀座と後半に強い拠点では同じ販売数でも判定が変わる**（社長の見立てどおり）。★⚠ **3区間予定を持たない拠点は分子からも分母からも外す**（置き弁・スポット・新規は納品数の決まり方が違う）。外した拠点は棒の下に「予定なし: ◯◯」と必ず出す。9/11 実測で外れたのは芝新規・新規1・大学院大学・森②・大手町・シビック・銀座2。★⚠ 販売数からは**お茶と「配分外」の商品だけ**を除く。**他社製3商品は除かない**（3区間予定側に載っているので、外すと分子だけ痩せる）。★**取得**＝メインGASに読み取り専用の `?action=getBandPlan&date=` を新設。拠点単位の `[区間1,区間2,区間3]` だけ返す（商品ユニット286行はスマホへ送らない）。端末は**その日1回だけ**取って localStorage に置き、5分周回に混ぜても2回目以降はサーバーへ行かない。取れない日は**棒が出ないだけ**で従来どおり動く。要: メインGAS @2026-09-13 以降（`getBandPlan`）。 -->
 <!-- driver v6.9 (2026-09-09) 【残数タブを速くする／取れなかった事を分かるようにする／見ていない間は止める】オーナー要望「正確な数字をなるべく早く（軽く）見たい」の後半。★**数字の意味は一切変えていない。速さだけ。**★**何が重かったか**＝`getResidualSummary` は1回の呼び出しで**フルシート読みを5〜6本**していた（①残数ログ ②報告ログ `getTodayReports` ③販売中ログ `getTodayIntermediate`＝単独でも平均13.5秒の最重量 ④`getLocationsWithAssignment` ⑤拠点間移動ログ ⑥`getResidualByLocation`＝残数照合ログ＋移動ログ再読み）。実測＝直近6営業日で**平均25.9秒・最大124.5秒**、誰も使っていない時間に単独で叩いても**17.7秒**。そして driver は**これを30秒ごとに叩いていた**。★**気づき**＝画面に大きく出ている数字（`locationConfirmed`／`locationTotal`／`locationAreas`）に要るのは**⑥の1本だけ**。残りは `calculatedTotal`（小さく出る参考値）と `drivers[]`（ドライバー行）のためだけに毎回走っていた。★**直し方**＝メインGAS `getResidualSummary(part)` に読む範囲の引数を足し、doGet で `&part=` を受ける。`part=loc`＝⑥だけ／`part=drivers`＝①②③④⑤だけ／**part 無し＝従来どおり全部**（既存の呼び出しは1つも壊れない）。driver は**30秒の周回を `part=loc` にし、`calculatedTotal` とドライバー行は `part=drivers` で5分ごと**に取る。★🔴 **画面から消したものは無い。**出る頻度が違うだけで、🔄更新／残数タブを開いた時／アプリを前面に戻した時は**今までどおり全部**取り直す。★**実測（2026-09-09 朝・同条件）**＝改善前 10.1〜16.1秒（6回平均**11.9秒**）→ `part=loc` **3.6〜4.6秒（平均4.0秒）＝約1/3**。`part=drivers` は7.6〜9.6秒だが**5分に1回**なので、30秒あたりの負荷は 11.9秒→約4.7秒＝**6割減**。★**② 取れなかった事を分かるようにした**＝従来は `catch` で握りつぶしており、**通信が詰まった端末は古い数字を何時間でも黙って出し続けていた**（現場の「アプリの数字が合っていない」の正体がこれの可能性）。⚠ 赤いエラーは大きく出さない（誤リマインドを嫌って握りつぶした経緯があるため）。1回の失敗では何も出さず（電波の谷は日常）、**2回続いた時＝約1分**から「HH:MM更新 ・接続待ち」と薄い琥珀色で出すだけ。時刻を見れば古さが分かる。★**③ 見ていない間はポーリングを止めた**＝`syncDriverState` は v5.3 で `visibilitychange` の対象に入れたのに**この30秒タイマーだけ外れていた**。残数タブを開いたままポケットに入れると、見ていない30分の間も60回叩き続ける。同じ仕組みに乗せた。★⚠ **取れていない側は絶対に上書きしない**（空で塗るとドライバー行や数字が消えたように見える）。拠点の入力がまだ1件も無い時間帯（`residualLocEmpty`）は軽い口に出す物が無いので**従来どおり全部取る周回に自動で戻る**。★⚠ **古いGASでも壊れない**＝part を知らない版は余計なパラメータを無視して全部返すだけ。要: メインGAS @671 以降。 -->
 <!-- driver v6.8 (2026-09-02) 【回収タブを速くする／更新ボタンを大きく】社長「ドライバーアプリの回収タブの読み込みを早くしたい。あと、更新ボタンを少し大きくしたい」。★**遅さの正体は重い処理ではなく往復の回数**。2026-09-02 実測＝`getTodayReports` 4.9〜5.9秒／`getTodayIntermediate` 4.1〜6.1秒／`getDriverState` 5.6〜7.0秒（**1回だけ65秒**）。**11バイトしか返っていないのに5秒**で、/exec は1往復あたり約5秒の固定コストがある。シートも小さく（報告ログ497行・販売中ログ1804行・回収状態1398行・休止拠点85行）**行数は原因ではない**（→ memory「アプリが遅い時の調べ方」＝犯人は重さより頻度）。★**直した内容**＝①メインGASに **`getCollectionBundle`**（v2026-09-02）を新設し、回収タブが使う3本を**1往復**にまとめた。更新ボタン/タブ切替は **3往復→1往復**、起動時は **6往復→4往復**。②1本あたり **12秒で打ち切る**（`COLLECTION_FETCH_TIMEOUT_MS`）。従来は `Promise.all` なので1本詰まると全部待ち、65秒のあいだボタンが「更新中…」で固まっていた。③更新ボタンを 11px/padding 4px12px（タップ範囲 約24px）→ **14px/padding 9px20px・min-height 40px** に拡大。★⚠ **数字の作り方は1つも変えていない。**サーバーは既存3関数をそのまま呼んで1つのJSONで返すだけ。★⚠ **古いGASには `getCollectionBundle` が無い**＝`bundle:true` が返らなければ**従来どおり3本を叩く**（落ちない）。doGet は未知の action でも200で別JSONを返すのでステータスコードでは判定できない（→ memory「doGetは未知のactionでも200を返す」）。★⚠ **起動時に取れなかった場合、キャッシュの報告を空で潰さないよう直した**。従来は失敗しても空配列で作り直しており、通信が詰まった起動では報告済みの拠点が全部「未報告」に戻ってリマインドが誤発射される形だった（`reloadCollectionData_` には元からあったガードを起動側にも合わせた）。要: メインGAS v2026-09-02 以降。 -->
 <!-- driver v6.7 (2026-09-02) 【実況マトリクスの完売を薄緑→薄赤に】社長「ドライバーマトリクスのリアルタイムの完売の色を緑→赤に変えて欲しい」。★エリア別マトリクスの完売セル（販売数≧納品数）を 背景 var(--green-light) #D5F5E3 ／文字 #1A7A42 から **背景 #FDECEC ／文字 var(--red) #C0392B** に変更。★あわせて**納品マイナスのセルの色付けを外した**（社長「納品マイナスはいろつけなくていい」）＝`.matrix-cell.minus` / `.matrix-total-cell.minus` の背景・文字色のCSSを削除。完売と同じ薄赤だったため、色を変えると見分けがつかなくなるのを避ける。判定ロジック（minus→soldout→short→通常の順・50%の閾値）は1行も触っていない。売り切れそうの薄オレンジ #FDEBD0 も従来どおり。★完売率ベスト3のヘッダーと「報告済み」バッジの薄緑はマトリクスとは別物なので変えていない。GAS変更なし。 -->
@@ -1584,6 +1585,86 @@ body {
   #tab-realtime .area-refresh-btn:disabled {
     opacity: .5; cursor: default;
   }
+  /* ═══ ★2026-09-13 v7.2 エリアの売れ行き棒（社長指示） ═══
+     棒＝実販売数／縦線＝いまいる区間までの販売予定数（＝いつもどおりのペース）。
+     🔴 **色分けのしきい値は持たせない**（社長決定 2026-09-13）。
+       分母が区間の頭で丸ごと立つ作りなので、100%±n% で塗ると午前中は必ず全エリア赤になる。
+       実測 9/11：12:15 まで5エリア全部が ±20% の下側に入っていた。
+     目盛りは 0〜140% 固定＝**全エリアで共通**。棒の長さを縦に見比べるためで、可変にすると比較が壊れる。 */
+  #tab-realtime .rt-pace {
+    background: var(--white); border: 1px solid var(--border); border-radius: 12px;
+    padding: 13px 14px 14px; margin-bottom: 16px;
+  }
+  #tab-realtime .rt-pace-head { display: flex; align-items: baseline; gap: 8px; }
+  #tab-realtime .rt-pace-title { font-size: 13px; font-weight: 800; letter-spacing: .04em; color: var(--ink); }
+  #tab-realtime .rt-pace-at {
+    font-size: 11px; color: var(--ink-mute); margin-left: auto; white-space: nowrap;
+  }
+  #tab-realtime .rt-pace-basis { font-size: 10.5px; color: var(--ink-mute); margin: 3px 0 12px; }
+  #tab-realtime .rt-pace-rows { display: grid; gap: 6px; }
+  #tab-realtime .rt-prow {
+    display: grid; grid-template-columns: 82px 1fr 54px; align-items: center;
+    column-gap: 10px; row-gap: 3px; padding: 7px 9px; border-radius: 9px; background: var(--cream-dark);
+  }
+  #tab-realtime .rt-prow.mine {
+    grid-template-columns: 1fr auto; padding: 12px 13px 13px; row-gap: 8px;
+    background: var(--cream); box-shadow: inset 0 0 0 1.5px var(--gold);
+  }
+  #tab-realtime .rt-prow.mine .rt-pname { font-size: 15px; }
+  #tab-realtime .rt-prow.mine .rt-ppct { font-size: 30px; }
+  #tab-realtime .rt-prow.mine .rt-bar { grid-column: 1 / -1; height: 18px; }
+  #tab-realtime .rt-prow.mine .rt-bar > i { top: -5px; bottom: -5px; width: 3px; opacity: .85; }
+  #tab-realtime .rt-prow.mine .rt-pmeta { font-size: 12px; color: var(--ink-soft); }
+  #tab-realtime .rt-pname {
+    font-size: 12.5px; font-weight: 800; color: var(--ink);
+    display: flex; align-items: center; gap: 5px; min-width: 0;
+  }
+  #tab-realtime .rt-mytag {
+    font-size: 9.5px; font-weight: 800; color: var(--gold); letter-spacing: .06em;
+    border: 1px solid var(--gold); border-radius: 3px; padding: 0 4px; white-space: nowrap;
+  }
+  #tab-realtime .rt-ppct {
+    font-size: 17px; font-weight: 700; text-align: right; color: var(--ink);
+    font-variant-numeric: tabular-nums; letter-spacing: -.02em;
+  }
+  #tab-realtime .rt-pmeta {
+    grid-column: 1 / -1; font-size: 10.5px; color: var(--ink-mute); font-variant-numeric: tabular-nums;
+  }
+  #tab-realtime .rt-others {
+    font-size: 10px; color: var(--ink-mute); font-weight: 700; letter-spacing: .1em; margin: 11px 0 5px;
+  }
+  #tab-realtime .rt-bar {
+    position: relative; height: 13px; border-radius: 4px; background: rgba(130,120,105,.16);
+  }
+  #tab-realtime .rt-bar > b {
+    position: absolute; top: 0; bottom: 0; left: 0; display: block;
+    border-radius: 4px 0 0 4px; background: var(--ink-soft);
+  }
+  #tab-realtime .rt-bar > s { position: absolute; top: 0; bottom: 0; display: block; text-decoration: none; }
+  #tab-realtime .rt-bar > s.gap {
+    background: repeating-linear-gradient(-45deg, var(--red) 0 1.5px, transparent 1.5px 5px);
+    opacity: .5; border-radius: 0 4px 4px 0;
+  }
+  #tab-realtime .rt-bar > s.plus { background: var(--green); border-radius: 0 4px 4px 0; }
+  #tab-realtime .rt-bar > i {
+    position: absolute; top: -4px; bottom: -4px; width: 2px;
+    background: var(--ink); opacity: .75; text-decoration: none;
+  }
+  #tab-realtime .rt-legend {
+    display: flex; gap: 12px; flex-wrap: wrap; font-size: 10.5px; color: var(--ink-mute); margin-top: 11px;
+  }
+  #tab-realtime .rt-legend span { display: inline-flex; align-items: center; gap: 5px; }
+  #tab-realtime .rt-chip { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  /* エリアブロックの見出しにも同じ棒を出す（カードまでスクロールを戻さなくて済む） */
+  #tab-realtime .area-pct {
+    margin-left: auto; font-size: 22px; font-weight: 700; color: var(--ink);
+    font-variant-numeric: tabular-nums; letter-spacing: -.02em; line-height: 1;
+  }
+  #tab-realtime .area-pace { display: grid; gap: 5px; margin: 0 0 12px; }
+  #tab-realtime .area-pace .rt-bar { height: 14px; }
+  #tab-realtime .area-pace .rt-pmeta { font-size: 11px; }
+  #tab-realtime .area-block.mine { box-shadow: 0 1px 4px rgba(0,0,0,.04), inset 0 0 0 1.5px var(--gold); }
+
   #tab-realtime .matrix-scroll {
     overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 8px;
   }
@@ -7825,6 +7906,10 @@ async function rtLoadAll() {
       rtFetchJSON(`${GAS_URL}?action=getTodayIntermediate&withStarted=1`),
       rtFetchJSON(`${GAS_URL}?action=getDriverState`).catch(() => ({ inactive: [] })),
       rtFetchJSON(`${GAS_URL}?action=getMoveAdjByLoc`).catch(() => ({ adj: {} })),  // v7
+      /* ★2026-09-13 v7.2 3区間予定（エリアの売れ行き棒）。**その日1回しかサーバーへ行かない**
+         （2回目以降は localStorage を見て即 return）ので、5分周回に混ぜても負荷は増えない。
+         戻り値は使わない＝取れなくてもここから先は従来どおり動く。 */
+      rtLoadBandPlan_().catch(() => {}),
     ]);
     rtMasterData = master;
     rtMoveAdjMap = (moveAdj && moveAdj.adj) ? moveAdj.adj : {};  // v7
@@ -8164,6 +8249,143 @@ function _teaIds_() {
   return (rtMasterData.products || []).filter(p => p.name.includes('お茶')).map(p => p.id);
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   ★2026-09-13 v7.2【エリアの売れ行き】3区間予定に対して、いま何%売れているか
+   ═══════════════════════════════════════════════════════════════════════════
+   社長指示「エリア別で販売予定数に対しての進捗率」「いつもより売れ行きがいいのか悪いのか」。
+
+   【定義（社長決定 2026-09-13）】
+     進捗率 ＝ 実販売数 ÷ **いまいる区間までの販売予定数の合計**
+       〜12:00 … 区間1 ／ 12:00〜12:20 … 区間1+2 ／ 12:20〜 … 区間1+2+3
+     社長「11:50なら1区分の販売予定個数に対する実販売数、12:10だったら1、2区分の合計」。
+   ⚠ **区間の途中で按分しない。**区間が始まった瞬間に分母がその区間ぶん丸ごと立つので、
+     区間の途中は必ず100%を割り、12:00と12:20でいったん数字が落ちる。**これは仕様。**
+     だから**色分けのしきい値を入れていない**（入れると午前中は全エリア赤で、合図にならない）。
+     実測 9/11：±20% だと 12:15 まで5エリア全部が赤側だった。
+
+   【なぜ「いつもどおりのペース」と言えるか】3区間予定は
+     `当日配分(L列) × その拠点の販売カーブの3区間比率` で前夜に作る。中身は
+     **その拠点が普段その時間までに売っている割合**なので、予定＝平常ペースになる。
+     ＝前半に強い銀座と後半に強い拠点で、同じ販売数でも判定が変わる（社長の見立てどおり）。
+
+   ⚠ **3区間予定を持たない拠点は、分子からも分母からも外す。**
+     置き弁・スポット・新規は納品数の決まり方が違うので、混ぜると比率が狂う。
+     外した拠点は棒の下に「予定なし: ◯◯」と必ず出す（黙って外さない）。
+   ⚠ お茶と「配分外」の商品は販売数から除く（3区間予定に載らないため）。
+     **他社製3商品は除かない**＝3区間予定側には載っているので、外すと分子だけ痩せる。
+   ═══════════════════════════════════════════════════════════════════════════ */
+const RT_BAND_KEY = 'oedo_driver_bandplan_v1';
+let rtBandPlan = null;            // { date, loc: {拠点ID:[区間1,区間2,区間3]} }
+
+/* その日1回だけ取って localStorage に置く（getPatrolPlan と同じ考え方）。
+   ⚠ 取れなくても画面は従来どおり出す。棒が出ないだけにする。 */
+async function rtLoadBandPlan_() {
+  const today = ccToday_();
+  const ok_ = (o) => !!(o && o.date === today && o.loc);
+  if (ok_(rtBandPlan)) return;
+  try {
+    const raw = localStorage.getItem(RT_BAND_KEY);
+    if (raw) {
+      const o = JSON.parse(raw);
+      if (ok_(o)) { rtBandPlan = o; return; }
+    }
+  } catch (e) {}
+  try {
+    const d = await rtFetchJSON(`${GAS_URL}?action=getBandPlan&date=${encodeURIComponent(today)}`);
+    if (d && d.ok && d.loc) {
+      rtBandPlan = d;
+      try { localStorage.setItem(RT_BAND_KEY, JSON.stringify(d)); } catch (e) {}
+    }
+  } catch (e) { console.warn('getBandPlan', e); }
+}
+
+/* いまが何区間目までか（1＝〜12:00 / 2＝〜12:20 / 3＝それ以降） */
+function _rtBandsUpTo_() {
+  const n = new Date();
+  const m = n.getHours() * 60 + n.getMinutes();
+  return m < 12 * 60 ? 1 : m < 12 * 60 + 20 ? 2 : 3;
+}
+
+/* 売れ行きに数える商品か（お茶と配分外を外す。他社製は数える） */
+function _rtPaceCountsPid_(pid) {
+  const p = (rtMasterData.products || []).find(x => String(x.id) === String(pid));
+  if (!p) return true;
+  if (p.noPlan) return false;
+  return !String(p.name || '').includes('お茶');
+}
+
+/* エリアの売れ行き。perLoc は renderAreaMatrix が作る [{loc, sales}, …]
+   @return {{na:boolean, plan:number, sold:number, rate:number, skip:string[]}} */
+function _rtAreaPace_(perLoc) {
+  const out = { na: true, plan: 0, sold: 0, rate: 0, skip: [] };
+  const bp = (rtBandPlan && rtBandPlan.loc) ? rtBandPlan.loc : null;
+  if (!bp) return out;
+  const upTo = _rtBandsUpTo_();
+  let n = 0;
+  perLoc.forEach(pl => {
+    const b = bp[String(pl.loc.id).trim()];
+    if (!b) { out.skip.push(pl.loc.displayName || pl.loc.name); return; }
+    for (let i = 0; i < upTo; i++) out.plan += Number(b[i]) || 0;
+    Object.keys(pl.sales || {}).forEach(pid => {
+      if (_rtPaceCountsPid_(pid)) out.sold += Number(pl.sales[pid]) || 0;
+    });
+    n++;
+  });
+  /* 予定がまだ小さいうちは判定しない。1〜2個の差で数百%に振れて意味を成さないため。 */
+  if (!n || out.plan < 8) return out;
+  out.na = false;
+  out.rate = out.sold / out.plan * 100;
+  return out;
+}
+
+/* 棒。目盛りは 0〜140% 固定（全エリア共通）。縦線＝100%＝いつもどおり。 */
+const RT_PACE_MAX_  = 140;
+const RT_PACE_TICK_ = 100 / RT_PACE_MAX_ * 100;
+function _rtPaceBar_(p) {
+  if (p.na) return '<span class="rt-bar"></span>';
+  const w    = Math.max(0, Math.min(RT_PACE_MAX_, p.rate)) / RT_PACE_MAX_ * 100;
+  const base = Math.min(w, RT_PACE_TICK_);
+  const seg = (w < RT_PACE_TICK_)
+    ? `<s class="gap" style="left:${w}%;width:${RT_PACE_TICK_ - w}%"></s>`
+    : (w > RT_PACE_TICK_ ? `<s class="plus" style="left:${RT_PACE_TICK_}%;width:${w - RT_PACE_TICK_}%"></s>` : '');
+  return `<span class="rt-bar"><b style="width:${base}%"></b>${seg}<i style="left:${RT_PACE_TICK_}%"></i></span>`;
+}
+function _rtPaceMeta_(p) {
+  if (p.na) {
+    return rtBandPlan ? 'このエリアは3区間予定がありません' : '3区間予定を読み込めませんでした';
+  }
+  const d = Math.round(p.sold - p.plan);
+  return `販売 ${Math.round(p.sold)} / いつもなら ${Math.round(p.plan)}（${d >= 0 ? '+' : ''}${d}個）`
+       + (p.skip.length ? ` ・予定なし: ${p.skip.map(rtEscapeHtml).join('、')}` : '');
+}
+function _rtPacePct_(p) { return p.na ? '—' : Math.round(p.rate) + '%'; }
+
+/* 自分が今日担当しているエリア。拠点数がいちばん多いエリアを1つ返す。
+   ⚠ **当日の担当（state.todayAssignment＝主担当＋担当例外）を先に見る。**
+     取れない時だけ拠点マスタK列の主担当（defaultDriverId）に落とす。 */
+function _rtMyArea_() {
+  const uid = String(state.userId || '');
+  if (!uid) return '';
+  const locs = rtMasterData.locations || [];
+  const count = (pick) => {
+    const c = {};
+    locs.forEach(l => {
+      const area = (l.area || '').trim();
+      if (!area || rtHiddenLoc_(l)) return;
+      if (pick(l)) c[area] = (c[area] || 0) + 1;
+    });
+    return c;
+  };
+  let c = count(l => {
+    const a = state.todayAssignment[l.id];
+    return !!a && String(a.userId || '') === uid;
+  });
+  if (!Object.keys(c).length) c = count(l => String(l.defaultDriverId || '') === uid);
+  let best = '', n = 0;
+  Object.keys(c).forEach(a => { if (c[a] > n) { n = c[a]; best = a; } });
+  return best;
+}
+
 // ── v7: 拠点間移動±の共通ヘルパー（全ビュー同一基準） ──────────────
 // 実効納品オブジェクト（商品ID→数）= 生納品 ＋ rtMoveAdjMap[locId]（商品別）。
 //   deliveryCount（object）/ deliveryCountJson（string）両対応。
@@ -8264,8 +8486,14 @@ function renderAreaMatrix() {
     areaMap[area].minOrder = Math.min(areaMap[area].minOrder, (loc.order != null ? loc.order : 9999));
   });
 
-  // エリア順: 内拠点の最小表示順 → 同値はエリア名
+  /* エリア順: ①自分の担当エリア ②内拠点の最小表示順 ③エリア名
+     ★2026-09-13 v7.2【社長指示】「自分の担当拠点が一番上に表示されるように」
+       「基本的にドライバーは自分のエリアを見る。だから一番上に表示」。
+     ⚠ 担当が取れない時（未ログイン・応援で他エリアに入った日など）は
+       **従来どおりの並び**に落ちる（`_rtMyArea_` が '' を返す）。壊さないための逃げ道。 */
+  const myArea = _rtMyArea_();
   const areaNames = Object.keys(areaMap).sort((a, b) => {
+    if ((a === myArea) !== (b === myArea)) return (a === myArea) ? -1 : 1;
     if (areaMap[a].minOrder !== areaMap[b].minOrder) return areaMap[a].minOrder - areaMap[b].minOrder;
     return a.localeCompare(b, 'ja');
   });
@@ -8276,6 +8504,7 @@ function renderAreaMatrix() {
   }
 
   const areaNameByKey = {};
+  const paceByArea = {};       // ★v7.2 売れ行き。ブロックを回しながら貯めて、最後に上のカードにする
   let html = '';
 
   areaNames.forEach(area => {
@@ -8367,13 +8596,23 @@ function renderAreaMatrix() {
       body += `<tr class="matrix-total-row">${totRow}</tr>`;
     }
 
+    /* ★2026-09-13 v7.2 このエリアの売れ行き。カード（画面の一番上）とここの両方に出す。
+       ⚠ ブロックの中まで来た人がカードまでスクロールを戻さなくて済むように、見出しにも出す。 */
+    const pace = _rtAreaPace_(perLoc);
+    paceByArea[area] = pace;
+
     html += `
-      <div class="area-block" id="area-block-${key}">
+      <div class="area-block${area === myArea ? ' mine' : ''}" id="area-block-${key}">
         <div class="area-block-head">
           <span class="area-name">${rtEscapeHtml(area)}</span>
           <span class="area-loc-count">${perLoc.length}拠点</span>
           <span class="area-updated" id="area-stamp-${key}"></span>
+          <span class="area-pct">${_rtPacePct_(pace)}</span>
           <button class="area-refresh-btn" id="area-btn-${key}" onclick="rtRefreshArea('${key}')">🔄 更新</button>
+        </div>
+        <div class="area-pace">
+          ${_rtPaceBar_(pace)}
+          <span class="rt-pmeta">${_rtPaceMeta_(pace)}</span>
         </div>
         <div class="matrix-scroll">
           <table class="matrix-table">
@@ -8385,7 +8624,54 @@ function renderAreaMatrix() {
   });
 
   window._areaNameByKey = areaNameByKey;
-  wrap.innerHTML = html;
+  wrap.innerHTML = _rtPaceCard_(areaNames, paceByArea, myArea) + html;
+}
+
+/* ★2026-09-13 v7.2 一番上の「エリア別 売れ行き」カード。
+   担当エリアだけ大きく、その下に「ほかのエリア」を細い行で縦に並べる。
+   目盛りが全エリア共通なので、**棒の長さを縦に見比べるだけ**で前後関係が分かる。
+   ⚠ 3区間予定が1つも取れていない日はカードごと出さない（空の枠だけ出すと壊れて見える）。 */
+function _rtPaceCard_(areaNames, paceByArea, myArea) {
+  if (!rtBandPlan || !rtBandPlan.loc) return '';
+  const judged = areaNames.filter(a => paceByArea[a] && !paceByArea[a].na);
+  if (!judged.length) return '';
+
+  const upTo = _rtBandsUpTo_();
+  const basis = (upTo === 1 ? '区間1（〜12:00）' : upTo === 2 ? '区間1+2（〜12:20）' : '区間1+2+3（1日ぶん）')
+              + 'の販売予定数に対する実販売数';
+  const now = new Date();
+  const hhmm = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+
+  let rows = '', others = 0;
+  areaNames.forEach(area => {
+    const p = paceByArea[area] || { na: true, skip: [] };
+    const mine = (area === myArea);
+    if (!mine && p.na) return;                      // 判定できないエリアは細い行では出さない
+    if (!mine && !others++) rows += '<div class="rt-others">ほかのエリア</div>';
+    const name = `<span class="rt-pname">${rtEscapeHtml(area)}`
+               + (mine ? '<span class="rt-mytag">担当</span>' : '') + '</span>';
+    const pct  = `<span class="rt-ppct">${_rtPacePct_(p)}</span>`;
+    const meta = `<span class="rt-pmeta">${_rtPaceMeta_(p)}</span>`;
+    rows += mine
+      ? `<div class="rt-prow mine">${name}${pct}${_rtPaceBar_(p)}${meta}</div>`
+      : `<div class="rt-prow">${name}${_rtPaceBar_(p)}${pct}${meta}</div>`;
+  });
+
+  return `
+    <div class="rt-pace">
+      <div class="rt-pace-head">
+        <span class="rt-pace-title">エリア別 売れ行き</span>
+        <span class="rt-pace-at">${hhmm} 時点</span>
+      </div>
+      <div class="rt-pace-basis">${basis}</div>
+      <div class="rt-pace-rows">${rows}</div>
+      <div class="rt-legend">
+        <span><i class="rt-chip" style="background:var(--ink-soft)"></i>売れた分</span>
+        <span><i class="rt-chip" style="background:repeating-linear-gradient(-45deg,var(--red) 0 1.5px,transparent 1.5px 5px);opacity:.6"></i>いつもに届いていない分</span>
+        <span><i class="rt-chip" style="background:var(--green)"></i>いつもを超えた分</span>
+        <span>│ ＝ いつもどおり</span>
+      </div>
+    </div>`;
 }
 
 // 単一エリアの更新ボタン:
