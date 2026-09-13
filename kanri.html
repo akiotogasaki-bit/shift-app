@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- kanri.html v3.83 (2026-09-13) 【読み取り(GET)に3回リトライ＝「配分調整が表示されない/盛り出しが出ない」の直接原因】社長報告「翌週9/14〜の配分調整が表示されない」「今日の盛り出しも出ないな」。★調査＝データは**サーバー側に正常にある**。2026-09-13(日)の `getSheet2Data`/`getSheet3Data` は `ok:true` で配達3件（後楽園ホール／東京タワー スタジオアース／テレビ朝日「羽鳥慎一モーニングショー」）を返していた。出ていないのは**画面側の取得が落ちている**から。実測：同じ口を12回叩いて **2回が404**（Googleの「ページが見つかりません」HTML）、応答時間も 4.5〜38.9秒。配分調整タブは開いた瞬間に最大15本のGETを投げるので、**全部成功する確率は 0.83^15 ≒ 6%**。🔴 **保存(POST)は v3.70（2026-08-25）で3回リトライを入れたのに、読み取り(GET)は素通しのままだった**（404のHTMLで `res.json()` が落ちる → catch → 「取得エラー」で終わり）。★対応＝`gasGetJson(url)` を新設し、**副作用の無い読み取りだけ**を通す（最大3回・1.2秒→2.4秒待ち）。404 だけでなく「200 なのに doGet の既定応答 `{"dates":[...]}`」も失敗として再送する。キャッシュ避けの `_r=` は**2回目以降だけ**付ける（1回目に付けると先読みのHTTPキャッシュが効かなくなる／付けないと1回目の404がキャッシュから返る）。★通したのは 配分調整(getBasicMasterMatrix)・盛り出し1〜3(getSheet1〜3Data)・仕込み(getSheet4Data)・発注(getOrderData)・献立(getMenuMeta/getMenuSelections/getMenuMonth)・拠点色(getLocationsWithAssignment)・進捗(bmstat)・一括印刷の5本。⚠ **副作用のある口（setBinOverride / bmDecide / importExternal / writeExtResidual / reimportDelivery）は通していない**＝再送すると二重に効く。GAS変更なし＝デプロイ枠を消費しない。 -->
 <!-- kanri.html v3.82 (2026-09-11) 【他社弁当を車載5台の内訳で出す】社長指示「他社製品の車載積み　現地配りの個数なんだけど、納品で指定された個数を**エリアの予定販売数/全体の予定販売数**で車載の欄に自動で書き込んで欲しい」。★メインGAS `extveh`（`extApplyVehicleSplit_`）が納品総数をエリアの予定販売数で按分して**車載のG列**へ書くようにしたので、配分調整の他社弁当行も**拠点列を横断する1マス（総数だけ）から、車載5台は普通のセル・通常拠点は「–」**に変えた。車載セルは編集もできる（手で直したら、その日は自動按分が上書きしない＝サーバー側 `onlyIfMismatch`）。★行頭のバッジは「総数 30」、合計列は**車載計 / 総数**を出し、**食い違う日は赤**（総数が入る前＝0/30 も赤で分かる）。★通常拠点の「–」は現地でドライバーが割り振るという意味（今までと同じ）。配分表・盛り出し表（シート1/2）は今までどおり総数行1行のまま。要メインGAS @708。 -->
 <!-- kanri.html v3.81 (2026-09-11) 【決定 → 初回納品を計算】社長決定「①当日配分で数字を決める → 決定を押したら②初回納品を計算する流れの方が分かりやすい」「L→Gという順番を間違えないで。**Gは必ずLから計算する。直接書き込まない**」。★メインGAS @706 から**分割済みの日は天候プリセットも `minfill` も L列にしか書かない**（G列は棚＝shelfsplitの計算結果なので直接書かない）。その代わりG列を作り直す導線が要る＝このボタン。押すと `?action=bmDecide&date=…`（@707・中身は `shelfsplit`）が走り、②へ自動で切り替わる。**何度押しても同じ結果**（土台がL列なので冪等）。ただし②で手調整した数字は作り直されるので確認を出す。★①に保存した日は**「②へ未反映」**として決定ボタンをオレンジで点滅させ、段階タブの下にも帯を出す（localStorage に保持＝リロードしても残る）。★夜間バッチの初回生成は今までどおり自動（社長「最初に推奨を書き出すタイミングでG列は計算して欲しい」＝発注・仕込みが前夜に決まる）。要メインGAS @707。 -->
 <!-- kanri.html v3.80 (2026-09-11) 【全六の未設定警告を「本当に困る日」だけにした】社長報告「これがまだ出る」＝土日月を選ぶと **9/12(土)・9/13(日) の全六が未設定です** と警告が出ていた。★土日は**そもそも営業しておらず拠点配分が無い**ので、献立が空なのが正常。毎週末に必ず出る＝オオカミ少年。★原因＝v3.78 の画面側が「その日の献立が空か」だけで判定し、**納品数量を見ていなかった**。GAS(@705)は `kawariMissingDates` で「**その日に全六の納品があるのに主菜が未設定**」の日だけを返しており（土日は入らない・実測で空配列）、そちらが正しい。★直し＝警告も日別の行も **GASの `kawariMissingDates` を唯一の判定材料**にする。納品が無い日は行ごと出さず、警告もしない。全六の納品自体が無い期間は「この期間は全六の納品がありません」と静かに出す。 -->
@@ -2834,8 +2835,9 @@ async function loadDriverColorMap(dateStr) {
   if (driverColorCache[dateStr]) return driverColorCache[dateStr];
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      const res  = await fetch(GAS_URL + '?action=getLocationsWithAssignment&date=' + encodeURIComponent(dateStr));
-      const data = await res.json();
+      // ★2026-09-13 v3.83 gasGetJson 経由（1呼び出しの中で3回まで再送）。
+      //   この関数自身の2回ループは v3.64 で入れた別の保険なので、そのまま残す。
+      const data = await gasGetJson(GAS_URL + '?action=getLocationsWithAssignment&date=' + encodeURIComponent(dateStr));
       if (Array.isArray(data) && data.length > 0) {
         const map = {};
         data.forEach(item => {
@@ -3089,8 +3091,7 @@ async function fetchSheet4() {
     //   従来は getKawariSelections → getSheet4Data の直列2本で、GASは1回の起動だけで
     //   約5秒かかるため（コード1.8MB）、起動2回＋往復2回ぶんまるごと損していた。
     //   応答の data.kawari を全六の読み取り専用表示に使う（renderSheet4 は元からそちらを見ている）。
-    const res  = await fetch(GAS_URL + '?action=getSheet4Data&dates=' + dates.join(','));
-    const data = await res.json();
+    const data = await gasGetJson(GAS_URL + '?action=getSheet4Data&dates=' + dates.join(','));   // ★2026-09-13 v3.83
     if (!data.ok) {
       s4SetStatus(data.error || '取得エラー', true);
       return;
@@ -4191,11 +4192,10 @@ async function fetchSheet1() {
   document.getElementById('sheet1-body').innerHTML = '';
   try {
     // ドライバー色マップを並列取得（Phase 4）
-    const [res, colorMap] = await Promise.all([
-      fetch(GAS_URL + '?action=getSheet1Data&date=' + dateVal),
+    const [data, colorMap] = await Promise.all([
+      gasGetJson(GAS_URL + '?action=getSheet1Data&date=' + dateVal),   // ★2026-09-13 v3.83 リトライ経由
       loadDriverColorMap(dateVal)
     ]);
-    const data = await res.json();
     if (!data.ok) { s1SetStatus(data.error || '取得エラー', true); return; }
     s1SetStatus('');
     data._driverColorMap = colorMap;
@@ -4527,8 +4527,9 @@ async function fetchSheet2() {
   s2SetStatus('取得中…');
   document.getElementById('sheet2-body').innerHTML = '';
   try {
-    const res  = await fetch(GAS_URL + '?action=getSheet2Data&date=' + dateVal);
-    const data = await res.json();
+    // ★2026-09-13 v3.83 リトライ経由。2026-09-13(日)はサーバーが配達3件を返していたのに
+    //   404で落ちて画面が空になっていた（→ gasGetJson の説明）。
+    const data = await gasGetJson(GAS_URL + '?action=getSheet2Data&date=' + dateVal);
     if (!data.ok) { s2SetStatus(data.error || '取得エラー', true); return; }
     s2SetStatus('');
     renderSheet2(data);
@@ -4696,8 +4697,7 @@ async function fetchSheet3() {
   s3SetStatus('取得中…');
   document.getElementById('sheet3-body').innerHTML = '';
   try {
-    const res  = await fetch(GAS_URL + '?action=getSheet3Data&date=' + dateVal);
-    const data = await res.json();
+    const data = await gasGetJson(GAS_URL + '?action=getSheet3Data&date=' + dateVal);   // ★2026-09-13 v3.83
     if (!data.ok) { s3SetStatus(data.error || '取得エラー', true); return; }
     s3SetStatus('');
     renderSheet3(data);
@@ -4997,8 +4997,7 @@ async function fetchOrderData() {
   document.getElementById('order-warn-wrap').style.display = 'none';
   document.getElementById('order-warn-wrap').innerHTML = '';
   try {
-    const res  = await fetch(GAS_URL + '?action=getOrderData&dates=' + encodeURIComponent(JSON.stringify(dates)));
-    const data = await res.json();
+    const data = await gasGetJson(GAS_URL + '?action=getOrderData&dates=' + encodeURIComponent(JSON.stringify(dates)));   // ★2026-09-13 v3.83
     if (!data.ok) { orderSetStatus(data.error || '取得エラー', true); return; }
     orderSetStatus('');
     loadOrderDoneFlags(dates.join('_'));
@@ -5786,15 +5785,57 @@ function bmTodayStr() {
   return y + '-' + m + '-' + d;
 }
 
+/* ★2026-09-13 v3.83【社長報告「翌週の配分調整が表示されない」「今日の盛り出しも出ない」】
+   　/exec の GET は **確率的に 404**（Googleの「ページが見つかりません」HTML）を返す。
+   　実測 2026-09-13：同じ口を12回叩いて **2回が404**（17%）、応答時間も 4.5〜38.9秒とバラバラ。
+   　配分調整タブは開いた瞬間に最大15本のGETを投げるので、**全部成功する確率は 0.83¹⁵ ≒ 6%**
+   　＝ Googleが重い時間帯は**ほぼ毎回どれかが落ちて画面が真っ白**になる。
+   　実際 2026-09-13 の盛り出し表は、サーバー側は `getSheet2Data`/`getSheet3Data` とも
+   　`ok:true` で配達3件を返していたのに、画面には1件も出ていなかった。
+   🔴 **保存(POST)は v3.70（2026-08-25）で3回リトライを入れたのに、読み取り(GET)は素通しのままだった。**
+   　　`res.json()` が404のHTMLで落ちる → catch → `{ok:false}` → 「取得エラー」で終わり。
+   　ここで POST と同じリトライを入れる。**GET は副作用が無いので何回送っても安全。**
+   ⚠ 404 以外に「200 なのに doGet の既定応答 `{"dates":[...]}` が返る」パターンもある（v3.70 で実測）。
+   　 これも失敗として再送する。
+   ⚠ リトライ時だけキャッシュ避けの `_r=` を足す。1回目に足さないのは、
+   　 同じ日を2度引く先読み（bmPrefetchWeek）でHTTPキャッシュを活かすため。
+   　 逆に1回目が404だった時は、足さないと**同じ404がキャッシュから返ってくる**（→ CLAUDE.md の `&_cb=`）。 */
+async function gasGetJson(url, tries) {
+  const TRIES = tries || 3;
+  let lastErr = '';
+  for (let attempt = 1; attempt <= TRIES; attempt++) {
+    try {
+      const u = (attempt === 1) ? url
+              : url + (url.indexOf('?') >= 0 ? '&' : '?') + '_r=' + attempt + '.' + Date.now();
+      const res = await fetch(u);
+      const txt = await res.text();
+      if (!res.ok) {
+        lastErr = 'HTTP ' + res.status;
+      } else {
+        let j = null;
+        try { j = JSON.parse(txt); } catch (e) { j = null; }
+        if (j && typeof j === 'object') {
+          const keys = Object.keys(j);
+          // doGet の既定応答（未知の action で返る {"dates":[...]}）＝中身が来ていない
+          if (!(keys.length === 1 && keys[0] === 'dates')) return j;
+          lastErr = 'doGetの既定応答が返りました';
+        } else {
+          lastErr = 'JSONではない応答（' + String(txt).substring(0, 40) + '…）';
+        }
+      }
+    } catch (e) {
+      lastErr = String((e && e.message) || e);
+    }
+    if (attempt < TRIES) await new Promise(r => setTimeout(r, attempt * 1200));
+  }
+  console.warn('[gasGetJson] ' + TRIES + '回とも失敗:', url, lastErr);
+  return { ok: false, error: '取得に失敗しました（' + TRIES + '回試行）: ' + lastErr };
+}
+
 // API
 async function bmFetchMatrix(dateStr) {
-  try {
-    const res = await fetch(GAS_URL + '?action=getBasicMasterMatrix&date=' + encodeURIComponent(dateStr));
-    const json = await res.json();
-    return json;
-  } catch(err) {
-    return { ok: false, error: String(err) };
-  }
+  // ★2026-09-13 v3.83 リトライ経由に変更（上の gasGetJson の説明を読むこと）
+  return await gasGetJson(GAS_URL + '?action=getBasicMasterMatrix&date=' + encodeURIComponent(dateStr));
 }
 
 async function bmPostAction(action, payload) {
@@ -5853,7 +5894,7 @@ async function bmLoadMenuTargets() {
   if (bmMenuTargets || bmMenuTargetsInflight) return;
   bmMenuTargetsInflight = true;
   try {
-    const r = await fetch(GAS_URL + '?action=getMenuMeta').then(x => x.json());
+    const r = await gasGetJson(GAS_URL + '?action=getMenuMeta');   // ★2026-09-13 v3.83 リトライ経由
     if (!r || !r.ok) return;
     const set = {};
     Object.keys(r.dailyProducts || {}).forEach(function(cat) {
@@ -5873,7 +5914,7 @@ async function bmLoadMenuTargets() {
 // その日の献立（保存済みかどうか＋ON商品）を取得
 async function bmFetchMenu(dateStr) {
   try {
-    const r = await fetch(GAS_URL + '?action=getMenuSelections&date=' + encodeURIComponent(dateStr)).then(x => x.json());
+    const r = await gasGetJson(GAS_URL + '?action=getMenuSelections&date=' + encodeURIComponent(dateStr));   // ★2026-09-13 v3.83
     if (!r || !r.ok) return null;
     const pids = {};
     (r.active || []).forEach(function(p) { pids[String(p)] = true; });
@@ -6001,9 +6042,8 @@ let bmStatCache = {};
 async function bmLoadStat(dateStr) {
   if (bmStatCache[dateStr]) { bmRenderStageNote(); return; }
   try {
-    const res = await fetch(GAS_URL + '?action=bmstat&date=' + encodeURIComponent(dateStr)
-                            + '&_cb=' + Date.now());
-    const d = await res.json();
+    const d = await gasGetJson(GAS_URL + '?action=bmstat&date=' + encodeURIComponent(dateStr)
+                            + '&_cb=' + Date.now());   // ★2026-09-13 v3.83
     if (d && d.ok && d.days && d.days.length) {
       bmStatCache[dateStr] = d.days[0];
       if (dateStr === bmCurrentDate) bmRenderStageNote();
@@ -8488,10 +8528,11 @@ async function printAllForDay() {
   const nextInfo = _prepNextDates(dateVal);   // ★v3.77 3枚目の仕込みが何日ぶんか
   let hasAfternoon = false;
   try {
+    // ★2026-09-13 v3.83 一括印刷は3本を同時に投げるので、1本でも404だと印刷が丸ごと止まっていた
     const [s1Res, s2Res, s3Res, colorMap] = await Promise.all([
-      fetch(GAS_URL + '?action=getSheet1Data&date=' + dateVal).then(r => r.json()),
-      fetch(GAS_URL + '?action=getSheet2Data&date=' + dateVal).then(r => r.json()),
-      fetch(GAS_URL + '?action=getSheet3Data&date=' + dateVal).then(r => r.json()),
+      gasGetJson(GAS_URL + '?action=getSheet1Data&date=' + dateVal),
+      gasGetJson(GAS_URL + '?action=getSheet2Data&date=' + dateVal),
+      gasGetJson(GAS_URL + '?action=getSheet3Data&date=' + dateVal),
       loadDriverColorMap(dateVal)
     ]);
     if (!s1Res.ok) throw new Error('シート1: ' + (s1Res.error || '不明'));
@@ -8522,8 +8563,8 @@ async function printAllForDay() {
   let prepToday = null, prepNext = null;
   try {
     const [t, n] = await Promise.all([
-      fetch(GAS_URL + '?action=getSheet4Data&dates=' + dateVal).then(r => r.json()),
-      fetch(GAS_URL + '?action=getSheet4Data&dates=' + nextInfo.dates.join(',')).then(r => r.json())
+      gasGetJson(GAS_URL + '?action=getSheet4Data&dates=' + dateVal),                      // ★2026-09-13 v3.83
+      gasGetJson(GAS_URL + '?action=getSheet4Data&dates=' + nextInfo.dates.join(','))       // ★2026-09-13 v3.83
     ]);
     if (!t || !t.ok) throw new Error('当日: ' + ((t && t.error) || '不明'));
     prepToday = t;
@@ -8856,7 +8897,7 @@ async function mnLoadMonth(ym) {
   mnState.loading = true;
   mnSetStatus('mn-status', '読み込み中…');
   try {
-    var r = await fetch(GAS_URL + '?action=getMenuMonth&ym=' + encodeURIComponent(ym)).then(function (x) { return x.json(); });
+    var r = await gasGetJson(GAS_URL + '?action=getMenuMonth&ym=' + encodeURIComponent(ym));   // ★2026-09-13 v3.83
     if (!r || !r.ok) { mnSetStatus('mn-status', (r && r.error) || '取得に失敗しました', 'err'); return; }
 
     mnState.ym    = r.ym || ym;
