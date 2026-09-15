@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <!-- kanri.html v3.83 (2026-09-13) 【読み取り(GET)に3回リトライ＝「配分調整が表示されない/盛り出しが出ない」の直接原因】社長報告「翌週9/14〜の配分調整が表示されない」「今日の盛り出しも出ないな」。★調査＝データは**サーバー側に正常にある**。2026-09-13(日)の `getSheet2Data`/`getSheet3Data` は `ok:true` で配達3件（後楽園ホール／東京タワー スタジオアース／テレビ朝日「羽鳥慎一モーニングショー」）を返していた。出ていないのは**画面側の取得が落ちている**から。実測：同じ口を12回叩いて **2回が404**（Googleの「ページが見つかりません」HTML）、応答時間も 4.5〜38.9秒。配分調整タブは開いた瞬間に最大15本のGETを投げるので、**全部成功する確率は 0.83^15 ≒ 6%**。🔴 **保存(POST)は v3.70（2026-08-25）で3回リトライを入れたのに、読み取り(GET)は素通しのままだった**（404のHTMLで `res.json()` が落ちる → catch → 「取得エラー」で終わり）。★対応＝`gasGetJson(url)` を新設し、**副作用の無い読み取りだけ**を通す（最大3回・1.2秒→2.4秒待ち）。404 だけでなく「200 なのに doGet の既定応答 `{"dates":[...]}`」も失敗として再送する。キャッシュ避けの `_r=` は**2回目以降だけ**付ける（1回目に付けると先読みのHTTPキャッシュが効かなくなる／付けないと1回目の404がキャッシュから返る）。★通したのは 配分調整(getBasicMasterMatrix)・盛り出し1〜3(getSheet1〜3Data)・仕込み(getSheet4Data)・発注(getOrderData)・献立(getMenuMeta/getMenuSelections/getMenuMonth)・拠点色(getLocationsWithAssignment)・進捗(bmstat)・一括印刷の5本。⚠ **副作用のある口（setBinOverride / bmDecide / importExternal / writeExtResidual / reimportDelivery）は通していない**＝再送すると二重に効く。GAS変更なし＝デプロイ枠を消費しない。 -->
 <!-- kanri.html v3.82 (2026-09-11) 【他社弁当を車載5台の内訳で出す】社長指示「他社製品の車載積み　現地配りの個数なんだけど、納品で指定された個数を**エリアの予定販売数/全体の予定販売数**で車載の欄に自動で書き込んで欲しい」。★メインGAS `extveh`（`extApplyVehicleSplit_`）が納品総数をエリアの予定販売数で按分して**車載のG列**へ書くようにしたので、配分調整の他社弁当行も**拠点列を横断する1マス（総数だけ）から、車載5台は普通のセル・通常拠点は「–」**に変えた。車載セルは編集もできる（手で直したら、その日は自動按分が上書きしない＝サーバー側 `onlyIfMismatch`）。★行頭のバッジは「総数 30」、合計列は**車載計 / 総数**を出し、**食い違う日は赤**（総数が入る前＝0/30 も赤で分かる）。★通常拠点の「–」は現地でドライバーが割り振るという意味（今までと同じ）。配分表・盛り出し表（シート1/2）は今までどおり総数行1行のまま。要メインGAS @708。 -->
+<!-- kanri.html v3.85 (2026-09-16) 【①当日配分の保存で「35セル中32セル」と出る】社長報告「9/17の当日配分を保存しようとすると35セル中32セルしか保存できなかったと出る」。★原因＝編集キャッシュ(localStorage)が**①と②で本体を共有**しており、キーは `商品ID_拠点ID` だけで**どちらの段で編集したかを持っていない**。`bmSetView` は未保存のまま段を切り替えるのを止めているが、**リロードすると `bmViewMode` は必ず①(daily)に戻る**ので、②で編集した車載セルが①の編集に化けて col='L' で送られていた。メインGAS `saveBasicMasterNumbers` は他社製3品のL列書き込みを弾く（正しい）ので弾かれた3セルぶん `saved` が足りず、画面は「拠点や商品がマスタに無い可能性があります」という**見当違いの警告**を出し、**しかもその時キャッシュを消さない**ので3セルが永久に居座り、以後の保存が毎回この警告で終わっていた。★直し①＝①から送るセルを「L列に入るセルだけ」に絞る（車載L9xx・他社製3品を除外＝`bmIsDailySavable`）。除いたセルは**捨てずに残し**「②で保存してください」と名指しで出す。★直し②＝保存成功時の**キャッシュ全消しをやめ、保存できたキーだけ消す**（②の編集が黙って消えていた）。★直し③＝`bmSetView` の未保存判定を「いま開いている段から保存できるセル」だけ数える（①に②専用セルが残っていても②へ行ける＝詰まない）。★直し④＝**編集した段を localStorage に覚えて復元**（`bmEditsMode`／`bmRestoreViewForDate`）。普通の拠点の②編集はサーバーに弾かれずそのままL列へ入ってしまうので、ここが根本。★直し⑤＝サーバーが弾いたセルは `blockedExt`/`blockedList` で名指し（黙って捨てない）。要メインGAS（`saveBasicMasterNumbers` が `blockedList` を返す）。 -->
 <!-- kanri.html v3.84 (2026-09-14) 【①当日配分に車載を出さない】社長指摘「当日配分の表に車載にプラスとかの数字が入っているのはなんで？車載は初回納品の方で初めて計算して出るはずだよね？」。★v3.71の設計に「①当日配分＝L列。人が数字を当てるのはここだけ。**車載は出てこない**」と書いてあるのに、`bmRenderMatrix`/`bmRenderRow`/`bmRenderCategoryRow` が `bmServerData.locations` を**そのまま全部**列にしており、①でも車載5列が出ていた。車載のL列は常に0で、右に出る数字は v3.75 で入れた「そのエリアの増産数」なので、**当日配分の段で車載に数字があるように見えていた**。★`bmVisibleLocs()` を1本作り、`bmViewMode==='daily'` のときだけ `L9xx` を列から外す。②初回納品＋車載では従来どおり全部出す。合計列・確定・コピーは拠点IDで引くので影響しない。GAS変更なし・フロントのみ。 -->
 <!-- kanri.html v3.81 (2026-09-11) 【決定 → 初回納品を計算】社長決定「①当日配分で数字を決める → 決定を押したら②初回納品を計算する流れの方が分かりやすい」「L→Gという順番を間違えないで。**Gは必ずLから計算する。直接書き込まない**」。★メインGAS @706 から**分割済みの日は天候プリセットも `minfill` も L列にしか書かない**（G列は棚＝shelfsplitの計算結果なので直接書かない）。その代わりG列を作り直す導線が要る＝このボタン。押すと `?action=bmDecide&date=…`（@707・中身は `shelfsplit`）が走り、②へ自動で切り替わる。**何度押しても同じ結果**（土台がL列なので冪等）。ただし②で手調整した数字は作り直されるので確認を出す。★①に保存した日は**「②へ未反映」**として決定ボタンをオレンジで点滅させ、段階タブの下にも帯を出す（localStorage に保持＝リロードしても残る）。★夜間バッチの初回生成は今までどおり自動（社長「最初に推奨を書き出すタイミングでG列は計算して欲しい」＝発注・仕込みが前夜に決まる）。要メインGAS @707。 -->
 <!-- kanri.html v3.80 (2026-09-11) 【全六の未設定警告を「本当に困る日」だけにした】社長報告「これがまだ出る」＝土日月を選ぶと **9/12(土)・9/13(日) の全六が未設定です** と警告が出ていた。★土日は**そもそも営業しておらず拠点配分が無い**ので、献立が空なのが正常。毎週末に必ず出る＝オオカミ少年。★原因＝v3.78 の画面側が「その日の献立が空か」だけで判定し、**納品数量を見ていなかった**。GAS(@705)は `kawariMissingDates` で「**その日に全六の納品があるのに主菜が未設定**」の日だけを返しており（土日は入らない・実測で空配列）、そちらが正しい。★直し＝警告も日別の行も **GASの `kawariMissingDates` を唯一の判定材料**にする。納品が無い日は行ごと出さず、警告もしない。全六の納品自体が無い期間は「この期間は全六の納品がありません」と静かに出す。 -->
@@ -5676,16 +5677,42 @@ let bmMenuTargets = null;     // 献立表の管理対象（海苔弁系/満腹�
 let bmMenuTeiban = null;      // 定番（毎日必ず入る）商品IDの集合。定番は0＋グレーにしない
 let bmMenuTargetsInflight = false;
 // localStorage 読込
+/* ★2026-09-16 v3.85 **編集した段（①/②）も一緒に覚える。**
+   覚えないと、リロードで `bmViewMode` が必ず①に戻り、**②で編集した数字が
+   ①の編集に化けて L列（当日配分）へ書かれる**（＝9/17「35セル中32セル」の元）。
+   車載・他社は v3.85 で送らないので弾かれるが、**普通の拠点の②編集は弾かれずに
+   そのままL列へ入ってしまう**（エラーも出ない）ので、ここで段を復元する。 */
+let bmEditsMode = {};   // { dateStr: 'daily' | 'shelf' }
+const BM_LS_MODE_KEY = 'kanri_bm_edits_mode_v1';
 function bmLoadEdits() {
   try {
     const raw = localStorage.getItem(BM_LS_KEY);
     bmEditsCache = raw ? JSON.parse(raw) : {};
   } catch(e) { bmEditsCache = {}; }
+  try {
+    const rawM = localStorage.getItem(BM_LS_MODE_KEY);
+    bmEditsMode = rawM ? JSON.parse(rawM) : {};
+  } catch(e) { bmEditsMode = {}; }
   // 旧版localStorage(kanri_bm_edits_v1)があれば削除（曜日キー版・無効化）
   try { localStorage.removeItem('kanri_bm_edits_v1'); } catch(e) {}
 }
 function bmSaveEdits() {
   try { localStorage.setItem(BM_LS_KEY, JSON.stringify(bmEditsCache)); } catch(e) {}
+  try {
+    const cache = bmEditsCache[bmCurrentDate] || {};
+    const has = Object.keys(cache).some(k => cache[k] !== null && cache[k] !== undefined && cache[k] !== '');
+    if (has) bmEditsMode[bmCurrentDate] = bmViewMode; else delete bmEditsMode[bmCurrentDate];
+    localStorage.setItem(BM_LS_MODE_KEY, JSON.stringify(bmEditsMode));
+  } catch(e) {}
+}
+/** リロード後・日付切替後に「その日の未保存編集をした段」へ戻す（→ bmEditsMode の上のコメント） */
+function bmRestoreViewForDate() {
+  const want = bmEditsMode[bmCurrentDate];
+  if (!want || want === bmViewMode) return;
+  const cache = bmEditsCache[bmCurrentDate] || {};
+  const has = Object.keys(cache).some(k => cache[k] !== null && cache[k] !== undefined && cache[k] !== '');
+  if (!has) { delete bmEditsMode[bmCurrentDate]; return; }
+  bmSetView(want, true);   // ★force＝未保存チェックを飛ばす（戻すための切り替えなので）
 }
 function bmGetEdit(dateStr, pid, lid) {
   return (bmEditsCache[dateStr] && bmEditsCache[dateStr][pid + '_' + lid] !== undefined)
@@ -5993,17 +6020,25 @@ function bmGetDisplaySales(pid, lid) {
 /** 段階の切り替え。データは取り直さず描き直すだけ。
     ⚠ **未保存の編集があるときは切り替えない。**①と②は書き込み先が違う列（L／G）なので、
       片方で編集したまま切り替えると**どちらの列に書くつもりだったのか分からなくなる**。 */
-function bmSetView(v) {
+function bmSetView(v, force) {
   const next = (v === 'shelf') ? 'shelf' : 'daily';
   if (next === bmViewMode) return;
-  const cache = bmEditsCache[bmCurrentDate] || {};
-  const dirty = Object.keys(cache).filter(k => cache[k] !== null && cache[k] !== undefined && cache[k] !== '').length;
+  if (force) { bmViewMode = next; bmApplyViewChrome_(); return; }
+  /* ★2026-09-16 v3.85 **いま開いている段から保存できるセルだけ数える。**
+     ①に「②でしか保存できないセル（車載・他社）」が残っていても②へは行かせる
+     （行かせないと、そのセルを保存する手段が無くなって永久に詰まる）。 */
+  const dirty = bmDirtyCount(bmViewMode);
   if (dirty) {
     alert('未保存の変更が ' + dirty + 'セルあります。\n'
         + '①と②は書き込み先が違うので、先に「💾 保存」するか「🔄 再取得」で破棄してください。');
     return;
   }
   bmViewMode = next;
+  bmApplyViewChrome_();
+}
+/** 段を切り替えたあとの画面まわり（タブ・ボタン・凡例・再描画）。
+    ★2026-09-16 v3.85 `bmSetView` から切り出した（force 復元でも同じ処理が要るため）。 */
+function bmApplyViewChrome_() {
   document.querySelectorAll('#bm-stage-tabs .bm-stage-tab').forEach(function (b) {
     b.classList.toggle('bm-active', b.dataset.view === bmViewMode);
   });
@@ -6262,6 +6297,55 @@ const BM_VEH_COL_RE_ = /^L9\d\d$/;
 function bmVisibleLocs() {
   const all = (bmServerData && bmServerData.locations) || [];
   return (bmViewMode === 'daily') ? all.filter(l => !BM_VEH_COL_RE_.test(String(l.id || ''))) : all;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ★2026-09-16 v3.85【①で保存できないセルを①の保存に混ぜない】
+   ══════════════════════════════════════════════════════════════
+   社長報告「9/17の当日配分を保存したら **35セル中32セル** しか保存できないと出る」。
+   【何が起きていたか】編集キャッシュ（localStorage）は **①と②で1本を共有**していて、
+     キーは `商品ID_拠点ID` だけ＝**どちらの段で編集したかを持っていない**。
+     `bmSetView` は未保存のまま段を切り替えるのを止めているが、**リロードすると
+     `bmViewMode` は必ず `daily`（①）に戻る**ので、②で編集した車載セルが
+     **①の編集に化けて** col='L' で送られていた。
+     メインGAS `saveBasicMasterNumbers` は他社製3品のL列書き込みを弾く（正しい）ので、
+     弾かれた3セルぶんだけ `saved` が足りず、画面は
+     「拠点や商品がマスタに無い可能性があります」という**見当違いの警告**を出していた。
+     さらに**その時キャッシュを消さない**ので、3セルは永久に居座り、
+     **以後の保存が毎回この警告で終わる**（社長「なんでこんなに毎日修正しないといけないんだろう」）。
+   【直し方】①から保存するセルを「L列に入るセルだけ」に絞る。
+     ・**車載(L9xx)** … ①には列が出ない＝①の編集ではありえない。②で保存する。
+     ・**他社製3品** … 拠点の当日配分は常に0（`_bmDailyBlockedPids_` がサーバーでも弾く）。
+       ①に出るのは車載列だけなので、これも②で保存する。
+     除いたセルは**捨てずに残し**、「②で保存してください」と名指しで出す。
+     ⚠ **キャッシュの全消しもやめる**（保存できたキーだけ消す）。残りを消すと
+       ②の編集が黙って消える。 */
+function bmIsExtPid(pid) {
+  if (!bmServerData || !bmServerData.products) return false;
+  const all = [].concat(bmServerData.products.rice || [], bmServerData.products.brown || []);
+  for (let i = 0; i < all.length; i++) {
+    if (String(all[i].id) === String(pid)) return !!all[i].isExternal;
+  }
+  return false;
+}
+/** そのセルは「①当日配分（L列）」として保存できるか。false＝②初回納品＋車載の編集。 */
+function bmIsDailySavable(pid, lid) {
+  if (BM_VEH_COL_RE_.test(String(lid))) return false;   // 車載は②だけ
+  if (bmIsExtPid(pid)) return false;                    // 他社製3品はL列に入れない
+  return true;
+}
+/** いま開いている段から保存できる未保存セルの数（→ bmSetView の切り替え判定に使う） */
+function bmDirtyCount(mode) {
+  const cache = bmEditsCache[bmCurrentDate] || {};
+  let n = 0;
+  for (const k of Object.keys(cache)) {
+    const v = cache[k];
+    if (v === null || v === undefined || v === '') continue;
+    const u = k.lastIndexOf('_');
+    if (u < 0) continue;
+    if (mode === 'shelf' || bmIsDailySavable(k.substring(0, u), k.substring(u + 1))) n++;
+  }
+  return n;
 }
 
 function bmRenderMatrix() {
@@ -6575,7 +6659,14 @@ function bmUpdateSaveDirty() {
       if (v !== null && v !== undefined && v !== '') { hasEdits = true; break; }
     }
   }
-  if (hasEdits) {
+  /* ★2026-09-16 v3.85 「今の段では保存できない未保存」を区別して言う。
+     ①に車載・他社の編集が残っている日に「未保存あり」だけだと、
+     何度保存しても消えないように見える。 */
+  const savableHere = bmDirtyCount(bmViewMode);
+  if (hasEdits && savableHere === 0) {
+    btn.classList.remove('bm-dirty');
+    btn.textContent = (bmViewMode === 'daily') ? '💾 保存 (②に未保存あり)' : '💾 保存 (①に未保存あり)';
+  } else if (hasEdits) {
     btn.classList.add('bm-dirty');
     btn.textContent = '💾 保存 (未保存あり)';
   } else {
@@ -6915,6 +7006,9 @@ async function bmLoadDate(dateStr) {
   if (colorMap && Object.keys(colorMap).length > 0) bmColorCache[dateStr] = colorMap;
   if (menu) bmMenuCache[dateStr] = menu;
   bmApplyData(dateStr, r, colorMap || {});
+  /* ★2026-09-16 v3.85 その日に未保存の編集が残っていたら、**編集した段へ戻す**。
+     リロードで必ず①に戻る作りだったため、②の編集がL列へ書かれていた（→ bmEditsMode）。 */
+  bmRestoreViewForDate();
   bmPrefetchWeek();   // v3.41: 同週の残り日を裏で先読み
 }
 
@@ -7077,6 +7171,11 @@ async function bmSaveAll() {
   const itemsByLoc = {};
   const locSet = new Set();
   let cellCount = 0;
+  const savedKeys = [];          // ★v3.85 実際に送ったキー（成功時はこれだけ消す）
+  const heldCells = [];          // ★v3.85 ①では保存できず②へ回すセル
+  /* ★2026-09-16 v3.85 書き込み先は開いている段で決まる（→ bmIsDailySavable の上のコメント）。
+     saveCol の決定を payload を組む前に上げた（①の時に送るセルを絞るため）。 */
+  const saveCol = (bmViewMode === 'shelf') ? 'G' : 'L';
   const cache = bmEditsCache[bmCurrentDate];
   if (cache) {
     for (const k of Object.keys(cache)) {
@@ -7088,14 +7187,24 @@ async function bmSaveAll() {
       const lid = k.substring(lastUnderscore + 1);
       const pid = k.substring(0, lastUnderscore);
       if (!lid || !pid) continue;
+      /* ★v3.85 ①当日配分(L列)に入らないセルは送らない。
+         送るとサーバーが黙って弾き、「35セル中32セル」の見当違いの警告になる。 */
+      if (saveCol === 'L' && !bmIsDailySavable(pid, lid)) { heldCells.push({ pid, lid }); continue; }
       if (!itemsByLoc[lid]) itemsByLoc[lid] = {};
       itemsByLoc[lid][pid] = Number(v);
       locSet.add(lid);
+      savedKeys.push(k);
       cellCount++;
     }
   }
 
   if (cellCount === 0) {
+    if (heldCells.length) {
+      alert('①当日配分に保存できる変更がありません。\n'
+          + '未保存の ' + heldCells.length + ' セルは**車載／他社製品**＝②初回納品＋車載の編集です。\n'
+          + '「②初回納品＋車載」に切り替えて保存してください。');
+      return;
+    }
     wpToast('保存する変更がありません', 'info');
     return;
   }
@@ -7105,8 +7214,8 @@ async function bmSaveAll() {
   /* ★2026-09-10 **書き込み先は開いている段で決まる。**
        ① 当日配分 → **L列**（GASは未分割の日ならG列にも写す＝`mirrorG`）
        ② 初回納品＋車載 → **G列**（＝実際に納品する数の微調整。L列＝予定販売数は動かさない）
-     社長「①で急遽やる拠点・やらない拠点を決める／②で細かい初回納品の数や車載の個数を調整する」 */
-  const saveCol = (bmViewMode === 'shelf') ? 'G' : 'L';
+     社長「①で急遽やる拠点・やらない拠点を決める／②で細かい初回納品の数や車載の個数を調整する」
+     ★2026-09-16 v3.85 saveCol の決定は payload を組む前へ移した（上を見る）。 */
   const r = await bmPostAction('saveBasicMasterNumbers', {
     date: bmCurrentDate,
     itemsByLoc: itemsByLoc,
@@ -7124,16 +7233,30 @@ async function bmSaveAll() {
     ? Number(r.saved)
     : (Number(r.updated || 0) + Number(r.appended || 0));
   const appendedCount = Number(r.appended || 0);
+  /* ★2026-09-16 v3.85 サーバーが弾いたセル（他社・お茶・配分外）は
+     **黙って捨てない**＝`blockedExt` / `blockedList` を必ず言う。
+     ここに出るのは v3.85 で送らないようにしたセルの取りこぼしなので、出たら中身を見る。 */
+  const blockedExt = Number(r.blockedExt || 0);
+  const blockedList = Array.isArray(r.blockedList) ? r.blockedList : [];
 
-  if (savedCount < cellCount) {
+  if (savedCount + blockedExt < cellCount) {
     // 一部が保存されなかった → 「保存完了」を出さず警告（編集内容は破棄しない＝再保存できる）
     alert('一部が保存できませんでした。\n要求 ' + cellCount + ' セル中 ' + savedCount + ' セルのみ保存。\n（拠点や商品がマスタに無い可能性があります。編集内容は破棄していません）');
     bmUpdateSaveDirty();
     return;
   }
+  if (blockedExt > 0) {
+    alert('うち ' + blockedExt + ' セルは当日配分に入れない商品（他社製品・お茶・配分外）のため除外しました。\n'
+        + (blockedList.length ? blockedList.slice(0, 10).join(' / ') + '\n' : '')
+        + '（他社製品は拠点ではなく車載に総数で積みます）');
+  }
 
-  // ローカル編集キャッシュをリセット
-  bmEditsCache[bmCurrentDate] = {};
+  /* ローカル編集キャッシュは **保存できたキーだけ** 消す。
+     ★2026-09-16 v3.85 全消しをやめた理由＝②の編集（車載・他社）まで黙って消えていた。 */
+  if (bmEditsCache[bmCurrentDate]) {
+    savedKeys.forEach(k => { delete bmEditsCache[bmCurrentDate][k]; });
+    blockedList.forEach(k => { delete bmEditsCache[bmCurrentDate][k]; });   // 保存しようがないので残さない
+  }
   bmSaveEdits();
 
   // サーバーから取り直し＋全画面再描画
@@ -7145,6 +7268,15 @@ async function bmSaveAll() {
   if (saveCol === 'L') bmSetPendingDecide(bmCurrentDate, true);
   wpToast(bmSaveWhere + 'に保存（' + locSet.size + '拠点・' + savedCount + 'セル' + bmSaveExtra + '）'
         + (saveCol === 'L' ? '／②に反映するには「決定」を押してください' : ''), 'success');
+  /* ★2026-09-16 v3.85 ①では保存できず残したセルは**名指しで言う**（黙って残さない）。
+     ここを黙ると「保存したのに数字が戻る」に見える。 */
+  if (heldCells.length) {
+    alert('未保存のまま残した ' + heldCells.length + ' セルがあります（車載／他社製品）。\n'
+        + heldCells.slice(0, 10).map(c => c.lid + ' ' + c.pid).join(' / ')
+        + (heldCells.length > 10 ? ' ほか' : '') + '\n\n'
+        + 'これは②初回納品＋車載の編集です。②に切り替えて「💾 保存」してください。\n'
+        + '（要らない編集なら「🔄 再取得」で破棄できます）');
+  }
 }
   function bmEscape(s) {
   return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;').replace(/"/g,'&quot;');
