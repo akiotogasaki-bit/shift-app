@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <!-- kanri.html v3.83 (2026-09-13) 【読み取り(GET)に3回リトライ＝「配分調整が表示されない/盛り出しが出ない」の直接原因】社長報告「翌週9/14〜の配分調整が表示されない」「今日の盛り出しも出ないな」。★調査＝データは**サーバー側に正常にある**。2026-09-13(日)の `getSheet2Data`/`getSheet3Data` は `ok:true` で配達3件（後楽園ホール／東京タワー スタジオアース／テレビ朝日「羽鳥慎一モーニングショー」）を返していた。出ていないのは**画面側の取得が落ちている**から。実測：同じ口を12回叩いて **2回が404**（Googleの「ページが見つかりません」HTML）、応答時間も 4.5〜38.9秒。配分調整タブは開いた瞬間に最大15本のGETを投げるので、**全部成功する確率は 0.83^15 ≒ 6%**。🔴 **保存(POST)は v3.70（2026-08-25）で3回リトライを入れたのに、読み取り(GET)は素通しのままだった**（404のHTMLで `res.json()` が落ちる → catch → 「取得エラー」で終わり）。★対応＝`gasGetJson(url)` を新設し、**副作用の無い読み取りだけ**を通す（最大3回・1.2秒→2.4秒待ち）。404 だけでなく「200 なのに doGet の既定応答 `{"dates":[...]}`」も失敗として再送する。キャッシュ避けの `_r=` は**2回目以降だけ**付ける（1回目に付けると先読みのHTTPキャッシュが効かなくなる／付けないと1回目の404がキャッシュから返る）。★通したのは 配分調整(getBasicMasterMatrix)・盛り出し1〜3(getSheet1〜3Data)・仕込み(getSheet4Data)・発注(getOrderData)・献立(getMenuMeta/getMenuSelections/getMenuMonth)・拠点色(getLocationsWithAssignment)・進捗(bmstat)・一括印刷の5本。⚠ **副作用のある口（setBinOverride / bmDecide / importExternal / writeExtResidual / reimportDelivery）は通していない**＝再送すると二重に効く。GAS変更なし＝デプロイ枠を消費しない。 -->
 <!-- kanri.html v3.82 (2026-09-11) 【他社弁当を車載5台の内訳で出す】社長指示「他社製品の車載積み　現地配りの個数なんだけど、納品で指定された個数を**エリアの予定販売数/全体の予定販売数**で車載の欄に自動で書き込んで欲しい」。★メインGAS `extveh`（`extApplyVehicleSplit_`）が納品総数をエリアの予定販売数で按分して**車載のG列**へ書くようにしたので、配分調整の他社弁当行も**拠点列を横断する1マス（総数だけ）から、車載5台は普通のセル・通常拠点は「–」**に変えた。車載セルは編集もできる（手で直したら、その日は自動按分が上書きしない＝サーバー側 `onlyIfMismatch`）。★行頭のバッジは「総数 30」、合計列は**車載計 / 総数**を出し、**食い違う日は赤**（総数が入る前＝0/30 も赤で分かる）。★通常拠点の「–」は現地でドライバーが割り振るという意味（今までと同じ）。配分表・盛り出し表（シート1/2）は今までどおり総数行1行のまま。要メインGAS @708。 -->
+<!-- kanri.html v3.89 (2026-09-16) 【シフトと配分の食い違いを保存前に止める】社長指示「割り当て済みの拠点が0のまま保存、もしくは未割当に納品数が入っているときはアラートを出して欲しい。そこから**戻る もしくは そのまま保存**の2パターンで進めたい」。★見る2つ＝①**割り当て済みなのに0**（出勤している販売員に売る弁当が1個も届かない）②**未割当なのに数字が入っている**（誰も売らない弁当が発注と仕込みに乗る＝2026-09-16の神保町63個と同じ形）。★🔴**判定はサーバーの `staffed`（＝`_shiftStaffedLocs_`）**で、`shelfsplit`（決定）とまったく同じ口を使う。画面が `salesPerson` の有無で独自に判定すると**警告と実際の挙動がズレて新しい混乱を生む**（`salesPerson` は `getSalesPersonMapForDate_` 由来で別物）。★`shiftHas` が false の日＝**シフト表そのものが無い日**は何も言わない（「シフト未入力」と「その日は誰も出ない」を取り違えない＝shelfsplit と同じ考え方）。★**置き弁・スポット・車載・他社は対象外**（別バッチが納品数を決めるので、入れると毎回誤警告になる）。★合計は `bmGetDisplaySales`＝**保存後の値**（未保存の編集を含む）。①なら当日配分(L)、②なら初回納品(G)を見る。★出す場面は**①②の保存＋「決定」の両方**。【OK】このまま保存/計算する ／【キャンセル】戻って直す（編集は1つも捨てない）。要メインGAS @752（`getBasicMasterMatrix` が locations に `staffed`/`isSpot`、トップに `shiftHas` を返す）。 -->
 <!-- kanri.html v3.88 (2026-09-16) 【①当日配分から②初回納品へ行けない】社長報告「9/18の配分調整　当日配分から初回納品に行けない」＝「未保存の変更が2セルあります」で止まる。★止めること自体は正しい（①＝L列・②＝G列で書き込み先が違う）。**悪いのは「保存するか破棄してください」と言うだけで、その場で何もできないこと**。しかも**何セルあるかしか言わない**のでどこを直したのかも分からない。社長の動線は「①で数字を当てる→②で車載を見る」なので、普通は**保存して進みたい**。★直し＝(1)アラートに**未保存の中身**を「拠点名 商品名 = 値」で出す（表の中でもオレンジで光っている・`bmDirtyDetail`）。(2)**その場で保存して進める**＝【OK】保存して②へ進む／【キャンセル】ここに留まる。保存しきれなかった時（通信失敗など）は切り替えない。(3)🔴**未保存のまま「決定」を押させない**＝`bmDecide` は**サーバーのL列**を土台に計算するので、未保存だと「直したのに反映されない」が**エラー無しで**起きる。先に保存してから計算する。GAS変更なし・フロントのみ。 -->
 <!-- kanri.html v3.87 (2026-09-16) 【「保存してないアイテムがある」アラートから抜けられない】社長報告「保存しようとすると、やっぱり保存してないアイテムがあるってアラートが出る。他社製品は表示もされていない」。★原因は2つ。①**「🔄 再取得」がローカル編集を破棄していなかった**＝ボタンの説明は「サーバーから取り直す（ローカル編集は破棄）」なのに `bmReload()` は `bmLoadDate` を呼ぶだけで**編集キャッシュ(localStorage)に一切触っていなかった**。②v3.86 で①から他社行を消したため、残った未保存セル（他社製品の車載）は**①の画面のどこにも出ない**。出ないものを「②で保存してください」と言われても社長は動きようがなく、保存のたびに同じアラートが出続けた。★直し＝(1)`bmReload()` を**説明どおり本当に破棄する**（何セル捨てるか confirm してから。②の編集も含むことを明記）。(2)保存後の「②の未保存が残っています」を **alert → confirm** にし、**その場で破棄できる**ようにした（OK＝破棄／キャンセル＝残して②で保存）。他社の車載は毎晩 `extveh` が書き直すので破棄して安全。(3)①で保存できる変更が0のときの案内も同じ confirm に統一。GAS変更なし・フロントのみ。 -->
 <!-- kanri.html v3.86 (2026-09-16) 【①当日配分に他社製3品を出さない】社長指摘「まず当日配分に他社製品の数が入っているのを直した方が良くない？」。★調べた結果**基本数マスタのL列はきれい**（`?action=runfix&name=extdaily0&from=2026-09-16&to=2026-10-10` の確認＝対象0セル／総合計1063にも他社は入っていない）。入って見えていたのは**表示**で、v3.84 で①から車載列を隠したため、他社行の左の数字（＝車載5台の合計）が**必ず0**になり、合計列が「**0 / 28**」と**赤（総数と不一致）**で出ていた。商品名の横の「総数 28」バッジと合わせて、当日配分に他社の数が居るように見える。★①では**他社行もカテゴリー別合計の「他社製品」行も出さない**（当日配分＝人が予定販売数を当てる段。他社は業者が決めた総数を車載に積んで現地で配るので、当てる数字が無い）。②初回納品＋車載では従来どおり出す＝そこで「車載計 / 納品総数」が突き合う。★消しっぱなしにせず、①の注記に「他社3品は②で見てください」と必ず書く。GAS変更なし・フロントのみ。 -->
@@ -6143,6 +6144,9 @@ async function bmDecide() {
     await bmSaveAll();
     if (bmDirtyCount('daily') > 0) return;   // 保存しきれなかった＝計算しない
   }
+  /* ★2026-09-16 v3.89 **「決定」でも同じ食い違いを聞く**（社長指示＝保存と決定の両方で見る）。
+     保存で見逃しても、G列を作る直前にもう一度止まる。 */
+  if (!bmConfirmShiftMismatch('計算する')) return;
   if (!confirm(bmCurrentDate + ' の初回納品＋車載を、いまの当日配分から計算し直します。\n\n'
              + '②で手で調整した数字は作り直されます。よろしいですか。')) return;
   const b = document.getElementById('bm-decide-btn');
@@ -6389,6 +6393,67 @@ function bmDirtyDetail(mode, limit) {
   }
   const max = limit || 10;
   return out.slice(0, max).join('\n') + (out.length > max ? ('\nほか ' + (out.length - max) + ' セル') : '');
+}
+/** いま開いている段から保存できる未保存セルの数（→ bmSetView の切り替え判定に使う） */
+/* ══════════════════════════════════════════════════════════════
+   🔴 ★2026-09-16 v3.89【シフトと配分の食い違いを保存前に止める】社長指示
+   ══════════════════════════════════════════════════════════════
+   社長「割り当て済みの拠点が0のまま保存、もしくは未割当に納品数が入っているときは
+         アラートを出して欲しい。そこから**戻る もしくは そのまま保存**の2パターンで進めたい」
+
+   【見る2つ】
+     ① **割り当て済みなのに0** … シフトに人がいるのに、その拠点の合計が0。
+        そのまま流すと**出勤している販売員に売る弁当が1個も届かない**。
+     ② **未割当なのに数字が入っている** … 誰も出ないのに納品数がある。
+        そのまま流すと**誰も売らない弁当が発注と仕込みに乗る**（2026-09-16 の神保町63個と同じ形）。
+
+   ⚠ **判定はサーバーの `staffed`（＝`_shiftStaffedLocs_`）**。`shelfsplit`（決定）とまったく同じ口を使う。
+     画面が `salesPerson` の有無で独自に判定すると、**警告と実際の挙動がズレて新しい混乱を生む**。
+   ⚠ **`shiftHas` が false の日は何も言わない**＝シフト表そのものが無い日。
+     「シフト未入力」と「その日は誰も出ない」を取り違えない（shelfsplit と同じ考え方）。
+   ⚠ **置き弁・スポット・車載・他社は対象外**。別バッチが納品数を決めるので、入れると毎回誤警告になる。
+   ⚠ 合計は `bmGetDisplaySales`＝**保存後の値**（未保存の編集を含む）。
+     ①を開いていれば当日配分(L)、②なら初回納品(G)を見る。 */
+function bmShiftMismatch() {
+  const out = { staffed0: [], unstaffed: [] };
+  if (!bmServerData || !bmServerData.shiftHas) return out;   // シフト表が無い日は黙る
+  const prods = [].concat(bmServerData.products.rice || [], bmServerData.products.brown || []);
+  (bmServerData.locations || []).forEach(function (loc) {
+    const lid = String(loc.id || '');
+    if (!lid || BM_VEH_COL_RE_.test(lid)) return;            // 車載
+    if (loc.isOkiben || loc.isSpot) return;                  // 置き弁・スポット
+    let sum = 0;
+    prods.forEach(function (p) {
+      if (p.isExternal) return;                              // 他社は拠点に配らない
+      if (!bmServerData.cells[p.id + '_' + lid]) return;
+      sum += bmGetDisplaySales(p.id, lid);
+    });
+    if (loc.staffed && sum === 0) {
+      out.staffed0.push({ lid: lid, name: loc.name || lid, person: loc.salesPerson || '' });
+    } else if (!loc.staffed && sum > 0) {
+      out.unstaffed.push({ lid: lid, name: loc.name || lid, qty: sum });
+    }
+  });
+  return out;
+}
+/** 食い違いがあれば聞く。true＝このまま進む／false＝戻る。 */
+function bmConfirmShiftMismatch(whatDoing) {
+  let mm;
+  try { mm = bmShiftMismatch(); } catch (e) { return true; }   // 判定でこけても作業は止めない
+  if (!mm.staffed0.length && !mm.unstaffed.length) return true;
+  let msg = '⚠ シフトと配分が食い違っています。\n\n';
+  if (mm.staffed0.length) {
+    msg += '【割り当て済みなのに0】' + mm.staffed0.length + '拠点\n'
+         + mm.staffed0.slice(0, 12).map(x => '  ' + x.name + (x.person ? '（' + x.person + '）' : '')).join('\n')
+         + (mm.staffed0.length > 12 ? '\n  ほか' + (mm.staffed0.length - 12) + '拠点' : '') + '\n\n';
+  }
+  if (mm.unstaffed.length) {
+    msg += '【未割当なのに数字が入っている】' + mm.unstaffed.length + '拠点\n'
+         + mm.unstaffed.slice(0, 12).map(x => '  ' + x.name + ' ' + x.qty + '食').join('\n')
+         + (mm.unstaffed.length > 12 ? '\n  ほか' + (mm.unstaffed.length - 12) + '拠点' : '') + '\n\n';
+  }
+  msg += '【OK】このまま' + (whatDoing || '保存する') + '\n【キャンセル】戻って直す';
+  return confirm(msg);
 }
 /** いま開いている段から保存できる未保存セルの数（→ bmSetView の切り替え判定に使う） */
 function bmDirtyCount(mode) {
@@ -7308,6 +7373,10 @@ async function bmSaveAll() {
     wpToast('保存する変更がありません', 'info');
     return;
   }
+
+  /* ★2026-09-16 v3.89 保存の直前に**シフトと配分の食い違い**を聞く（→ bmShiftMismatch）。
+     キャンセル＝戻って直す。編集は1つも捨てない。 */
+  if (!bmConfirmShiftMismatch('保存する')) { bmUpdateSaveDirty(); return; }
 
   const btn = document.getElementById('bm-save-btn');
   if (btn) { btn.disabled = true; btn.textContent = '保存中...'; }
