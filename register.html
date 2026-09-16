@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>お江戸弁当 レジ</title>
+<!-- register v3.30 (2026-09-16) 【締めの残数が「勝手に戻る」「消える」を両方止めた】社長報告2件＝①「エリアで車載から下ろす時、レジの最終在庫を入力している最中に数字が推奨の数に戻ったり0に戻ったりする」②「昨日 青山で回収時に残数が表示されていなくて、販売スタッフに聞いたら入力したと。こっちで直そうとしても直せなかった」。★**①数字が戻る＝4つの原因**。(a)`enterFinalScreen` の `refreshMoveAdj_().then(syncResidualDefaults)` を**await していなかった**＝/exec の床は3〜4秒・混むと10秒超で、その間に打ち始めると**まだ触っていない欄が計算値で全部書き換わる**。→ トークンで古い応答を捨て、**1つでも打っていたら上書きしない**（`rcAnyTouched_`）。(b)`syncResidualDefaults` が**入力中の欄まで書き換えていた**。→ `rcIsFocused_` で除外。(c)`rcExpectedResidual` の **`Math.max(0,…)` が「0に戻る」の正体**。車から下ろしている最中は メインGAS `getMoveAdjByLocProduct_` が「出発＝移動元から−／**完結してから**移動先へ＋」なので拠点側の＋が0のまま、`納品+0−販売` がマイナス→0に潰れていた。→ 負なら**空欄**にして数字を作らず、代わりに「🚚 車から下ろした N個が未到着です」を出す（新API `getMovePendingByLocProduct_`／古いGASでは出ないだけで壊れない）。(d)`saveState` に **residualDetail / residualTouched が入っていなかった**＝PWAがOSに落とされて再起動すると打った数字が全部消えて計算値に戻る。レジ終了金は保存していたのにここだけ抜けていた。→ 保存・復元する（moveAdj / movePending も）。★**②残数が消える＝送信が2本に分かれていた**。残数は報告ログとは別の2本目のPOST（`submitClosingResidual`）でしか書かれず、**落ちても `console.warn` だけでリトライも表示も無かった**。行が立たないと `getDeclaredResidual` が found:false → **ドライバーの回収画面に入力欄が1つも出ず `submitCollectionCheck` も弾かれる**＝現場に復旧手段が無い。実測**直近12営業日で23件**（9/15＝平河町・青山・ダイビル／平河町4回・大手町3回・浜松町3回。ゼロの日は2日だけ）。→ (a)`okibenGigPaid` と同じ考え方で **`residual` を submitReport と同じ1本の送信に載せる**（GAS側が報告ログを書いた直後に `submitClosingResidual` を呼ぶ＝一蓮托生）。(b)2本目も残すが**時間で粘るリトライ**にした（最大3分・待ちは倍々で上限20秒。memory「gas-exec-flaky-404＝回数でなく時間で粘る」）。(c)それでも落ちたら**完了画面に赤で出す**＋端末に残して**次回起動時に自動再送**（`RESIDUAL_QUEUE_KEY`・日付が変わったら捨てる）。★**古いGASでも壊れない**＝`pending` が返らなければ注意書きが出ないだけ、`residual` を見ないGASなら従来どおり2本目で立つ。同じ日×拠点の行は作り直しなので二重にならない。★要: メインGAS @2026-09-16（`getMovePendingByLocProduct_`／`getMoveAdjByLoc` の pending／`submitReport` の residual 受け／`getDeclaredResidual` の noClosing／`submitCollectionCheck` の行の自動作成）＋ driver v7.3。 -->
 <!-- register v3.29 (2026-09-11) 【配分外の試作品は「納品のある拠点」のレジにだけ出す】社長指示「今日試しでタレカツ重を作った。配分には入っていないけど、納品確認・納品ある拠点にはレジのアイテムに出して欲しい」（単価マスタ P127 で登録済み）。★**背景**＝単価マスタに「有効」で1行足すと、その商品は無条件で `getMaster` に乗るので**全41拠点の販売画面に出る**。実測 2026-09-11：タレカツ重は登録直後から全拠点のレジ（全六タブ）に並んでいた。作っていない拠点でも押せてしまう。★**直し方**＝単価マスタに「**配分外**」列を作り○を入れた商品を、レジ側で**納品連動**にする。判定は既存の献立連動（v3.26）と同じ「**納品数>0 か既に売った**」。★**納品数入力（納品確認）・修正画面・在庫編集モードには必ず出す。**ここまで隠すと販売員が納品数を打てず、販売画面にも永久に出てこない（鶏と卵になる）。隠すのは**販売画面のグリッドとカテゴリータブだけ**。★逃げ道は献立連動と共用＝「＋ 隠れている商品も出す」バー（`state.showOffMenu`）を押せば出る。バーの文言を「献立に無い日替わり N品／納品の無い試作品 M品」の2本立てにした。★**古いGASでも壊れない**＝`noPlan` が返ってこない（列が無い・未デプロイ）と隠す対象が0件になり、従来どおり全商品が出る。★二次販売レジ（`?mode=2nd`）は対象外。★要: メインGAS @2026-09-11（単価マスタ「配分外」列／`getProducts_Compute_` の `noPlan`／`bmLoadProducts_`・`calculateNextWeekProposals_` の除外／`getPlannedDelivery`・`_dapDiffSummary_` の差異除外／runfix `noplan`）。GAS側が配分の行を作らないので、**この商品の納品数を入れてもドライバーへ承認依頼は飛ばない**。 -->
 <!-- register v3.28 (2026-08-24) 【納品数を取り終わるまでスタート画面を触らせない】社長指示「レジをスタートする時、納品数をダウンロードするまで一切始められないようにしたい」。★これまでも v3.20/v3.22 で送信ボタンの無効化＋ハンドラ入口ガードは入れていたが、止まっていたのは**送信ボタンだけ**で、納品数の欄・開始金・金種は読み込み中でも触れた。手で先に打つと `loadPlannedDelivery` は「既に入力済みの欄は上書きしない」ため配分表の数が入らず、打ち込んだ数字だけでスタートできてしまう。★→ `#start-loading-cover`（position:fixed の全面カバー）でスタート画面ごと覆い、「納品数をダウンロード中です」を出す。ヘッダーも入力欄も送信ボタンもタップできない。取得が終わったら自動で消える。★**失敗時は自動で3回リトライ**（1.2秒→2.4秒→3.6秒）。/exec の GET は確率的に404を返すことがあるので、1回の失敗で手入力に落とさない。3回ダメなら「🔄 もう一度読み込む」と「手入力で進む」の2ボタンをカバー内に出す＝GASが落ちた日でもレジは打てる（手入力を選んでも合計10個以下は従来どおり弾かれる）。★毎回 `&_cb=` を付ける（/exec の GET はHTTPキャッシュに当たるため、リトライが同じ古い応答を掴むのを防ぐ）。★引き継ぎモード（`takeoverStartOnly`＝開始金だけ入力）はカバーしない。納品数は前の人のものを使うので待たせる理由が無い。GAS変更なし。 -->
 <!-- register v3.27 (2026-08-20) 【拠点振替：②から回ってきた弁当を、このレジで受け取って納品数に足す】社長要望「芝パーク②が終わる時、芝パークに残りを追加して終わる。それを紐づけて自動で追加できないか」→「ドライバーを介さないで終わらせたい」。★**数を確定するのはこの画面（受け取り側）**にした。理由＝渡す側がレジ拠点の日は締めの申告残数が既定値で入り、渡す側が**スポットの日**（当日バイト・レジ非使用＝締めが無い）は0から入れるだけで、**どちらの日も同じ画面で通る**。バイトにもドライバーにも作業が増えない（社長「渡す側がスポットの日もありえる」2026-08-20）。★販売画面の上に「📥 芝パーク② から受け取り」バナーを出す（`getPendingHandover`）。押すと商品別の数が並び、確定で `confirmHandover` → メインGASが拠点間移動ログに「完結」を1本立てる＝**納品数に即加算**。在庫表示は元から `state.moveAdj` を見ているので `refreshMoveAdj_` を叩けばその場で反映される。★**上限は渡す側にあった数**（締め済みなら申告残数／それ以外は納品数）でクランプする。超えると実在しない在庫を作るため。★**逃げ道＝締めで引き留める**（社長選択「すぐ確認できない場合があるから後からでもできるように」）。`enterFinalScreen` の冒頭で未受け取りがあれば止めて受け取り画面を開く。今日は来なかった日のために「今日は受け取りが無かった」も置いた（押すと記録だけ残して引き留めが外れる）。★読み込みは `showScreen('register')` に集約（入口が7か所あるので個別に付けると必ず漏れる）＋60秒スロットル。二次販売レジ（`?mode=2nd`）は対象外でAPIも叩かない。要: メインGAS @2026-08-20 以降＋拠点マスタに「自動振替先」列。 -->
@@ -1349,6 +1350,8 @@ html, body { overscroll-behavior-y: contain; }
       <div style="font-size:12px;color:var(--ink-mute);line-height:1.7;margin-bottom:8px;">
         計算上の残り数を入れてあります。<br><b>実際に数えて違っていたら直してください。</b>賄いで食べた分は、この下の「賄い」に入れてください。
       </div>
+      <!-- ★2026-09-16 v3.30 車から下ろしたぶんが未到着の時だけ出る -->
+      <div id="residual-pending-warn" style="display:none;background:#5D4037;color:#FFF;border-radius:8px;padding:9px 11px;font-size:12px;line-height:1.7;margin-bottom:8px;"></div>
       <div id="residual-inputs"></div>
       <div class="form-row" style="border-top:1px solid var(--border);margin-top:6px;padding-top:8px;">
         <span class="form-label" style="font-weight:700;">残り合計</span>
@@ -3559,6 +3562,10 @@ async function refreshMoveAdj_() {
     const json = await res.json();
     const adj  = (json && json.adj) ? json.adj : {};
     state.moveAdj = adj[locId] || {};
+    /* ★2026-09-16 v3.30 「出発したが、まだ到着として登録されていない」ぶん。
+       古いGASは pending を返さない → {} になり、従来どおりの挙動に倒れる（壊れない）。 */
+    const pend = (json && json.pending) ? json.pending : {};
+    state.movePending = pend[locId] || {};
   } catch (e) {
     console.error('refreshMoveAdj_', e);
     // 取得失敗時は前回値を保持（0扱いにして残数を誤らせない）
@@ -4001,6 +4008,16 @@ function saveState() {
       finalRegisterEnd: finalRegisterEnd,
       finalLateMinutes: finalLateMinutes,
       makanaiAri:    state['makanaiあり'],
+      /* ★2026-09-16 v3.30 **締めの残数を保存する。**
+         レジ終了金・遅刻分は Task-9 で保存しているのに、残数だけ抜けていた。
+         スマホのPWAは待っている間にOSに落とされることがあり、再起動すると
+         打った残数が丸ごと消えて計算値（＝推奨の数）に戻っていた。
+         moveAdj / movePending も持っておく＝取り直す前でも残数の計算がずれない。 */
+      residualDetail:  state.residualDetail  || {},
+      residualTouched: state.residualTouched || {},
+      makanaiDetail:   state.makanaiDetail   || {},
+      moveAdj:         state.moveAdj         || {},
+      movePending:     state.movePending     || {},
       savedAt:       new Date().toISOString(),
     };
     localStorage.setItem(STATE_KEY, JSON.stringify(save));   // ★2026-08-13 二次販売レジは別キー
@@ -4037,6 +4054,14 @@ function restoreState() {
     state._finalRegisterEnd = save.finalRegisterEnd || '';
     state._finalLateMinutes = save.finalLateMinutes || '';
     if (typeof save.makanaiAri === 'boolean') state['makanaiあり'] = save.makanaiAri;
+    // ★2026-09-16 v3.30 締めの残数を復元する（打った数字を再起動で失わない）
+    state.residualDetail  = save.residualDetail  || {};
+    state.residualTouched = save.residualTouched || {};
+    state.makanaiDetail   = save.makanaiDetail   || {};
+    state.moveAdj         = save.moveAdj         || {};
+    state.movePending     = save.movePending     || {};
+    state.residualCount   = Object.keys(state.residualDetail)
+                              .reduce((s, k) => s + (Number(state.residualDetail[k]) || 0), 0);
     // ★2026-08-18 v3.26 復元した納品数・販売数を見てから絞り込みをやり直す。
     //   「実際に届いた／既に売った商品」は献立に無くても必ず出す（offMenuProductIds_ が判定）。
     try { filterStoppedProducts(); } catch (e) {}
@@ -4349,12 +4374,37 @@ function rcBentoProducts() {
 }
 
 // ★2026-08-03 商品ごとの計算上の残り数（在庫画面の「残」と同じ式。賄いぶんも引く）
-function rcExpectedResidual(pid) {
+// ★2026-09-16 v3.30 **0で丸めない**。負の値はそのまま返す。
+//   【なぜ】車から下ろしている最中は、車載側だけ先に − が立ち、拠点側の ＋ は
+//     「到着」を登録して『完結』になるまで合流しない（メインGAS getMoveAdjByLocProduct_）。
+//     その谷間では mv が 0 のままなのに sold には車から下ろした弁当の売上が入るので、
+//     delivery + 0 - sold が**マイナス**になる。旧コードは Math.max(0, …) で潰しており、
+//     残数欄に**勝手に 0 が入っていた**（社長報告 2026-09-16「0に戻る」の正体）。
+//   → 負になった商品は「計算できない」として**既定値を入れない（空欄のまま）**。
+function rcExpectedResidualRaw_(pid) {
   const delivery = Number((state.deliveryCount || {})[pid]) || 0;
   const mv       = Number((state.moveAdj       || {})[pid]) || 0;
   const sold     = Number((state.productSales  || {})[pid]) || 0;
   const makanai  = state['makanaiあり'] ? (Number((state.makanaiDetail || {})[pid]) || 0) : 0;
-  return Math.max(0, delivery + mv - sold - makanai);
+  return delivery + mv - sold - makanai;
+}
+function rcExpectedResidual(pid) {          // 旧名は0丸めのまま残す（他から呼ばれても壊さない）
+  return Math.max(0, rcExpectedResidualRaw_(pid));
+}
+// 入力欄に入れる既定値。計算が負なら**空欄**（勝手に0を書かない）
+function rcDefaultResidualValue_(pid) {
+  const n = rcExpectedResidualRaw_(pid);
+  return n < 0 ? '' : String(n);
+}
+// ★2026-09-16 v3.30 1つでも手で打った欄があるか（＝自動上書きを止める合図）
+function rcAnyTouched_() {
+  const t = state.residualTouched || {};
+  return Object.keys(t).some(k => t[k]);
+}
+// ★2026-09-16 v3.30 いま入力中の欄は何があっても書き換えない
+function rcIsFocused_(pid) {
+  const a = document.activeElement;
+  return !!(a && a.id === `residual-${pid}`);
 }
 
 // 手で直した商品は自動更新しない（賄いを入れ直しても書いた数字を勝手に変えない）
@@ -4371,9 +4421,10 @@ function renderResidualInputs() {
   state.residualTouched = state.residualTouched || {};
   // ★2026-08-03 未入力の商品には計算値を入れておく（直した商品はその値を保持）
   c.innerHTML = rcBentoProducts().map(p => {
+    // ★2026-09-16 v3.30 打った欄は「0」も保持する（residualDetail は 0 を捨てるので touched を見る）
     const val = state.residualTouched[p.id]
-      ? (state.residualDetail[p.id] || 0)
-      : rcExpectedResidual(p.id);
+      ? String(Number(state.residualDetail[p.id]) || 0)
+      : rcDefaultResidualValue_(p.id);
     return `
     <div class="form-row">
       <span class="form-label">${p.name}</span>
@@ -4407,12 +4458,18 @@ function updateResidualTotal() {
 }
 
 // ★2026-08-03 賄いを入れ直したら、手で直していない商品の既定値を追従させる
+// ★2026-09-16 v3.30 **入力中の欄は絶対に触らない**。
+//   社長報告「最終の在庫を入力している最中に数字が推奨の数に戻る」。
+//   この関数は賄いトグルからも、締め画面に入った直後の非同期（refreshMoveAdj_）からも呼ばれる。
+//   呼ばれた瞬間に「まだ oninput されていない欄」を計算値で上書きするので、
+//   **上から順に打っている販売員の、これから打つ欄が書き換わって見える**。
 function syncResidualDefaults() {
   state.residualTouched = state.residualTouched || {};
   rcBentoProducts().forEach(p => {
-    if (state.residualTouched[p.id]) return;
+    if (state.residualTouched[p.id]) return;   // 手で打った欄は従来どおり守る
+    if (rcIsFocused_(p.id)) return;            // ★いま入力中の欄は触らない
     const el = document.getElementById(`residual-${p.id}`);
-    if (el) el.value = rcExpectedResidual(p.id);
+    if (el) el.value = rcDefaultResidualValue_(p.id);
   });
   recalcResidualState();
   saveState();
@@ -4485,27 +4542,125 @@ async function loadMakanaiLimit() {
 
 // 締め送信の直後に、残数と賄いをサーバへ送って理論残と突き合わせる。
 // ★報告ログが書かれた後でないと販売数が読めないので、submitReport の完了を待ってから呼ぶ。
+/* 🔴 ★2026-09-16 v3.30【残数の送信は「通るまで」粘る／落ちたら必ず見せる】
+     旧コードは1回だけ投げて catch で console.warn＝**落ちても誰にも見えなかった**。
+     /exec は確率的に 404 を返し（既知）、締めは12〜14時に全拠点が一斉に叩く時間帯。
+     memory「gas-exec-flaky-404」＝**回数ではなく時間で粘る**。帳票バッチと同じ考え方。
+     それでも通らなかったぶんは端末に残し、次にアプリを開いた時に自動で再送する。 */
+// STATE_KEY は 1681行で先に宣言済み（二次販売レジは別キー＝混ざらない）
+const RESIDUAL_QUEUE_KEY = STATE_KEY + '_residual_pending';
+
+function rcQueueSave_(payload) {
+  try { localStorage.setItem(RESIDUAL_QUEUE_KEY, JSON.stringify(payload)); } catch (e) {}
+}
+function rcQueueClear_() {
+  try { localStorage.removeItem(RESIDUAL_QUEUE_KEY); } catch (e) {}
+}
+function rcQueueLoad_() {
+  try {
+    const raw = localStorage.getItem(RESIDUAL_QUEUE_KEY);
+    if (!raw) return null;
+    const p = JSON.parse(raw);
+    // 日付が変わったものは捨てる（前日の残数を今日送らない）
+    if (!p || p.date !== ppToday()) { rcQueueClear_(); return null; }
+    return p;
+  } catch (e) { return null; }
+}
+
+// 1回だけ投げる。成功したら応答を返す。
+async function rcPostOnce_(payload) {
+  const res = await fetch(state.GAS_URL, { method: 'POST', body: JSON.stringify(payload), redirect: 'follow' });
+  const j = await res.json().catch(() => null);
+  if (!j || !j.ok) throw new Error((j && j.error) || 'サーバーが ok を返しませんでした');
+  return j;
+}
+
+// 時間で粘る（既定：最大3分・待ちは倍々で上限20秒）
+async function rcPostWithRetry_(payload, budgetMs) {
+  const until = Date.now() + (budgetMs || 180000);
+  let wait = 2000, lastErr = null;
+  while (Date.now() < until) {
+    try { return await rcPostOnce_(payload); }
+    catch (e) {
+      lastErr = e;
+      if (Date.now() + wait >= until) break;
+      await new Promise(r => setTimeout(r, wait));
+      wait = Math.min(wait * 2, 20000);
+    }
+  }
+  throw lastErr || new Error('時間内に送信できませんでした');
+}
+
 async function sendClosingResidual() {
   if (!state.location || !state.location.id) return;
+  const payload = {
+    action: 'submitClosingResidual',
+    date: ppToday(),
+    locationId:   state.location.id,
+    locationName: state.location.name,
+    userId:       state.userId,
+    userName:     state.userName,
+    residualCount:  Number(state.residualCount) || 0,
+    residualDetail: state.residualDetail || {},
+    makanaiCount:   state['makanaiあり'] ? (Number(state.makanaiCount) || 0) : 0,
+    makanaiDetail:  state['makanaiあり'] ? (state.makanaiDetail || {}) : {},
+  };
+  // 先に端末へ置く＝この関数の途中でアプリが落ちても、次の起動で再送される
+  rcQueueSave_(payload);
   try {
-    const payload = {
-      action: 'submitClosingResidual',
-      date: ppToday(),
-      locationId:   state.location.id,
-      locationName: state.location.name,
-      userId:       state.userId,
-      userName:     state.userName,
-      residualCount:  Number(state.residualCount) || 0,
-      residualDetail: state.residualDetail || {},
-      makanaiCount:   state['makanaiあり'] ? (Number(state.makanaiCount) || 0) : 0,
-      makanaiDetail:  state['makanaiあり'] ? (state.makanaiDetail || {}) : {},
-    };
-    const res = await fetch(state.GAS_URL, { method: 'POST', body: JSON.stringify(payload), redirect: 'follow' });
-    const j = await res.json().catch(() => null);
-    if (j && j.ok) renderResidualVerdict(j);
+    const j = await rcPostWithRetry_(payload, 180000);
+    rcQueueClear_();
+    renderResidualVerdict(j);
   } catch (e) {
     console.warn('残数の送信に失敗:', e);
+    rcRenderResidualFailed_();     // ★黙らない
   }
+}
+
+/* 残数だけが送れなかったことを完了画面に赤で出す。
+   ここを黙らせていたせいで「販売員は入力した／記録には無い」が毎日起きていた。 */
+function rcRenderResidualFailed_() {
+  const box = document.getElementById('pp-check');
+  if (!box) return;
+  if (document.getElementById('rc-failed-note')) return;   // 二重に出さない
+  const d = document.createElement('div');
+  d.id = 'rc-failed-note';
+  d.style.cssText = 'margin-top:10px;padding:10px 11px;border-radius:8px;background:#B71C1C;color:#FFF;font-size:13px;line-height:1.8;';
+  d.innerHTML = '⚠️ <b>残った数だけ、まだ送れていません。</b>'
+              + '<br>報告（締め）は送信できています。<b>この画面を閉じずにお待ちください。</b>'
+              + '<br>電波が戻れば自動で送ります。<button onclick="rcRetryNow_()" '
+              + 'style="margin-top:7px;padding:7px 14px;border:none;border-radius:6px;background:#FFF;color:#B71C1C;font-weight:700;font-size:13px;cursor:pointer;">'
+              + 'いま送り直す</button>';
+  box.style.display = 'block';
+  box.appendChild(d);
+}
+
+async function rcRetryNow_() {
+  const p = rcQueueLoad_();
+  if (!p) { showToast('送信待ちの残数はありません'); return; }
+  showToast('残数を送り直しています…');
+  try {
+    const j = await rcPostWithRetry_(p, 60000);
+    rcQueueClear_();
+    const note = document.getElementById('rc-failed-note');
+    if (note) note.remove();
+    renderResidualVerdict(j);
+    showToast('残った数を送信しました');
+  } catch (e) {
+    showToast('まだ送れません。電波の良い場所でもう一度お試しください', 5000);
+  }
+}
+
+/* 起動時・レジ画面に戻った時に、送れていない残数があれば黙って再送する。
+   ★締めたあとアプリを閉じてしまっても、次に開いた時に拾える。 */
+async function rcFlushPendingResidual_() {
+  const p = rcQueueLoad_();
+  if (!p) return;
+  try {
+    await rcPostWithRetry_(p, 60000);
+    rcQueueClear_();
+    showToast('送れていなかった残数を送信しました');
+  } catch (e) { /* 次の機会に再送する */ }
 }
 
 // ★判定はここで初めて見せる（入力前には出さない）
@@ -4595,6 +4750,24 @@ async function submitFinal() {
     //   ★金額は totalSalary に既に含まれている（レジから一緒に抜くため）。
     okibenGigPaid: (state.okibenGig && state.okibenGig.amount) ? state.okibenGig.dates : [],
     couponTotal: (state.history || []).filter(h => h.status === 'active').reduce((s, h) => s + (Number(h.couponAmount) || 0), 0),  // 2026-07-08 Phase3 D1: クーポン値引累計→GAS col34（取消分は除外）
+    /* 🔴 ★2026-09-16 v3.30【残数を報告と同じ1本の送信に載せる】社長報告 2026-09-16
+         「青山で回収時に残数が表示されていない。販売スタッフは入力したと言う。直せなかった」。
+       【何が起きていたか】残数は報告ログとは**別の2本目のPOST**（submitClosingResidual）で
+         送っていた。報告が通ってもこの2本目だけ落ちると、残数照合ログの行が立たない。
+         行が無いと getDeclaredResidual が found:false → **ドライバーの回収画面に入力欄が
+         1つも出ず、submitCollectionCheck も弾かれる**＝現場では誰も直せない。
+         失敗は console.warn だけでリトライも無く、販売員には「完了」しか見えなかった。
+       【規模】直近12営業日で**23件**（平河町4・大手町3・浜松町3…）。ゼロの日は2日だけ。
+       【直し方】okibenGigPaid と同じ考え方＝**同じ送信に載せて一蓮托生にする**。
+         GAS の submitReport が報告ログを書いた直後に submitClosingResidual を呼ぶので、
+         報告が通れば残数も必ず立つ。下の sendClosingResidual は判定表示と
+         **古いGAS（residual を見ない版）への保険**として残す＝同じ日×拠点は作り直しなので二重にならない。 */
+    residual: {
+      residualCount:  Number(state.residualCount) || 0,
+      residualDetail: state.residualDetail || {},
+      makanaiCount:   state['makanaiあり'] ? (Number(state.makanaiCount) || 0) : 0,
+      makanaiDetail:  state['makanaiあり'] ? (state.makanaiDetail || {}) : {},
+    },
   };
   // ★2026-07-31 報告の送信を待ってから残数を送る。
   //   submitClosingResidual は報告ログの販売数を読むので、書かれる前に送ると理論残が狂う。
@@ -4811,8 +4984,53 @@ function enterFinalScreen() {
     loadMakanaiLimit();
     // ★2026-08-03 既定値に拠点間移動±を含めるため、最新の移動を取ってから入れ直す
     //   （在庫画面を一度も開いていないと state.moveAdj が空のままになるため）
-    refreshMoveAdj_().then(() => { try { syncResidualDefaults(); } catch (e) {} });
+    // ★2026-09-16 v3.30 **await していない**のがそのまま事故になっていた。
+    //   /exec の応答は床が3〜4秒、混む時間帯は10秒を超える。その間に販売員が打ち始めると、
+    //   返ってきた瞬間に syncResidualDefaults が「まだ打っていない欄」を全部書き換える。
+    //   → ①画面を出入りしたら捨てる（トークン）②もう1つでも打っていたら上書きしない。
+    const myToken = ++rcSyncToken;
+    refreshMoveAdj_().then(() => {
+      if (myToken !== rcSyncToken) return;          // 締め画面を出入りした＝この結果は古い
+      try {
+        if (rcAnyTouched_()) {
+          recalcResidualState();                     // 打ち始めていたら合計だけ直す
+        } else {
+          syncResidualDefaults();
+        }
+        rcRenderPendingWarn_();                      // 「車から下ろしたぶんが未到着」の注意
+      } catch (e) { console.error(e); }
+    });
   } catch (e) { console.error('残数入力の初期化に失敗:', e); }
+}
+
+// ★2026-09-16 v3.30 締め画面に入るたびに増える。古い非同期の結果を捨てるための番号。
+let rcSyncToken = 0;
+
+/* ★2026-09-16 v3.30【車から下ろしたぶんが、まだ拠点に合流していないことを画面に出す】
+   メインGAS getMoveAdjByLocProduct_ は「出発＝移動元から −／**完結してから**移動先へ ＋」。
+   ドライバーが車から下ろして「到着」を登録する前は、この拠点の移動＋が 0 のままなので、
+   計算上の残りがマイナスに出る。数字を勝手に 0 で埋めるのではなく、理由を書いて見せる。 */
+function rcRenderPendingWarn_() {
+  const box = document.getElementById('residual-pending-warn');
+  if (!box) return;
+  const pend = state.movePending || {};
+  const teaIds = _rcTeaIdsClient_();
+  let total = 0;
+  Object.keys(pend).forEach(pid => { if (!teaIds[pid]) total += Number(pend[pid]) || 0; });
+  if (total > 0) {
+    box.style.display = 'block';
+    box.innerHTML = `🚚 車から下ろした <b>${total}個</b> が、まだ「到着」として登録されていません。`
+                  + `<br><span style="opacity:.85;">この分は下の計算値に入っていません。`
+                  + `<b>実際に棚にある数を入れてください。</b></span>`;
+  } else {
+    box.style.display = 'none';
+    box.innerHTML = '';
+  }
+}
+function _rcTeaIdsClient_() {
+  const m = {};
+  (state.products || []).forEach(p => { if (String(p.name || '').indexOf('お茶') >= 0) m[p.id] = true; });
+  return m;
 }
 
 function backToRegisterFromFinal() {
@@ -4958,7 +5176,13 @@ function attachModalSwipeClose() {
 }
 
 // BOOT
-init().then(() => { renderLocations(); attachModalSwipeClose(); });
+init().then(() => {
+  renderLocations();
+  attachModalSwipeClose();
+  /* ★2026-09-16 v3.30 前回送れなかった残数があれば、ここで黙って送り直す。
+     締めたあとにアプリを閉じてしまっても、次に開いた時点で拾える。 */
+  try { rcFlushPendingResidual_(); } catch (e) { console.warn(e); }
+});
 </script>
 </body>
 </html>
