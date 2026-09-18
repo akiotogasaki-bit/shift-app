@@ -8074,10 +8074,13 @@ async function rtLoadAll() {
       rtFetchJSON(`${GAS_URL}?action=getTodayIntermediate&withStarted=1`),
       rtFetchJSON(`${GAS_URL}?action=getDriverState`).catch(() => ({ inactive: [] })),
       rtFetchJSON(`${GAS_URL}?action=getMoveAdjByLoc`).catch(() => ({ adj: {} })),  // v7
-      /* ★2026-09-13 v7.2 3区間予定（エリアの売れ行き棒）。**その日1回しかサーバーへ行かない**
-         （2回目以降は localStorage を見て即 return）ので、5分周回に混ぜても負荷は増えない。
-         戻り値は使わない＝取れなくてもここから先は従来どおり動く。 */
-      rtLoadBandPlan_().catch(() => {}),
+      /* 🔴 ★2026-09-18 **緊急停止中。**営業中（12:00）に /exec の実行枠が枯れ、
+         何もしないアクションすら90秒でエラーページを返す状態になった。
+         この口は取得に失敗すると**3回リトライする**作りで、混雑している時に
+         **さらに叩いて悪化させる側**なので、原因が分かるまで呼ばない。
+         止めると エリアの売れ行き棒が出なくなるだけで、マトリクスの数字は従来どおり。
+         再開する時はここのコメントアウトを外す（`RT_BAND_ENABLED_` を true に）。 */
+      RT_BAND_ENABLED_ ? rtLoadBandPlan_().catch(() => {}) : Promise.resolve(),
     ]);
     rtMasterData = master;
     rtMoveAdjMap = (moveAdj && moveAdj.adj) ? moveAdj.adj : {};  // v7
@@ -8447,6 +8450,8 @@ function _teaIds_() {
    2026-09-14 に実際に踏んだ（9/08 に作られた古い予定＝全社1479個を端末が掴んでいた。
    作り直して1127になってもスマホ側は1479のまま）。
    サーバー側は `?action=getBandPlan&date=…&fresh=1` を1回叩けばキャッシュが入れ替わる。 */
+/* 🔴 ★2026-09-18 緊急停止フラグ。true に戻すと売れ行き棒が復活する。→ rtLoadAll の該当コメント */
+const RT_BAND_ENABLED_ = false;
 const RT_BAND_KEY = 'oedo_driver_bandplan_v2';
 let rtBandPlan = null;            // { date, loc: {拠点ID:[区間1,区間2,区間3]} }
 
