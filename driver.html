@@ -2888,6 +2888,30 @@ async function fetchDriverStatePublic_() {
   } catch (e) { return null; }
 }
 
+/* ★2026-09-19 公開スナップショットの**2行目以降**＝実況データ（拠点別の納品・販売・3区間予定）。
+   1行目は回収状態。**同じCSVのURLで両方取れる**ので、社長の公開作業は1回で済んでいる。
+   ⚠ ここに入っているのは **拠点ID・商品ID・数だけ。**現金・給与・販売員名・LINE UID は
+     公開シートには**1つも出していない**（出せない。回収タブと実況サマリーが `/exec` のままなのはそのため）。 */
+let drvSnapLive = null, drvSnapLiveAt = 0;
+async function fetchSnapLive_(maxAgeMs) {
+  if (drvSnapLive && (Date.now() - drvSnapLiveAt) < (maxAgeMs || 30000)) return drvSnapLive;
+  try {
+    const res = await fetch(DRV_STATE_PUB_URL + '&_cb=' + Date.now(), { redirect: 'follow' });
+    if (!res.ok) return null;
+    const lines = (await res.text()).split(/\r?\n/).filter(Boolean);
+    if (lines.length < 2) return null;
+    let body = lines.slice(1).map(l => {
+      let s = l.trim();
+      if (s.startsWith('"') && s.endsWith('"')) s = s.slice(1, -1).replace(/""/g, '"');
+      return s;
+    }).join('');
+    const o = JSON.parse(body);
+    if (!o || o.date !== ccToday_()) return null;
+    drvSnapLive = o; drvSnapLiveAt = Date.now();
+    return o;
+  } catch (e) { return null; }
+}
+
 async function syncDriverState() {
   // 自操作後5秒はサーバー値で上書きしない
   if (Date.now() - state.lastUserActionAt < SELF_ACTION_GRACE_MS) return;
@@ -8491,38 +8515,31 @@ function _teaIds_() {
    作り直して1127になってもスマホ側は1479のまま）。
    サーバー側は `?action=getBandPlan&date=…&fresh=1` を1回叩けばキャッシュが入れ替わる。 */
 /* 🔴 ★2026-09-18 緊急停止フラグ。true に戻すと売れ行き棒が復活する。→ rtLoadAll の該当コメント */
-const RT_BAND_ENABLED_ = false;
+const RT_BAND_ENABLED_ = true;   // ★2026-09-19 公開スナップショット経由で復活（/exec は使わない）
 const RT_BAND_KEY = 'oedo_driver_bandplan_v2';
 let rtBandPlan = null;            // { date, loc: {拠点ID:[区間1,区間2,区間3]} }
 
 /* その日1回だけ取って localStorage に置く（getPatrolPlan と同じ考え方）。
    ⚠ 取れなくても画面は従来どおり出す。棒が出ないだけにする。 */
 async function rtLoadBandPlan_() {
+  /* 🔴 ★2026-09-19 **`/exec` を叩かない。**公開スナップショットの `band` を使う。
+     【なぜ】9/18 に営業中 `/exec` の実行枠が枯れ、この口も緊急停止した。
+       3区間予定は**お金を含まない**ので公開シートに載せられる＝**実行枠を1本も使わない。**
+     ⚠ リトライは持たない（混雑時に叩き足すと悪化させる。9/18の反省）。
+       取れなければ棒が出ないだけで、マトリクスの数字は従来どおり出る。 */
   const today = ccToday_();
-  const ok_ = (o) => !!(o && o.date === today && o.loc);
-  if (ok_(rtBandPlan)) return;
+  if (rtBandPlan && rtBandPlan.date === today && rtBandPlan.loc) return;
   try {
     const raw = localStorage.getItem(RT_BAND_KEY);
     if (raw) {
       const o = JSON.parse(raw);
-      if (ok_(o)) { rtBandPlan = o; return; }
+      if (o && o.date === today && o.loc) { rtBandPlan = o; return; }
     }
   } catch (e) {}
-  /* ⚠ **3回まで試す。**`/exec` は確率的にHTMLのエラーページを返すことがあり（→ memory `gas-exec-flaky-404`）、
-     `rtFetchJSON` は JSON.parse でそのまま落ちる。ここは**その日1回きりの取得**なので、
-     1回スカを引くと次の5分周回まで棒が出ない。取れるまで待つ価値がある。 */
-  for (let i = 0; i < 3; i++) {
-    try {
-      const d = await rtFetchJSON(
-        `${GAS_URL}?action=getBandPlan&date=${encodeURIComponent(today)}&_cb=${Date.now()}_${i}`);
-      if (d && d.ok && d.loc) {
-        rtBandPlan = d;
-        try { localStorage.setItem(RT_BAND_KEY, JSON.stringify(d)); } catch (e) {}
-        return;
-      }
-      if (d && d.ok === false) return;          // 「その日の3区間予定がありません」＝叩き直しても同じ
-    } catch (e) { console.warn('getBandPlan', i, e); }
-    await new Promise(r => setTimeout(r, 1200));
+  const live = await fetchSnapLive_(60000);
+  if (live && live.band && Object.keys(live.band).length) {
+    rtBandPlan = { date: today, loc: live.band, src: 'snapshot' };
+    try { localStorage.setItem(RT_BAND_KEY, JSON.stringify(rtBandPlan)); } catch (e) {}
   }
 }
 
