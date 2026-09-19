@@ -2851,13 +2851,53 @@ async function init() {
 // ═══════════════════════════════════════════════════════════════
 let driverStateTimer = null;
 
+/* ═══════════════════════════════════════════════════════════════
+   ★2026-09-19【9/18の障害の根治・試作】回収状態は **/exec を使わずに読む**
+   ───────────────────────────────────────────────────────────────
+   【なぜ】9/18 に営業中 /exec の実行枠が枯れ、レジもドライバーも同時に止まった。
+     実測：**11バイトしか返さない呼び出しでも4〜5秒**かかる（往復そのもののコスト）。
+     同時実行は30本前後が上限なので **1分あたり約400回が天井**。
+     レジ約40台＋ドライバー6台が10秒ごとに叩くと**1分約280回＝天井の7割**。
+     キャッシュは「1回15秒→5秒」には効くが、**回数には1回も効かない。**
+   【やったこと】回収状態（拠点IDと回収済み／休止フラグだけ）を専用の別スプレッドシートへ
+     書き出し、**ウェブに公開したCSV**を端末が直接読む。**GASの実行枠を1本も使わない。**
+     実測 2026-09-19：公開CSV **0.65〜1.08秒** 対 /exec **4.4〜6.3秒**。
+     GitHub Pages のページからブラウザで読めることも実機で確認済み（835ms・status 200）。
+   🔴 **公開しているのは専用シートだけ。**メインSSは絶対に公開しない（給与・売上・LINE UIDが入っている）。
+     置いているのは拠点IDとフラグのみで、名前も金額も入れていない。
+   ⚠ **取れなかったら従来どおり /exec に落ちる。**公開が外れても止まらないようにするため。
+   ⚠ 更新は書き込みの直後（回収・休止・報告）＋15分トリガーの保険。常に最新。 */
+const DRV_STATE_PUB_URL =
+  'https://docs.google.com/spreadsheets/d/e/2PACX-1vSt3QWyDo8m7fCKkD8Bu6KCGmux6AUFSZTxgqGmSns27eJMmoyWPwSvk4in81UWf7piVGBosCwJHrJl/pub?gid=0&single=true&output=csv';
+
+/** 公開CSVから回収状態を読む。読めなければ null（呼び出し側が /exec に落ちる） */
+async function fetchDriverStatePublic_() {
+  try {
+    const res = await fetch(DRV_STATE_PUB_URL + '&_cb=' + Date.now(), { redirect: 'follow' });
+    if (!res.ok) return null;
+    let txt = (await res.text()).trim();
+    // CSVの1セルなので、前後の " と "" のエスケープを戻す
+    if (txt.startsWith('"') && txt.endsWith('"')) txt = txt.slice(1, -1).replace(/""/g, '"');
+    const o = JSON.parse(txt);
+    if (!o || !Array.isArray(o.collected) || !Array.isArray(o.inactive)) return null;
+    // 日付が違う＝前日のスナップショットが残っている。使わない（古い回収済みで塗り潰さないため）
+    if (o.date && o.date !== ccToday_()) return null;
+    // /exec と同じ形（{locationId}の配列）に揃えてから返す
+    return { collected: o.collected.map(id => ({ locationId: id })),
+             inactive:  o.inactive.map(id => ({ locationId: id })) };
+  } catch (e) { return null; }
+}
+
 async function syncDriverState() {
   // 自操作後5秒はサーバー値で上書きしない
   if (Date.now() - state.lastUserActionAt < SELF_ACTION_GRACE_MS) return;
 
   try {
-    const res  = await fetch(GAS_URL + '?action=getDriverState', { redirect: 'follow' });
-    const data = await res.json();
+    let data = await fetchDriverStatePublic_();
+    if (!data) {
+      const res = await fetch(GAS_URL + '?action=getDriverState', { redirect: 'follow' });
+      data = await res.json();
+    }
     const newCollected = new Set((data.collected || []).map(c => c.locationId));
     // ★ v5.8 軽量版なので data.inactive は**手動休止だけ**。端末が持つ自動休止と混ぜる。
     const newInactive  = applyInactive_(data.inactive || []);
