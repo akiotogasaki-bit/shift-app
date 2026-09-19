@@ -8138,10 +8138,17 @@ async function rtLoadAll() {
   }
 
   try {
+    /* 🔴 ★2026-09-19 **エリア別マトリクスを開いている間は `/exec` の
+       `getTodayIntermediate` を叩かない。**公開スナップショットから作る（実行枠0本）。
+       9/18 の障害で**単独3,634秒＝最大の消費者**だった口。ピーク中に見るのはこの画面なので、
+       ここを外すのが一番効く。サマリー（売上）を開いている時は従来どおり `/exec`。 */
+    const _snapLive = (rtCurrentView === 'area') ? await fetchSnapLive_(30000) : null;
+    const _snapInter = _snapLive ? rtIntermediateFromSnap_(_snapLive) : null;
     const [master, reports, intermediate, driverState, moveAdj] = await Promise.all([
       rtFetchJSON(`${GAS_URL}?action=getMaster`),
       rtFetchJSON(`${GAS_URL}?action=getTodayReports`),
-      rtFetchJSON(`${GAS_URL}?action=getTodayIntermediate&withStarted=1`),
+      _snapInter ? Promise.resolve({ data: _snapInter })
+                 : rtFetchJSON(`${GAS_URL}?action=getTodayIntermediate&withStarted=1`),
       rtFetchJSON(`${GAS_URL}?action=getDriverState`).catch(() => ({ inactive: [] })),
       rtFetchJSON(`${GAS_URL}?action=getMoveAdjByLoc`).catch(() => ({ adj: {} })),  // v7
       /* 🔴 ★2026-09-18 **緊急停止中。**営業中（12:00）に /exec の実行枠が枯れ、
@@ -8483,6 +8490,34 @@ function switchRtView(view) {
   document.getElementById('rtsub-summary').classList.toggle('active', view === 'summary');
   document.getElementById('rtsub-area').classList.toggle('active', view === 'area');
   if (view === 'area') renderAreaMatrix();
+}
+
+/* ★2026-09-19 公開スナップショット → 実況のレコード形に変換する。
+   【なぜ】`getTodayIntermediate` は 9/18 の障害で**単独3,634秒＝最大の消費者**だった。
+     中身は「拠点ごとの納品数と商品別販売数」で、**お金も名前も含まない**＝公開シートに出せる。
+   ⚠ **エリア別マトリクスの時だけ使う。**サマリー（売上・現金）は現金が絡むので
+     公開シートに出せないので、従来どおり `/exec` から取る。
+   ⚠ 返す形は `_effSellRate_` / `_effDeliveryObj_` が読める形に揃える
+     （`deliveryCountJson` と `productSalesJson` は**文字列**で渡す）。 */
+function rtIntermediateFromSnap_(live) {
+  if (!live || !live.sales) return null;
+  const out = [];
+  const ids = new Set([...Object.keys(live.sales || {}), ...Object.keys(live.deliv || {})]);
+  ids.forEach(lid => {
+    const s = live.sales[lid] || {};
+    const d = (live.deliv || {})[lid] || {};
+    let sold = 0;
+    Object.keys(s).forEach(k => { sold += Number(s[k]) || 0; });
+    out.push({
+      locationId: lid,
+      deliveryCountJson: JSON.stringify(d),
+      productSalesJson:  JSON.stringify(s),
+      soldCount: sold,
+      isIntermediate: true,
+      fromSnapshot: true
+    });
+  });
+  return out;
 }
 
 // お茶商品ID一覧
