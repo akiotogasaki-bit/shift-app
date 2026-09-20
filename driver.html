@@ -4741,8 +4741,11 @@ async function openAbsenceMove() {
   // ① 納品数（＝まだ1個も売っていないので全量）をサーバーから取る
   let items = null;
   try {
+    /* ⚠ パラメータ名は **`loc`**（`locationId` ではない）。
+       doGet は `e.parameter.loc` を見ており、間違えると
+       `{ok:false,error:'locationId が必要です'}` が返って**必ず失敗する**（2026-09-20 に踏んだ）。 */
     const r = await fetch(`${GAS_URL}?action=getDeclaredResidual&date=${encodeURIComponent(ccToday_())}`
-                        + `&locationId=${encodeURIComponent(id)}`, { redirect: 'follow' });
+                        + `&loc=${encodeURIComponent(id)}`, { redirect: 'follow' });
     const d = await r.json();
     if (!d || !d.noRegister) {
       showToast(nm + ' はレジが開始されています。回収から締めてください', 'error', 4000);
