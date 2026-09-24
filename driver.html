@@ -8652,6 +8652,7 @@ function rtIntermediateFromSnap_(live) {
        サーバー側は直したが、**公開シートが壊れた時に黙って0を出す形そのもの**を残さない。
      ⚠ 「全拠点0」だけを見る。1拠点でも売れていれば通常どおりスナップショットを使う
        （＝朝いちの「まだ誰も売っていない」時間帯だけ `/exec` に落ちる。9/19以前と同じ挙動）。 */
+  if (!out.length) return null;                 // 空配列も truthy なので明示的に落とす
   const anySold = out.some(r => r.soldCount > 0);
   const anyDeliv = out.some(r => r.deliveryCountJson && r.deliveryCountJson !== '{}');
   if (!anySold && anyDeliv) return null;
