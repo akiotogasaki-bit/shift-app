@@ -1,0 +1,233 @@
+<!doctype html>
+<!-- お江戸弁当 業者アプリ Version: v1.0 (2026-09-29)
+     設計書: 40_ドキュメント/設計_業者アプリ_2026-09-29.md ／ サーバー: 15_ソース/vendor-api.gs -->
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>お江戸弁当 販売状況</title>
+<style>
+:root{--bg:#f7f6f3;--card:#fff;--ink:#222;--sub:#6b6b6b;--line:#e3e1dc;--accent:#c0392b;--up:#c0392b;--dn:#2c6fbb;--ok:#1f8a4c;--warn:#b7791f}
+@media (prefers-color-scheme:dark){:root{--bg:#161616;--card:#222;--ink:#eee;--sub:#aaa;--line:#3a3a3a;--accent:#e0675a;--up:#e0675a;--dn:#6fa4e0;--ok:#4cc27f;--warn:#e3a94b}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,'Hiragino Sans','Noto Sans JP',sans-serif;font-size:15px}
+#top{position:sticky;top:0;z-index:5}
+header{background:var(--card);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;align-items:center;gap:8px}
+header h1{font-size:15px;margin:0;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}header select,header button{font:inherit;font-size:13px;padding:6px 8px}
+nav{display:flex;background:var(--card);border-bottom:1px solid var(--line)}
+nav button{flex:1;border:0;background:none;padding:10px 4px;font:inherit;font-size:13px;color:var(--sub);border-bottom:3px solid transparent}
+nav button.on{color:var(--ink);border-color:var(--accent);font-weight:600}
+main{padding:12px 16px 40px;max-width:760px;margin:0 auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:12px}
+h2{font-size:15px;margin:0 0 10px;border-left:4px solid var(--accent);padding-left:8px}
+.kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px}
+.kpi div{border:1px solid var(--line);border-radius:8px;text-align:center;padding:6px 2px;font-size:11px;color:var(--sub)}
+.kpi b{display:block;font-size:20px;color:var(--ink)}
+table{border-collapse:collapse;width:100%;font-size:13px}th,td{border-bottom:1px solid var(--line);padding:6px 4px;text-align:left}
+th{color:var(--sub);font-weight:500;font-size:12px}.n{text-align:right;font-variant-numeric:tabular-nums}
+.out{color:var(--accent);font-weight:600}.up{color:var(--up);font-weight:600}.dn{color:var(--dn);font-weight:600}
+.muted{color:var(--sub);font-size:12px}.rec{border:2px solid var(--accent);border-radius:10px;padding:10px 12px;margin-top:10px}
+.rec b.big{font-size:28px}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+input[type=email],input[type=password],input[type=date]{font:inherit;padding:10px;border:1px solid var(--line);border-radius:8px;width:100%;background:var(--card);color:var(--ink)}
+input.q{width:100%;padding:6px 2px;text-align:right;font:inherit;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink)}
+input.q.chg{border-color:var(--warn);background:rgba(183,121,31,.08)}
+.btn{font:inherit;padding:10px 14px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}.btn:disabled{opacity:.5}
+.pill{display:inline-block;font-size:11px;padding:2px 8px;border-radius:99px;border:1px solid var(--line)}
+.pill.ok{color:var(--ok);border-color:var(--ok)}.pill.draft{color:var(--warn);border-color:var(--warn)}
+.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}.err{color:var(--accent)}
+#toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;display:none;z-index:9}
+.day{border-top:1px solid var(--line);padding:10px 0}.day:first-of-type{border-top:0}.dh{display:flex;align-items:center;gap:8px;margin-bottom:6px}.dh b{flex:1}
+.grid5{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}.grid5 label{font-size:11px;color:var(--sub);text-align:center;display:block}
+.center{max-width:380px;margin:40px auto}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast"></div>
+<script>
+// サーバー（業者GAS の /exec）。デプロイ後にURLを入れる
+const API = 'https://script.google.com/macros/s/AKfycbxYi-4WvR9m9EwE2KHFJPJrk0_47SSvterFrUpKRkHgDlRA2fFE1WfwumWP6U5dKtO_Mg/exec';
+const AREAS = ['芝','神谷','赤坂','銀座','お茶の水'];
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const st = { session: null, me: null, vendor: '', tab: 'live' };
+function store(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} }
+function load(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function toast(t) { const el = $('#toast'); el.textContent = t; el.style.display = 'block'; clearTimeout(toast.t); toast.t = setTimeout(() => el.style.display = 'none', 2600); }
+const sg = (n) => n > 0 ? '+' + n : String(n);
+const cl = (n) => n > 0 ? 'up' : (n < 0 ? 'dn' : '');
+const md = (d) => { const [y, m, dd] = d.split('-'); return +m + '/' + +dd; };
+const wd = (d) => '日月火水木金土'[new Date(d + 'T12:00:00+09:00').getDay()];
+const yen = (n) => '¥' + Math.round(n).toLocaleString('ja-JP');
+
+async function call(action, body = {}) {
+  const res = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(Object.assign({ action, session: st.session, vendor: st.vendor }, body)) });
+  const j = await res.json();
+  if (j.relogin) { logout(); throw new Error(j.error); }
+  if (!j.ok) throw new Error(j.error || '失敗しました');
+  return j;
+}
+
+// ---------------- ログイン ----------------
+function loginView(msg = '') {
+  $('#app').innerHTML = `<div class="center card"><h2>お江戸弁当 販売状況</h2>
+    <p class="muted">登録したメールアドレスとパスワードで入ってください。</p>
+    <p><input type="email" id="em" placeholder="メールアドレス" autocomplete="username"></p>
+    <p><input type="password" id="pw" placeholder="パスワード" autocomplete="current-password"></p>
+    <p class="err">${esc(msg)}</p>
+    <div class="row"><button class="btn pri" id="go">ログイン</button><button class="btn" id="rs">パスワードを設定する／忘れた</button></div></div>`;
+  $('#em').value = load('v_email') || '';
+  $('#go').onclick = async () => {
+    try { const j = await call('login', { email: $('#em').value, password: $('#pw').value });
+      st.session = j.session; store('v_session', j.session); store('v_email', $('#em').value); start();
+    } catch (e) { loginView(e.message); }
+  };
+  $('#pw').onkeydown = (e) => { if (e.key === 'Enter') $('#go').click(); };
+  $('#rs').onclick = async () => {
+    const em = $('#em').value.trim(); if (!em) return toast('メールアドレスを入れてください');
+    try { const j = await call('requestReset', { email: em }); loginView(j.message); } catch (e) { loginView(e.message); }
+  };
+}
+function resetView(key, msg = '') {
+  $('#app').innerHTML = `<div class="center card"><h2>パスワードの設定</h2>
+    <p class="muted">8文字以上で決めてください。</p>
+    <p><input type="password" id="p1" placeholder="新しいパスワード" autocomplete="new-password"></p>
+    <p><input type="password" id="p2" placeholder="もう一度" autocomplete="new-password"></p>
+    <p class="err">${esc(msg)}</p><button class="btn pri" id="go">設定する</button></div>`;
+  $('#go').onclick = async () => {
+    if ($('#p1').value !== $('#p2').value) return resetView(key, '2回の入力が一致しません');
+    try { await call('setPassword', { key, password: $('#p1').value }); history.replaceState(null, '', location.pathname); loginView('設定しました。ログインしてください'); }
+    catch (e) { resetView(key, e.message); }
+  };
+}
+function logout() { st.session = null; store('v_session', null); loginView(); }
+
+// ---------------- 本体 ----------------
+async function start() {
+  try { st.me = await call('me'); } catch (e) { return; }
+  if (st.me.role === '管理' && !st.vendor) st.vendor = (st.me.vendors[0] || {}).id || '';
+  frame(); show(st.tab);
+}
+function frame() {
+  const sel = st.me.role === '管理' ? `<select id="vs">${st.me.vendors.map(v => `<option value="${esc(v.id)}"${v.id === st.vendor ? ' selected' : ''}>${esc(v.name)}</option>`).join('')}</select>` : '';
+  $('#app').innerHTML = `<div id="top"><header><h1>${st.me.role === '管理' ? '管理' : esc(st.me.name) + '様'}</h1>${sel}<button class="btn" id="lo">ログアウト</button></header>
+  <nav>${[['live','今日'],['report','レポート'],['plan','翌週の配分'],['money','お支払い']].map(([k, t]) => `<button data-t="${k}">${t}</button>`).join('')}</nav></div><main id="m"></main>`;
+  $('#lo').onclick = logout;
+  if ($('#vs')) $('#vs').onchange = (e) => { st.vendor = e.target.value; show(st.tab); };
+  document.querySelectorAll('nav button').forEach(b => b.onclick = () => show(b.dataset.t));
+}
+async function show(t) {
+  st.tab = t; store('v_tab', t);
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
+  $('#m').innerHTML = '<p class="muted">読み込み中…</p>';
+  try { await ({ live, report, plan, money })[t](); } catch (e) { $('#m').innerHTML = `<p class="err">${esc(e.message)}</p>`; }
+}
+
+// ① 今日
+async function live() {
+  const j = await call('live');
+  if (!j.fresh) { $('#m').innerHTML = '<div class="card"><p>今日の販売データはまだありません（営業時間中に更新されます）。</p></div>'; return; }
+  $('#m').innerHTML = `<p class="muted">${esc(j.date)} ${esc(j.at)} 時点（15分ごとに更新）。完売時刻は速報で、夜に確定します。</p>` + j.products.map(p => {
+    const outs = p.rows.filter(r => r.out).length;
+    return `<div class="card"><h2>${esc(p.name)}</h2>
+    <div class="kpi"><div><b>${p.total}</b>本日の納品</div><div><b>${p.sold}</b>販売</div><div><b>${outs}</b>完売拠点</div></div>
+    <div class="scroll"><table><tr><th>拠点</th><th class="n">置いた数</th><th class="n">販売</th><th class="n">残</th><th class="n">完売</th></tr>
+    ${p.rows.map(r => `<tr><td>${esc(r.loc)}</td><td class="n">${r.deliv}</td><td class="n">${r.sold}</td><td class="n">${r.rem}</td><td class="n ${r.out ? 'out' : ''}">${r.out ? (esc(r.at) || '完売') : ''}</td></tr>`).join('')}</table></div>
+    <p class="muted">「置いた数」は拠点に置いた数です。本日の納品のうち残りは車載にあります。</p></div>`;
+  }).join('');
+}
+
+// ② レポート
+async function report(date) {
+  const [j, w] = await Promise.all([call('report', { date }), call('weekly', { date })]);
+  let h = `<div class="card row"><input type="date" id="dt" value="${esc(j.date)}" style="width:auto"><span class="muted">${esc(md(j.date))}(${esc(j.wd)}) の日次</span></div>`;
+  if (!j.biz) h += '<div class="card">この日はお休みです。</div>';
+  h += j.products.filter(p => p.total || p.sold).map(p => {
+    const d = p.rec.rec - p.rec.base;
+    return `<div class="card"><h2>${esc(p.name)}</h2>
+    <div class="kpi"><div><b>${p.total}</b>納品</div><div><b>${p.sold}</b>販売</div><div><b>${p.rem}</b>残</div><div><b>${p.rate}%</b>消化率</div><div><b>${p.nsold}</b>完売拠点</div><div><b>${esc(p.first || '—')}</b>最速完売</div></div>
+    <div class="scroll"><table><tr><th>拠点</th><th class="n">販売</th><th class="n">完売時刻</th></tr>
+    ${p.rows.map(r => `<tr><td>${esc(r[0])}</td><td class="n">${r[1]}</td><td class="n ${r[2] ? 'out' : ''}">${esc(r[2] || '—')}</td></tr>`).join('')}</table></div>
+    <table style="margin-top:10px"><tr><th>前4週の同曜日</th><th class="n">納品</th><th class="n">販売</th><th class="n">残</th><th class="n">消化率</th></tr>
+    ${p.hist.map(x => `<tr><td>${md(x.date)}(${wd(x.date)})</td><td class="n">${x.total}</td><td class="n">${x.sold}</td><td class="n">${x.rem}</td><td class="n">${x.rate}%</td></tr>`).join('')}</table>
+    <div class="rec"><div class="muted">来週${wd(p.rec.date)}曜（${md(p.rec.date)}）の推奨</div><div><b class="big">${p.rec.rec}</b>個　<span class="muted">今 ${p.rec.base}個 → <span class="${cl(d)}">${sg(d)}</span></span></div>
+    <div class="muted">実績の加重平均 ${p.rec.avg}個 ＋ 完売の上乗せ ${p.rec.bonus}個 → ${esc(p.rec.why)}<br>エリア別の目安：${AREAS.map(a => a + ' ' + (p.rec.areas[a] || 0)).join('　')}</div></div></div>`;
+  }).join('');
+  h += `<div class="card"><h2>今週の総括（${md(w.mon)}〜）</h2>` + w.products.map(p => {
+    let T = { t: 0, s: 0, n: 0 };
+    const rows = p.days.map(x => { if (!x.biz) return `<tr><td>${md(x.date)}(${wd(x.date)})</td><td colspan="5" class="muted">お休み／まだ</td></tr>`;
+      T.t += x.total; T.s += x.sold; T.n += x.nsold;
+      return `<tr><td>${md(x.date)}(${wd(x.date)})</td><td class="n">${x.total}</td><td class="n">${x.sold}</td><td class="n">${x.rem}</td><td class="n">${x.rate}%</td><td class="n">${x.nsold}</td></tr>`; }).join('');
+    return `<p><b>${esc(p.name)}</b></p><div class="scroll"><table><tr><th></th><th class="n">納品</th><th class="n">販売</th><th class="n">残</th><th class="n">消化率</th><th class="n">完売</th></tr>${rows}
+      <tr><th>週計</th><th class="n">${T.t}</th><th class="n">${T.s}</th><th class="n">${Math.max(T.t - T.s, 0)}</th><th class="n">${T.t ? Math.round(T.s / T.t * 100) : 0}%</th><th class="n">${T.n}</th></tr></table></div>`;
+  }).join('') + '</div>';
+  h += `<p class="muted">拠点はエリア名＋番号で表示しています。推奨はお江戸弁当の自社弁当と同じ式です（過去4週の同曜日を40・30・20・10で加重平均。完売した日は配った数で数える／直近の同曜日に12時前に完売した拠点は+2・12:20までは+1／今の納品数の±15%まで）。残は日々のばらつきとして、減らす材料にしていません。</p>`;
+  $('#m').innerHTML = h;
+  $('#dt').onchange = (e) => { $('#m').innerHTML = '<p class="muted">読み込み中…</p>'; report(e.target.value).catch(er => $('#m').innerHTML = `<p class="err">${esc(er.message)}</p>`); };
+}
+
+// ③ 翌週の配分
+let planData = null;
+async function plan(week) {
+  planData = await call('plan', { week });
+  const j = planData;
+  let h = `<div class="card"><div class="row"><button class="btn" id="pw">◀ 前の週</button><b>${md(j.mon)}〜 の週</b><button class="btn" id="nw">次の週 ▶</button></div>
+    <p class="muted">推奨が最初から入っています。直したら「保存」、決まったら「確定」を押してください。<b>確定した日だけ</b>納品数に反映します（配達の前日21時まで変えられます）。日曜12時に未確定の日をお知らせします。</p></div>`;
+  h += j.products.map((p, pi) => `<div class="card"><h2>${esc(p.name)}</h2>
+    ${p.days.map((d, di) => {
+      const tot = AREAS.reduce((s, a) => s + (d.areas[a] || 0), 0);
+      const pill = d.state === '確定' ? '<span class="pill ok">確定</span>' : (d.state ? '<span class="pill draft">下書き</span>' : '<span class="pill">未確定</span>');
+      return `<div class="day" data-p="${pi}" data-d="${di}"><div class="dh"><b>${md(d.date)}(${d.wd})</b><span class="muted">計 <b class="tot">${tot}</b>（推奨 ${d.rec}）</span>${pill}</div>
+      <div class="grid5">${AREAS.map(a => `<div><label>${a}</label><input class="q${(d.areas[a] || 0) !== (d.recAreas[a] || 0) ? ' chg' : ''}" type="number" inputmode="numeric" min="0" data-a="${a}" value="${d.areas[a] || 0}" ${d.editable ? '' : 'disabled'}></div>`).join('')}</div></div>`;
+    }).join('')}
+    <p class="muted">推奨＝前週の納品（${p.days.map(d => d.base).join('/')}）を土台に、実績と完売から計算した数です。色が付いた欄は推奨から変えた所です。</p></div>`).join('');
+  h += `<div class="card row"><button class="btn" id="sv">保存（下書き）</button><button class="btn pri" id="cf">この週を確定する</button></div>`;
+  $('#m').innerHTML = h;
+  document.querySelectorAll('input.q').forEach(el => el.oninput = () => {
+    const tr = el.closest('.day'); let s = 0; tr.querySelectorAll('input.q').forEach(x => s += Math.max(0, +x.value || 0));
+    tr.querySelector('.tot').textContent = s;
+    const d = planData.products[+tr.dataset.p].days[+tr.dataset.d];
+    el.classList.toggle('chg', (+el.value || 0) !== (d.recAreas[el.dataset.a] || 0));
+  });
+  const mv = (n) => { const d = new Date(j.mon + 'T12:00:00+09:00'); d.setDate(d.getDate() + n); plan(d.toISOString().slice(0, 10)).catch(e => toast(e.message)); };
+  $('#pw').onclick = () => mv(-7); $('#nw').onclick = () => mv(7);
+  $('#sv').onclick = () => savePlan(false); $('#cf').onclick = () => savePlan(true);
+}
+async function savePlan(confirm) {
+  const rows = [];
+  document.querySelectorAll('.day[data-p]').forEach(tr => {
+    const p = planData.products[+tr.dataset.p], d = p.days[+tr.dataset.d];
+    if (!d.editable) return;
+    const areas = {}; tr.querySelectorAll('input.q').forEach(x => areas[x.dataset.a] = Math.max(0, Math.floor(+x.value || 0)));
+    rows.push({ pid: p.pid, date: d.date, areas });
+  });
+  if (!rows.length) return toast('変えられる日がありません');
+  if (confirm && !window.confirm('この週の数を確定します。よろしいですか？')) return;
+  try { const r = await call('savePlan', { rows, confirm }); toast((confirm ? '確定しました' : '保存しました') + (r.skipped.length ? `（締切を過ぎた ${r.skipped.length} 件は変えていません）` : '')); plan(planData.mon); }
+  catch (e) { toast(e.message); }
+}
+
+// ④ お支払い
+async function money() {
+  const j = await call('money', { months: 3 });
+  let h = '';
+  if (!j.priced) h += '<div class="card"><p class="err">販売価格が未設定の商品があります（お江戸弁当で設定中）。金額は仮の表示です。</p></div>';
+  if (j.months) h += `<div class="card"><h2>月締め（お江戸弁当のみ表示）</h2><table><tr><th>月</th><th class="n">支払額</th></tr>${j.months.map(m => `<tr><td>${esc(m.month)}</td><td class="n">${yen(m.pay)}</td></tr>`).join('')}</table><p class="muted">販売日の月で数えています。</p></div>`;
+  h += `<div class="card"><h2>週ごとのお支払い</h2><p class="muted">月〜金の販売ぶんを金曜で締め、翌週水曜にお支払いします。</p>` + (j.weeks.length ? j.weeks.map(w => `
+    <p><b>${md(w.mon)}〜${md(w.fri)}</b>　<span class="muted">お支払い日 ${md(w.pay)}(水)</span></p>
+    <table><tr><th>商品</th><th class="n">販売数</th><th class="n">売上</th><th class="n">手数料</th><th class="n">お支払い</th></tr>
+    ${w.items.map(i => `<tr><td>${esc(i.name)}</td><td class="n">${i.qty}</td><td class="n">${yen(i.sales)}</td><td class="n">${yen(i.fee)}</td><td class="n">${yen(i.sales - i.fee)}</td></tr>`).join('')}
+    <tr><th>計</th><th></th><th class="n">${yen(w.sales)}</th><th class="n">${yen(w.fee)}</th><th class="n">${yen(w.payAmt)}</th></tr></table>`).join('') : '<p class="muted">まだデータがありません。</p>') + '</div>';
+  $('#m').innerHTML = h;
+}
+
+// ---------------- 起動 ----------------
+const q = new URLSearchParams(location.search);
+if (q.get('reset')) resetView(q.get('reset'));
+else if ((st.session = load('v_session'))) { st.tab = load('v_tab') || 'live'; start(); }
+else loginView();
+</script>
+</body>
+</html>
