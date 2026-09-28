@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- お江戸弁当 業者アプリ「お江戸委託」 Version: v1.2 (2026-09-29) レポートに日次／週次の切り替え ホーム画面に置けるようにした（manifest＋アイコン＝お江戸弁当のロゴ）
+<!-- お江戸弁当 業者アプリ「お江戸委託」 Version: v1.3 (2026-09-29) 日次を実況と同じ「販売/納品」のエリア別マトリクスに（色なし） ホーム画面に置けるようにした（manifest＋アイコン＝お江戸弁当のロゴ）
      設計書: 40_ドキュメント/設計_業者アプリ_2026-09-29.md ／ サーバー: 15_ソース/vendor-api.gs -->
 <html lang="ja">
 <head>
@@ -33,8 +33,15 @@ h2{font-size:15px;margin:0 0 10px;border-left:4px solid var(--accent);padding-le
 .kpi b{display:block;font-size:20px;color:var(--ink)}
 table{border-collapse:collapse;width:100%;font-size:13px}th,td{border-bottom:1px solid var(--line);padding:6px 4px;text-align:left}
 th{color:var(--sub);font-weight:500;font-size:12px;white-space:nowrap}
+.mx{border-collapse:separate;border-spacing:0;font-size:12px;min-width:100%}
+.mx th,.mx td{padding:7px 8px;text-align:center;white-space:nowrap;border-bottom:1px solid var(--line)}
+.mx thead th{background:var(--bg);font-weight:600;color:var(--ink)}
+.mx th:first-child{position:sticky;left:0;background:var(--card);text-align:left;border-right:2px solid var(--line);z-index:1;min-width:110px}
+.mx thead th:first-child{background:var(--bg)}.mx td b{font-weight:800}.mx .t{display:block;font-size:10px;color:var(--sub);margin-top:1px}
+.mx .sumc{border-left:2px solid var(--line);font-weight:700}
+.mx tr.tot th,.mx tr.tot td{background:var(--bg);border-top:2px solid var(--line);font-weight:700}
 .tight th,.tight td{padding:6px 3px;font-size:12px;white-space:nowrap}.n{text-align:right;font-variant-numeric:tabular-nums}
-.out{color:var(--accent);font-weight:600}.up{color:var(--up);font-weight:600}.dn{color:var(--dn);font-weight:600}
+.out{font-weight:600}.up,.dn{font-weight:600}
 .muted{color:var(--sub);font-size:12px}.rec{border:2px solid var(--accent);border-radius:10px;padding:10px 12px;margin-top:10px}
 .rec b.big{font-size:28px}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 input[type=email],input[type=password],input[type=date]{font:inherit;padding:10px;border:1px solid var(--line);border-radius:8px;width:100%;background:var(--card);color:var(--ink)}
@@ -135,18 +142,39 @@ async function show(t) {
   try { await ({ live, report, plan, money })[t](); } catch (e) { $('#m').innerHTML = `<p class="err">${esc(e.message)}</p>`; }
 }
 
-// ① 今日
+// ① 今日（ドライバーアプリの実況と同じ形）
+function mxHtml(areas, rowsOf) {
+  return areas.map(A => {
+    const sum = (cells) => cells.reduce((a, c) => c ? [a[0] + c.s, a[1] + c.d] : a, [0, 0]);
+    const head = `<tr><th>${esc(A.area)}</th>${A.locs.map(l => `<th>${esc(l)}</th>`).join('')}<th>計</th></tr>`;
+    const body = A.rows.map(r => { const [s, d] = sum(r.cells);
+      return `<tr><th>${esc(r.name)}</th>${r.cells.map(c => c ? `<td><b>${c.s}</b>/${c.d}${c.t ? `<span class="t">${esc(c.t)}</span>` : ''}</td>` : '<td>—</td>').join('')}<td class="sumc"><b>${s}</b>/${d}</td></tr>`; }).join('');
+    let tot = '';
+    if (A.rows.length > 1) { let S = 0, D = 0;
+      tot = `<tr class="tot"><th>合計</th>${A.locs.map((l, i) => { let s = 0, d = 0; A.rows.forEach(r => { const c = r.cells[i]; if (c) { s += c.s; d += c.d; } }); S += s; D += d; return (s || d) ? `<td><b>${s}</b>/${d}</td>` : '<td>—</td>'; }).join('')}<td class="sumc"><b>${S}</b>/${D}</td></tr>`; }
+    return `<div class="scroll" style="margin-bottom:12px"><table class="mx"><thead>${head}</thead><tbody>${body}${tot}</tbody></table></div>`;
+  }).join('');
+}
 async function live() {
   const j = await call('live');
   if (!j.fresh) { $('#m').innerHTML = '<div class="card"><p>今日の販売データはまだありません（営業時間中に更新されます）。</p></div>'; return; }
-  $('#m').innerHTML = `<p class="muted">${esc(j.date)} ${esc(j.at)} 時点（15分ごとに更新）。完売時刻は速報で、夜に確定します。</p>` + j.products.map(p => {
-    const outs = p.rows.filter(r => r.out).length;
-    return `<div class="card"><h2>${esc(p.name)}</h2>
-    <div class="kpi"><div><b>${p.total}</b>本日の納品</div><div><b>${p.sold}</b>販売</div><div><b>${outs}</b>完売拠点</div></div>
-    <div class="scroll"><table><tr><th>拠点</th><th class="n">置いた数</th><th class="n">販売</th><th class="n">残</th><th class="n">完売</th></tr>
-    ${p.rows.map(r => `<tr><td>${esc(r.loc)}</td><td class="n">${r.deliv}</td><td class="n">${r.sold}</td><td class="n">${r.rem}</td><td class="n ${r.out ? 'out' : ''}">${r.out ? (esc(r.at) || '完売') : ''}</td></tr>`).join('')}</table></div>
-    <p class="muted">「置いた数」は拠点に置いた数です。本日の納品のうち残りは車載にあります。</p></div>`;
-  }).join('');
+  const num = (x) => +((String(x).match(/(\d+)$/) || [0, 0])[1]);
+  const areas = {};
+  j.products.forEach(p => p.rows.forEach(r => {
+    if (!r.area) return;
+    const A = areas[r.area] = areas[r.area] || { area: r.area, locs: {}, cells: {} };
+    A.locs[r.loc] = 1; A.cells[p.pid + '|' + r.loc] = { s: r.sold, d: r.deliv, t: r.out ? (r.at || '完売') : '' };
+  }));
+  const list = AREAS.filter(a => areas[a]).map(a => {
+    const A = areas[a], locs = Object.keys(A.locs).sort((x, y) => num(x) - num(y));
+    return { area: a, locs, rows: j.products.map(p => ({ name: p.name, cells: locs.map(l => A.cells[p.pid + '|' + l] || null) })) };
+  });
+  let h = `<p class="muted">${esc(j.date)} ${esc(j.at)} 時点（15分ごとに更新）。マスは 販売/納品、完売した拠点は下に時刻（速報・夜に確定）。</p>`;
+  h += j.products.map(p => { const outs = p.rows.filter(r => r.out).length;
+    return `<div class="card"><h2>${esc(p.name)}</h2><div class="kpi"><div><b>${p.total}</b>本日の納品</div><div><b>${p.sold}</b>販売</div><div><b>${outs}</b>完売拠点</div></div>
+    <p class="muted" style="margin:0">拠点に置いた数 ${p.deliv}個・残りは車載にあります。</p></div>`; }).join('');
+  h += `<div class="card"><h2>エリア別（販売/納品）</h2>${mxHtml(list)}</div>`;
+  $('#m').innerHTML = h;
 }
 
 // ② レポート（日次／週次）
@@ -167,15 +195,30 @@ async function report() {
     $('#rsel').innerHTML = `<input type="date" id="dt" value="${esc(j.date)}" style="width:auto"><span class="muted">${esc(md(j.date))}(${esc(j.wd)})</span>`;
     $('#dt').onchange = (e) => run(daily, e.target.value);
     let h = j.biz ? '' : '<div class="card">この日はお休みです。</div>';
-    h += j.products.filter(p => p.total || p.sold).map(p => {
-      const d = p.rec.rec - p.rec.base;
+    const shown = j.products.filter(p => p.total || p.sold);
+    // ① 商品ごとの合計
+    h += shown.map(p => {
+      const ag = {}; AREAS.forEach(a => ag[a] = { d: 0, s: 0, n: 0 });
+      (j.matrix || []).forEach(A => { const r = A.rows.find(x => x.pid === p.pid); if (r) r.cells.forEach(c => { if (c) { ag[A.area].d += c.d; ag[A.area].s += c.s; if (c.t) ag[A.area].n++; } }); });
+      let D = 0; const rows = AREAS.filter(a => ag[a].d || ag[a].s).map(a => { const g = ag[a]; D += g.d;
+        return `<tr><td>${a}</td><td class="n">${g.d}</td><td class="n">${g.s}</td><td class="n">${Math.max(g.d - g.s, 0)}</td><td class="n">${g.d ? Math.round(g.s / g.d * 100) : 0}%</td><td class="n">${g.n}</td></tr>`; }).join('');
       return `<div class="card"><h2>${esc(p.name)}</h2>
       <div class="kpi"><div><b>${p.total}</b>納品</div><div><b>${p.sold}</b>販売</div><div><b>${p.rem}</b>残</div><div><b>${p.rate}%</b>消化率</div><div><b>${p.nsold}</b>完売拠点</div><div><b>${esc(p.first || '—')}</b>最速完売</div></div>
-      <div class="scroll"><table><tr><th>拠点</th><th class="n">販売</th><th class="n">完売時刻</th></tr>
-      ${p.rows.map(r => `<tr><td>${esc(r[0])}</td><td class="n">${r[1]}</td><td class="n ${r[2] ? 'out' : ''}">${esc(r[2] || '—')}</td></tr>`).join('')}</table></div>
-      <table style="margin-top:10px"><tr><th>前4週の同曜日</th><th class="n">納品</th><th class="n">販売</th><th class="n">残</th><th class="n">消化率</th></tr>
+      <table class="tight"><tr><th>エリア</th><th class="n">納品</th><th class="n">販売</th><th class="n">残</th><th class="n">消化率</th><th class="n">完売拠点</th></tr>${rows}
+      <tr><th>計（拠点に置いた数）</th><th class="n">${D}</th><th class="n">${p.sold}</th><th class="n">${Math.max(D - p.sold, 0)}</th><th></th><th class="n">${p.nsold}</th></tr></table>
+      <p class="muted" style="margin:6px 0 0">${D < p.total ? `本日の納品 ${p.total}個との差 ${p.total - D}個は車載に残った数です。` : (D > p.total ? `移動の登録状況で、拠点の合計が本日の納品より${D - p.total}個多く出ています。` : '本日の納品を全部拠点に置きました。')}</p></div>`; }).join('');
+    // ② 実況と同じ形：エリアごとに 行＝商品・列＝拠点、マスは 販売/納品（完売した拠点は下に時刻）
+    if (j.matrix && j.matrix.length) {
+      h += '<div class="card"><h2>エリア別（販売/納品）</h2><p class="muted" style="margin:0 0 8px">納品は車載から足した・引き上げた分を含む実際の数です（移動の登録状況で1〜2個ずれることがあります）。時刻は完売した時刻です。</p>';
+      h += mxHtml(j.matrix) + '</div>';
+    }
+    // ③ 前4週と推奨
+    h += shown.map(p => {
+      const d = p.rec.rec - p.rec.base;
+      return `<div class="card"><h2>${esc(p.name)}</h2>
+      <table><tr><th>前4週の同曜日</th><th class="n">納品</th><th class="n">販売</th><th class="n">残</th><th class="n">消化率</th></tr>
       ${p.hist.map(x => `<tr><td>${md(x.date)}(${wd(x.date)})</td><td class="n">${x.total}</td><td class="n">${x.sold}</td><td class="n">${x.rem}</td><td class="n">${x.rate}%</td></tr>`).join('')}</table>
-      <div class="rec"><div class="muted">来週${wd(p.rec.date)}曜（${md(p.rec.date)}）の推奨</div><div><b class="big">${p.rec.rec}</b>個　<span class="muted">今 ${p.rec.base}個 → <span class="${cl(d)}">${sg(d)}</span></span></div>
+      <div class="rec"><div class="muted">来週${wd(p.rec.date)}曜（${md(p.rec.date)}）の推奨</div><div><b class="big">${p.rec.rec}</b>個　<span class="muted">今 ${p.rec.base}個 → ${sg(d)}</span></div>
       <div class="muted">実績の加重平均 ${p.rec.avg}個 ＋ 完売の上乗せ ${p.rec.bonus}個 → ${esc(p.rec.why)}<br>エリア別の目安：${AREAS.map(a => a + ' ' + (p.rec.areas[a] || 0)).join('　')}</div></div></div>`;
     }).join('');
     if (j.biz && !j.products.some(p => p.total || p.sold)) h += '<div class="card">この日は納品がありませんでした。</div>';
