@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- お江戸弁当 業者アプリ「お江戸委託」 Version: v1.3 (2026-09-29) 日次を実況と同じ「販売/納品」のエリア別マトリクスに（色なし） ホーム画面に置けるようにした（manifest＋アイコン＝お江戸弁当のロゴ）
+<!-- お江戸弁当 業者アプリ「お江戸委託」 Version: v1.4 (2026-09-29) 販売が納品を上回る数字は出さない（注記も消した） ホーム画面に置けるようにした（manifest＋アイコン＝お江戸弁当のロゴ）
      設計書: 40_ドキュメント/設計_業者アプリ_2026-09-29.md ／ サーバー: 15_ソース/vendor-api.gs -->
 <html lang="ja">
 <head>
@@ -206,10 +206,10 @@ async function report() {
       <div class="kpi"><div><b>${p.total}</b>納品</div><div><b>${p.sold}</b>販売</div><div><b>${p.rem}</b>残</div><div><b>${p.rate}%</b>消化率</div><div><b>${p.nsold}</b>完売拠点</div><div><b>${esc(p.first || '—')}</b>最速完売</div></div>
       <table class="tight"><tr><th>エリア</th><th class="n">納品</th><th class="n">販売</th><th class="n">残</th><th class="n">消化率</th><th class="n">完売拠点</th></tr>${rows}
       <tr><th>計（拠点に置いた数）</th><th class="n">${D}</th><th class="n">${p.sold}</th><th class="n">${Math.max(D - p.sold, 0)}</th><th></th><th class="n">${p.nsold}</th></tr></table>
-      <p class="muted" style="margin:6px 0 0">${D < p.total ? `本日の納品 ${p.total}個との差 ${p.total - D}個は車載に残った数です。` : (D > p.total ? `移動の登録状況で、拠点の合計が本日の納品より${D - p.total}個多く出ています。` : '本日の納品を全部拠点に置きました。')}</p></div>`; }).join('');
+      <p class="muted" style="margin:6px 0 0">${D < p.total ? `本日の納品 ${p.total}個との差 ${p.total - D}個は車載に残った数です。` : '本日の納品を全部拠点に置きました。'}</p></div>`; }).join('');
     // ② 実況と同じ形：エリアごとに 行＝商品・列＝拠点、マスは 販売/納品（完売した拠点は下に時刻）
     if (j.matrix && j.matrix.length) {
-      h += '<div class="card"><h2>エリア別（販売/納品）</h2><p class="muted" style="margin:0 0 8px">納品は車載から足した・引き上げた分を含む実際の数です（移動の登録状況で1〜2個ずれることがあります）。時刻は完売した時刻です。</p>';
+      h += '<div class="card"><h2>エリア別（販売/納品）</h2><p class="muted" style="margin:0 0 8px">納品は車載から足した・引き上げた分を含む実際の数です。時刻は完売した時刻です。</p>';
       h += mxHtml(j.matrix) + '</div>';
     }
     // ③ 前4週と推奨
