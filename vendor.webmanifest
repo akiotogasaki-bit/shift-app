@@ -1,0 +1,14 @@
+{
+  "name": "お江戸委託",
+  "short_name": "お江戸委託",
+  "start_url": "./vendor.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FDF8F0",
+  "theme_color": "#C0392B",
+  "icons": [
+    { "src": "./vendor-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
+    { "src": "./vendor-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

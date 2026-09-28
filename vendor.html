@@ -1,12 +1,20 @@
 <!doctype html>
-<!-- お江戸弁当 業者アプリ Version: v1.0 (2026-09-29)
+<!-- お江戸弁当 業者アプリ「お江戸委託」 Version: v1.1 (2026-09-29) ホーム画面に置けるようにした（manifest＋アイコン＝お江戸弁当のロゴ）
      設計書: 40_ドキュメント/設計_業者アプリ_2026-09-29.md ／ サーバー: 15_ソース/vendor-api.gs -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
-<title>お江戸弁当 販売状況</title>
+<title>お江戸委託</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="お江戸委託">
+<link rel="apple-touch-icon" href="vendor-icon.png">
+<link rel="icon" href="vendor-icon.png">
+<link rel="manifest" href="vendor.webmanifest">
+<meta name="theme-color" content="#C0392B">
 <style>
 :root{--bg:#f7f6f3;--card:#fff;--ink:#222;--sub:#6b6b6b;--line:#e3e1dc;--accent:#c0392b;--up:#c0392b;--dn:#2c6fbb;--ok:#1f8a4c;--warn:#b7791f}
 @media (prefers-color-scheme:dark){:root{--bg:#161616;--card:#222;--ink:#eee;--sub:#aaa;--line:#3a3a3a;--accent:#e0675a;--up:#e0675a;--dn:#6fa4e0;--ok:#4cc27f;--warn:#e3a94b}}
@@ -39,7 +47,8 @@ input.q.chg{border-color:var(--warn);background:rgba(183,121,31,.08)}
 #toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;display:none;z-index:9}
 .day{border-top:1px solid var(--line);padding:10px 0}.day:first-of-type{border-top:0}.dh{display:flex;align-items:center;gap:8px;margin-bottom:6px}.dh b{flex:1}
 .grid5{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}.grid5 label{font-size:11px;color:var(--sub);text-align:center;display:block}
-.center{max-width:380px;margin:40px auto}
+.center{max-width:380px;margin:40px auto}.logo{display:block;width:84px;margin:0 auto 10px}.hlogo{height:30px;width:auto}
+@media (display-mode:standalone){header{padding-top:max(10px,env(safe-area-inset-top))}}
 </style>
 </head>
 <body>
@@ -72,7 +81,7 @@ async function call(action, body = {}) {
 
 // ---------------- ログイン ----------------
 function loginView(msg = '') {
-  $('#app').innerHTML = `<div class="center card"><h2>お江戸弁当 販売状況</h2>
+  $('#app').innerHTML = `<div class="center card"><img class="logo" src="vendor-icon-512.png" alt="お江戸弁当"><h2>お江戸委託</h2>
     <p class="muted">登録したメールアドレスとパスワードで入ってください。</p>
     <p><input type="email" id="em" placeholder="メールアドレス" autocomplete="username"></p>
     <p><input type="password" id="pw" placeholder="パスワード" autocomplete="current-password"></p>
@@ -112,7 +121,7 @@ async function start() {
 }
 function frame() {
   const sel = st.me.role === '管理' ? `<select id="vs">${st.me.vendors.map(v => `<option value="${esc(v.id)}"${v.id === st.vendor ? ' selected' : ''}>${esc(v.name)}</option>`).join('')}</select>` : '';
-  $('#app').innerHTML = `<div id="top"><header><h1>${st.me.role === '管理' ? '管理' : esc(st.me.name) + '様'}</h1>${sel}<button class="btn" id="lo">ログアウト</button></header>
+  $('#app').innerHTML = `<div id="top"><header><img class="hlogo" src="vendor-icon.png" alt=""><h1>お江戸委託${st.me.role === '管理' ? '（管理）' : '・' + esc(st.me.name) + '様'}</h1>${sel}<button class="btn" id="lo">ログアウト</button></header>
   <nav>${[['live','今日'],['report','レポート'],['plan','翌週の配分'],['money','お支払い']].map(([k, t]) => `<button data-t="${k}">${t}</button>`).join('')}</nav></div><main id="m"></main>`;
   $('#lo').onclick = logout;
   if ($('#vs')) $('#vs').onchange = (e) => { st.vendor = e.target.value; show(st.tab); };
