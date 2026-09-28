@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- お江戸弁当 業者アプリ「お江戸委託」 Version: v1.1 (2026-09-29) ホーム画面に置けるようにした（manifest＋アイコン＝お江戸弁当のロゴ）
+<!-- お江戸弁当 業者アプリ「お江戸委託」 Version: v1.2 (2026-09-29) レポートに日次／週次の切り替え ホーム画面に置けるようにした（manifest＋アイコン＝お江戸弁当のロゴ）
      設計書: 40_ドキュメント/設計_業者アプリ_2026-09-29.md ／ サーバー: 15_ソース/vendor-api.gs -->
 <html lang="ja">
 <head>
@@ -32,7 +32,8 @@ h2{font-size:15px;margin:0 0 10px;border-left:4px solid var(--accent);padding-le
 .kpi div{border:1px solid var(--line);border-radius:8px;text-align:center;padding:6px 2px;font-size:11px;color:var(--sub)}
 .kpi b{display:block;font-size:20px;color:var(--ink)}
 table{border-collapse:collapse;width:100%;font-size:13px}th,td{border-bottom:1px solid var(--line);padding:6px 4px;text-align:left}
-th{color:var(--sub);font-weight:500;font-size:12px}.n{text-align:right;font-variant-numeric:tabular-nums}
+th{color:var(--sub);font-weight:500;font-size:12px;white-space:nowrap}
+.tight th,.tight td{padding:6px 3px;font-size:12px;white-space:nowrap}.n{text-align:right;font-variant-numeric:tabular-nums}
 .out{color:var(--accent);font-weight:600}.up{color:var(--up);font-weight:600}.dn{color:var(--dn);font-weight:600}
 .muted{color:var(--sub);font-size:12px}.rec{border:2px solid var(--accent);border-radius:10px;padding:10px 12px;margin-top:10px}
 .rec b.big{font-size:28px}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -121,7 +122,7 @@ async function start() {
 }
 function frame() {
   const sel = st.me.role === '管理' ? `<select id="vs">${st.me.vendors.map(v => `<option value="${esc(v.id)}"${v.id === st.vendor ? ' selected' : ''}>${esc(v.name)}</option>`).join('')}</select>` : '';
-  $('#app').innerHTML = `<div id="top"><header><img class="hlogo" src="vendor-icon.png" alt=""><h1>お江戸委託${st.me.role === '管理' ? '（管理）' : '・' + esc(st.me.name) + '様'}</h1>${sel}<button class="btn" id="lo">ログアウト</button></header>
+  $('#app').innerHTML = `<div id="top"><header><img class="hlogo" src="vendor-icon.png" alt=""><h1>お江戸委託${st.me.role === '管理' ? '' : '・' + esc(st.me.name) + '様'}</h1>${sel}<button class="btn" id="lo">ログアウト</button></header>
   <nav>${[['live','今日'],['report','レポート'],['plan','翌週の配分'],['money','お支払い']].map(([k, t]) => `<button data-t="${k}">${t}</button>`).join('')}</nav></div><main id="m"></main>`;
   $('#lo').onclick = logout;
   if ($('#vs')) $('#vs').onchange = (e) => { st.vendor = e.target.value; show(st.tab); };
@@ -148,33 +149,67 @@ async function live() {
   }).join('');
 }
 
-// ② レポート
-async function report(date) {
-  const [j, w] = await Promise.all([call('report', { date }), call('weekly', { date })]);
-  let h = `<div class="card row"><input type="date" id="dt" value="${esc(j.date)}" style="width:auto"><span class="muted">${esc(md(j.date))}(${esc(j.wd)}) の日次</span></div>`;
-  if (!j.biz) h += '<div class="card">この日はお休みです。</div>';
-  h += j.products.filter(p => p.total || p.sold).map(p => {
-    const d = p.rec.rec - p.rec.base;
-    return `<div class="card"><h2>${esc(p.name)}</h2>
-    <div class="kpi"><div><b>${p.total}</b>納品</div><div><b>${p.sold}</b>販売</div><div><b>${p.rem}</b>残</div><div><b>${p.rate}%</b>消化率</div><div><b>${p.nsold}</b>完売拠点</div><div><b>${esc(p.first || '—')}</b>最速完売</div></div>
-    <div class="scroll"><table><tr><th>拠点</th><th class="n">販売</th><th class="n">完売時刻</th></tr>
-    ${p.rows.map(r => `<tr><td>${esc(r[0])}</td><td class="n">${r[1]}</td><td class="n ${r[2] ? 'out' : ''}">${esc(r[2] || '—')}</td></tr>`).join('')}</table></div>
-    <table style="margin-top:10px"><tr><th>前4週の同曜日</th><th class="n">納品</th><th class="n">販売</th><th class="n">残</th><th class="n">消化率</th></tr>
-    ${p.hist.map(x => `<tr><td>${md(x.date)}(${wd(x.date)})</td><td class="n">${x.total}</td><td class="n">${x.sold}</td><td class="n">${x.rem}</td><td class="n">${x.rate}%</td></tr>`).join('')}</table>
-    <div class="rec"><div class="muted">来週${wd(p.rec.date)}曜（${md(p.rec.date)}）の推奨</div><div><b class="big">${p.rec.rec}</b>個　<span class="muted">今 ${p.rec.base}個 → <span class="${cl(d)}">${sg(d)}</span></span></div>
-    <div class="muted">実績の加重平均 ${p.rec.avg}個 ＋ 完売の上乗せ ${p.rec.bonus}個 → ${esc(p.rec.why)}<br>エリア別の目安：${AREAS.map(a => a + ' ' + (p.rec.areas[a] || 0)).join('　')}</div></div></div>`;
-  }).join('');
-  h += `<div class="card"><h2>今週の総括（${md(w.mon)}〜）</h2>` + w.products.map(p => {
-    let T = { t: 0, s: 0, n: 0 };
-    const rows = p.days.map(x => { if (!x.biz) return `<tr><td>${md(x.date)}(${wd(x.date)})</td><td colspan="5" class="muted">お休み／まだ</td></tr>`;
-      T.t += x.total; T.s += x.sold; T.n += x.nsold;
-      return `<tr><td>${md(x.date)}(${wd(x.date)})</td><td class="n">${x.total}</td><td class="n">${x.sold}</td><td class="n">${x.rem}</td><td class="n">${x.rate}%</td><td class="n">${x.nsold}</td></tr>`; }).join('');
-    return `<p><b>${esc(p.name)}</b></p><div class="scroll"><table><tr><th></th><th class="n">納品</th><th class="n">販売</th><th class="n">残</th><th class="n">消化率</th><th class="n">完売</th></tr>${rows}
-      <tr><th>週計</th><th class="n">${T.t}</th><th class="n">${T.s}</th><th class="n">${Math.max(T.t - T.s, 0)}</th><th class="n">${T.t ? Math.round(T.s / T.t * 100) : 0}%</th><th class="n">${T.n}</th></tr></table></div>`;
-  }).join('') + '</div>';
-  h += `<p class="muted">拠点はエリア名＋番号で表示しています。推奨はお江戸弁当の自社弁当と同じ式です（過去4週の同曜日を40・30・20・10で加重平均。完売した日は配った数で数える／直近の同曜日に12時前に完売した拠点は+2・12:20までは+1／今の納品数の±15%まで）。残は日々のばらつきとして、減らす材料にしていません。</p>`;
-  $('#m').innerHTML = h;
-  $('#dt').onchange = (e) => { $('#m').innerHTML = '<p class="muted">読み込み中…</p>'; report(e.target.value).catch(er => $('#m').innerHTML = `<p class="err">${esc(er.message)}</p>`); };
+// ② レポート（日次／週次）
+const NOTE = `<p class="muted">拠点はエリア名＋番号で表示しています。推奨はお江戸弁当の自社弁当と同じ式です（過去4週の同曜日を40・30・20・10で加重平均。完売した日は配った数で数える／直近の同曜日に12時前に完売した拠点は+2・12:20までは+1／今の納品数の±15%まで）。残は日々のばらつきとして、減らす材料にしていません。</p>`;
+const addD = (d, n) => { const x = new Date(d + 'T12:00:00+09:00'); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); };
+async function report() {
+  const mode = load('v_rmode') || 'day';
+  const seg = `<div class="card row"><button class="btn${mode === 'day' ? ' pri' : ''}" id="rmD">日次</button><button class="btn${mode === 'week' ? ' pri' : ''}" id="rmW">週次</button><span id="rsel" class="row"></span></div>`;
+  $('#m').innerHTML = seg + '<div id="rb"><p class="muted">読み込み中…</p></div>';
+  $('#rmD').onclick = () => { store('v_rmode', 'day'); report(); };
+  $('#rmW').onclick = () => { store('v_rmode', 'week'); report(); };
+  const run = (f, arg) => { $('#rb').innerHTML = '<p class="muted">読み込み中…</p>'; f(arg).catch(er => $('#rb').innerHTML = `<p class="err">${esc(er.message)}</p>`); };
+  if (mode === 'week') await reportWeek(st.rweek); else await reportDay(st.rdate);
+  function reportDay(date) { return daily(date); }
+  async function daily(date) {
+    const j = await call('report', { date });
+    st.rdate = j.date;
+    $('#rsel').innerHTML = `<input type="date" id="dt" value="${esc(j.date)}" style="width:auto"><span class="muted">${esc(md(j.date))}(${esc(j.wd)})</span>`;
+    $('#dt').onchange = (e) => run(daily, e.target.value);
+    let h = j.biz ? '' : '<div class="card">この日はお休みです。</div>';
+    h += j.products.filter(p => p.total || p.sold).map(p => {
+      const d = p.rec.rec - p.rec.base;
+      return `<div class="card"><h2>${esc(p.name)}</h2>
+      <div class="kpi"><div><b>${p.total}</b>納品</div><div><b>${p.sold}</b>販売</div><div><b>${p.rem}</b>残</div><div><b>${p.rate}%</b>消化率</div><div><b>${p.nsold}</b>完売拠点</div><div><b>${esc(p.first || '—')}</b>最速完売</div></div>
+      <div class="scroll"><table><tr><th>拠点</th><th class="n">販売</th><th class="n">完売時刻</th></tr>
+      ${p.rows.map(r => `<tr><td>${esc(r[0])}</td><td class="n">${r[1]}</td><td class="n ${r[2] ? 'out' : ''}">${esc(r[2] || '—')}</td></tr>`).join('')}</table></div>
+      <table style="margin-top:10px"><tr><th>前4週の同曜日</th><th class="n">納品</th><th class="n">販売</th><th class="n">残</th><th class="n">消化率</th></tr>
+      ${p.hist.map(x => `<tr><td>${md(x.date)}(${wd(x.date)})</td><td class="n">${x.total}</td><td class="n">${x.sold}</td><td class="n">${x.rem}</td><td class="n">${x.rate}%</td></tr>`).join('')}</table>
+      <div class="rec"><div class="muted">来週${wd(p.rec.date)}曜（${md(p.rec.date)}）の推奨</div><div><b class="big">${p.rec.rec}</b>個　<span class="muted">今 ${p.rec.base}個 → <span class="${cl(d)}">${sg(d)}</span></span></div>
+      <div class="muted">実績の加重平均 ${p.rec.avg}個 ＋ 完売の上乗せ ${p.rec.bonus}個 → ${esc(p.rec.why)}<br>エリア別の目安：${AREAS.map(a => a + ' ' + (p.rec.areas[a] || 0)).join('　')}</div></div></div>`;
+    }).join('');
+    if (j.biz && !j.products.some(p => p.total || p.sold)) h += '<div class="card">この日は納品がありませんでした。</div>';
+    $('#rb').innerHTML = h + NOTE;
+  }
+  async function reportWeek(date) {
+    const w = await call('weekly', { date });
+    st.rweek = w.mon;
+    const fri = addD(w.mon, 4), nm = addD(w.mon, 7);
+    $('#rsel').innerHTML = `<button class="btn" id="wp">◀</button><b>${md(w.mon)}〜${md(fri)}</b><button class="btn" id="wn">▶</button>`;
+    $('#wp').onclick = () => run(reportWeek, addD(w.mon, -7));
+    $('#wn').onclick = () => run(reportWeek, addD(w.mon, 7));
+    const h = w.products.map(p => {
+      const T = { t: 0, s: 0, n: 0, e: 0 };
+      const rows = p.days.map(x => {
+        if (!x.biz) return `<tr><td>${md(x.date)}(${wd(x.date)})</td><td colspan="6" class="muted">お休み／まだ</td></tr>`;
+        T.t += x.total; T.s += x.sold; T.n += x.nsold; T.e += x.early;
+        return `<tr><td>${md(x.date)}(${wd(x.date)})</td><td class="n">${x.total}</td><td class="n">${x.sold}</td><td class="n">${x.rem}</td><td class="n">${x.rate}%</td><td class="n">${x.nsold}<span class="muted">(${x.early})</span></td><td class="n">${esc(x.first || '—')}</td></tr>`;
+      }).join('');
+      if (!T.t && !T.s) return '';
+      let B = 0, R = 0;
+      const nx = p.next.map(r => { const d = r.rec - r.base; B += r.base; R += r.rec;
+        return `<tr><td>${md(r.date)}(${wd(r.date)})</td><td class="n">${r.base}</td><td class="n"><b>${r.rec}</b></td><td class="n ${cl(d)}">${sg(d)}</td>${AREAS.map(a => `<td class="n">${r.areas[a] || 0}</td>`).join('')}</tr>`; }).join('');
+      return `<div class="card"><h2>${esc(p.name)}</h2>
+        <p class="muted" style="margin:0 0 4px">1週間の総括（完売拠点の（）内は12時前）</p>
+        <div class="scroll"><table class="tight"><tr><th></th><th class="n">納品</th><th class="n">販売</th><th class="n">残</th><th class="n">消化率</th><th class="n">完売</th><th class="n">最速</th></tr>${rows}
+        <tr><th>週計</th><th class="n">${T.t}</th><th class="n">${T.s}</th><th class="n">${Math.max(T.t - T.s, 0)}</th><th class="n">${T.t ? Math.round(T.s / T.t * 100) : 0}%</th><th class="n">${T.n}<span class="muted">(${T.e})</span></th><th></th></tr></table></div>
+        <p class="muted" style="margin:12px 0 4px">翌週（${md(nm)}〜）の推奨・エリア別</p>
+        <div class="scroll"><table class="tight"><tr><th></th><th class="n">今</th><th class="n">推奨</th><th class="n">増減</th>${AREAS.map(a => `<th class="n">${a}</th>`).join('')}</tr>${nx}
+        <tr><th>週計</th><th class="n">${B}</th><th class="n">${R}</th><th class="n ${cl(R - B)}">${sg(R - B)}</th><th colspan="${AREAS.length}"></th></tr></table></div>
+        <p class="muted">「今」は前週同じ曜日の納品数です（祝日の週はその前の週）。エリア別は拠点の実績と完売から配った目安で、合計は推奨と一致します。</p></div>`;
+    }).join('');
+    $('#rb').innerHTML = (h || '<div class="card">この週はまだデータがありません。</div>') + NOTE;
+  }
 }
 
 // ③ 翌週の配分
