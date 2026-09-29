@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v7.9 (2026-09-30) 【売れ行き棒の大きい数字を「販売数／納品数」＋時間帯の予定比％に】社長指示「マイナスじゃなくて実況マトリクスみたいに販売数／納品数で表示」「その下に時間帯に対する販売数を％で」。★大きい数字＝販売数／納品数（納品は実況マトリクスと同じ実効納品＝生納品＋移動±・お茶と配分外を除く）。数えるのは棒に入れた拠点だけ（休止・置き弁・12時以降の未開始は外す）。★下の小さい数字＝〜12:00は「12:00の予定比」、〜12:20は「12:20の予定比」、以降は「本日の予定比」＝販売数÷その時刻までの3区間予定。★旧表示の「いまの線に対する過不足の個数（-33）」はやめた（明細行の「いまは◯（±◯個）」には残る）。 -->
 <!-- driver v7.8 (2026-09-30) 【置き弁で残数を全部 ⌫ で消すと「回収済みにする」が押せなかった】社長報告（アスエネ・スクショ）。各行は空でも「0」と表示するのに、合計は「—」＝未入力扱いで、現金なし置き弁の確定条件（合計が未入力でない）を満たさなかった。★`cashBackspace` で残数の欄が空になったら「0」を入れる。0キーで入れた場合と同じ状態になる。現金・クーポン・交通費の欄は従来どおり空にできる。 -->
 <!-- driver v7.7 (2026-09-30) 【売れ行き棒の分母から「売らない拠点」を外した】9/29 ドライバー報告「棒グラフの数字がおかしい」。分母（3区間予定）に休止のパソナ②・置き弁アスエネ・レジ未開始の茶3が残り、赤坂52%／銀座69%／お茶の水86%と実態より低く出ていた（外すと66%／92%／104%）。★`_rtAreaPace_` で ①休止（手動・自動）②置き弁（起動時の okibenLocs）③12:00を過ぎてもレジ未開始 を分子・分母から外す。午前はレジ未開始を外さない（社長決定＝開いた瞬間に分母が跳ねないように）。★外した拠点は棒の下に「数えていない拠点: 名前（休止／置き弁／未開始）」と必ず出す。通信は増えていない。マトリクスの数字は変えていない。 -->
 <!-- driver v7.6 (2026-09-25) 【不具合修正：実況タブが「更新すると出るのに、戻ると0」になっていた】社長報告「昨日の営業中、実況タブで更新を押して最新の数字が出ているところから、別の画面に行ってから戻ると0に戻っていた」。★**更新頻度の問題ではない**（5分ポーリングは v3.3 2026-08-13 から1秒も変えていない）。★**真犯人はサーバー側の1行**＝`snapWriteLive_`（公開スナップショットを15分トリガーで丸ごと作り直す処理）が `r.productSales` を読んでいたが、`getTodayIntermediate` が返すキーは **`productSalesJson`（文字列）**で `productSales` は存在しない。→ **再構築が走るたびに全拠点の販売数が `{}` になる**。納品数（`deliveryCount`）だけは文字列/オブジェクト両対応で書けていたので、**納品数は出るのに販売数だけ0**という形で出ていた。実測 2026-09-24 15:59 の公開CSV＝`sales` が全23拠点 `{}`／`deliv` は正常。レジの差分（`opts.delta`）は正しく積むので数字は一度出る＝**15分ごとに0へ戻ってまた増える**動きだった。★**なぜ「更新を押すと出る」のか**＝エリアの 🔄 更新（`rtRefreshArea`）は **`/exec` の `getTodayIntermediate` を直接**叩く。一方タブ復帰は `startRealtime_`→`rtLoadAll` で、エリア別マトリクスを開いている間は **公開スナップショット**から作る（2026-09-19・実行枠を使わないため）。**同じ画面なのに数字の出どころが2本ある**のが見え方の正体。★client 側も2つ直した＝①`rtIntermediateFromSnap_` は「納品数はあるのに販売数が全拠点0」なら **null を返して `/exec` に落ちる**。それまでは**中身が空でも配列を返し、三項演算子で truthy になるため保険の `/exec` が一度も効かなかった**。1拠点でも売れていれば従来どおりスナップショットを使う（＝朝いちだけ `/exec`）。②実況キャッシュの**キー名のズレ**（保存 `rtAllData:` ／読み `allData`）を直した。初回の先描画が一度も効いていなかった。古いキーが端末に残っている可能性があるので両方見る。★要: メインGAS 2026-09-25 以降（`snapWriteLive_` の `productSalesJson` 対応）。**サーバーを直さないと client だけでは直らない**（client の①は「0を出さない」保険であって、スナップショットが正しくなるわけではない）。 -->
@@ -1624,7 +1625,7 @@ body {
   #tab-realtime .rt-pace-basis { font-size: 10.5px; color: var(--ink-mute); margin: 3px 0 12px; }
   #tab-realtime .rt-pace-rows { display: grid; gap: 6px; }
   #tab-realtime .rt-prow {
-    display: grid; grid-template-columns: 82px 1fr 54px; align-items: center;
+    display: grid; grid-template-columns: 82px 1fr auto; align-items: center;
     column-gap: 10px; row-gap: 3px; padding: 7px 9px; border-radius: 9px; background: var(--cream-dark);
   }
   #tab-realtime .rt-prow.mine {
@@ -1650,6 +1651,16 @@ body {
     font-size: 17px; font-weight: 700; text-align: right; color: var(--ink);
     font-variant-numeric: tabular-nums; letter-spacing: -.02em;
   }
+  /* ★v7.9 販売数／納品数（上）＋ 時間帯の予定比％（下） */
+  #tab-realtime .rt-ppct, #tab-realtime .area-pct {
+    display: inline-flex; flex-direction: column; align-items: flex-end; white-space: nowrap;
+  }
+  #tab-realtime .rt-sd { line-height: 1.05; }
+  #tab-realtime .rt-sd b { font-weight: 800; }
+  #tab-realtime .rt-rate {
+    font-size: 10.5px; font-weight: 700; color: var(--ink-soft); letter-spacing: 0; margin-top: 2px;
+  }
+  #tab-realtime .rt-prow.mine .rt-rate { font-size: 12px; }
   #tab-realtime .rt-pmeta {
     grid-column: 1 / -1; font-size: 10.5px; color: var(--ink-mute); font-variant-numeric: tabular-nums;
   }
@@ -8747,7 +8758,7 @@ function _rtPaceCountsPid_(pid) {
 /* エリアの売れ行き。perLoc は renderAreaMatrix が作る [{loc, sales}, …]
    @return {{na:boolean, plan:number, sold:number, rate:number, skip:string[]}} */
 function _rtAreaPace_(perLoc) {
-  const out = { na: true, plan: 0, sold: 0, rate: 0, skip: [], day: 0, b1: 0, b2: 0 };
+  const out = { na: true, plan: 0, sold: 0, deliv: 0, rate: 0, skip: [], day: 0, b1: 0, b2: 0 };
   const bp = (rtBandPlan && rtBandPlan.loc) ? rtBandPlan.loc : null;
   if (!bp) return out;
   const upTo = _rtBandsUpTo_();
@@ -8774,6 +8785,11 @@ function _rtAreaPace_(perLoc) {
     out.day += (Number(b[0]) || 0) + (Number(b[1]) || 0) + (Number(b[2]) || 0);
     Object.keys(pl.sales || {}).forEach(pid => {
       if (_rtPaceCountsPid_(pid)) out.sold += Number(pl.sales[pid]) || 0;
+    });
+    /* ★v7.9 大きい数字を「販売数／納品数」にする。納品は実況マトリクスと同じ実効納品（生納品＋移動±）。
+       ⚠ 数えるのは**棒に入れた拠点だけ**（休止・置き弁・未開始は外す）＝分子と分母の顔ぶれを揃える。 */
+    Object.keys(pl.delivery || {}).forEach(pid => {
+      if (_rtPaceCountsPid_(pid)) out.deliv += Number(pl.delivery[pid]) || 0;
     });
     n++;
   });
@@ -8825,12 +8841,15 @@ function _rtPaceMeta_(p) {
        + ` ・いまは ${Math.round(p.plan)}（${d >= 0 ? '+' : ''}${d}個）`
        + (p.skip.length ? ` ・数えていない拠点: ${p.skip.map(rtEscapeHtml).join('、')}` : '');
 }
-/* 大きい数字は**％ではなく「いまの線に対して何個ぶん前後か」**。
-   目盛りが1日ぶんなのに％の分母が「いまの区間まで」だと、棒の長さと数字が噛み合わず読み違える。 */
+/* ★2026-09-30 v7.9【社長指示】大きい数字＝**販売数／納品数**（実況マトリクスの合計行と同じ形）。
+   その下に**いまの時間帯までの販売予定に対する％**（〜12:00は12:00まで／〜12:20は12:20まで／以降は本日）。
+   ※以前は「いまの線に対する過不足の個数（例 -33）」を出していた。 */
 function _rtPacePct_(p) {
   if (p.na) return '—';
-  const d = Math.round(p.sold - p.plan);
-  return (d >= 0 ? '+' : '') + d;
+  const upTo = _rtBandsUpTo_();
+  const lbl  = (upTo === 1 ? '12:00' : upTo === 2 ? '12:20' : '本日') + 'の予定比';
+  return `<span class="rt-sd"><b>${Math.round(p.sold)}</b>/${Math.round(p.deliv)}</span>`
+       + `<span class="rt-rate">${lbl} ${Math.round(p.rate)}%</span>`;
 }
 
 /* 自分が今日担当しているエリア。拠点数がいちばん多いエリアを1つ返す。
@@ -9110,9 +9129,9 @@ function _rtPaceCard_(areaNames, paceByArea, myArea) {
   if (!judged.length) return '';
 
   const upTo = _rtBandsUpTo_();
-  const basis = '棒＝実販売数（右端＝本日の予定）。数字は'
+  const basis = '棒＝実販売数（右端＝本日の予定）。数字は 販売数／納品数、％は'
               + (upTo === 1 ? '12:00' : upTo === 2 ? '12:20' : '本日')
-              + 'の予定に対する過不足';
+              + 'までの販売予定に対する販売数';
   const now = new Date();
   const hhmm = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
 
