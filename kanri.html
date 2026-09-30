@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- kanri.html v3.97 (2026-10-01) 【決定の時にシフトとの食い違いを一覧で出す】社長「当日急に入れたり消したりを生かすいい方法あるかな」→「決定時に 未割り当てに配分があるとき・シフト入っているのに0配分は一覧表示にしようか」。★決定ボタンの確認を confirm から一覧のダイアログ（`bmDecideShiftDialog`）へ。未割り当てなのに配分がある拠点は**拠点ごとに「残す」チェック**（既定オフ＝今までどおり0）→ サーバーへ `&keep=` で渡し、`naShelfSplit_` がその拠点を0にしない。シフトに人がいるのに0の拠点は表示だけ。保存時の確認（`bmConfirmShiftMismatch`）は従来どおり。要メインGAS @879（bmDecide の keep／置き弁は当日配分をそのまま初回納品に）。 -->
+<!-- kanri.html v3.97 (2026-10-01) 【決定の時にシフトとの食い違いを一覧で出す】社長「当日急に入れたり消したりを生かすいい方法あるかな」→「決定時に 未割り当てに配分があるとき・シフト入っているのに0配分は一覧表示にしようか」。★決定ボタンの確認を confirm から一覧のダイアログ（`bmDecideShiftDialog`）へ。未割り当てなのに配分がある拠点は**拠点ごとに「残す」チェック**（既定オフ＝今までどおり0）→ サーバーへ `&keep=` で渡し、`naShelfSplit_` がその拠点を0にしない。シフトに人がいるのに0の拠点は表示だけ。★スポットは「シフトに人がいる」扱い（一覧の判定・保存時の確認とも）。要メインGAS @880（スポットも当日配分をそのまま初回納品に）。保存時の確認（`bmConfirmShiftMismatch`）の中身は従来どおり。要メインGAS @879（bmDecide の keep／置き弁は当日配分をそのまま初回納品に）。 -->
 <!-- kanri.html v3.96 (2026-09-30) 【発注タブの日付切替を朝7時に】社長指示「ゲットソースの発注内容のコピー、納品予定の日付の日付変更線を当日7時に」。★納品日のチェック欄（全業者共通）と先行発注の「今日発注」判定が使う「今日」を、0時切替→7時切替にした（`orderTodayStr` の CUTOVER_HOUR=7）。0:00〜6:59 は前日扱い＝その日の日付がまだ選べ、コピー文の「▼納品日」もその日になる。発注タブ以外は触っていない。 -->
 <!-- kanri.html v3.95 (2026-09-29) 【拠点毎の種別の「推奨」が3倍に膨らんでいた】社長指摘「拠点毎の種別の数がおかしいな。多く出てると思う」（v3.94 で種別合計が出るようになった直後）。★原因＝**日替わりのり弁3種・満腹3種は推奨が3種とも同じ値で立つ**（配分の仕様_正本 1-5）ので、素直に足すとグループぶんが**3重に乗る**。📌 実測 2026-09-29 芝パーク＝海苔弁系の推奨 **50 → 正しくは36**／満腹 **15 → 5**。★当日配分（上段）は**足し算が正しい**＝献立で1種に絞ってあるので3重にならない（実測で一致）。もし人が2種入れたらその2種を作るので足し算が実態。だから上段は触らない。★直し＝**推奨（下段）だけ集約グループごとに max を取る**。GAS変更なし・フロントのみ。 -->
 <!-- kanri.html v3.94 (2026-09-29) 【拠点毎の種別合計が全部「–」だったのを直した】社長報告「種別の合計が入っていない」「これはかなり前から」。★原因＝`BM_CATEGORIES` の `id` は**英字**（noriben/manpuku/zenroku/other）なのに、サーバーが返す `p.group` は**日本語**（海苔弁系／満腹系／全六／他社商品）。`bmRenderCategoryRow` が `p.group !== cat.id` で突き合わせていたので**1商品も一致せず、種別の合計は拠点ごとも右端も全部 `–`** になっていた。⚠ `other` だけは `cat.id === 'other'` のリテラル比較で使っていたので「①では他社行を出さない」は効いており、**片方だけ動いていたので気づきにくかった**。★直し＝`groups`（サーバーの値の配列）で突き合わせる `bmInCategory()` を新設。将来サーバーの文言が変わっても配列に足すだけで拾える。GAS変更なし・フロントのみ。 -->
@@ -6462,16 +6462,18 @@ function bmShiftMismatch() {
   (bmServerData.locations || []).forEach(function (loc) {
     const lid = String(loc.id || '');
     if (!lid || BM_VEH_COL_RE_.test(lid)) return;            // 車載
-    if (loc.isOkiben || loc.isSpot) return;                  // 置き弁・スポット
+    if (loc.isOkiben) return;                                // 置き弁
+    // ★2026-10-01 v3.97 社長「スポットも含めてシフト入っている扱いで」＝スポットは人がいる拠点として見る
     let sum = 0;
     prods.forEach(function (p) {
       if (p.isExternal) return;                              // 他社は拠点に配らない
       if (!bmServerData.cells[p.id + '_' + lid]) return;
       sum += bmGetDisplaySales(p.id, lid);
     });
-    if (loc.staffed && sum === 0) {
+    const staffed = loc.staffed || loc.isSpot;
+    if (staffed && sum === 0) {
       out.staffed0.push({ lid: lid, name: loc.name || lid, person: loc.salesPerson || '' });
-    } else if (!loc.staffed && sum > 0) {
+    } else if (!staffed && sum > 0) {
       out.unstaffed.push({ lid: lid, name: loc.name || lid, qty: sum });
     }
   });
