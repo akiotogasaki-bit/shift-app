@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- kanri.html v3.97 (2026-10-01) 【決定の時にシフトとの食い違いを一覧で出す】社長「当日急に入れたり消したりを生かすいい方法あるかな」→「決定時に 未割り当てに配分があるとき・シフト入っているのに0配分は一覧表示にしようか」。★決定ボタンの確認を confirm から一覧のダイアログ（`bmDecideShiftDialog`）へ。未割り当てなのに配分がある拠点は**拠点ごとに「残す」チェック**（既定オフ＝今までどおり0）→ サーバーへ `&keep=` で渡し、`naShelfSplit_` がその拠点を0にしない。シフトに人がいるのに0の拠点は表示だけ。保存時の確認（`bmConfirmShiftMismatch`）は従来どおり。要メインGAS @879（bmDecide の keep／置き弁は当日配分をそのまま初回納品に）。 -->
 <!-- kanri.html v3.96 (2026-09-30) 【発注タブの日付切替を朝7時に】社長指示「ゲットソースの発注内容のコピー、納品予定の日付の日付変更線を当日7時に」。★納品日のチェック欄（全業者共通）と先行発注の「今日発注」判定が使う「今日」を、0時切替→7時切替にした（`orderTodayStr` の CUTOVER_HOUR=7）。0:00〜6:59 は前日扱い＝その日の日付がまだ選べ、コピー文の「▼納品日」もその日になる。発注タブ以外は触っていない。 -->
 <!-- kanri.html v3.95 (2026-09-29) 【拠点毎の種別の「推奨」が3倍に膨らんでいた】社長指摘「拠点毎の種別の数がおかしいな。多く出てると思う」（v3.94 で種別合計が出るようになった直後）。★原因＝**日替わりのり弁3種・満腹3種は推奨が3種とも同じ値で立つ**（配分の仕様_正本 1-5）ので、素直に足すとグループぶんが**3重に乗る**。📌 実測 2026-09-29 芝パーク＝海苔弁系の推奨 **50 → 正しくは36**／満腹 **15 → 5**。★当日配分（上段）は**足し算が正しい**＝献立で1種に絞ってあるので3重にならない（実測で一致）。もし人が2種入れたらその2種を作るので足し算が実態。だから上段は触らない。★直し＝**推奨（下段）だけ集約グループごとに max を取る**。GAS変更なし・フロントのみ。 -->
 <!-- kanri.html v3.94 (2026-09-29) 【拠点毎の種別合計が全部「–」だったのを直した】社長報告「種別の合計が入っていない」「これはかなり前から」。★原因＝`BM_CATEGORIES` の `id` は**英字**（noriben/manpuku/zenroku/other）なのに、サーバーが返す `p.group` は**日本語**（海苔弁系／満腹系／全六／他社商品）。`bmRenderCategoryRow` が `p.group !== cat.id` で突き合わせていたので**1商品も一致せず、種別の合計は拠点ごとも右端も全部 `–`** になっていた。⚠ `other` だけは `cat.id === 'other'` のリテラル比較で使っていたので「①では他社行を出さない」は効いており、**片方だけ動いていたので気づきにくかった**。★直し＝`groups`（サーバーの値の配列）で突き合わせる `bmInCategory()` を新設。将来サーバーの文言が変わっても配列に足すだけで拾える。GAS変更なし・フロントのみ。 -->
@@ -6162,7 +6163,12 @@ async function bmDecide() {
   }
   /* ★2026-09-16 v3.89 **「決定」でも同じ食い違いを聞く**（社長指示＝保存と決定の両方で見る）。
      保存で見逃しても、G列を作る直前にもう一度止まる。 */
-  if (!bmConfirmShiftMismatch('計算する')) return;
+  /* 🆕 ★2026-10-01 v3.97【社長決定】**決定の時はシフトとの食い違いを一覧で出し、未割り当ての拠点は拠点ごとに選ぶ。**
+     社長「未割り当てだったりを配分に入れなくする仕様はいいんだけど、当日急に入れたり消したりを生かすいい方法あるかな」
+     → 「決定時に 未割り当てに配分があるとき・シフト入っているのに0配分は一覧表示にしようか」
+     既定は今までどおり「0にする」。「残す」にチェックした拠点だけ、サーバーへ `keep=` で渡して0にしない。 */
+  const _pick = await bmDecideShiftDialog();
+  if (!_pick) return;
   if (!confirm(bmCurrentDate + ' の初回納品＋車載を、いまの当日配分から計算し直します。\n\n'
              + '②で手で調整した数字は作り直されます。よろしいですか。')) return;
   const b = document.getElementById('bm-decide-btn');
@@ -6170,6 +6176,7 @@ async function bmDecide() {
   if (b) { b.disabled = true; b.textContent = '計算中…'; }
   try {
     const res = await fetch(GAS_URL + '?action=bmDecide&date=' + encodeURIComponent(bmCurrentDate)
+                            + (_pick.keep.length ? '&keep=' + encodeURIComponent(_pick.keep.join(',')) : '')
                             + '&_cb=' + Date.now());
     const r = await res.json();
     if (!r || !r.ok) { alert('計算できませんでした: ' + ((r && r.error) || '不明なエラー')); return; }
@@ -6179,6 +6186,7 @@ async function bmDecide() {
     bmLoadStat(bmCurrentDate);
     bmSetView('shelf');                         // 結果が見える②へ切り替える
     wpToast('②初回納品＋車載を計算しました（' + (r.locs || 0) + '拠点・車載 ' + (r.vehTotal || 0) + '個）', 'success');
+    if (_pick.keep.length) wpToast('未割り当てでも残した拠点: ' + _pick.keepNames.join('、'), 'info');
     /* 🔴 ★2026-09-25【社長決定・配分の仕様_正本 5-③】**割り当て済みなのに配分が0＝警告。**
        社長「社長の確認忘れも考えられるから、**決定を押したタイミングで警告**を出して
              社長が判断できるようにしよう」
@@ -6468,6 +6476,52 @@ function bmShiftMismatch() {
     }
   });
   return out;
+}
+/** ★2026-10-01 v3.97 決定用の一覧。食い違いが無ければ即 {keep:[]}。キャンセルなら null。
+ *  【未割当なのに配分がある】… 拠点ごとに「残す」チェック（既定オフ＝0にする）
+ *  【シフトに人がいるのに0】… 表示だけ（売るなら①に数字を入れてから決定）*/
+function bmDecideShiftDialog() {
+  let mm;
+  try { mm = bmShiftMismatch(); } catch (e) { return Promise.resolve({ keep: [], keepNames: [] }); }
+  if (!mm.staffed0.length && !mm.unstaffed.length) return Promise.resolve({ keep: [], keepNames: [] });
+  return new Promise(function (resolve) {
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const ov = document.createElement('div');
+    ov.className = 'bm-modal-overlay bm-show';
+    let h = '<div class="bm-modal"><div class="bm-modal-head"><div><div class="bm-modal-title">⚠ シフトと配分の食い違い</div>'
+          + '<div class="bm-modal-subtitle">' + esc(bmCurrentDate) + '　確認してから計算します</div></div></div><div class="bm-modal-body">';
+    if (mm.unstaffed.length) {
+      h += '<div class="bm-modal-section"><div class="bm-modal-section-title">未割り当てなのに配分がある（' + mm.unstaffed.length + '拠点）</div>'
+         + '<div style="font-size:9pt;color:#777;margin-bottom:6px">チェックした拠点は配分を残します。チェックしない拠点は0になります。</div>';
+      mm.unstaffed.forEach(function (x) {
+        h += '<label style="display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid #eee;cursor:pointer">'
+           + '<input type="checkbox" class="bm-keep-chk" value="' + esc(x.lid) + '" data-name="' + esc(x.name) + '" style="width:18px;height:18px">'
+           + '<span style="flex:1">' + esc(x.name) + '</span><span style="color:#555">' + esc(x.qty) + '食</span><span style="font-size:9pt;color:#1976d2">残す</span></label>';
+      });
+      h += '</div>';
+    }
+    if (mm.staffed0.length) {
+      h += '<div class="bm-modal-section"><div class="bm-modal-section-title">シフトに人がいるのに配分0（' + mm.staffed0.length + '拠点）</div>'
+         + '<div style="font-size:9pt;color:#777;margin-bottom:6px">このまま計算すると0のままです。売るならキャンセルして①当日配分に数字を入れてください。</div>';
+      mm.staffed0.forEach(function (x) {
+        h += '<div style="padding:4px;border-bottom:1px solid #eee">' + esc(x.name) + (x.person ? '<span style="color:#777">（' + esc(x.person) + '）</span>' : '') + '</div>';
+      });
+      h += '</div>';
+    }
+    h += '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">'
+       + '<button type="button" class="bm-dlg-cancel" style="padding:8px 14px">キャンセル</button>'
+       + '<button type="button" class="bm-dlg-ok" style="padding:8px 14px;background:#1976d2;color:#fff;border:none;border-radius:4px">この内容で計算へ</button></div>'
+       + '</div></div>';
+    ov.innerHTML = h;
+    document.body.appendChild(ov);
+    const done = v => { ov.remove(); resolve(v); };
+    ov.querySelector('.bm-dlg-cancel').onclick = () => done(null);
+    ov.addEventListener('click', ev => { if (ev.target === ov) done(null); });
+    ov.querySelector('.bm-dlg-ok').onclick = function () {
+      const chk = Array.from(ov.querySelectorAll('.bm-keep-chk:checked'));
+      done({ keep: chk.map(c => c.value), keepNames: chk.map(c => c.getAttribute('data-name')) });
+    };
+  });
 }
 /** 食い違いがあれば聞く。true＝このまま進む／false＝戻る。 */
 function bmConfirmShiftMismatch(whatDoing) {
