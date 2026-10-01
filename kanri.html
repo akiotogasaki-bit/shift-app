@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- kanri.html v3.98 (2026-10-01) 【Macで印刷】社長報告「午前盛り出しをプリントアウトして実行すると止まっちゃう」。★切り分け＝Chrome の印刷画面から Brother（USB の AirPrint）へ直接送ると午前盛り出しだけ約850KBに膨らみプリンター本体が止まる。画面を出さない Chrome で作ったPDF（約200KB）を lp で送ると出る（社長確認・PDF経由でも出た）。★各タブに「🖨 Macで印刷」、拠点配分に「📚 Macで一括印刷」を追加。いま印刷用に描いている画面のHTMLを、この Mac に常駐する印刷係（15_ソース/print-server.py・127.0.0.1:8765・launchd com.oedo.print.server）へ渡し、PDF化→lp で送る。一括印刷は同じキュー（拠点配分2部→午前→午後→仕込み3枚）を使い、拠点配分は「2部」にまとめる。`_printAllStartCurrent` からタブ切替を `_printAllActivate` に切り出し（window.print の一括印刷は挙動不変）。今までの🖨印刷・📚一括印刷はそのまま残す。GAS変更なし。 -->
 <!-- kanri.html v3.97 (2026-10-01) 【決定の時にシフトとの食い違いを一覧で出す】社長「当日急に入れたり消したりを生かすいい方法あるかな」→「決定時に 未割り当てに配分があるとき・シフト入っているのに0配分は一覧表示にしようか」。★決定ボタンの確認を confirm から一覧のダイアログ（`bmDecideShiftDialog`）へ。未割り当てなのに配分がある拠点は**拠点ごとに「残す」チェック**（既定オフ＝今までどおり0）→ サーバーへ `&keep=` で渡し、`naShelfSplit_` がその拠点を0にしない。シフトに人がいるのに0の拠点は表示だけ。★スポットは「シフトに人がいる」扱い（一覧の判定・保存時の確認とも）。要メインGAS @880（スポットも当日配分をそのまま初回納品に）。保存時の確認（`bmConfirmShiftMismatch`）の中身は従来どおり。要メインGAS @879（bmDecide の keep／置き弁は当日配分をそのまま初回納品に）。 -->
 <!-- kanri.html v3.96 (2026-09-30) 【発注タブの日付切替を朝7時に】社長指示「ゲットソースの発注内容のコピー、納品予定の日付の日付変更線を当日7時に」。★納品日のチェック欄（全業者共通）と先行発注の「今日発注」判定が使う「今日」を、0時切替→7時切替にした（`orderTodayStr` の CUTOVER_HOUR=7）。0:00〜6:59 は前日扱い＝その日の日付がまだ選べ、コピー文の「▼納品日」もその日になる。発注タブ以外は触っていない。 -->
 <!-- kanri.html v3.95 (2026-09-29) 【拠点毎の種別の「推奨」が3倍に膨らんでいた】社長指摘「拠点毎の種別の数がおかしいな。多く出てると思う」（v3.94 で種別合計が出るようになった直後）。★原因＝**日替わりのり弁3種・満腹3種は推奨が3種とも同じ値で立つ**（配分の仕様_正本 1-5）ので、素直に足すとグループぶんが**3重に乗る**。📌 実測 2026-09-29 芝パーク＝海苔弁系の推奨 **50 → 正しくは36**／満腹 **15 → 5**。★当日配分（上段）は**足し算が正しい**＝献立で1種に絞ってあるので3重にならない（実測で一致）。もし人が2種入れたらその2種を作るので足し算が実態。だから上段は触らない。★直し＝**推奨（下段）だけ集約グループごとに max を取る**。GAS変更なし・フロントのみ。 -->
@@ -2385,7 +2386,9 @@ body {
     <input type="date" id="s1-date-input">
     <button class="btn btn-primary" id="s1-btn-fetch">取得</button>
     <button class="btn btn-print" onclick="window.print()">🖨 印刷</button>
+    <button class="btn btn-print" onclick="macPrintCurrent()" title="この Mac の印刷係が軽いPDFにしてプリンターへ送ります（Brother で止まる時用）">🖨 Macで印刷</button>
     <button class="btn btn-print" id="s1-btn-print-all" onclick="printAllForDay()" style="background:#ef6c00;color:#fff;border-color:#ef6c00;font-weight:bold;">📚 一括印刷</button>
+    <button class="btn btn-print" onclick="printAllForDay(true)" style="background:#2e7d32;color:#fff;border-color:#2e7d32;font-weight:bold;" title="印刷画面を出さずに、この Mac の印刷係がまとめてプリンターへ送ります">📚 Macで一括印刷</button>
     <span class="status-msg" id="s1-status-msg"></span>
   </div>
   <div id="sheet1-body"></div>
@@ -2398,6 +2401,7 @@ body {
     <input type="date" id="s2-date-input">
     <button class="btn btn-primary" id="s2-btn-fetch">取得</button>
     <button class="btn btn-print" onclick="window.print()">🖨 印刷</button>
+    <button class="btn btn-print" onclick="macPrintCurrent()" title="この Mac の印刷係が軽いPDFにしてプリンターへ送ります（Brother で止まる時用）">🖨 Macで印刷</button>
     <span class="status-msg" id="s2-status-msg"></span>
     <div class="legend">
       <span>色：</span>
@@ -2418,6 +2422,7 @@ body {
     <input type="date" id="s3-date-input">
     <button class="btn btn-primary" id="s3-btn-fetch">取得</button>
     <button class="btn btn-print" onclick="window.print()">🖨 印刷</button>
+    <button class="btn btn-print" onclick="macPrintCurrent()" title="この Mac の印刷係が軽いPDFにしてプリンターへ送ります（Brother で止まる時用）">🖨 Macで印刷</button>
     <span class="status-msg" id="s3-status-msg"></span>
     <div class="legend">
       <span>色：</span>
@@ -2435,6 +2440,7 @@ body {
     <button class="s4-week-btn" id="s4-btn-week1">来週 月〜日</button>
     <button class="btn btn-primary" id="s4-btn-fetch">取得</button>
     <button class="btn btn-print" onclick="window.print()">🖨 印刷</button>
+    <button class="btn btn-print" onclick="macPrintCurrent()" title="この Mac の印刷係が軽いPDFにしてプリンターへ送ります（Brother で止まる時用）">🖨 Macで印刷</button>
     <span class="status-msg" id="s4-status-msg"></span>
   </div>
   <div class="s4-date-row" id="s4-date-row"></div>
@@ -8802,7 +8808,7 @@ let _printAllIdx = 0;          // 現在の印刷インデックス
 let _printAllBound = false;    // afterprint ハンドラ登録済みフラグ
 let _printAllPrepToday = null; // 当日ぶんの仕込みデータ（印刷後に画面を戻すため保持）
 
-async function printAllForDay() {
+async function printAllForDay(viaMac) {
   // ① sheet1日付取得
   const dateVal = document.getElementById('s1-date-input').value;
   if (!dateVal) {
@@ -8815,7 +8821,12 @@ async function printAllForDay() {
     return;
   }
   // ② 事前確認
-  const okConfirm = confirm(
+  const okConfirm = viaMac ? confirm(
+    dateVal + ' を Mac の印刷係でまとめて印刷します。\n\n' +
+    '拠点配分(2部) → 午前便 → (午後便) →\n' +
+    '仕込み(当日 午前便) → 仕込み(当日 午後便) → 仕込み(翌日)\n\n' +
+    '印刷画面は出ません。1枚あたり数秒〜20秒ほどかかります。\n開始しますか?'
+  ) : confirm(
     dateVal + ' の一括印刷を開始します。\n\n' +
     '拠点配分(2部) → 午前便 → (午後便) →\n' +
     '仕込み(当日 午前便) → 仕込み(当日 午後便) → 仕込み(翌日)\n' +
@@ -8919,6 +8930,8 @@ async function printAllForDay() {
   }
   _printAllIdx = 0;
 
+  if (viaMac) { await _macPrintQueue(); return; }   // ★2026-10-01 v3.98 印刷画面を出さずに Mac の印刷係へ
+
   // ⑧ afterprint ハンドラを登録 (初回のみ)
   if (!_printAllBound) {
     window.addEventListener('afterprint', _printAllOnAfter);
@@ -8936,7 +8949,17 @@ function _printAllStartCurrent() {
     _printAllFinish();
     return;
   }
-  const item = _printAllQueue[_printAllIdx];
+  _printAllActivate(_printAllQueue[_printAllIdx]);
+
+  // 描画反映を待ってから印刷ダイアログ
+  setTimeout(function() {
+    window.print();
+  }, 200);
+}
+
+/** 一括印刷の1件を「印刷する状態」にする（タブを切り替え、仕込みは区分を描き直す）。
+ *  ★2026-10-01 v3.98 window.print() から切り離した（Macで一括印刷が同じ描き方を使うため） */
+function _printAllActivate(item) {
   const tabName = item.tab;
 
   // ★v3.77 仕込みは同じタブを日付・区分を差し替えて3回使う
@@ -8953,11 +8976,6 @@ function _printAllStartCurrent() {
   const tabPane = document.getElementById('tab-' + tabName);
   if (tabBtn)  tabBtn.classList.add('active');
   if (tabPane) tabPane.classList.add('active');
-
-  // 描画反映を待ってから印刷ダイアログ
-  setTimeout(function() {
-    window.print();
-  }, 200);
 }
 
 // afterprint コールバック (キューが空なら何もしない=単体印刷時)
@@ -8997,6 +9015,92 @@ function _printAllFinish() {
 }
 
 // キュー要素→日本語ラベル
+/* ══════════════════════════════════════════════════════════════
+   ★2026-10-01 v3.98【Macで印刷】社長報告「午前盛り出しをプリントアウトして実行すると止まっちゃう」
+   切り分け＝Chrome の印刷画面から Brother MFC-J4940DN（USB の AirPrint）へ直接送ると午前盛り出しだけ
+   書類が約850KBに膨らみ、プリンター本体が止まる。画面を出さない Chrome で作ったPDF（約200KB）を
+   lp で送ると普通に出る（社長確認）。→ この Mac に常駐する印刷係（15_ソース/print-server.py・
+   launchd com.oedo.print.server）へ**いま印刷用に描いている画面のHTML**を渡し、PDF化と送信を任せる。
+   データは取り直さない＝画面で見ている数字と印刷が食い違わない。
+   ⚠ 印刷係は 127.0.0.1（この Mac の中）にしかいない。他の端末（iPad 等）からは使えない＝今までの🖨印刷を使う。
+   ⚠ 初回だけ Chrome が「このデバイス上の他のアプリへのアクセス」を聞いてくることがある → 許可する。
+   ══════════════════════════════════════════════════════════════ */
+const MAC_PRINT_URL = 'http://127.0.0.1:8765';
+
+/** いまの画面を印刷用のHTMLにする（スクリプトは抜く・表示中のタブ以外は空にして軽くする） */
+function macSnapshotHtml() {
+  const doc = document.documentElement.cloneNode(true);
+  doc.querySelectorAll('script').forEach(s => s.remove());
+  doc.querySelectorAll('.tab-pane:not(.active)').forEach(p => { p.innerHTML = ''; });
+  doc.querySelectorAll('.bm-modal-overlay').forEach(p => p.remove());
+  const head = doc.querySelector('head');
+  if (head) {
+    const b = document.createElement('base');
+    b.href = location.href.replace(/[^\/]*$/, '');   // 画像などの相対パスを配布元から読む
+    head.insertBefore(b, head.firstChild);
+  }
+  return '<!DOCTYPE html>\n' + doc.outerHTML;
+}
+
+/** 印刷係へ送る。戻り値＝サーバーの結果 or {ok:false, offline:true, error} */
+async function macPrintPost(docs) {
+  try {
+    const res = await fetch(MAC_PRINT_URL + '/print', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ docs: docs })
+    });
+    return await res.json();
+  } catch (e) {
+    return { ok: false, offline: true,
+             error: 'Mac の印刷係につながりません。\n（この Mac 以外の端末では使えません／印刷係が止まっている可能性）\n\n今までの「🖨 印刷」を使ってください。' };
+  }
+}
+
+function macPrintSummary(r) {
+  if (!r || !Array.isArray(r.results)) return (r && r.error) || '不明なエラー';
+  return r.results.map(x => (x.ok ? '✅ ' : '❌ ') + x.label
+    + (x.ok ? '（' + (x.pages || '?') + '枚' + (x.copies > 1 ? '×' + x.copies + '部' : '') + '）' : '：' + (x.error || ''))).join('\n');
+}
+
+/** いま開いているタブを1部、Macで印刷 */
+async function macPrintCurrent() {
+  const pane = document.querySelector('.tab-pane.active');
+  const tb = document.querySelector('.tab-btn.active');
+  const di = pane ? pane.querySelector('input[type=date]') : null;
+  const label = (tb ? tb.textContent.replace(/^[^\p{L}\p{N}]+/u, '').trim() : 'kanri') + (di && di.value ? ' ' + di.value : '');
+  wpToast('Mac で印刷しています…（' + label + '）', 'info');
+  const r = await macPrintPost([{ label: label, copies: 1, html: macSnapshotHtml() }]);
+  if (r && r.ok) wpToast('印刷しました：' + macPrintSummary(r).replace(/\n/g, ' / '), 'success');
+  else alert('Macで印刷できませんでした\n\n' + (r && r.offline ? r.error : macPrintSummary(r)));
+}
+
+/** 一括印刷のキューを Mac の印刷係でまとめて刷る（拠点配分の2部は「2部」にまとめる） */
+async function _macPrintQueue() {
+  const docs = [];
+  try {
+    for (let i = 0; i < _printAllQueue.length; i++) {
+      const item = _printAllQueue[i];
+      if (item.tab === 'sheet1' && i > 0 && _printAllQueue[i - 1].tab === 'sheet1') { docs[docs.length - 1].copies++; continue; }
+      s1SetStatus('Macで一括印刷の準備中... (' + (i + 1) + '/' + _printAllQueue.length + ') ' + _printAllLabel(item));
+      _printAllActivate(item);
+      await new Promise(r => setTimeout(r, 150));
+      docs.push({ label: _printAllLabel(item), copies: 1, html: macSnapshotHtml() });
+    }
+  } finally {
+    _printAllFinish();
+  }
+  s1SetStatus('Macで一括印刷中...（' + docs.length + '件・1件あたり数秒〜20秒）');
+  const r = await macPrintPost(docs);
+  if (r && r.ok) {
+    s1SetStatus('✅ Macで一括印刷しました');
+    alert('Macで一括印刷しました\n\n' + macPrintSummary(r));
+  } else {
+    s1SetStatus('Macで一括印刷できませんでした', true);
+    alert('Macで一括印刷できませんでした\n\n' + (r && r.offline ? r.error : macPrintSummary(r)));
+  }
+}
+
 function _printAllLabel(item) {
   const labels = {
     'sheet1': '拠点配分',
