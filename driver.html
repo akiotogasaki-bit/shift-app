@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v8.0 (2026-10-01) 【売れ行き棒の分母を「エリアの総量（棚＋車の残り）」に】社長「知りたいのは、他社製品も含むエリア毎の売れ行き、残り具合」。★それまでの分母は拠点の棚に置いた数（実効納品）だけで、車に積んだままの弁当（他社製品を含む）が入らず残りが少なく出ていた。★大きい数字＝販売数／総量（棚＋車の残り・他社込み・お茶と配分外は除く）、下に「残り◯（車◯）・予定比◯%」。％は今までどおり他社込みの販売数÷予定（社長決定）。置き弁は今までどおり除く。★車の残りは公開スナップショットの `veh`（エリア名→商品→個数・移動タブの「車載の残り」と同じ計算）＝/exec を増やさない。取れない時は「車は未取得」と出す。要メインGAS @886。 -->
 <!-- driver v7.9 (2026-09-30) 【売れ行き棒の大きい数字を「販売数／納品数」＋時間帯の予定比％に】社長指示「マイナスじゃなくて実況マトリクスみたいに販売数／納品数で表示」「その下に時間帯に対する販売数を％で」。★大きい数字＝販売数／納品数（納品は実況マトリクスと同じ実効納品＝生納品＋移動±・お茶と配分外を除く）。数えるのは棒に入れた拠点だけ（休止・置き弁・12時以降の未開始は外す）。★下の小さい数字＝〜12:00は「12:00の予定比」、〜12:20は「12:20の予定比」、以降は「本日の予定比」＝販売数÷その時刻までの3区間予定。★旧表示の「いまの線に対する過不足の個数（-33）」はやめた（明細行の「いまは◯（±◯個）」には残る）。 -->
 <!-- driver v7.8 (2026-09-30) 【置き弁で残数を全部 ⌫ で消すと「回収済みにする」が押せなかった】社長報告（アスエネ・スクショ）。各行は空でも「0」と表示するのに、合計は「—」＝未入力扱いで、現金なし置き弁の確定条件（合計が未入力でない）を満たさなかった。★`cashBackspace` で残数の欄が空になったら「0」を入れる。0キーで入れた場合と同じ状態になる。現金・クーポン・交通費の欄は従来どおり空にできる。 -->
 <!-- driver v7.7 (2026-09-30) 【売れ行き棒の分母から「売らない拠点」を外した】9/29 ドライバー報告「棒グラフの数字がおかしい」。分母（3区間予定）に休止のパソナ②・置き弁アスエネ・レジ未開始の茶3が残り、赤坂52%／銀座69%／お茶の水86%と実態より低く出ていた（外すと66%／92%／104%）。★`_rtAreaPace_` で ①休止（手動・自動）②置き弁（起動時の okibenLocs）③12:00を過ぎてもレジ未開始 を分子・分母から外す。午前はレジ未開始を外さない（社長決定＝開いた瞬間に分母が跳ねないように）。★外した拠点は棒の下に「数えていない拠点: 名前（休止／置き弁／未開始）」と必ず出す。通信は増えていない。マトリクスの数字は変えていない。 -->
@@ -8287,6 +8288,7 @@ async function rtLoadAll() {
        ここを外すのが一番効く。サマリー（売上）を開いている時は従来どおり `/exec`。 */
     const _snapLive = (rtCurrentView === 'area') ? await fetchSnapLive_(30000) : null;
     const _snapInter = _snapLive ? rtIntermediateFromSnap_(_snapLive) : null;
+    if (_snapLive) rtVehByArea = (_snapLive.veh && typeof _snapLive.veh === 'object') ? _snapLive.veh : null;   // ★v8.0
     const [master, reports, intermediate, driverState, moveAdj] = await Promise.all([
       rtFetchJSON(`${GAS_URL}?action=getMaster`),
       rtFetchJSON(`${GAS_URL}?action=getTodayReports`),
@@ -8715,6 +8717,9 @@ function _teaIds_() {
 const RT_BAND_ENABLED_ = true;   // ★2026-09-19 公開スナップショット経由で復活（/exec は使わない）
 const RT_BAND_KEY = 'oedo_driver_bandplan_v2';
 let rtBandPlan = null;            // { date, loc: {拠点ID:[区間1,区間2,区間3]} }
+/* ★2026-10-01 v8.0 車の残り（エリア名 → 商品ID → 個数）。公開スナップショットの `veh`（メインGAS @886〜）。
+   取れない時は null＝棚だけで出し、「車の残りは未取得」と言う（黙って少なく出さない）。 */
+let rtVehByArea = null;
 
 /* その日1回だけ取って localStorage に置く（getPatrolPlan と同じ考え方）。
    ⚠ 取れなくても画面は従来どおり出す。棒が出ないだけにする。 */
@@ -8757,8 +8762,8 @@ function _rtPaceCountsPid_(pid) {
 
 /* エリアの売れ行き。perLoc は renderAreaMatrix が作る [{loc, sales}, …]
    @return {{na:boolean, plan:number, sold:number, rate:number, skip:string[]}} */
-function _rtAreaPace_(perLoc) {
-  const out = { na: true, plan: 0, sold: 0, deliv: 0, rate: 0, skip: [], day: 0, b1: 0, b2: 0 };
+function _rtAreaPace_(perLoc, area) {
+  const out = { na: true, plan: 0, sold: 0, deliv: 0, rate: 0, skip: [], day: 0, b1: 0, b2: 0, veh: 0, vehKnown: false };
   const bp = (rtBandPlan && rtBandPlan.loc) ? rtBandPlan.loc : null;
   if (!bp) return out;
   const upTo = _rtBandsUpTo_();
@@ -8793,6 +8798,14 @@ function _rtAreaPace_(perLoc) {
     });
     n++;
   });
+  /* ★2026-10-01 v8.0【社長「知りたいのは、他社製品も含むエリア毎の売れ行き、残り具合」】
+     **車に残っている分（他社製品を含む）もエリアの総量に入れる。**それまでは棚に置いた数だけで、
+     車に積んだままの弁当が数えられず残りが少なく出ていた。お茶・配分外は棚と同じく数えない。 */
+  if (rtVehByArea && area) {
+    out.vehKnown = true;
+    const v = rtVehByArea[area] || {};
+    Object.keys(v).forEach(pid => { if (_rtPaceCountsPid_(pid)) out.veh += Number(v[pid]) || 0; });
+  }
   /* 予定がまだ小さいうちは判定しない。1〜2個の差で数百%に振れて意味を成さないため。 */
   if (!n || out.plan < 8) return out;
   out.na = false;
@@ -8848,8 +8861,13 @@ function _rtPacePct_(p) {
   if (p.na) return '—';
   const upTo = _rtBandsUpTo_();
   const lbl  = (upTo === 1 ? '12:00' : upTo === 2 ? '12:20' : '本日') + 'の予定比';
-  return `<span class="rt-sd"><b>${Math.round(p.sold)}</b>/${Math.round(p.deliv)}</span>`
-       + `<span class="rt-rate">${lbl} ${Math.round(p.rate)}%</span>`;
+  /* ★v8.0 分母＝エリアの総量（棚＋車の残り・他社込み）。その下に「残り◯（車◯）」。
+     ％は今までどおり 販売数（他社込み）÷予定（社長決定 2026-10-01「％も他社込み」）。 */
+  const total = Math.round(p.deliv + p.veh);
+  const left  = Math.max(0, total - Math.round(p.sold));
+  const vehTxt = p.vehKnown ? `（車${Math.round(p.veh)}）` : '（車は未取得）';
+  return `<span class="rt-sd"><b>${Math.round(p.sold)}</b>/${total}</span>`
+       + `<span class="rt-rate">残り${left}${vehTxt}・${lbl} ${Math.round(p.rate)}%</span>`;
 }
 
 /* 自分が今日担当しているエリア。拠点数がいちばん多いエリアを1つ返す。
@@ -9090,7 +9108,7 @@ function renderAreaMatrix() {
 
     /* ★2026-09-13 v7.2 このエリアの売れ行き。カード（画面の一番上）とここの両方に出す。
        ⚠ ブロックの中まで来た人がカードまでスクロールを戻さなくて済むように、見出しにも出す。 */
-    const pace = _rtAreaPace_(perLoc);
+    const pace = _rtAreaPace_(perLoc, area);
     paceByArea[area] = pace;
 
     html += `
@@ -9129,7 +9147,7 @@ function _rtPaceCard_(areaNames, paceByArea, myArea) {
   if (!judged.length) return '';
 
   const upTo = _rtBandsUpTo_();
-  const basis = '棒＝実販売数（右端＝本日の予定）。数字は 販売数／納品数、％は'
+  const basis = '棒＝実販売数（右端＝本日の予定）。数字は 販売数／エリアの総量（棚＋車の残り・他社込み）、％は'
               + (upTo === 1 ? '12:00' : upTo === 2 ? '12:20' : '本日')
               + 'までの販売予定に対する販売数';
   const now = new Date();
