@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- kanri.html v3.99 (2026-10-02) 【配分表の他社弁当を車載5台に分けて出す】社長「初回納品には車載の他社製品の数が入っているけど、配分表ではまとめて表示になっている。これも合わせて直して欲しい」→「配分表も車載5台に分ける」。★GAS getSheet1Data が他社3品の**車載行のG列**（`extveh` の按分＝②初回納品＋車載と同じ数）を byLocation に入れて返す。配分表は車載列に積み数・通常拠点は空欄、車載計・中計・拠点合計・カテゴリー別合計にも入る。合計列は納品総数（車載計とずれる日は赤で「車載計 / 総数」）。按分前で車載の内訳が無い日は従来どおり「総数 N 個」の1マス。盛り出し表は変えていない。要メインGAS（getSheet1Data）。 -->
 <!-- kanri.html v3.98 (2026-10-01) 【Macで印刷】社長報告「午前盛り出しをプリントアウトして実行すると止まっちゃう」。★切り分け＝Chrome の印刷画面から Brother（USB の AirPrint）へ直接送ると午前盛り出しだけ約850KBに膨らみプリンター本体が止まる。画面を出さない Chrome で作ったPDF（約200KB）を lp で送ると出る（社長確認・PDF経由でも出た）。★各タブに「🖨 Macで印刷」、拠点配分に「📚 Macで一括印刷」を追加。いま印刷用に描いている画面のHTMLを、この Mac に常駐する印刷係（15_ソース/print-server.py・127.0.0.1:8765・launchd com.oedo.print.server）へ渡し、PDF化→lp で送る。一括印刷は同じキュー（拠点配分2部→午前→午後→仕込み3枚）を使い、拠点配分は「2部」にまとめる。`_printAllStartCurrent` からタブ切替を `_printAllActivate` に切り出し（window.print の一括印刷は挙動不変）。今までの🖨印刷・📚一括印刷はそのまま残す。GAS変更なし。 -->
 <!-- kanri.html v3.97 (2026-10-01) 【決定の時にシフトとの食い違いを一覧で出す】社長「当日急に入れたり消したりを生かすいい方法あるかな」→「決定時に 未割り当てに配分があるとき・シフト入っているのに0配分は一覧表示にしようか」。★決定ボタンの確認を confirm から一覧のダイアログ（`bmDecideShiftDialog`）へ。未割り当てなのに配分がある拠点は**拠点ごとに「残す」チェック**（既定オフ＝今までどおり0）→ サーバーへ `&keep=` で渡し、`naShelfSplit_` がその拠点を0にしない。シフトに人がいるのに0の拠点は表示だけ。★スポットは「シフトに人がいる」扱い（一覧の判定・保存時の確認とも）。要メインGAS @880（スポットも当日配分をそのまま初回納品に）。保存時の確認（`bmConfirmShiftMismatch`）の中身は従来どおり。要メインGAS @879（bmDecide の keep／置き弁は当日配分をそのまま初回納品に）。 -->
 <!-- kanri.html v3.96 (2026-09-30) 【発注タブの日付切替を朝7時に】社長指示「ゲットソースの発注内容のコピー、納品予定の日付の日付変更線を当日7時に」。★納品日のチェック欄（全業者共通）と先行発注の「今日発注」判定が使う「今日」を、0時切替→7時切替にした（`orderTodayStr` の CUTOVER_HOUR=7）。0:00〜6:59 は前日扱い＝その日の日付がまだ選べ、コピー文の「▼納品日」もその日になる。発注タブ以外は触っていない。 -->
@@ -4277,7 +4278,7 @@ function renderSheet1(data) {
   //   （隠れる＝その日0なので値は変わらないが、定義を可視状態に依存させない）。
   const s1SubIds = locations.slice(0, subtotalSplit).map(l => l.id);
   function s1Subtotal(row) {
-    if (!row || row.isExternal || !row.byLocation) return 0;
+    if (!row || !row.byLocation) return 0;   // ★v3.99 他社も車載ぶんは数える（byLocation は車載だけ）
     let s = 0;
     s1SubIds.forEach(lid => { s += Number(row.byLocation[lid]) || 0; });
     return s;
@@ -4290,11 +4291,15 @@ function renderSheet1(data) {
      ⚠ 0拠点で隠れた車載列も足す（定義を可視状態に依存させない＝中計と同じ考え方）。 */
   const s1VehIds = s1VehLocs.map(l => l.id);
   function s1VehTotal(row) {
-    if (!row || row.isExternal || !row.byLocation) return 0;
+    if (!row || !row.byLocation) return 0;   // ★v3.99 他社も車載ぶんは数える
     let s = 0;
     s1VehIds.forEach(lid => { s += Number(row.byLocation[lid]) || 0; });
     return s;
   }
+
+  /* ★2026-10-02 v3.99 他社弁当に車載の内訳があるか（GAS getSheet1Data が車載のG列を返す）。
+     無い日（按分前など）は従来どおり「総数 N 個（拠点ごとの内訳なし）」の1マスで出す。 */
+  function s1ExtHasVeh(row) { return !!(row && row.isExternal && s1VehTotal(row) > 0); }
 
   // 区切り線（本来位置ベース・左詰め集約）：
   //   可視 vIdx と次の可視拠点の「本来位置」の間に元の境界があれば vIdx の右に線。
@@ -4362,7 +4367,7 @@ function renderSheet1(data) {
       html += `<td class="cell-name">${escHtml(row.baseName)}`
             + (row.isExternal ? '<span class="s2-ext-badge" title="他社弁当：拠点ごとの配分は決めない（総数のみ）／外部SSから自動取込">他社</span>' : '')
             + '</td>';
-      if (row.isExternal) {
+      if (row.isExternal && !s1ExtHasVeh(row)) {
         // 拠点列は横断して1マス＝「1まとめ」であることが印刷でも分かるようにする
         const span = visLocIds.length + (subtotalInsertAt <= visLocIds.length ? 2 : 0);
         html += `<td class="cell-data" colspan="${span}" style="text-align:center;font-weight:700;">`
@@ -4379,7 +4384,12 @@ function renderSheet1(data) {
           html += `<td class="cell-data${bcls}">${q ? q : ''}</td>`;
         });
       }
-      html += `<td class="cell-tot">${row.total || ''}</td>`;
+      // ★v3.99 他社は合計＝納品総数。車載計と食い違う日は赤で「車載計 / 総数」
+      if (s1ExtHasVeh(row) && s1VehTotal(row) !== (Number(row.total) || 0)) {
+        html += `<td class="cell-tot" style="color:#c62828;" title="車載計と納品総数が合っていません">${s1VehTotal(row)} / ${row.total}</td>`;
+      } else {
+        html += `<td class="cell-tot">${row.total || ''}</td>`;
+      }
       html += '</tr>';
     });
 
@@ -4395,13 +4405,18 @@ function renderSheet1(data) {
     //   拠点ごとに何個持っていくかが先に目に入る方が、配る時に見やすいため。
     const grandByLoc = {};
     let grandSub = 0, grandTotal = 0, grandVeh = 0;   // ★2026-09-10 grandVeh＝車載だけの合計
+    // ★v3.99 他社の車載ぶんも拠点合計に入る。合計列は他社＝納品総数で数える（車載計とずれても製造数に合わせる）
     locIds.forEach((lid, idx) => {
       let sum = 0;
-      allRows.forEach(r => { sum += Number(r.byLocation[lid]) || 0; });
+      allRows.forEach(r => { if (isTea(r)) return; sum += Number(r.byLocation[lid]) || 0; });
       grandByLoc[lid] = sum;
-      grandTotal += sum;
       if (idx < subtotalSplit) grandSub += sum;
       if (VEH_RE_S1.test(lid)) grandVeh += sum;
+    });
+    allRows.forEach(r => {
+      if (isTea(r)) return;
+      if (r.isExternal) { if (s1ExtHasVeh(r)) grandTotal += Number(r.total) || 0; return; }
+      locIds.forEach(lid => { grandTotal += Number(r.byLocation[lid]) || 0; });
     });
     html += '<tr class="cat-row cat-grand">';
     html += '<td class="cell-name cat-label">拠点合計</td>';
@@ -4429,14 +4444,15 @@ function renderSheet1(data) {
       //   拠点分と総数分を分けて数え、合計には両方を含める。
       const byLocation = {};
       let subtotal = 0, total = 0, catVeh = 0;   // ★2026-09-10 catVeh＝このカテゴリーの車載ぶん
-      const catLocRows = catRows.filter(r => !r.isExternal);
+      // ★v3.99 車載の内訳がある他社行は通常行と同じ列に並べる（合計は納品総数で数える）
+      const catLocRows = catRows.filter(r => !r.isExternal || s1ExtHasVeh(r));
       const catExtRows = catRows.filter(r =>  r.isExternal);
       const extTotal   = catExtRows.reduce((a, r) => a + (Number(r.total) || 0), 0);
       locIds.forEach((lid, idx) => {
         let sum = 0;
         catLocRows.forEach(r => { sum += Number(r.byLocation[lid]) || 0; });
         byLocation[lid] = sum;
-        total += sum;
+        catLocRows.forEach(r => { if (!r.isExternal) total += Number(r.byLocation[lid]) || 0; });
         if (idx < subtotalSplit) subtotal += sum;
         if (VEH_RE_S1.test(lid)) catVeh += sum;
       });
@@ -4444,7 +4460,7 @@ function renderSheet1(data) {
       if (total === 0) return;  // 全拠点ゼロなら行ごと省略
 
       // 他社商品だけのカテゴリー（拠点内訳がまったく無い）は横断1マスで見せる
-      const catIsAllExternal = (catLocRows.length === 0 || total === extTotal) && extTotal > 0;
+      const catIsAllExternal = (catLocRows.length === 0) && extTotal > 0;   // ★v3.99 車載の内訳が無い時だけ1マス
 
       html += `<tr class="cat-row ${catIsAllExternal ? 's2-ext-row' : 'g-' + cat.color}">`;
       html += `<td class="cell-name cat-label">${cat.label}`
@@ -4479,7 +4495,8 @@ function renderSheet1(data) {
     //   他社ぶんと総合計の行を足す（社長報告：合計数がおかしい）。
     // ★2026-08-04 v3.61 他社ぶんは上の「他社商品」カテゴリー行で既に出しているので、
     //   同じ内容の行を重ねず、総合計だけを足す（v3.60 は他社の行が2回出て読みにくかった）。
-    const extGrand = allRows.reduce((a, r) => a + (r.isExternal ? (Number(r.total) || 0) : 0), 0);
+    // ★v3.99 車載の内訳がある他社は拠点合計に入ったので、ここで足すのは内訳の無い日のぶんだけ
+    const extGrand = allRows.reduce((a, r) => a + ((r.isExternal && !s1ExtHasVeh(r)) ? (Number(r.total) || 0) : 0), 0);
     if (extGrand > 0) {
       const spanG = visLocIds.length + (subtotalInsertAt <= visLocIds.length ? 2 : 0);
       html += '<tr class="cat-row cat-grand">';
