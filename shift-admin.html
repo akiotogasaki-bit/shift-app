@@ -1,6 +1,10 @@
 <!DOCTYPE html>
 <!--
   お江戸弁当 shift-admin.html
+  v2026-10-05 候補一覧の「📋 割当済み」を「その日に実際に入っている人」だけにし、拠点名を添えた。
+    - 従来は「今週どこかで希望/割当がある＆その日の未割当に居ない人」を全部ここへ入れていたため、
+      その日どこにも入っていない人まで割当済みに見えた（社長指摘：藤山さん 10/5）。
+    - その人たちは新しい段「🗓 この日は希望なし」へ。GASは無変更。
   v2026-08-15 PWA化（ホーム画面から開けるようにする）
     - 社長要望「リッチメニューからじゃなくてホーム画面から行きたいだけ」。認証は作り替えていない。
     - shift-admin は **LIFF を1箇所も使っていない**（実測0件）ので、driver で不合格になった
@@ -1304,6 +1308,10 @@ input { font-family: inherit; }
   background: #FFF7E0;
   opacity: 1;
 }
+.seller-item.assigned-item .assigned-base {
+  margin-left: auto; margin-right: 6px;
+  font-size: 12px; color: var(--ink-mute);
+}
 .seller-item.assigned-item.current .name,
 .seller-item.notsubmit-item.current .name {
   color: var(--ink);
@@ -2459,17 +2467,18 @@ function renderSellers() {
 
   // その日に既にどこかの拠点に割り当てられている人の名前 → 拠点名 のマップ
   // （現在編集中の base は除外しない：自分の拠点に入っている人もここで扱う）
-  const assignedNameToBase = {};
+  const assignedNameToBase = {};   // 名前 → [拠点…]（重複していれば複数）
   const dayMatrix = state.matrix[date] || {};
   Object.keys(dayMatrix).forEach(b => {
     const n = dayMatrix[b];
     if (!n || n === '【未割当】') return;
-    assignedNameToBase[n] = b;
+    (assignedNameToBase[n] = assignedNameToBase[n] || []).push(b);
   });
 
   const poolNormal = [];      // 1) ⚠️ この日の未割当
   const allSpots = [];         // 2) ⭐ スポット枠（常時表示）
-  const alreadyAssigned = [];  // 3) 📋 割当済み（その日、どこかの拠点に既に割り当て）
+  const alreadyAssigned = [];  // 3) 📋 この日は割当済み（その日、実際にどこかの拠点に入っている）
+  const noRequestToday = [];   // 3b) 🗓 この日は希望なし（今週は希望/割当があるが、この日は無い）
   const notSubmitted = [];     // 4) 💤 希望未提出
 
   state.sellers.forEach(s => {
@@ -2494,8 +2503,11 @@ function renderSellers() {
       return;
     }
 
-    // その他は「その日にどこかへ割当済み」
-    alreadyAssigned.push({ ...s, assignedBase: assignedNameToBase[name] || '' });
+    // ★2026-10-05 従来は「その日の未割当に居ない人」を全部ここへ入れていたため、
+    //   その日どこにも入っていない人まで「割当済み」に並んだ（藤山さん 10/5＝実際は10/6〜8だけ大手町）。
+    //   その日に実際に入っている人だけを割当済みにし、拠点名を添える。
+    if (assignedNameToBase[name]) alreadyAssigned.push({ ...s, assignedBase: assignedNameToBase[name].join('・') });
+    else noRequestToday.push({ ...s });
   });
 
   let html = '';
@@ -2541,9 +2553,9 @@ function renderSellers() {
     });
   }
 
-  // ③ 📋 割当済み（その日、どこかの拠点に既に割り当て）
+  // ③ 📋 この日は割当済み（その日、実際にどこかの拠点に入っている）
   if (alreadyAssigned.length > 0) {
-    html += `<div class="tier-head assigned">📋 割当済み（${alreadyAssigned.length}名）</div>`;
+    html += `<div class="tier-head assigned">📋 この日は割当済み（${alreadyAssigned.length}名）</div>`;
     alreadyAssigned.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
     alreadyAssigned.forEach(s => {
       const isCur = s.name === current;
@@ -2552,7 +2564,22 @@ function renderSellers() {
       html += `<div class="seller-item assigned-item ${isCur ? 'current' : ''}"
         onclick="selectSeller('${escapeAttr(s.name)}')">
         <span class="name">${escapeHtml(s.name)}</span>
+        <span class="assigned-base">${escapeHtml(s.assignedBase)}</span>
         ${dupBadge}
+        ${isCur ? '<span class="check">✓</span>' : ''}
+      </div>`;
+    });
+  }
+
+  // ③b 🗓 この日は希望なし（今週ほかの日には希望/割当がある）
+  if (noRequestToday.length > 0) {
+    html += `<div class="tier-head notsubmit">🗓 この日は希望なし（${noRequestToday.length}名）</div>`;
+    noRequestToday.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+    noRequestToday.forEach(s => {
+      const isCur = s.name === current;
+      html += `<div class="seller-item notsubmit-item ${isCur ? 'current' : ''}"
+        onclick="selectSeller('${escapeAttr(s.name)}')">
+        <span class="name">${escapeHtml(s.name)}</span>
         ${isCur ? '<span class="check">✓</span>' : ''}
       </div>`;
     });
