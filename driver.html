@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v8.2 (2026-10-06) 【実況マトリクスの数が「減ったり戻ったり」する】ドライバー報告。★原因は2つ。①サーバーの公開スナップショットがレジの送信を**足し算**で積んでいて、送り直しで2重に足す・15分の作り直しで潰す（メインGAS側で「累計で上書き」に直した）②公開CSVはGoogle側で**数分遅れて**配られるので、🔄更新（/exec＝最新）→タブを開き直す（スナップショット＝数分前）で**遅れのぶん数字が下がって見える**。★②の直し＝販売数は1日の中で増える一方なので、**スナップショットで描く時は、この端末が最後に見た数（商品ごと）より下げない**（`rtSalesFloor_`）。/exec から取った時はそれが正しい数なので、そのまま床を置き直す（打ち間違いの取り消しで減る分はここで反映される）。床は日付つきで端末のメモリだけに持つ。通信は増えていない。 -->
 <!-- driver v8.1 (2026-10-06) 【📝 ドライバー日報ボタン】社長「朝私が簡単に日報を見れて返事を書けること。そしてそれがPDFに反映されること」「ドライバーアプリにボタン」。★ヘッダー右上に「📝 日報」ボタン。押すと3項目（①売れ行き・気づいた事 ②困った事・相談 ③一言）の入力欄が開き、送信で doPost `submitDriverReport`（シート「ドライバー日報」）。同じ日に送り直すと上書き（後勝ち）。★**起動時には何も叩かない**＝押した時に1回POSTするだけなので、アプリの重さ（/exec の実行枠）はほぼ増えない。書きかけは端末に残す（localStorage・日付つき）。★社長は kanri「📝 ドライバー日報」で読んで返事と今日の目標を書き、翌朝6時のエリア別予定表PDF（Mac `driver-plan.py`）の一番上に載ってLINEで届く。要メインGAS（submitDriverReport_）。 -->
 <!-- driver v8.0 (2026-10-01) 【売れ行き棒の分母を「エリアの総量（棚＋車の残り）」に】社長「知りたいのは、他社製品も含むエリア毎の売れ行き、残り具合」。★それまでの分母は拠点の棚に置いた数（実効納品）だけで、車に積んだままの弁当（他社製品を含む）が入らず残りが少なく出ていた。★大きい数字＝販売数／総量（棚＋車の残り・他社込み・お茶と配分外は除く）、下に「残り◯（車◯）・予定比◯%」。％は今までどおり他社込みの販売数÷予定（社長決定）。置き弁は今までどおり除く。★車の残りは公開スナップショットの `veh`（エリア名→商品→個数・移動タブの「車載の残り」と同じ計算）＝/exec を増やさない。取れない時は「車は未取得」と出す。要メインGAS @886。 -->
 <!-- driver v7.9 (2026-09-30) 【売れ行き棒の大きい数字を「販売数／納品数」＋時間帯の予定比％に】社長指示「マイナスじゃなくて実況マトリクスみたいに販売数／納品数で表示」「その下に時間帯に対する販売数を％で」。★大きい数字＝販売数／納品数（納品は実況マトリクスと同じ実効納品＝生納品＋移動±・お茶と配分外を除く）。数えるのは棒に入れた拠点だけ（休止・置き弁・12時以降の未開始は外す）。★下の小さい数字＝〜12:00は「12:00の予定比」、〜12:20は「12:20の予定比」、以降は「本日の予定比」＝販売数÷その時刻までの3区間予定。★旧表示の「いまの線に対する過不足の個数（-33）」はやめた（明細行の「いまは◯（±◯個）」には残る）。 -->
@@ -8389,6 +8390,7 @@ async function rtLoadAll() {
       RT_BAND_ENABLED_ ? rtLoadBandPlan_().catch(() => {}) : Promise.resolve(),
     ]);
     rtMasterData = master;
+    if (!_snapInter && intermediate && intermediate.data) rtApplySalesFloor_(intermediate.data, true);   // ★v8.2 /exec＝最新で床を置き直す
     rtMoveAdjMap = (moveAdj && moveAdj.adj) ? moveAdj.adj : {};  // v7
     // 本日の休止拠点IDをSetで保持
     // ★ v5.8 getDriverState の既定は軽量版（手動休止だけ）。端末が持つ自動休止を混ぜる。
@@ -8728,6 +8730,34 @@ function switchRtView(view) {
      公開シートに出せないので、従来どおり `/exec` から取る。
    ⚠ 返す形は `_effSellRate_` / `_effDeliveryObj_` が読める形に揃える
      （`deliveryCountJson` と `productSalesJson` は**文字列**で渡す）。 */
+/* ★2026-10-06 v8.2【ドライバー報告「マトリクスの数が減ったり戻ったりする」】販売数の「床」。
+   スナップショット（数分遅れ）で描く時は、この端末が最後に見た数より下げない。
+   /exec（最新）から取った時は、その数で床を置き直す（取り消しで減るのはここで反映）。 */
+let rtSalesFloor_ = { date: '', m: {} };
+function rtApplySalesFloor_(rows, fromExec) {
+  const today = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+  if (rtSalesFloor_.date !== today) rtSalesFloor_ = { date: today, m: {} };
+  (rows || []).forEach(r => {
+    const lid = String((r && r.locationId) || ''); if (!lid) return;
+    let ps = {};
+    try { ps = JSON.parse(r.productSalesJson || '{}') || {}; } catch (e) { ps = {}; }
+    if (!fromExec) {
+      const fl = rtSalesFloor_.m[lid] || {};
+      let changed = false;
+      Object.keys(fl).forEach(pid => {
+        if ((Number(ps[pid]) || 0) < (Number(fl[pid]) || 0)) { ps[pid] = fl[pid]; changed = true; }
+      });
+      if (changed) {
+        r.productSalesJson = JSON.stringify(ps);
+        let sold = 0; Object.keys(ps).forEach(k => { sold += Number(ps[k]) || 0; });
+        r.soldCount = sold;
+      }
+    }
+    rtSalesFloor_.m[lid] = ps;
+  });
+  return rows;
+}
+
 function rtIntermediateFromSnap_(live) {
   if (!live || !live.sales) return null;
   const out = [];
@@ -8759,7 +8789,7 @@ function rtIntermediateFromSnap_(live) {
   const anySold = out.some(r => r.soldCount > 0);
   const anyDeliv = out.some(r => r.deliveryCountJson && r.deliveryCountJson !== '{}');
   if (!anySold && anyDeliv) return null;
-  return out;
+  return rtApplySalesFloor_(out, false);   // ★v8.2 最後に見た数より下げない
 }
 
 // お茶商品ID一覧
@@ -9281,6 +9311,7 @@ async function rtRefreshArea(key) {
       rtFetchJSON(`${GAS_URL}?action=getDriverState`).catch(() => ({ inactive: [] })),
       rtFetchJSON(`${GAS_URL}?action=getMoveAdjByLoc`).catch(() => ({ adj: {} })),  // v7
     ]);
+    if (intermediate && intermediate.data) rtApplySalesFloor_(intermediate.data, true);   // ★v8.2 /exec＝最新で床を置き直す
     rtMoveAdjMap = (moveAdj && moveAdj.adj) ? moveAdj.adj : {};  // v7
     // ★ v5.8 getDriverState の既定は軽量版（手動休止だけ）。端末が持つ自動休止を混ぜる。
     rtInactiveLocationIds = new Set(
