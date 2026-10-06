@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- kanri.html v4.01 (2026-10-06) 【📝 ドライバー日報タブ】社長「朝私が簡単に日報を見れて返事を書けること。そしてそれがPDFに反映されること」。★予定日を選ぶと、その前の営業日にドライバーが出した日報（driver v8.1「📝 日報」）がドライバーごとに並び、横に**返事**と**今日の目標**を書いて保存（doPost `saveDriverReply`＝シート「ドライバー返事」・後勝ち）。予定日の既定は14時前なら今日・以降は翌平日。★書いた内容は**朝6時に Mac `driver-plan.py` がエリア別予定表PDFの一番上に載せて担当ドライバーへLINE**する。6時より後に直した時は「📨 予定表を送り直す」（doPost `requestDriverPlanResend`）→ 15分以内に Mac が作り直して送る（11:00まで）。★担当エリアはその日の担当（拠点マスタの主担当＋担当例外）で、担当拠点がいちばん多いエリアのPDFがその人に届く。要メインGAS（getDriverReports_ ほか）。 -->
 <!-- kanri.html v4.00 (2026-10-06) 【配分表：車載の「満腹」欄にエリアの満腹合計を出す】社長「配分表に満腹のエリア別の合計を車載の満腹の欄に表示してほしい」。★満腹は天井なしで車載に積まない（初回納品0）ので、車載列の満腹行は空だった。→ 満腹の行（白・玄それぞれ）の車載セルに**そのエリアの拠点の満腹合計**を緑太字で出す。対象＝そのエリアの車載以外の全拠点（メイン・サテライト・スポット）。**置き弁は外す**（車が回らない）。★**車載計にだけ足す**（社長決定）。中計・合計・拠点合計・カテゴリー別の各車載列には足さない＝二重計上しない。カテゴリー別「満腹系」と拠点合計の**車載計**には入る。★エリアは `BM_VEH_AREA_`（L901芝バーク／L902銀座／L903赤坂／L904神谷／L905お茶の水）と拠点マスタのエリアで引く。実際に車載へ積んだ満腹があれば「積み数 / エリアN」と並べる。要メインGAS（getSheet1Data が locations に `isOkiben` を返す）。 -->
 <!-- kanri.html v3.99 (2026-10-02) 【配分表の他社弁当を車載5台に分けて出す】社長「初回納品には車載の他社製品の数が入っているけど、配分表ではまとめて表示になっている。これも合わせて直して欲しい」→「配分表も車載5台に分ける」。★GAS getSheet1Data が他社3品の**車載行のG列**（`extveh` の按分＝②初回納品＋車載と同じ数）を byLocation に入れて返す。配分表は車載列に積み数・通常拠点は空欄、車載計・中計・拠点合計・カテゴリー別合計にも入る。合計列は納品総数（車載計とずれる日は赤で「車載計 / 総数」）。按分前で車載の内訳が無い日は従来どおり「総数 N 個」の1マス。盛り出し表は変えていない。要メインGAS（getSheet1Data）。 -->
 <!-- kanri.html v3.98 (2026-10-01) 【Macで印刷】社長報告「午前盛り出しをプリントアウトして実行すると止まっちゃう」。★切り分け＝Chrome の印刷画面から Brother（USB の AirPrint）へ直接送ると午前盛り出しだけ約850KBに膨らみプリンター本体が止まる。画面を出さない Chrome で作ったPDF（約200KB）を lp で送ると出る（社長確認・PDF経由でも出た）。★各タブに「🖨 Macで印刷」、拠点配分に「📚 Macで一括印刷」を追加。いま印刷用に描いている画面のHTMLを、この Mac に常駐する印刷係（15_ソース/print-server.py・127.0.0.1:8765・launchd com.oedo.print.server）へ渡し、PDF化→lp で送る。一括印刷は同じキュー（拠点配分2部→午前→午後→仕込み3枚）を使い、拠点配分は「2部」にまとめる。`_printAllStartCurrent` からタブ切替を `_printAllActivate` に切り出し（window.print の一括印刷は挙動不変）。今までの🖨印刷・📚一括印刷はそのまま残す。GAS変更なし。 -->
@@ -2379,6 +2380,7 @@ body {
   <button class="tab-btn" data-tab="settings">⚙️ 設定</button>
   <button class="tab-btn" data-tab="shiftview">📅 シフト閲覧</button>
   <button class="tab-btn" data-tab="kintai">🕐 勤怠承認</button>
+  <button class="tab-btn" data-tab="drvrep">📝 ドライバー日報</button>
 </div>
 
 <!-- シート1 -->
@@ -2792,6 +2794,30 @@ body {
   #tab-kintai .kt-btns{ display:flex; gap:10px; }
   #tab-kintai .kt-approve{ flex:1; border:none; border-radius:10px; padding:12px; font-size:15px; font-weight:bold; color:#fff; background:#2f8f5b; cursor:pointer; }
   #tab-kintai .kt-reject{ flex:1; border:none; border-radius:10px; padding:12px; font-size:15px; font-weight:bold; color:#fff; background:#c0504d; cursor:pointer; }
+</style>
+<!-- ★v4.01 ドライバー日報 -->
+<div class="tab-pane" id="tab-drvrep">
+  <div class="ctrl-bar">
+    <label>予定日：</label>
+    <input type="date" id="dr-date">
+    <button class="btn-primary" onclick="drLoad()">取得</button>
+    <button onclick="drResend()" style="margin-left:8px;">📨 予定表を送り直す</button>
+    <span id="dr-status" style="margin-left:10px;color:#666;font-size:13px;"></span>
+  </div>
+  <div id="dr-body" style="padding:8px 4px;"></div>
+</div>
+<style>
+.dr-card { border:1px solid #cfd8dc; border-radius:10px; padding:10px 12px; margin:10px 0; background:#fff; display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+@media (max-width: 800px) { .dr-card { grid-template-columns: 1fr; } }
+.dr-h { grid-column: 1 / -1; font-weight:800; font-size:15px; }
+.dr-area { font-weight:400; color:#555; font-size:13px; margin-left:6px; }
+.dr-rep div { margin-bottom:6px; white-space:pre-wrap; font-size:14px; }
+.dr-rep b { display:block; font-size:12px; color:#455a64; }
+.dr-none { color:#999; font-size:13px; }
+.dr-reply label { display:block; font-size:12px; font-weight:700; color:#1b5e20; margin-top:4px; }
+.dr-reply textarea { width:100%; box-sizing:border-box; font-size:14px; padding:6px; border:1px solid #a5d6a7; border-radius:6px; font-family:inherit; }
+.dr-reply .dr-save { margin-top:6px; padding:6px 16px; font-weight:700; }
+.dr-saved { color:#2e7d32; font-size:12px; margin-left:6px; }
 </style>
 <div class="tab-pane" id="tab-kintai">
   <div id="kt-lock" class="kt-lock">
@@ -3510,6 +3536,10 @@ document.querySelectorAll('.tab-btn:not(:disabled)').forEach(btn => {
     // 献立表タブを開いたら初期化（初回のみ日付セット＆取得）
     if (btn.dataset.tab === 'menu' && typeof mnOnOpen === 'function') {
       mnOnOpen();
+    }
+    // ★v4.01 ドライバー日報タブ（初回だけ日付を入れて取得）
+    if (btn.dataset.tab === 'drvrep' && typeof drOnOpen === 'function') {
+      drOnOpen();
     }
   });
 });
@@ -5941,6 +5971,69 @@ async function gasGetJson(url, tries) {
   }
   console.warn('[gasGetJson] ' + TRIES + '回とも失敗:', url, lastErr);
   return { ok: false, error: '取得に失敗しました（' + TRIES + '回試行）: ' + lastErr };
+}
+
+// ════════════ ★v4.01 ドライバー日報タブ（dr* 接頭辞）════════════
+var drState = { loaded: false, data: null };
+function drEsc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c])); }
+function drDefaultDate_() {
+  const now = new Date(Date.now() + 9 * 3600 * 1000);          // JST
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  if (now.getUTCHours() >= 14) d.setUTCDate(d.getUTCDate() + 1);   // 14時以降は翌日ぶん
+  while (d.getUTCDay() === 0 || d.getUTCDay() === 6) d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+function drOnOpen() {
+  if (drState.loaded) return;
+  drState.loaded = true;
+  const el = document.getElementById('dr-date');
+  if (!el.value) el.value = drDefaultDate_();
+  drLoad();
+}
+async function drLoad() {
+  const ymd = document.getElementById('dr-date').value;
+  const st = document.getElementById('dr-status');
+  const body = document.getElementById('dr-body');
+  st.textContent = '取得中…';
+  const j = await gasGetJson(GAS_URL + '?action=getDriverReports&date=' + encodeURIComponent(ymd) + '&_cb=' + Date.now());
+  if (!j || !j.ok) { st.textContent = '取得できませんでした：' + ((j && j.error) || ''); return; }
+  drState.data = j;
+  st.textContent = (j.reportDate ? ('日報＝' + j.reportDate.slice(5).replace('-', '/') + ' 提出分') : '日報はまだありません')
+                 + (j.resendPending ? '　／ 送り直し待ち：' + String(j.resendPending).split('|')[0] : '');
+  body.innerHTML = (j.drivers || []).map((d, i) => {
+    const r = d.report, p = d.reply || {};
+    const rep = r ? ('<div><b>① 売れ行き・気づいた事</b>' + (drEsc(r.sales) || '—') + '</div>'
+                   + '<div><b>② 困った事・相談</b>' + (drEsc(r.trouble) || '—') + '</div>'
+                   + (r.note ? '<div><b>③ 一言</b>' + drEsc(r.note) + '</div>' : '')
+                   + '<div class="dr-none">' + drEsc(r.at) + ' 送信</div>')
+                 : '<div class="dr-none">日報なし</div>';
+    return '<div class="dr-card">'
+      + '<div class="dr-h">' + drEsc(d.name) + '<span class="dr-area">' + (d.areas.length ? '担当：' + drEsc(d.areas.join('・')) : 'この日の担当エリアなし') + '</span></div>'
+      + '<div class="dr-rep">' + rep + '</div>'
+      + '<div class="dr-reply">'
+      +   '<label>返事</label><textarea rows="4" id="dr-reply-' + i + '">' + drEsc(p.reply || '') + '</textarea>'
+      +   '<label>今日の目標・やって欲しいこと</label><textarea rows="3" id="dr-goal-' + i + '">' + drEsc(p.goal || '') + '</textarea>'
+      +   '<button class="dr-save" onclick="drSave(' + i + ')">保存</button>'
+      +   '<span class="dr-saved" id="dr-saved-' + i + '">' + (p.at ? drEsc(p.at) + ' 保存済み' : '') + '</span>'
+      + '</div></div>';
+  }).join('') || '<div class="dr-none">ドライバーがいません</div>';
+}
+async function drSave(i) {
+  const d = (drState.data && drState.data.drivers || [])[i]; if (!d) return;
+  const ymd = drState.data.date;
+  const lab = document.getElementById('dr-saved-' + i);
+  lab.textContent = '保存中…';
+  const j = await bmPostAction('saveDriverReply', { date: ymd, userId: d.userId, name: d.name,
+    reply: document.getElementById('dr-reply-' + i).value, goal: document.getElementById('dr-goal-' + i).value });
+  lab.textContent = (j && j.ok) ? '保存しました' : ('保存できませんでした：' + ((j && j.error) || ''));
+}
+async function drResend() {
+  const ymd = document.getElementById('dr-date').value;
+  const today = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+  if (ymd !== today) { alert('送り直しは当日（' + today + '）の予定表だけです。翌日以降の分は、朝6時に自動で送られます。'); return; }
+  if (!confirm(ymd + ' の予定表を作り直して、ドライバー全員へ送り直します。\n（15分以内・11:00まで）')) return;
+  const j = await bmPostAction('requestDriverPlanResend', { date: ymd });
+  document.getElementById('dr-status').textContent = (j && j.ok) ? '送り直しを予約しました（15分以内に届きます）' : '予約できませんでした';
 }
 
 // API

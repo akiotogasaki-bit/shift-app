@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v8.1 (2026-10-06) 【📝 ドライバー日報ボタン】社長「朝私が簡単に日報を見れて返事を書けること。そしてそれがPDFに反映されること」「ドライバーアプリにボタン」。★ヘッダー右上に「📝 日報」ボタン。押すと3項目（①売れ行き・気づいた事 ②困った事・相談 ③一言）の入力欄が開き、送信で doPost `submitDriverReport`（シート「ドライバー日報」）。同じ日に送り直すと上書き（後勝ち）。★**起動時には何も叩かない**＝押した時に1回POSTするだけなので、アプリの重さ（/exec の実行枠）はほぼ増えない。書きかけは端末に残す（localStorage・日付つき）。★社長は kanri「📝 ドライバー日報」で読んで返事と今日の目標を書き、翌朝6時のエリア別予定表PDF（Mac `driver-plan.py`）の一番上に載ってLINEで届く。要メインGAS（submitDriverReport_）。 -->
 <!-- driver v8.0 (2026-10-01) 【売れ行き棒の分母を「エリアの総量（棚＋車の残り）」に】社長「知りたいのは、他社製品も含むエリア毎の売れ行き、残り具合」。★それまでの分母は拠点の棚に置いた数（実効納品）だけで、車に積んだままの弁当（他社製品を含む）が入らず残りが少なく出ていた。★大きい数字＝販売数／総量（棚＋車の残り・他社込み・お茶と配分外は除く）、下に「残り◯（車◯）・予定比◯%」。％は今までどおり他社込みの販売数÷予定（社長決定）。置き弁は今までどおり除く。★車の残りは公開スナップショットの `veh`（エリア名→商品→個数・移動タブの「車載の残り」と同じ計算）＝/exec を増やさない。取れない時は「車は未取得」と出す。要メインGAS @886。 -->
 <!-- driver v7.9 (2026-09-30) 【売れ行き棒の大きい数字を「販売数／納品数」＋時間帯の予定比％に】社長指示「マイナスじゃなくて実況マトリクスみたいに販売数／納品数で表示」「その下に時間帯に対する販売数を％で」。★大きい数字＝販売数／納品数（納品は実況マトリクスと同じ実効納品＝生納品＋移動±・お茶と配分外を除く）。数えるのは棒に入れた拠点だけ（休止・置き弁・12時以降の未開始は外す）。★下の小さい数字＝〜12:00は「12:00の予定比」、〜12:20は「12:20の予定比」、以降は「本日の予定比」＝販売数÷その時刻までの3区間予定。★旧表示の「いまの線に対する過不足の個数（-33）」はやめた（明細行の「いまは◯（±◯個）」には残る）。 -->
 <!-- driver v7.8 (2026-09-30) 【置き弁で残数を全部 ⌫ で消すと「回収済みにする」が押せなかった】社長報告（アスエネ・スクショ）。各行は空でも「0」と表示するのに、合計は「—」＝未入力扱いで、現金なし置き弁の確定条件（合計が未入力でない）を満たさなかった。★`cashBackspace` で残数の欄が空になったら「0」を入れる。0キーで入れた場合と同じ状態になる。現金・クーポン・交通費の欄は従来どおり空にできる。 -->
@@ -130,6 +131,19 @@ body {
 .header-title { font-size: 16px; font-weight: 700; }
 .header-sub { font-size: 11px; opacity: .75; margin-top: 2px; }
 .header-user { font-size: 12px; opacity: .8; }
+/* ★v8.1 ドライバー日報 */
+.drr-btn { background:#fff; color:var(--blue); border:none; border-radius:14px; padding:5px 10px; font-size:12px; font-weight:700; }
+.drr-bg { position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:3000; display:none; align-items:flex-end; justify-content:center; }
+.drr-bg.show { display:flex; }
+.drr-sheet { background:#fff; width:100%; max-width:560px; border-radius:16px 16px 0 0; padding:16px 16px 22px; max-height:92vh; overflow:auto; }
+.drr-title { font-size:16px; font-weight:800; margin-bottom:8px; }
+.drr-sheet label { display:block; font-size:13px; font-weight:700; margin:10px 0 4px; }
+.drr-sheet textarea { width:100%; box-sizing:border-box; font-size:15px; padding:8px; border:1px solid #bbb; border-radius:8px; font-family:inherit; }
+.drr-actions { display:flex; gap:10px; margin-top:14px; }
+.drr-actions button { flex:1; padding:12px; font-size:15px; font-weight:700; border-radius:10px; border:none; }
+.drr-cancel { background:#eceff1; }
+.drr-send { background:var(--blue); color:#fff; }
+.drr-hint { font-size:11px; color:#666; margin-top:8px; }
 
 #screen-loading { align-items: center; justify-content: center; background: var(--blue); }
 
@@ -1839,7 +1853,27 @@ body {
       <div class="header-title">🚚 ドライバー報告</div>
       <div class="header-sub" id="main-date">--</div>
     </div>
-    <div class="header-user" id="driver-name">--</div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <button type="button" class="drr-btn" onclick="drrOpen()">📝 日報</button>
+      <div class="header-user" id="driver-name">--</div>
+    </div>
+  </div>
+  <!-- ★v8.1 ドライバー日報 -->
+  <div id="drr-bg" class="drr-bg" onclick="if(event.target===this)drrClose()">
+    <div class="drr-sheet">
+      <div class="drr-title">📝 今日の日報 <span id="drr-date"></span></div>
+      <label>① 売れ行き・気づいた事</label>
+      <textarea id="drr-sales" rows="4" placeholder="例：芝パークは銀しゃけが12時前に完売。浜スクは全六が残り気味"></textarea>
+      <label>② 困った事・相談</label>
+      <textarea id="drr-trouble" rows="3" placeholder="なければ空欄でOK"></textarea>
+      <label>③ 一言（任意）</label>
+      <textarea id="drr-note" rows="2"></textarea>
+      <div class="drr-actions">
+        <button type="button" class="drr-cancel" onclick="drrClose()">閉じる</button>
+        <button type="button" class="drr-send" id="drr-send" onclick="drrSend()">送信</button>
+      </div>
+      <div class="drr-hint">社長の返事は、明朝6時の予定表（LINE）に載ります。同じ日に送り直すと上書きされます。</div>
+    </div>
   </div>
 
   <div class="tab-bar">
@@ -2553,6 +2587,56 @@ function restoreReminders() {
 // ★2026-08-06 duration を受け取るようにした。呼び出し側は以前から
 //   showToast(msg, 'error', 5000) のように3つ目を渡していたが**受け取っておらず無視されていた**。
 //   残数の記録失敗など、読ませたい警告が2.8秒で消えてしまうため。
+/* ★v8.1 ドライバー日報（→ 先頭コメント）。起動時には何も叩かない。 */
+function drrToday_() {
+  const d = new Date(Date.now() + 9 * 3600 * 1000);
+  return d.toISOString().slice(0, 10);
+}
+function drrKey_() { return 'oedo_drr_draft_' + drrToday_(); }
+function drrOpen() {
+  document.getElementById('drr-date').textContent = '（' + drrToday_().slice(5).replace('-', '/') + '）';
+  let dr = {};
+  try { dr = JSON.parse(localStorage.getItem(drrKey_()) || '{}'); } catch (e) {}
+  ['sales', 'trouble', 'note'].forEach(k => {
+    const el = document.getElementById('drr-' + k);
+    el.value = dr[k] || '';
+    el.oninput = drrSaveDraft_;
+  });
+  document.getElementById('drr-bg').classList.add('show');
+}
+function drrClose() { drrSaveDraft_(); document.getElementById('drr-bg').classList.remove('show'); }
+function drrSaveDraft_() {
+  const dr = {};
+  ['sales', 'trouble', 'note'].forEach(k => { dr[k] = document.getElementById('drr-' + k).value; });
+  try { localStorage.setItem(drrKey_(), JSON.stringify(dr)); } catch (e) {}
+}
+async function drrSend() {
+  const v = k => document.getElementById('drr-' + k).value.trim();
+  if (!v('sales') && !v('trouble') && !v('note')) { showToast('何か1つ書いてください', 'error'); return; }
+  if (!state.userId && !state.userName) { showToast('ドライバーが確認できません。開き直してください', 'error'); return; }
+  const btn = document.getElementById('drr-send');
+  btn.disabled = true; btn.textContent = '送信中…';
+  try {
+    let j = null;
+    for (let i = 0; i < 3 && !(j && j.ok); i++) {
+      try {
+        const r = await fetch(GAS_URL, { method: 'POST', redirect: 'follow',
+          body: JSON.stringify({ action: 'submitDriverReport', date: drrToday_(),
+            driverUserId: state.userId || '', driverName: state.userName || '',
+            sales: v('sales'), trouble: v('trouble'), note: v('note') }) });
+        j = await r.json();
+      } catch (e) { j = { ok: false, error: e.message }; await new Promise(r => setTimeout(r, 2000)); }
+    }
+    if (j && j.ok) {
+      showToast(j.updated ? '日報を上書きしました' : '日報を送りました', 'success');
+      drrSaveDraft_();
+      document.getElementById('drr-bg').classList.remove('show');
+    } else {
+      showToast('送れませんでした：' + ((j && j.error) || '通信エラー'), 'error', 5000);
+    }
+  } finally { btn.disabled = false; btn.textContent = '送信'; }
+}
+
 function showToast(message, type = 'success', duration = 2800) {
   const existing = document.getElementById('app-toast');
   if (existing) existing.remove();
