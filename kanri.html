@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- kanri.html v4.00 (2026-10-06) 【配分表：車載の「満腹」欄にエリアの満腹合計を出す】社長「配分表に満腹のエリア別の合計を車載の満腹の欄に表示してほしい」。★満腹は天井なしで車載に積まない（初回納品0）ので、車載列の満腹行は空だった。→ 満腹の行（白・玄それぞれ）の車載セルに**そのエリアの拠点の満腹合計**を緑太字で出す。対象＝そのエリアの車載以外の全拠点（メイン・サテライト・スポット）。**置き弁は外す**（車が回らない）。★**車載計にだけ足す**（社長決定）。中計・合計・拠点合計・カテゴリー別の各車載列には足さない＝二重計上しない。カテゴリー別「満腹系」と拠点合計の**車載計**には入る。★エリアは `BM_VEH_AREA_`（L901芝バーク／L902銀座／L903赤坂／L904神谷／L905お茶の水）と拠点マスタのエリアで引く。実際に車載へ積んだ満腹があれば「積み数 / エリアN」と並べる。要メインGAS（getSheet1Data が locations に `isOkiben` を返す）。 -->
 <!-- kanri.html v3.99 (2026-10-02) 【配分表の他社弁当を車載5台に分けて出す】社長「初回納品には車載の他社製品の数が入っているけど、配分表ではまとめて表示になっている。これも合わせて直して欲しい」→「配分表も車載5台に分ける」。★GAS getSheet1Data が他社3品の**車載行のG列**（`extveh` の按分＝②初回納品＋車載と同じ数）を byLocation に入れて返す。配分表は車載列に積み数・通常拠点は空欄、車載計・中計・拠点合計・カテゴリー別合計にも入る。合計列は納品総数（車載計とずれる日は赤で「車載計 / 総数」）。按分前で車載の内訳が無い日は従来どおり「総数 N 個」の1マス。盛り出し表は変えていない。要メインGAS（getSheet1Data）。 -->
 <!-- kanri.html v3.98 (2026-10-01) 【Macで印刷】社長報告「午前盛り出しをプリントアウトして実行すると止まっちゃう」。★切り分け＝Chrome の印刷画面から Brother（USB の AirPrint）へ直接送ると午前盛り出しだけ約850KBに膨らみプリンター本体が止まる。画面を出さない Chrome で作ったPDF（約200KB）を lp で送ると出る（社長確認・PDF経由でも出た）。★各タブに「🖨 Macで印刷」、拠点配分に「📚 Macで一括印刷」を追加。いま印刷用に描いている画面のHTMLを、この Mac に常駐する印刷係（15_ソース/print-server.py・127.0.0.1:8765・launchd com.oedo.print.server）へ渡し、PDF化→lp で送る。一括印刷は同じキュー（拠点配分2部→午前→午後→仕込み3枚）を使い、拠点配分は「2部」にまとめる。`_printAllStartCurrent` からタブ切替を `_printAllActivate` に切り出し（window.print の一括印刷は挙動不変）。今までの🖨印刷・📚一括印刷はそのまま残す。GAS変更なし。 -->
 <!-- kanri.html v3.97 (2026-10-01) 【決定の時にシフトとの食い違いを一覧で出す】社長「当日急に入れたり消したりを生かすいい方法あるかな」→「決定時に 未割り当てに配分があるとき・シフト入っているのに0配分は一覧表示にしようか」。★決定ボタンの確認を confirm から一覧のダイアログ（`bmDecideShiftDialog`）へ。未割り当てなのに配分がある拠点は**拠点ごとに「残す」チェック**（既定オフ＝今までどおり0）→ サーバーへ `&keep=` で渡し、`naShelfSplit_` がその拠点を0にしない。シフトに人がいるのに0の拠点は表示だけ。★スポットは「シフトに人がいる」扱い（一覧の判定・保存時の確認とも）。要メインGAS @880（スポットも当日配分をそのまま初回納品に）。保存時の確認（`bmConfirmShiftMismatch`）の中身は従来どおり。要メインGAS @879（bmDecide の keep／置き弁は当日配分をそのまま初回納品に）。 -->
@@ -4297,6 +4298,27 @@ function renderSheet1(data) {
     return s;
   }
 
+  /* ★2026-10-06 v4.00【社長指示】車載の「満腹」欄＝そのエリアの拠点の満腹合計（置き弁を除く）。
+     車載計にだけ足す（中計・合計・各車載列の合計には足さない＝二重計上しない）。 */
+  const s1IsManRow = r => !!(r && !r.isExternal && /満腹/.test(String(r.baseName || '')));
+  function s1ManArea(row, vehId) {
+    const area = BM_VEH_AREA_[String(vehId)];
+    if (!area || !row || !row.byLocation) return 0;
+    let s = 0;
+    locations.forEach(l => {
+      if (VEH_RE_S1.test(l.id) || l.isOkiben) return;
+      if (String(l.area || '').trim() !== area) return;
+      s += Number(row.byLocation[l.id]) || 0;
+    });
+    return s;
+  }
+  function s1ManVehExtra(row) {
+    if (!s1IsManRow(row)) return 0;
+    let s = 0;
+    s1VehIds.forEach(vid => { s += s1ManArea(row, vid); });
+    return s;
+  }
+
   /* ★2026-10-02 v3.99 他社弁当に車載の内訳があるか（GAS getSheet1Data が車載のG列を返す）。
      無い日（按分前など）は従来どおり「総数 N 個（拠点ごとの内訳なし）」の1マスで出す。 */
   function s1ExtHasVeh(row) { return !!(row && row.isExternal && s1VehTotal(row) > 0); }
@@ -4375,12 +4397,19 @@ function renderSheet1(data) {
       } else {
         visLocIds.forEach((lid, vIdx) => {
           if (vIdx === subtotalInsertAt) {
-            html += `<td class="cell-veh">${s1VehTotal(row) || ''}</td>`;
+            html += `<td class="cell-veh">${(s1VehTotal(row) + s1ManVehExtra(row)) || ''}</td>`;
             html += `<td class="cell-sub">${s1Subtotal(row) || ''}</td>`;
           }
           const q = row.byLocation[lid];
           // v3.9/v3.40: 拠点グループ区切り線（本来位置ベース・左詰め）
           const bcls = visBoundaryCls(vIdx);
+          if (VEH_RE_S1.test(lid) && s1IsManRow(row)) {
+            // ★v4.00 車載の満腹欄＝エリアの満腹合計
+            const a = s1ManArea(row, lid);
+            const txt = (Number(q) || 0) > 0 ? `${q} / ${a}` : (a || '');
+            html += `<td class="cell-data${bcls}" style="color:#1b5e20;font-weight:800;" title="エリア（${escHtml(BM_VEH_AREA_[lid] || '')}）の満腹合計＝${a}個（置き弁を除く）">${txt}</td>`;
+            return;
+          }
           html += `<td class="cell-data${bcls}">${q ? q : ''}</td>`;
         });
       }
@@ -4413,6 +4442,7 @@ function renderSheet1(data) {
       if (idx < subtotalSplit) grandSub += sum;
       if (VEH_RE_S1.test(lid)) grandVeh += sum;
     });
+    allRows.forEach(r => { grandVeh += s1ManVehExtra(r); });   // ★v4.00 車載計にだけ満腹のエリア合計を足す
     allRows.forEach(r => {
       if (isTea(r)) return;
       if (r.isExternal) { if (s1ExtHasVeh(r)) grandTotal += Number(r.total) || 0; return; }
@@ -4456,6 +4486,7 @@ function renderSheet1(data) {
         if (idx < subtotalSplit) subtotal += sum;
         if (VEH_RE_S1.test(lid)) catVeh += sum;
       });
+      catLocRows.forEach(r => { catVeh += s1ManVehExtra(r); });   // ★v4.00 満腹のエリア合計（車載計だけ）
       total += extTotal;                       // ★総数管理ぶんを合計に加える
       if (total === 0) return;  // 全拠点ゼロなら行ごと省略
 
