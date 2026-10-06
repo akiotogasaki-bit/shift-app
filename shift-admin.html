@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <!--
   お江戸弁当 shift-admin.html
+  v2026-10-07b 日付の下に内訳「拠点N＋配達N」も出す（1300を超えない日も）。社長「1300はあくまで目安」。
   v2026-10-07 割当表の日付の下に「その日の作る数（店頭＋配達）」を出す。1300食を超えた日は赤で「⚠+N」。
     - 社長決定「キャパは1日1300食（配達込み）。日曜のお昼にシフトを作るので、それまでに分かるように」。
     - 数字はメインGAS `getCapacityForecast`（読み取り専用）。取れなければ何も出さない（表は今までどおり）。
@@ -316,6 +317,12 @@ input { font-family: inherit; }
   color: #FFF;
   border-radius: 4px;
   padding: 1px 3px;
+}
+.matrix thead th .capa-sub {
+  display: block;
+  font-size: 9px;
+  font-weight: 400;
+  opacity: .7;
 }
 .matrix td.rest-cand {
   background: #E9DDF7 !important;
@@ -2422,14 +2429,16 @@ function capaRestFor(d, baseName) {
 function capaBadgeHtml(d) {
   const x = state.capa && state.capa[d];
   if (!x || !x.total) return '';
-  if (!x.ready && x.shop > 0) return `<span class="capa" title="推奨がまだできていない日（前の週の同じ曜日の20時にできる）">推奨待ち</span>`;
+  if (!x.ready && x.shop > 0) return `<span class="capa" title="推奨がまだできていない日（前の週の同じ曜日の20時にできる）">推奨待ち</span>` + (x.deliv ? `<span class="capa-sub">配達${x.deliv}</span>` : '');
   const tip = `店頭${x.shop}（${x.src}列）＋配達${x.deliv}＝${x.total}食／キャパ${state.capaLimit || 1300}`;
+  // 社長「配達と拠点分の合計食数を入れておこう。1300食超えていない日も。1300はあくまで目安」
+  const sub = `<span class="capa-sub">拠点${x.shop}＋配達${x.deliv}</span>`;
   if (x.isOver) {
     let t = tip;
     if (x.rest) t += `\n休ませ候補${x.rest.length}拠点で −${x.restCut}食 → ${x.afterTotal}食` + (x.restShort ? '（週2日・同じ曜日3週連続の決まりで消しきれない）' : '');
-    return `<span class="capa over" title="${escapeAttr(t)}">${x.total}食 ⚠+${x.over}</span>`;
+    return `<span class="capa over" title="${escapeAttr(t)}">${x.total}食 ⚠+${x.over}</span>${sub}`;
   }
-  return `<span class="capa" title="${escapeAttr(tip)}">${x.total}食</span>`;
+  return `<span class="capa" title="${escapeAttr(tip)}">${x.total}食</span>${sub}`;
 }
 
 function renderPool() {
