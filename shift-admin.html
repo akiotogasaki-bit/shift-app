@@ -2401,6 +2401,7 @@ async function loadCapacity() {
 function capaBadgeHtml(d) {
   const x = state.capa && state.capa[d];
   if (!x || !x.total) return '';
+  if (!x.ready && x.shop > 0) return `<span class="capa" title="推奨がまだできていない日（前の週の同じ曜日の20時にできる）">推奨待ち</span>`;
   const tip = `店頭${x.shop}（${x.src}列）＋配達${x.deliv}＝${x.total}食／キャパ${state.capaLimit || 1300}`;
   if (x.isOver) return `<span class="capa over" title="${escapeAttr(tip)}">${x.total}食 ⚠+${x.over}</span>`;
   return `<span class="capa" title="${escapeAttr(tip)}">${x.total}食</span>`;
