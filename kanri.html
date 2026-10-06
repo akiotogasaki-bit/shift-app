@@ -4300,7 +4300,9 @@ function renderSheet1(data) {
 
   /* ★2026-10-06 v4.00【社長指示】車載の「満腹」欄＝そのエリアの拠点の満腹合計（置き弁を除く）。
      車載計にだけ足す（中計・合計・各車載列の合計には足さない＝二重計上しない）。 */
-  const s1IsManRow = r => !!(r && !r.isExternal && /満腹/.test(String(r.baseName || '')));
+  // ⚠ 満腹の商品は名前に「満腹」が入らない（集約グループ名だけが満腹）。カテゴリーで見る（SHEET1_CATEGORIES の満腹系と同じ表記）
+  const s1IsManRow = r => !!(r && !r.isExternal
+    && (['満腹系', '満腹シリーズ'].indexOf(String(r.category || '').trim()) >= 0 || /満腹/.test(String(r.baseName || ''))));
   function s1ManArea(row, vehId) {
     const area = BM_VEH_AREA_[String(vehId)];
     if (!area || !row || !row.byLocation) return 0;
