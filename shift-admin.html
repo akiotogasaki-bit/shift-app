@@ -1,6 +1,9 @@
 <!DOCTYPE html>
 <!--
   お江戸弁当 shift-admin.html
+  v2026-10-07 割当表の日付の下に「その日の作る数（店頭＋配達）」を出す。1300食を超えた日は赤で「⚠+N」。
+    - 社長決定「キャパは1日1300食（配達込み）。日曜のお昼にシフトを作るので、それまでに分かるように」。
+    - 数字はメインGAS `getCapacityForecast`（読み取り専用）。取れなければ何も出さない（表は今までどおり）。
   v2026-10-05 候補一覧の「📋 割当済み」を「その日に実際に入っている人」だけにし、拠点名を添えた。
     - 従来は「今週どこかで希望/割当がある＆その日の未割当に居ない人」を全部ここへ入れていたため、
       その日どこにも入っていない人まで割当済みに見えた（社長指摘：藤山さん 10/5）。
@@ -298,6 +301,20 @@ input { font-family: inherit; }
   z-index: 2;
   min-width: 70px;
   height: 36px;
+}
+.matrix thead th .capa {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  font-weight: 600;
+  opacity: .75;
+}
+.matrix thead th .capa.over {
+  opacity: 1;
+  background: #D64545;
+  color: #FFF;
+  border-radius: 4px;
+  padding: 1px 3px;
 }
 .matrix thead th.corner {
   left: 0;
@@ -2146,6 +2163,11 @@ async function loadAll() {
       });
     }
 
+    // ★2026-10-07 キッチンのキャパ（1300食）：非同期・失敗しても本体に影響させない
+    loadCapacity().catch(function(err) {
+      console.warn('キャパ見込みの読み込みに失敗:', err);
+    });
+
     // ★2026-07-16 販売員成績（未割当ソート用）：非同期・失敗しても本体に影響させない
     if (!state.perfLoaded) {
       loadSellerPerf().catch(function(err) {
@@ -2294,7 +2316,7 @@ function renderMatrix() {
 
   let html = '<table class="matrix"><thead><tr>';
   html += '<th class="corner">拠点</th>';
-  state.dates.forEach(d => { html += `<th>${escapeHtml(d)}</th>`; });
+  state.dates.forEach(d => { html += `<th>${escapeHtml(d)}${capaBadgeHtml(d)}</th>`; });
   html += '</tr></thead><tbody>';
 
   basesToShow.forEach(b => {
@@ -2345,6 +2367,43 @@ function renderMatrix() {
 
   html += '</tbody></table>';
   wrap.innerHTML = html;
+}
+
+// ★2026-10-07 キッチンのキャパ見込み（店頭＋配達）
+//   state.dates は「10/13(火)」形式で年が無いので、今日にいちばん近い年を当てる。
+function shiftDateToYmd(d) {
+  const m = String(d || '').match(/^(\d{1,2})\/(\d{1,2})/);
+  if (!m) return '';
+  const now = new Date();
+  let best = '', bestDiff = Infinity;
+  [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1].forEach(y => {
+    const t = new Date(y, Number(m[1]) - 1, Number(m[2]));
+    const diff = Math.abs(t - now);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      best = y + '-' + String(m[1]).padStart(2, '0') + '-' + String(m[2]).padStart(2, '0');
+    }
+  });
+  return best;
+}
+async function loadCapacity() {
+  const ymds = state.dates.map(shiftDateToYmd).filter(Boolean).sort();
+  if (!ymds.length) return;
+  const res = await apiGet('getCapacityForecast', { from: ymds[0], to: ymds[ymds.length - 1] });
+  if (!res || !res.ok) return;
+  const byYmd = {};
+  (res.days || []).forEach(x => { byYmd[x.date] = x; });
+  state.capa = {};
+  state.dates.forEach(d => { const x = byYmd[shiftDateToYmd(d)]; if (x) state.capa[d] = x; });
+  state.capaLimit = res.cap;
+  renderMatrix();
+}
+function capaBadgeHtml(d) {
+  const x = state.capa && state.capa[d];
+  if (!x || !x.total) return '';
+  const tip = `店頭${x.shop}（${x.src}列）＋配達${x.deliv}＝${x.total}食／キャパ${state.capaLimit || 1300}`;
+  if (x.isOver) return `<span class="capa over" title="${escapeAttr(tip)}">${x.total}食 ⚠+${x.over}</span>`;
+  return `<span class="capa" title="${escapeAttr(tip)}">${x.total}食</span>`;
 }
 
 function renderPool() {
