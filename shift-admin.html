@@ -4,6 +4,7 @@
   v2026-10-07 割当表の日付の下に「その日の作る数（店頭＋配達）」を出す。1300食を超えた日は赤で「⚠+N」。
     - 社長決定「キャパは1日1300食（配達込み）。日曜のお昼にシフトを作るので、それまでに分かるように」。
     - 数字はメインGAS `getCapacityForecast`（読み取り専用）。取れなければ何も出さない（表は今までどおり）。
+    - 超えた日は「休ませる候補」の拠点のマスを薄い紫にして「休ませ候補 −N食」。決めるのは社長（自動で未割当にはしない）。
   v2026-10-05 候補一覧の「📋 割当済み」を「その日に実際に入っている人」だけにし、拠点名を添えた。
     - 従来は「今週どこかで希望/割当がある＆その日の未割当に居ない人」を全部ここへ入れていたため、
       その日どこにも入っていない人まで割当済みに見えた（社長指摘：藤山さん 10/5）。
@@ -315,6 +316,16 @@ input { font-family: inherit; }
   color: #FFF;
   border-radius: 4px;
   padding: 1px 3px;
+}
+.matrix td.rest-cand {
+  background: #E9DDF7 !important;
+  box-shadow: inset 0 0 0 2px #8E5CC9;
+}
+.matrix td .rest-tag {
+  display: block;
+  font-size: 9px;
+  font-weight: 700;
+  color: #6A3FA0;
 }
 .matrix thead th.corner {
   left: 0;
@@ -2353,6 +2364,11 @@ function renderMatrix() {
         displayHtml = `<span class="cell-name">${escapeHtml(name)}</span>${badgeHtml}`;
       }
       if (isPending) cls += ' pending';
+      const rc = capaRestFor(d, b.name);
+      if (rc) {
+        cls += ' rest-cand';
+        displayHtml += `<span class="rest-tag" title="直近4週で休んだ回数が少なく、その日の数が少ない順に選んだ候補">休ませ候補 −${rc.qty}食</span>`;
+      }
 
       html += `<td class="${cls}" data-date="${escapeAttr(d)}" data-base="${escapeAttr(b.name)}"
         onclick="openSheet(this.dataset.date, this.dataset.base)">${displayHtml}</td>`;
@@ -2398,12 +2414,21 @@ async function loadCapacity() {
   state.capaLimit = res.cap;
   renderMatrix();
 }
+function capaRestFor(d, baseName) {
+  const x = state.capa && state.capa[d];
+  if (!x || !x.rest) return null;
+  return x.rest.find(r => r.name === baseName) || null;
+}
 function capaBadgeHtml(d) {
   const x = state.capa && state.capa[d];
   if (!x || !x.total) return '';
   if (!x.ready && x.shop > 0) return `<span class="capa" title="推奨がまだできていない日（前の週の同じ曜日の20時にできる）">推奨待ち</span>`;
   const tip = `店頭${x.shop}（${x.src}列）＋配達${x.deliv}＝${x.total}食／キャパ${state.capaLimit || 1300}`;
-  if (x.isOver) return `<span class="capa over" title="${escapeAttr(tip)}">${x.total}食 ⚠+${x.over}</span>`;
+  if (x.isOver) {
+    let t = tip;
+    if (x.rest) t += `\n休ませ候補${x.rest.length}拠点で −${x.restCut}食 → ${x.afterTotal}食` + (x.restShort ? '（週2日・同じ曜日3週連続の決まりで消しきれない）' : '');
+    return `<span class="capa over" title="${escapeAttr(t)}">${x.total}食 ⚠+${x.over}</span>`;
+  }
   return `<span class="capa" title="${escapeAttr(tip)}">${x.total}食</span>`;
 }
 
