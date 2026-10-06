@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v8.3 (2026-10-06) 【実況タブの /exec 呼び出しを1本にまとめた】社長「凄く重い。何とかならない？」。★12時台の遅延ログ（10/6＝5秒超1,087件・待ち合計5時間）の上位が getTodayIntermediate／getMoveAdjByLoc／getDriverState で、実況タブは🔄更新1回で /exec を4本、5分更新で5本叩いていた。/exec は1往復ごとに3〜4秒の床＋全アプリ共有の30本枠を取るので**本数が重さ**。★直し＝メインGASの束ね口 `getRealtimeBundle`（報告・販売数・休止・移動差分を1往復）で取る（`rtFetchBundle_`）。🔄更新 4本→1本／5分更新 5本→1本。マスタは端末に30分覚えておく（`rtGetMaster_`）。★数字の作り方は変えていない（サーバーは各関数をそのまま呼ぶだけ）。⚠ 古いGASでは bundle:true が返らないので従来の4本に落ちる。要: メインGAS 2026-10-06（getRealtimeBundle）。 -->
 <!-- driver v8.2 (2026-10-06) 【実況マトリクスの数が「減ったり戻ったり」する】ドライバー報告。★原因は2つ。①サーバーの公開スナップショットがレジの送信を**足し算**で積んでいて、送り直しで2重に足す・15分の作り直しで潰す（メインGAS側で「累計で上書き」に直した）②公開CSVはGoogle側で**数分遅れて**配られるので、🔄更新（/exec＝最新）→タブを開き直す（スナップショット＝数分前）で**遅れのぶん数字が下がって見える**。★②の直し＝販売数は1日の中で増える一方なので、**スナップショットで描く時は、この端末が最後に見た数（商品ごと）より下げない**（`rtSalesFloor_`）。/exec から取った時はそれが正しい数なので、そのまま床を置き直す（打ち間違いの取り消しで減る分はここで反映される）。床は日付つきで端末のメモリだけに持つ。通信は増えていない。 -->
 <!-- driver v8.1 (2026-10-06) 【📝 ドライバー日報ボタン】社長「朝私が簡単に日報を見れて返事を書けること。そしてそれがPDFに反映されること」「ドライバーアプリにボタン」。★ヘッダー右上に「📝 日報」ボタン。押すと3項目（①売れ行き・気づいた事 ②困った事・相談 ③一言）の入力欄が開き、送信で doPost `submitDriverReport`（シート「ドライバー日報」）。同じ日に送り直すと上書き（後勝ち）。★**起動時には何も叩かない**＝押した時に1回POSTするだけなので、アプリの重さ（/exec の実行枠）はほぼ増えない。書きかけは端末に残す（localStorage・日付つき）。★社長は kanri「📝 ドライバー日報」で読んで返事と今日の目標を書き、翌朝6時のエリア別予定表PDF（Mac `driver-plan.py`）の一番上に載ってLINEで届く。要メインGAS（submitDriverReport_）。 -->
 <!-- driver v8.0 (2026-10-01) 【売れ行き棒の分母を「エリアの総量（棚＋車の残り）」に】社長「知りたいのは、他社製品も含むエリア毎の売れ行き、残り具合」。★それまでの分母は拠点の棚に置いた数（実効納品）だけで、車に積んだままの弁当（他社製品を含む）が入らず残りが少なく出ていた。★大きい数字＝販売数／総量（棚＋車の残り・他社込み・お茶と配分外は除く）、下に「残り◯（車◯）・予定比◯%」。％は今までどおり他社込みの販売数÷予定（社長決定）。置き弁は今までどおり除く。★車の残りは公開スナップショットの `veh`（エリア名→商品→個数・移動タブの「車載の残り」と同じ計算）＝/exec を増やさない。取れない時は「車は未取得」と出す。要メインGAS @886。 -->
@@ -8374,13 +8375,11 @@ async function rtLoadAll() {
     const _snapLive = (rtCurrentView === 'area') ? await fetchSnapLive_(30000) : null;
     const _snapInter = _snapLive ? rtIntermediateFromSnap_(_snapLive) : null;
     if (_snapLive) rtVehByArea = (_snapLive.veh && typeof _snapLive.veh === 'object') ? _snapLive.veh : null;   // ★v8.0
-    const [master, reports, intermediate, driverState, moveAdj] = await Promise.all([
-      rtFetchJSON(`${GAS_URL}?action=getMaster`),
-      rtFetchJSON(`${GAS_URL}?action=getTodayReports`),
-      _snapInter ? Promise.resolve({ data: _snapInter })
-                 : rtFetchJSON(`${GAS_URL}?action=getTodayIntermediate&withStarted=1`),
-      rtFetchJSON(`${GAS_URL}?action=getDriverState`).catch(() => ({ inactive: [] })),
-      rtFetchJSON(`${GAS_URL}?action=getMoveAdjByLoc`).catch(() => ({ adj: {} })),  // v7
+    /* ★v8.3 /exec を5本 → 1本（＋マスタは30分に1回）。束ね口 getRealtimeBundle で報告・販売数・休止・移動差分を1往復。
+       販売数をスナップショットから作れた時は束ね口にも販売数を作らせない（noInter）。 */
+    const [master, _rb] = await Promise.all([
+      rtGetMaster_(),
+      rtFetchBundle_(!_snapInter),
       /* 🔴 ★2026-09-18 **緊急停止中。**営業中（12:00）に /exec の実行枠が枯れ、
          何もしないアクションすら90秒でエラーページを返す状態になった。
          この口は取得に失敗すると**3回リトライする**作りで、混雑している時に
@@ -8389,6 +8388,8 @@ async function rtLoadAll() {
          再開する時はここのコメントアウトを外す（`RT_BAND_ENABLED_` を true に）。 */
       RT_BAND_ENABLED_ ? rtLoadBandPlan_().catch(() => {}) : Promise.resolve(),
     ]);
+    const reports = _rb.reports, driverState = _rb.driverState, moveAdj = _rb.moveAdj;
+    const intermediate = _snapInter ? { data: _snapInter } : _rb.intermediate;
     rtMasterData = master;
     if (!_snapInter && intermediate && intermediate.data) rtApplySalesFloor_(intermediate.data, true);   // ★v8.2 /exec＝最新で床を置き直す
     rtMoveAdjMap = (moveAdj && moveAdj.adj) ? moveAdj.adj : {};  // v7
@@ -8409,7 +8410,7 @@ async function rtLoadAll() {
     // ─────────────────────────────────────────────────────────
     // キャッシュ保存（マスタ・リアルタイム両方）
     // ─────────────────────────────────────────────────────────
-    saveDashMasterCache(master);
+    // ★v8.3 マスタは rtGetMaster_ が取り直した時だけ保存する（ここで毎回保存すると保存時刻が進み続け、30分で取り直さなくなる）
     saveDashRealtimeCache({
       rtAllData: merged,
       inactiveIds: Array.from(rtInactiveLocationIds),
@@ -8454,6 +8455,45 @@ async function rtFetchJSON(url) {
   const res  = await fetch(url, { redirect: 'follow' });
   const text = await res.text();
   return JSON.parse(text);
+}
+
+/* ★v8.3 (2026-10-06) 実況の取得を1往復にまとめる。社長「凄く重い。何とかならない？」。
+   /exec は1往復ごとに3〜4秒の床＋全アプリ共有の30本枠を取る。🔄更新1回で4本・5分更新で5本叩いていたのが
+   12時台の遅延ログ上位（getTodayIntermediate／getMoveAdjByLoc／getDriverState）の主な出どころだった。
+   戻り値は従来の4本と同じ形（reports.data / intermediate.data / driverState.inactive / moveAdj.adj）。
+   ⚠ 古いGASには束ね口が無い＝bundle:true が返らなければ従来どおり4本叩く（doGetは未知のactionでも200を返す）。 */
+async function rtFetchBundle_(withInter) {
+  try {
+    const b = await rtFetchJSON(`${GAS_URL}?action=getRealtimeBundle&withStarted=1${withInter ? '' : '&noInter=1'}`);
+    if (b && b.bundle) {
+      return {
+        reports:      { data: b.reports || [] },
+        intermediate: withInter ? { data: b.intermediate || [] } : null,
+        driverState:  b.driverState || { inactive: [] },
+        moveAdj:      b.moveAdj || { adj: {} },
+      };
+    }
+  } catch (e) { console.warn('getRealtimeBundle 失敗 → 従来の4本で取る', e); }
+  const [reports, intermediate, driverState, moveAdj] = await Promise.all([
+    rtFetchJSON(`${GAS_URL}?action=getTodayReports`),
+    withInter ? rtFetchJSON(`${GAS_URL}?action=getTodayIntermediate&withStarted=1`) : Promise.resolve(null),
+    rtFetchJSON(`${GAS_URL}?action=getDriverState`).catch(() => ({ inactive: [] })),
+    rtFetchJSON(`${GAS_URL}?action=getMoveAdjByLoc`).catch(() => ({ adj: {} })),
+  ]);
+  return { reports, intermediate, driverState, moveAdj };
+}
+
+/* ★v8.3 マスタ（拠点・商品の一覧）は1日に何度も変わらないので、端末に30分覚えておく。
+   それまでは5分ごとに毎回 /exec で取り直していた。取れない時は古いキャッシュ（24時間以内）で描く。 */
+const RT_MASTER_FRESH_MS = 30 * 60 * 1000;
+async function rtGetMaster_() {
+  try {
+    const raw = localStorage.getItem(DASH_MASTER_CACHE_KEY);
+    const obj = raw ? JSON.parse(raw) : null;
+    if (obj && obj.data && obj.savedAt && Date.now() - obj.savedAt < RT_MASTER_FRESH_MS) return obj.data;
+  } catch (e) {}
+  try { const m = await rtFetchJSON(`${GAS_URL}?action=getMaster`); saveDashMasterCache(m); return m; }
+  catch (e) { const c = loadDashMasterCache(); if (c) return c; throw e; }
 }
 
 function rtUpdateTime() {
@@ -9305,12 +9345,8 @@ async function rtRefreshArea(key) {
   const btn = document.getElementById('area-btn-' + key);
   if (btn) { btn.disabled = true; btn.textContent = '更新中…'; }
   try {
-    const [reports, intermediate, driverState, moveAdj] = await Promise.all([
-      rtFetchJSON(`${GAS_URL}?action=getTodayReports`),
-      rtFetchJSON(`${GAS_URL}?action=getTodayIntermediate&withStarted=1`),
-      rtFetchJSON(`${GAS_URL}?action=getDriverState`).catch(() => ({ inactive: [] })),
-      rtFetchJSON(`${GAS_URL}?action=getMoveAdjByLoc`).catch(() => ({ adj: {} })),  // v7
-    ]);
+    // ★v8.3 /exec を4本 → 1本（束ね口 getRealtimeBundle）。古いGASでは従来の4本に落ちる。
+    const { reports, intermediate, driverState, moveAdj } = await rtFetchBundle_(true);
     if (intermediate && intermediate.data) rtApplySalesFloor_(intermediate.data, true);   // ★v8.2 /exec＝最新で床を置き直す
     rtMoveAdjMap = (moveAdj && moveAdj.adj) ? moveAdj.adj : {};  // v7
     // ★ v5.8 getDriverState の既定は軽量版（手動休止だけ）。端末が持つ自動休止を混ぜる。
