@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v8.4 (2026-10-08) 【Firebase 並走（段階1）】社長決定「B 裏側だけ移す」→ 40_ドキュメント/設計_GASからの段階移行_2026-10-07.md。★GAS に送った同じ内容を Firebase の受け口 `shadow` にも投げる（`shadowSend_`）。回収・休止のオンオフ（setCollected/unsetCollected/setInactive/unsetInactive）。結果は見ない・失敗しても画面は何も変わらない（keepalive の投げっぱなし）。★止める時は SHADOW_URL を '' にして配り直すだけ。差し込みは firebase/apply-shadow-front.py。 -->
 <!-- driver v8.3 (2026-10-06) 【実況タブの /exec 呼び出しを1本にまとめた】社長「凄く重い。何とかならない？」。★12時台の遅延ログ（10/6＝5秒超1,087件・待ち合計5時間）の上位が getTodayIntermediate／getMoveAdjByLoc／getDriverState で、実況タブは🔄更新1回で /exec を4本、5分更新で5本叩いていた。/exec は1往復ごとに3〜4秒の床＋全アプリ共有の30本枠を取るので**本数が重さ**。★直し＝メインGASの束ね口 `getRealtimeBundle`（報告・販売数・休止・移動差分を1往復）で取る（`rtFetchBundle_`）。🔄更新 4本→1本／5分更新 5本→1本。マスタは端末に30分覚えておく（`rtGetMaster_`）。★数字の作り方は変えていない（サーバーは各関数をそのまま呼ぶだけ）。⚠ 古いGASでは bundle:true が返らないので従来の4本に落ちる。要: メインGAS 2026-10-06（getRealtimeBundle）。 -->
 <!-- driver v8.2 (2026-10-06) 【実況マトリクスの数が「減ったり戻ったり」する】ドライバー報告。★原因は2つ。①サーバーの公開スナップショットがレジの送信を**足し算**で積んでいて、送り直しで2重に足す・15分の作り直しで潰す（メインGAS側で「累計で上書き」に直した）②公開CSVはGoogle側で**数分遅れて**配られるので、🔄更新（/exec＝最新）→タブを開き直す（スナップショット＝数分前）で**遅れのぶん数字が下がって見える**。★②の直し＝販売数は1日の中で増える一方なので、**スナップショットで描く時は、この端末が最後に見た数（商品ごと）より下げない**（`rtSalesFloor_`）。/exec から取った時はそれが正しい数なので、そのまま床を置き直す（打ち間違いの取り消しで減る分はここで反映される）。床は日付つきで端末のメモリだけに持つ。通信は増えていない。 -->
 <!-- driver v8.1 (2026-10-06) 【📝 ドライバー日報ボタン】社長「朝私が簡単に日報を見れて返事を書けること。そしてそれがPDFに反映されること」「ドライバーアプリにボタン」。★ヘッダー右上に「📝 日報」ボタン。押すと3項目（①売れ行き・気づいた事 ②困った事・相談 ③一言）の入力欄が開き、送信で doPost `submitDriverReport`（シート「ドライバー日報」）。同じ日に送り直すと上書き（後勝ち）。★**起動時には何も叩かない**＝押した時に1回POSTするだけなので、アプリの重さ（/exec の実行枠）はほぼ増えない。書きかけは端末に残す（localStorage・日付つき）。★社長は kanri「📝 ドライバー日報」で読んで返事と今日の目標を書き、翌朝6時のエリア別予定表PDF（Mac `driver-plan.py`）の一番上に載ってLINEで届く。要メインGAS（submitDriverReport_）。 -->
@@ -2369,6 +2370,15 @@ body {
 
 
 <script>
+// ★2026-10-07 段階1（並走）→ 40_ドキュメント/設計_GASからの段階移行_2026-10-07.md
+//   GAS に送った同じ内容を Firebase にも投げる。結果は見ない・失敗しても何もしない。
+//   止める時は SHADOW_URL を '' にするだけ。
+const SHADOW_URL = 'https://asia-northeast1-oedo-bento.cloudfunctions.net/shadow';
+function shadowSend_(p) {
+  if (!SHADOW_URL || !p) return;
+  try { fetch(SHADOW_URL, { method: 'POST', body: JSON.stringify(p), keepalive: true }).catch(function () {}); }
+  catch (e) {}
+}
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5AawPDc7aluPokONkYz6f2ikwl0S487JvhKdKh6QSp1xhEhA/exec';
 
 const STORAGE_KEY_REMINDERS = 'oedo_driver_reminders';
@@ -3806,6 +3816,7 @@ async function toggleCollection(id) {
     if (!result || result.success === false) {
       throw new Error((result && result.error) || 'サーバーエラー');
     }
+    shadowSend_({ action, locationId: id });
     // 成功時：キャッシュも更新
     persistDrvDriverStateFromState();
   } catch(e) {
@@ -4795,6 +4806,7 @@ async function confirmToggleInactive() {
     if (!result || result.success === false) {
       throw new Error((result && result.error) || 'サーバーエラー');
     }
+    shadowSend_({ action, locationId });
     showToast(wasInactive ? `${loc.name} の休止を解除しました` : `${loc.name} を休止にしました`, 'success');
     // 成功時：キャッシュも更新
     persistDrvDriverStateFromState();
