@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- kanri.html v4.04 (2026-10-09) 【献立：全六の主菜にも曜日固定／ローテ】社長「全六の献立も曜日固定とローテーションを入れたい。ありの2品を曜日固定、なしの1品を曜日固定、もう1品をローテ（照り焼き・塩麹がある方）」。★⚙に「🍙 全六の主菜」欄を新設＝区分（全六あり/全六なし）×枠（主菜1/主菜2）ごとに方式（曜日固定／ローテ）を選ぶ。曜日固定は月〜金のプルダウン、ローテは↑↓✕で並べる（基準日は海苔弁と共通）。★カレンダー・日別パネルは保存していない日・空の枠を自動値で出す（GASの getMenuMonth が埋める）。「↩自動に戻す」で全六も自動値に戻る。仕込み表もGAS側で同じ自動値を使う。要メインGAS v2026-10-09（新シート「献立全六」）。 -->
 <!-- kanri.html v4.03 (2026-10-07) 【🚚 予定表 全エリア印刷】社長「ドライバー予定表は配分表アプリでどこかに全エリアのプリントアウトボタン欲しい」「（予定表の）LINEは止めたまま」。★拠点配分タブに青いボタン。押すと Mac の印刷係（print-server.py の新しい窓口 POST /driverplan）が、その日の drvplan を読んで driver-plan.py と同じ表を全エリアぶんPDF化→lp。押した時点の配分で作る（朝のPDFの作り置きではない）。この Mac からのみ。GAS変更なし。 -->
 <!-- kanri.html v4.02 (2026-10-06) 【試作品を配分調整②の車載に入れられるようにした】社長「試作での商品が配分表に出ない。推奨の数・配分の数は自動で出さなくていいけど配分には入れたい」→「車載だけ」。★メインGAS `getBasicMasterMatrix` が「配分外」○の商品を他社弁当と同じ形（isExternal＋isTrial）で返すので、②初回納品＋車載に**車載5台のセルだけ**出る（拠点は「–」・①には出ない）。バッジは「試作」、合計列は車載計だけ。保存すると車載のG列に入り、配分表・盛り出し・仕込み・ドライバー予定表に乗る。推奨・下限・天井は今までどおり掛からない。 -->
 <!-- kanri.html v4.01 (2026-10-06) 【📝 ドライバー日報タブ】社長「朝私が簡単に日報を見れて返事を書けること。そしてそれがPDFに反映されること」。★予定日を選ぶと、その前の営業日にドライバーが出した日報（driver v8.1「📝 日報」）がドライバーごとに並び、横に**返事**と**今日の目標**を書いて保存（doPost `saveDriverReply`＝シート「ドライバー返事」・後勝ち）。予定日の既定は14時前なら今日・以降は翌平日。★書いた内容は**朝6時に Mac `driver-plan.py` がエリア別予定表PDFの一番上に載せて担当ドライバーへLINE**する。6時より後に直した時は「📨 予定表を送り直す」（doPost `requestDriverPlanResend`）→ 15分以内に Mac が作り直して送る（11:00まで）。★担当エリアはその日の担当（拠点マスタの主担当＋担当例外）で、担当拠点がいちばん多いエリアのPDFがその人に届く。要メインGAS（getDriverReports_ ほか）。 -->
@@ -2565,6 +2566,13 @@ body {
   #tab-menu .mn-wk-dow{ width:26px; font-weight:bold; color:#37474f; flex:0 0 auto; }
   #tab-menu .mn-wk-items{ display:flex; flex-direction:column; gap:4px; flex:1; }
   #tab-menu .mn-wk-one{ display:flex; align-items:center; gap:6px; }
+  #tab-menu .mn-zr-box{ margin-top:14px; padding-top:12px; border-top:1px solid #eceff1; }
+  #tab-menu .mn-zr-slot{ padding:8px 0; border-bottom:1px dashed #eceff1; }
+  #tab-menu .mn-zr-head{ display:flex; align-items:center; gap:8px; font-size:13px; font-weight:bold; color:#37474f; margin-bottom:6px; flex-wrap:wrap; }
+  #tab-menu .mn-zr-head select, #tab-menu .mn-zr-wk select, #tab-menu .mn-zr-add select{ padding:4px 6px; border:1px solid #bbb; border-radius:4px; font-family:inherit; font-size:12px; }
+  #tab-menu .mn-zr-wk{ display:flex; gap:6px; flex-wrap:wrap; }
+  #tab-menu .mn-zr-wk label{ display:flex; align-items:center; gap:3px; font-size:12px; color:#555; }
+  #tab-menu .mn-zr-add{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:4px; }
   #tab-menu .mn-rules-foot{ margin-top:14px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
 
   /* ── 月ナビ ── */
@@ -2650,7 +2658,7 @@ body {
   <div class="mn-rules" id="mn-rules">
     <div class="mn-rules-head" id="mn-rules-head">
       <span class="mn-arw">▶</span><span>⚙ ローテ・曜日固定の設定</span>
-      <span class="mn-rules-hint">（海苔弁の回す順番／満腹の曜日割り／基準日）</span>
+      <span class="mn-rules-hint">（海苔弁の回す順番／満腹の曜日割り／全六の主菜／基準日）</span>
     </div>
     <div class="mn-rules-body">
       <div class="mn-teiban-box">
@@ -2682,6 +2690,11 @@ body {
           <div id="mn-wk-list"></div>
           <div class="mn-hint">1曜日に複数種を置けます（＋で追加）。空にすればその曜日は自動表示なしになります。</div>
         </div>
+      </div>
+      <div class="mn-zr-box">
+        <h4 class="mn-h4">🍙 全六の主菜（曜日固定／ローテ）</h4>
+        <div id="mn-zr-list"></div>
+        <div class="mn-hint">主菜1・主菜2ごとに「曜日固定」か「ローテ」を選びます。ローテは海苔弁と同じ基準日から1営業日ずつ回ります（祝日は飛ばす）。保存していない日はこの値が献立表・仕込み表に出ます。</div>
       </div>
       <div class="mn-rules-foot">
         <button class="btn mn-btn-green" id="mn-btn-save-rules">💾 保存してカレンダーに反映</button>
@@ -9548,7 +9561,77 @@ function mnNormalizeRules(rules) {
       return { key: w.key, category: w.category, label: w.label };
     });
   });
+  // ★v4.04 全六の主菜ルール { kind:{ shu1:{mode,weekly:{月:{id,name}},rotation:[{id,name}]}, shu2:{...} } }
+  out.zenroku = JSON.parse(JSON.stringify((rules && rules.zenroku) || {}));
   return out;
+}
+
+// ★v4.04 全六の主菜ルール：候補のある区分だけ出す（タレカツ重など主菜を選ばない全六は除く）
+function mnZrKinds() {
+  var meta = mnState.meta || {};
+  return (meta.zenrokuKinds || []).filter(function (k) {
+    return ((meta.zenrokuCandidates && meta.zenrokuCandidates[k]) || []).length > 0;
+  });
+}
+function mnZrSlot(kind, slot) {
+  var rd = mnState.rulesDraft;
+  if (!rd.zenroku) rd.zenroku = {};
+  if (!rd.zenroku[kind]) rd.zenroku[kind] = {};
+  if (!rd.zenroku[kind][slot]) rd.zenroku[kind][slot] = { mode: 'weekly', weekly: {}, rotation: [] };
+  var s = rd.zenroku[kind][slot];
+  if (!s.weekly) s.weekly = {};
+  if (!s.rotation) s.rotation = [];
+  return s;
+}
+function mnZrOptions(kind, selectedId, withBlank) {
+  var cands = (mnState.meta && mnState.meta.zenrokuCandidates && mnState.meta.zenrokuCandidates[kind]) || [];
+  var h = withBlank ? '<option value="">－</option>' : '';
+  cands.forEach(function (c) {
+    var nm = String(c.name || '').replace(/^全六(あり|なし)_/, '');
+    h += '<option value="' + mnEsc(c.id) + '"' + (String(c.id) === String(selectedId) ? ' selected' : '') + '>' + mnEsc(nm) + '</option>';
+  });
+  return h;
+}
+function mnRenderZenRules() {
+  var box = document.getElementById('mn-zr-list');
+  if (!box || !mnState.rulesDraft) return;
+  var kinds = mnZrKinds();
+  if (!kinds.length) { box.innerHTML = '<div class="mn-empty">全六の主菜候補がありません</div>'; return; }
+  var html = '';
+  kinds.forEach(function (k) {
+    ['shu1', 'shu2'].forEach(function (slot) {
+      var s = mnZrSlot(k, slot);
+      var att = ' data-k="' + mnEsc(k) + '" data-s="' + slot + '"';
+      html += '<div class="mn-zr-slot"><div class="mn-zr-head"><span>' + mnEsc(k) + '　' + (slot === 'shu2' ? '主菜2' : '主菜1') + '</span>'
+            + '<select data-zract="mode"' + att + '>'
+            + '<option value="weekly"' + (s.mode !== 'rot' ? ' selected' : '') + '>曜日固定</option>'
+            + '<option value="rot"' + (s.mode === 'rot' ? ' selected' : '') + '>ローテ</option></select></div>';
+      if (s.mode === 'rot') {
+        html += '<ul class="mn-rot-list">' + (s.rotation.length
+          ? s.rotation.map(function (x, i) {
+              return '<li><span class="mn-rot-no">' + (i + 1) + '</span><span>' + mnEsc(String(x.name || x.id).replace(/^全六(あり|なし)_/, '')) + '</span><span class="mn-sp"></span>'
+                   + '<button class="mn-mini" data-zract="up" data-i="' + i + '"' + att + '>↑</button>'
+                   + '<button class="mn-mini" data-zract="down" data-i="' + i + '"' + att + '>↓</button>'
+                   + '<button class="mn-mini" data-zract="del" data-i="' + i + '"' + att + '>✕</button></li>';
+            }).join('')
+          : '<li style="border:none;background:none;color:#999;padding-left:0;">（未設定＝自動表示なし）</li>') + '</ul>'
+          + '<div class="mn-zr-add"><select data-zract="addsel"' + att + '>' + mnZrOptions(k, '', false) + '</select>'
+          + '<button class="mn-mini" data-zract="add"' + att + '>＋ 主菜を追加</button></div>';
+      } else {
+        html += '<div class="mn-zr-wk">' + MN_WEEKDAYS.map(function (d) {
+          var w = s.weekly[d];
+          return '<label>' + d + '<select data-zract="wk" data-dow="' + d + '"' + att + '>' + mnZrOptions(k, w ? w.id : '', true) + '</select></label>';
+        }).join('') + '</div>';
+      }
+      html += '</div>';
+    });
+  });
+  box.innerHTML = html;
+}
+function mnZrNameOf(kind, id) {
+  var cands = (mnState.meta && mnState.meta.zenrokuCandidates && mnState.meta.zenrokuCandidates[kind]) || [];
+  for (var i = 0; i < cands.length; i++) if (String(cands[i].id) === String(id)) return String(cands[i].name || '');
+  return '';
 }
 
 // ── カレンダー描画 ────────────────────────────────────────
@@ -9740,8 +9823,15 @@ function mnResetDayToAuto() {
   if (!day || !mnState.draft) return;
   mnState.draft.active = {};
   (day.autoActive || []).forEach(function (pid) { mnState.draft.active[String(pid)] = true; });
+  // ★v4.04 全六も⚙ルールの自動値に戻す（ルールの無い枠はそのまま）
+  var az = day.autoZenroku || {};
+  Object.keys(az).forEach(function (k) {
+    if (!mnState.draft.zenroku[k]) mnState.draft.zenroku[k] = { shu1: '', shu2: '' };
+    if (az[k].shu1) mnState.draft.zenroku[k].shu1 = az[k].shu1;
+    if (az[k].shu2) mnState.draft.zenroku[k].shu2 = az[k].shu2;
+  });
   mnRenderPanel();
-  mnSetStatus('mn-p-status', '海苔弁・満腹を自動値に戻しました（保存するまで確定しません）');
+  mnSetStatus('mn-p-status', '海苔弁・満腹・全六を自動値に戻しました（保存するまで確定しません）');
 }
 
 async function mnSaveDay() {
@@ -9835,6 +9925,7 @@ function mnRenderRules() {
            + '<div><button class="mn-mini" data-wact="add" data-dow="' + d + '">＋ 追加</button></div></div></div>';
     }).join('');
   }
+  mnRenderZenRules();   // ★v4.04
 }
 
 async function mnSaveRules() {
@@ -9851,7 +9942,11 @@ async function mnSaveRules() {
   MN_WEEKDAYS.forEach(function (d) {
     payload.weekly[d] = (rd.weekly[d] || []).map(function (w) { return { category: w.category, label: w.label }; });
   });
-  if (payload.rotation.length && !payload.baseDate) {
+  payload.zenroku = rd.zenroku || {};   // ★v4.04 全六の主菜ルール
+  var zenRot = Object.keys(payload.zenroku).some(function (k) {
+    return ['shu1', 'shu2'].some(function (s) { var z = payload.zenroku[k][s]; return z && z.mode === 'rot' && (z.rotation || []).length; });
+  });
+  if ((payload.rotation.length || zenRot) && !payload.baseDate) {
     mnSetStatus('mn-rules-status', 'ローテを使うには基準日が必要です', 'err');
     return;
   }
@@ -9995,6 +10090,37 @@ async function mnSaveRules() {
       var list = mnState.rulesDraft.weekly[sel.getAttribute('data-dow')] || [];
       var i = Number(sel.getAttribute('data-i'));
       if (list[i]) list[i] = it;
+    });
+  }
+  // ★v4.04 全六の主菜ルールの操作
+  var zr = $('mn-zr-list');
+  if (zr) {
+    zr.addEventListener('click', function (ev) {
+      var btn = ev.target.closest ? ev.target.closest('button[data-zract]') : null;
+      if (!btn || !mnState.rulesDraft) return;
+      var k = btn.getAttribute('data-k'), s = mnZrSlot(k, btn.getAttribute('data-s'));
+      var act = btn.getAttribute('data-zract'), i = Number(btn.getAttribute('data-i'));
+      var list = s.rotation;
+      if (act === 'del') list.splice(i, 1);
+      else if (act === 'up'   && i > 0)               list.splice(i - 1, 0, list.splice(i, 1)[0]);
+      else if (act === 'down' && i < list.length - 1) list.splice(i + 1, 0, list.splice(i, 1)[0]);
+      else if (act === 'add') {
+        var sel = btn.parentNode.querySelector('select[data-zract="addsel"]');
+        if (!sel || !sel.value) return;
+        list.push({ id: sel.value, name: mnZrNameOf(k, sel.value) });
+      }
+      mnRenderZenRules();
+    });
+    zr.addEventListener('change', function (ev) {
+      var sel = ev.target;
+      if (!sel || !sel.getAttribute || !mnState.rulesDraft) return;
+      var act = sel.getAttribute('data-zract');
+      if (act !== 'mode' && act !== 'wk') return;
+      var k = sel.getAttribute('data-k'), s = mnZrSlot(k, sel.getAttribute('data-s'));
+      if (act === 'mode') { s.mode = (sel.value === 'rot') ? 'rot' : 'weekly'; mnRenderZenRules(); return; }
+      var d = sel.getAttribute('data-dow');
+      if (sel.value) s.weekly[d] = { id: sel.value, name: mnZrNameOf(k, sel.value) };
+      else delete s.weekly[d];
     });
   }
   if ($('mn-btn-save-rules')) $('mn-btn-save-rules').addEventListener('click', mnSaveRules);
