@@ -5,8 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>週給与明細 印刷</title>
 <!--
-  週締め給与明細（印刷用）  v1.0  2026-10-05
-  A4縦を 横4×縦3＝12枠（1枠 52.5×99mm）。切り取り線で切って1人1枚で渡す。
+  週締め給与明細（印刷用）  v1.1  2026-10-09
+  ★v1.1 社長指定のラベル用紙に合わせた＝A4・2列×6段＝12面（1面 86.4×42.3mm／上21.2・下22・左右18.6mm・面の間の隙間なし）。
+         1面が横長で低いので、左に日別の表・右に名前と合計を置く。印刷は「余白なし・倍率100%」必須。
+  v1.0  2026-10-05 A4縦を 横4×縦3＝12枠（1枠 52.5×99mm）。切り取り線で切って1人1枚で渡す。
   週＝月曜〜日曜（月をまたいでも1週間）。サーバー＝メインGAS getWeeklyPayslips（doPost・給与PW）。
 -->
 <style>
@@ -23,36 +25,40 @@
   #msg { padding: 8px 16px; font-size: 14px; color: var(--sub); }
   #msg .warn { color: #b00; }
 
-  /* ── A4縦・4×3 ── */
+  /* ── A4ラベル 2列×6段（86.4×42.3mm）── */
   .sheet { width: 210mm; height: 297mm; margin: 12px auto; background: #fff;
-           display: grid; grid-template-columns: repeat(4, 52.5mm); grid-template-rows: repeat(3, 99mm);
+           padding: 21.2mm 18.6mm 22mm; box-sizing: border-box;
+           display: grid; grid-template-columns: repeat(2, 86.4mm); grid-template-rows: repeat(6, 42.3mm);
            box-shadow: 0 1px 4px rgba(0,0,0,.15); overflow: hidden; }
-  .slip { border-right: 0.2mm dashed var(--line); border-bottom: 0.2mm dashed var(--line);
-          padding: 5mm 3.5mm 4mm; font-size: 6.6pt; line-height: 1.35; overflow: hidden;
-          display: flex; flex-direction: column; }
-  .slip:nth-child(4n) { border-right: none; }
-  .slip:nth-child(n+9) { border-bottom: none; }
-  .slip .ttl { font-size: 7.5pt; font-weight: 700; letter-spacing: .1em; text-align: center;
-               border-bottom: 0.3mm solid var(--ink); padding-bottom: 1mm; margin-bottom: 1.5mm; }
-  .slip .name { font-size: 10pt; font-weight: 700; margin: 0.5mm 0 0.3mm; }
-  .slip .name small { font-size: 6.6pt; font-weight: 400; }
-  .slip .period { color: var(--sub); margin-bottom: 1.5mm; }
+  .slip { outline: 0.2mm dashed var(--line); outline-offset: -0.1mm;
+          padding: 2.6mm 3mm 2.2mm; font-size: 6.2pt; line-height: 1.25; overflow: hidden;
+          display: grid; grid-template-columns: 1fr 27mm; column-gap: 2.5mm; }
+  .slip:empty { outline-color: #eee; }
+  .slip .days { overflow: hidden; }
   .slip table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-  .slip th { font-weight: 400; color: var(--sub); border-bottom: 0.2mm solid var(--ink); padding: 0.4mm 0; text-align: left; }
-  .slip td { padding: 0.7mm 0; border-bottom: 0.1mm solid #ddd; white-space: nowrap; }
+  .slip th { font-weight: 400; color: var(--sub); border-bottom: 0.2mm solid var(--ink); padding: 0 0 0.3mm; text-align: left; font-size: 5.6pt; }
+  .slip td { padding: 0.35mm 0; border-bottom: 0.1mm solid #ddd; white-space: nowrap; }
   .slip .r { text-align: right; }
-  .slip col.c1 { width: 25%; } .slip col.c2 { width: 37%; } .slip col.c3 { width: 13%; } .slip col.c4 { width: 25%; }
-  .slip .sum td { border-bottom: none; padding-top: 1mm; }
-  .slip .ex td { border-bottom: none; padding: 0.3mm 0; }
-  .slip .ex .det { color: var(--sub); font-size: 5.8pt; }
-  .slip .total { margin-top: auto; border-top: 0.4mm double var(--ink); padding-top: 1.2mm;
-                 display: flex; justify-content: space-between; align-items: baseline; }
+  .slip col.c1 { width: 25%; } .slip col.c2 { width: 37%; } .slip col.c3 { width: 15%; } .slip col.c4 { width: 23%; }
+  .slip .sum td { border-bottom: none; padding-top: 0.6mm; font-weight: 700; }
+  .slip .side { display: flex; flex-direction: column; border-left: 0.2mm solid #ccc; padding-left: 2.5mm; }
+  .slip .ttl { font-size: 6pt; font-weight: 700; letter-spacing: .15em; color: var(--sub); }
+  .slip .name { font-size: 9.5pt; font-weight: 700; margin: 0.6mm 0 0.2mm; line-height: 1.15; word-break: break-all; }
+  .slip .name small { font-size: 6pt; font-weight: 400; }
+  .slip .period { color: var(--sub); font-size: 5.8pt; }
+  .slip .ex { margin-top: 1mm; font-size: 5.8pt; }
+  .slip .ex div { display: flex; justify-content: space-between; }
+  .slip .ex .exl { white-space: nowrap; margin-top: 0.4mm; }
+  .slip .ex .det { color: var(--sub); font-size: 5.2pt; }
+  .slip .total { margin-top: auto; border-top: 0.4mm double var(--ink); padding-top: 0.8mm; }
+  .slip .total span { display: block; font-size: 5.8pt; color: var(--sub); }
   .slip .total b { font-size: 11pt; }
-  .slip .foot { margin-top: 1mm; color: var(--sub); font-size: 5.6pt; text-align: right; }
+  .slip .foot { color: var(--sub); font-size: 4.8pt; margin-top: 0.3mm; }
 
   @page { size: A4 portrait; margin: 0; }
   @media print {
     body { background: #fff; }
+    .slip, .slip:empty { outline: none; }   /* ラベルは台紙で切れているので線は刷らない */
     .bar, #msg { display: none; }
     .sheet { margin: 0; box-shadow: none; page-break-after: always; break-after: page; }
     .sheet:last-child { page-break-after: auto; break-after: auto; }
@@ -114,18 +120,23 @@ async function load() {
 function slipHtml(p, r) {
   const rows = p.days.map(d =>
     `<tr><td>${esc(d.label)}</td><td>${esc(d.inT)}-${esc(d.outT)}</td><td class="r">${esc(d.hm)}</td><td class="r">${yen(d.yen)}</td></tr>`).join('');
-  const ex = p.extras.map(x =>
-    `<tr class="ex"><td colspan="2">${esc(x.label)}<br><span class="det">${esc(x.detail)}</span></td><td></td><td class="r">${x.yen > 0 ? '+' : ''}${yen(x.yen)}</td></tr>`).join('');
   const sum = `<tr class="sum"><td colspan="2">小計 ${p.days.length}日</td><td class="r">${esc(p.hm)}</td><td class="r">${yen(p.subtotal)}</td></tr>`;
+  const ex = p.extras.length ? '<div class="ex">' + p.extras.map(x =>
+    `<div class="exl">${esc(x.label)}</div><div><span class="det">${esc(x.detail)}</span><span>${x.yen > 0 ? '+' : ''}${yen(x.yen)}</span></div>`).join('') + '</div>' : '';
   return `<div class="slip">
-    <div class="ttl">給与明細</div>
-    <div class="name">${esc(p.name)} <small>様</small></div>
-    <div class="period">${esc(r.fromLabel)}〜${esc(r.toLabel)}</div>
-    <table><colgroup><col class="c1"><col class="c2"><col class="c3"><col class="c4"></colgroup>
-      <thead><tr><th>日付</th><th>出勤-退勤</th><th class="r">時間</th><th class="r">給与</th></tr></thead>
-      <tbody>${rows}${sum}${ex}</tbody></table>
-    <div class="total"><span>${p.extras.length ? '差引支給額' : '合計'}</span><b>¥${yen(p.total)}</b></div>
-    <div class="foot">${esc(r.brand)}／${esc(r.company)}</div>
+    <div class="days">
+      <table><colgroup><col class="c1"><col class="c2"><col class="c3"><col class="c4"></colgroup>
+        <thead><tr><th>日付</th><th>出勤-退勤</th><th class="r">時間</th><th class="r">給与</th></tr></thead>
+        <tbody>${rows}${sum}</tbody></table>
+    </div>
+    <div class="side">
+      <div class="ttl">給与明細</div>
+      <div class="name">${esc(p.name)} <small>様</small></div>
+      <div class="period">${esc(r.fromLabel)}〜${esc(r.toLabel)}</div>
+      ${ex}
+      <div class="total"><span>${p.extras.length ? '差引支給額' : '合計'}</span><b>¥${yen(p.total)}</b></div>
+      <div class="foot">${esc(r.brand)}</div>
+    </div>
   </div>`;
 }
 
