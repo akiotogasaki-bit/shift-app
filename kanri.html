@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- kanri.html v4.08 (2026-10-09) 【セパレート行：置き弁の満腹も車載へ】社長「置き弁も車載でいい」。★セパレート行（白米/玄米/セパレート3行）の車載の列に、置き弁の拠点の満腹もそのエリアの車として足す。配分表の満腹欄（v4.00）は従来どおり置き弁を除く。GAS変更なし。 -->
 <!-- kanri.html v4.07 (2026-10-09) 【セパレート行：満腹は車載の列にエリア合計で】社長「白米の数だけど、満腹の分も入れて欲しい。満腹の拠点別は予定表に入るから、配分表には入れなくていい」。★白米・玄米・セパレート3行とも、満腹は拠点の列に出さず、車載の列に「その車の満腹＋エリアの拠点の満腹合計（置き弁を除く）」を入れる（v4.00 の満腹欄と同じ数え方）。合計列は変わらない。GAS変更なし。 -->
 <!-- kanri.html v4.06 (2026-10-09) 【配分表にセパレート行】社長「白米の一番下に白米、玄米の一番下に玄米。白米は満腹とメンチかつ、玄米は満腹系とあさひめの南蛮と油淋鶏の合計数。おかずとご飯をセパレートで出すメニューのお米の数が知りたい」「カテゴリー別にセパレート欄」「今後も増えるかもしれないから簡単にセパレート分類に入れれるように」。★単価マスタ「セパレート」○の商品（GAS getSheet1Data の isSeparate）を白米・玄米の段ごとに足して段の一番下に1行。カテゴリー別合計に「セパレート 白米／玄米／計」の3行。新商品は○を付けるだけで乗る。要メインGAS v2026-10-09c。 -->
 <!-- kanri.html v4.05 (2026-10-09) 【献立：各日を既定で確定済み】社長「各日付をデフォルト決定済みにして欲しい。ローテの変更・メニューの変更はこっちで手作業でやります」。★メインGASが毎晩21時台に翌月末までの未保存の日を自動値で確定し、確定済みの日はルールを変えても動かさない（後勝ちを止めた）。画面は⚙の下に説明を1行足しただけ。 -->
@@ -4354,12 +4355,12 @@ function renderSheet1(data) {
   // ⚠ 満腹の商品は名前に「満腹」が入らない（集約グループ名だけが満腹）。カテゴリーで見る（SHEET1_CATEGORIES の満腹系と同じ表記）
   const s1IsManRow = r => !!(r && !r.isExternal
     && (['満腹系', '満腹シリーズ'].indexOf(String(r.category || '').trim()) >= 0 || /満腹/.test(String(r.baseName || ''))));
-  function s1ManArea(row, vehId) {
+  function s1ManArea(row, vehId, withOkiben) {
     const area = BM_VEH_AREA_[String(vehId)];
     if (!area || !row || !row.byLocation) return 0;
     let s = 0;
     locations.forEach(l => {
-      if (VEH_RE_S1.test(l.id) || l.isOkiben) return;
+      if (VEH_RE_S1.test(l.id) || (l.isOkiben && !withOkiben)) return;   // ★v4.08 セパレート行だけ置き弁も入れる
       if (String(l.area || '').trim() !== area) return;
       s += Number(row.byLocation[l.id]) || 0;
     });
@@ -4496,7 +4497,7 @@ function renderSheet1(data) {
       let v = 0;
       sepRows.forEach(r => {
         if (s1IsManRow(r)) {
-          if (isVeh) v += (Number((r.byLocation || {})[lid]) || 0) + s1ManArea(r, lid);
+          if (isVeh) v += (Number((r.byLocation || {})[lid]) || 0) + s1ManArea(r, lid, true);   // ★v4.08 置き弁も車載でいい（社長）
           return;
         }
         v += Number((r.byLocation || {})[lid]) || 0;
