@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- kanri.html v4.09 (2026-10-09) 【盛り出し表にセパレート白米／玄米】社長「盛り出し表にも白米・玄米それぞれの一番下にセパレート白米・玄米の名前で計のところに合計の数を入れよう」。★午前（1便）・午後（2便）とも、白米・玄米の表の一番下に1行。計の列だけに「セパレート」○の商品の合計。要メインGAS v2026-10-09d（getSheet2Data/getSheet3Data の isSeparate）。 -->
 <!-- kanri.html v4.08 (2026-10-09) 【セパレート行：置き弁の満腹も車載へ】社長「置き弁も車載でいい」。★セパレート行（白米/玄米/セパレート3行）の車載の列に、置き弁の拠点の満腹もそのエリアの車として足す。配分表の満腹欄（v4.00）は従来どおり置き弁を除く。GAS変更なし。 -->
 <!-- kanri.html v4.07 (2026-10-09) 【セパレート行：満腹は車載の列にエリア合計で】社長「白米の数だけど、満腹の分も入れて欲しい。満腹の拠点別は予定表に入るから、配分表には入れなくていい」。★白米・玄米・セパレート3行とも、満腹は拠点の列に出さず、車載の列に「その車の満腹＋エリアの拠点の満腹合計（置き弁を除く）」を入れる（v4.00 の満腹欄と同じ数え方）。合計列は変わらない。GAS変更なし。 -->
 <!-- kanri.html v4.06 (2026-10-09) 【配分表にセパレート行】社長「白米の一番下に白米、玄米の一番下に玄米。白米は満腹とメンチかつ、玄米は満腹系とあさひめの南蛮と油淋鶏の合計数。おかずとご飯をセパレートで出すメニューのお米の数が知りたい」「カテゴリー別にセパレート欄」「今後も増えるかもしれないから簡単にセパレート分類に入れれるように」。★単価マスタ「セパレート」○の商品（GAS getSheet1Data の isSeparate）を白米・玄米の段ごとに足して段の一番下に1行。カテゴリー別合計に「セパレート 白米／玄米／計」の3行。新商品は○を付けるだけで乗る。要メインGAS v2026-10-09c。 -->
@@ -4712,6 +4713,22 @@ async function fetchSheet2() {
   }
 }
 
+/* ★2026-10-09 v4.09【社長指示】盛り出し表の白米・玄米それぞれの一番下に「セパレート白米／玄米」。
+   社長「盛り出し表にも白米・玄米それぞれの一番下にセパレート白米・玄米の名前で計のところに合計の数を入れよう」。
+   対象＝単価マスタ「セパレート」○の商品（GAS getSheet2Data/getSheet3Data の isSeparate）。
+   midCols＝商品名と計の間の列数（1便＝拠点＋配達数／2便＝配達数）。間は空欄。 */
+function moriSepRowHTML(rows, isBrown, midCols) {
+  const tot = (rows || []).filter(r => r && r.isSeparate)
+    .reduce((a, r) => a + (Number(r.total) || 0), 0);
+  if (!tot) return '';
+  let html = `<tr class="s1-sep-row${isBrown ? ' brown-row' : ''}">`;
+  html += `<td class="cell-name" title="おかずとご飯を別に出す商品（単価マスタ「セパレート」○）のお米の数">${isBrown ? 'セパレート玄米' : 'セパレート白米'}</td>`;
+  for (let i = 0; i < midCols; i++) html += '<td></td>';
+  html += `<td class="cell-tot">${tot}</td>`;
+  html += '</tr>';
+  return html;
+}
+
 function renderSheet2(data) {
   const body = document.getElementById('sheet2-body');
   const { dateLabel, deliveries, rice, brown } = data;
@@ -4768,6 +4785,9 @@ function renderSheet2(data) {
       html += `<td class="cell-tot">${row.total || ''}</td>`;
       html += '</tr>';
     });
+
+    // ★2026-10-09 v4.09 一番下に「セパレート白米／玄米」＝計の列だけに合計（単価マスタ「セパレート」○の商品）
+    html += moriSepRowHTML(activeRows, isBrown, 1 + dCount);
 
     html += '</tbody>';
     return html;
@@ -4923,6 +4943,9 @@ function renderSheet3(data) {
       html += `<td class="cell-tot">${row.total || ''}</td>`;
       html += '</tr>';
     });
+
+    // ★2026-10-09 v4.09 一番下に「セパレート白米／玄米」＝計の列だけに合計
+    html += moriSepRowHTML((rows || []).filter(r => r.total), isBrown, dCount);
 
     html += '</tbody>';
     return html;
