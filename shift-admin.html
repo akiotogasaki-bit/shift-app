@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <!--
   お江戸弁当 shift-admin.html
+  v2026-10-13c 休ませ候補の数を当日配分(L列)に（それまでG列＝初回納品）。同じ週に同じ拠点は1回まで。割り当て済みの拠点にも「配分N」を出す（社長「あとから配達が入った時に削ることがある為」）。
   v2026-10-13b 日付の下の食数の配達を午前（1便）だけにした＝配分調整の総合計・午前盛り出し表の計と同じ数（社長「総合計と同じにする」）。表記も「配達午前」。
   v2026-10-13 日付の下の食数に他社製品を含め、内訳に「＋他社N」を出す（社長「他社製品も含む」）。試作品も数える（GAS側）。
   v2026-10-07b 日付の下に内訳「拠点N＋配達N」も出す（1300を超えない日も）。社長「1300はあくまで目安」。
@@ -335,6 +336,11 @@ input { font-family: inherit; }
   font-size: 9px;
   font-weight: 700;
   color: #6A3FA0;
+}
+.matrix td .alloc-tag {
+  display: block;
+  font-size: 9px;
+  color: var(--ink-mute, #888);
 }
 .matrix thead th.corner {
   left: 0;
@@ -2376,7 +2382,11 @@ function renderMatrix() {
       const rc = capaRestFor(d, b.name);
       if (rc) {
         cls += ' rest-cand';
-        displayHtml += `<span class="rest-tag" title="直近4週で休んだ回数が少なく、その日の数が少ない順に選んだ候補">休ませ候補 −${rc.qty}食</span>`;
+        displayHtml += `<span class="rest-tag" title="当日配分が少なく、直近4週で休んだ回数が少ない順に選んだ候補（同じ週に同じ拠点は1回まで）">休ませ候補 −${rc.qty}食</span>`;
+      } else {
+        // ★2026-10-13 割り当て済みの拠点にも当日配分の数を出す（社長「あとから配達が入った時に削ることがある為」）
+        const dq = capaDailyFor(d, b.name);
+        if (dq) displayHtml += `<span class="alloc-tag" title="この拠点の当日配分（休ませるとこの数が減る）">配分${dq}</span>`;
       }
 
       html += `<td class="${cls}" data-date="${escapeAttr(d)}" data-base="${escapeAttr(b.name)}"
@@ -2422,6 +2432,10 @@ async function loadCapacity() {
   state.dates.forEach(d => { const x = byYmd[shiftDateToYmd(d)]; if (x) state.capa[d] = x; });
   state.capaLimit = res.cap;
   renderMatrix();
+}
+function capaDailyFor(d, baseName) {
+  const x = state.capa && state.capa[d];
+  return (x && x.dailyByName && x.dailyByName[baseName]) || 0;
 }
 function capaRestFor(d, baseName) {
   const x = state.capa && state.capa[d];
