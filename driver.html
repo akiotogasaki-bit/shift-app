@@ -8480,6 +8480,11 @@ async function rtLoadAll() {
     const reports = _rb.reports, driverState = _rb.driverState, moveAdj = _rb.moveAdj;
     const intermediate = _snapInter ? { data: _snapInter } : _rb.intermediate;
     rtMasterData = master;
+    // ★v8.7 Firebase の行で拠点名が無いもの（開始だけの拠点など）はマスタから補う（ランキングが名前を直接出すため）
+    if (_fbInter && master && Array.isArray(master.locations)) {
+      const nm = {}; master.locations.forEach(l => { if (l && l.id) nm[l.id] = l.name || ''; });
+      _fbInter.forEach(r => { if (!r.locationName) r.locationName = nm[r.locationId] || r.locationId; });
+    }
     if ((!_snapInter || _fbInter) && intermediate && intermediate.data) rtApplySalesFloor_(intermediate.data, true);   // ★v8.2 /exec＝最新で床を置き直す（★v8.7 Firebase も最新なので同じ扱い）
     rtMoveAdjMap = (moveAdj && moveAdj.adj) ? moveAdj.adj : {};  // v7
     // 本日の休止拠点IDをSetで保持
