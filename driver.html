@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v8.7 (2026-10-14) 【実況を Firebase から読む（項目ごとに切り替え）】社長「今日からドライバーで試しちゃっていいよ」。★ログインできていれば実況（`rtLoadAll`）が Firestore の今日の拠点データを読む（`rtFbLive_`→`rtIntermediateFromFb_`）。★オン・オフは t/{FC}/config/flags の rtSales（販売数）／rtMoney（金額＝サマリーが /exec の getTodayIntermediate を使わなくなる）／rtDeliv（納品数。オフの間は公開スナップショット）。画面を配り直さずに切り替え・戻せる。★PWA・読めない時・オフの時は従来どおり。★どこから読んだかを fbProbe（step=rt:firebase/snapshot/exec:表示）で記録。 -->
 <!-- driver v8.6 (2026-10-14) 【Firebase へ裏でログイン（見た目は変わらない）】社長決定 A'（金額も置いて実況サマリー・回収タブを Firebase 読みへ）の下準備。★LINE の中で開いた時だけ、LIFF の IDトークン → 受け口 auth → ログイン券 → signInWithCustomToken。ログインできたら今日のデータを1回読み、成否と所要を受け口へ記録（fbProbe）。★Firebase への送信（shadowSend_）にログインの証明（IDトークン）を付ける。受け口は今は数えるだけで弾かない。★PWA（パスワード入口）は LIFF が無いのでログインしない＝従来どおり。★LINE Developers の LIFF Scope に openid を追加済み（社長 10/14）。 -->
 <!-- driver v8.5 (2026-10-11) 【並走：回収の本流も Firebase へ送る】10/9 の答え合わせで13時以降の回収が Firebase に1件も入っていなかった（GAS 17拠点／Firebase 0）。★原因＝v8.4 で差し込んだのは回収済みボタンのオンオフ（toggle）だけで、現金を入力して確定する本流（confirmCash の② setCollected）に shadowSend_ が無かった。②の成功直後に1行足した（firebase/apply-shadow-front.py にも追加＝何度流しても同じ）。画面の動きは変わらない。 -->
 <!-- driver v8.4 (2026-10-08) 【Firebase 並走（段階1）】社長決定「B 裏側だけ移す」→ 40_ドキュメント/設計_GASからの段階移行_2026-10-07.md。★GAS に送った同じ内容を Firebase の受け口 `shadow` にも投げる（`shadowSend_`）。回収・休止のオンオフ（setCollected/unsetCollected/setInactive/unsetInactive）。結果は見ない・失敗しても画面は何も変わらない（keepalive の投げっぱなし）。★止める時は SHADOW_URL を '' にして配り直すだけ。差し込みは firebase/apply-shadow-front.py。 -->
@@ -8454,8 +8455,14 @@ async function rtLoadAll() {
        `getTodayIntermediate` を叩かない。**公開スナップショットから作る（実行枠0本）。
        9/18 の障害で**単独3,634秒＝最大の消費者**だった口。ピーク中に見るのはこの画面なので、
        ここを外すのが一番効く。サマリー（売上）を開いている時は従来どおり `/exec`。 */
-    const _snapLive = (rtCurrentView === 'area') ? await fetchSnapLive_(30000) : null;
-    const _snapInter = _snapLive ? rtIntermediateFromSnap_(_snapLive) : null;
+    /* ★v8.7 Firebase から読めるなら先にそちらを使う（→ rtFbLive_ の上のコメント）。
+       サマリーは金額が要るので rtMoney がオンの時だけ。エリア別は販売数だけで足りる。 */
+    const _fb = await rtFbLive_();
+    const _fbUsable = !!(_fb && (rtCurrentView === 'area' || _fb.flags.rtMoney));
+    const _snapLive = (rtCurrentView === 'area' || (_fbUsable && !_fb.flags.rtDeliv)) ? await fetchSnapLive_(30000) : null;
+    const _fbInter = _fbUsable ? rtIntermediateFromFb_(_fb, _snapLive) : null;
+    const _snapInter = _fbInter || (_snapLive && rtCurrentView === 'area' ? rtIntermediateFromSnap_(_snapLive) : null);
+    rtSourceNote_(_fbInter ? 'firebase' : (_snapInter ? 'snapshot' : 'exec'));
     if (_snapLive) rtVehByArea = (_snapLive.veh && typeof _snapLive.veh === 'object') ? _snapLive.veh : null;   // ★v8.0
     /* ★v8.3 /exec を5本 → 1本（＋マスタは30分に1回）。束ね口 getRealtimeBundle で報告・販売数・休止・移動差分を1往復。
        販売数をスナップショットから作れた時は束ね口にも販売数を作らせない（noInter）。 */
@@ -8473,7 +8480,7 @@ async function rtLoadAll() {
     const reports = _rb.reports, driverState = _rb.driverState, moveAdj = _rb.moveAdj;
     const intermediate = _snapInter ? { data: _snapInter } : _rb.intermediate;
     rtMasterData = master;
-    if (!_snapInter && intermediate && intermediate.data) rtApplySalesFloor_(intermediate.data, true);   // ★v8.2 /exec＝最新で床を置き直す
+    if ((!_snapInter || _fbInter) && intermediate && intermediate.data) rtApplySalesFloor_(intermediate.data, true);   // ★v8.2 /exec＝最新で床を置き直す（★v8.7 Firebase も最新なので同じ扱い）
     rtMoveAdjMap = (moveAdj && moveAdj.adj) ? moveAdj.adj : {};  // v7
     // 本日の休止拠点IDをSetで保持
     // ★ v5.8 getDriverState の既定は軽量版（手動休止だけ）。端末が持つ自動休止を混ぜる。
@@ -8878,6 +8885,70 @@ function rtApplySalesFloor_(rows, fromExec) {
     rtSalesFloor_.m[lid] = ps;
   });
   return rows;
+}
+
+/* ★v8.7 実況をどこから読んだかを受け口へ記録する（切り替えの効き目を測る）。同じ値が続く間は30分に1回だけ。 */
+let rtSrcLast_ = '', rtSrcAt_ = 0;
+function rtSourceNote_(src) {
+  try {
+    if (src === rtSrcLast_ && Date.now() - rtSrcAt_ < 30 * 60000) return;
+    rtSrcLast_ = src; rtSrcAt_ = Date.now();
+    if (typeof fbProbe_ === 'function') fbProbe_({ ok: true, step: 'rt:' + src + ':' + rtCurrentView, ms: 0 });
+  } catch (e) {}
+}
+
+/* ★2026-10-14 v8.7【実況を Firebase から読む】社長「今日からドライバーで試しちゃっていいよ」。
+   項目ごとのオン・オフは Firestore の t/{FC}/config/flags（画面を配り直さずに切り替え・戻せる）：
+     rtSales … 販売数を Firebase から（エリア別はこれだけで /exec も公開CSVの遅れも無くなる）
+     rtMoney … 金額も Firebase から（サマリーが /exec の getTodayIntermediate を使わなくなる＝本命）
+     rtDeliv … 納品数も Firebase から（オフの間は公開スナップショットの納品数を使う）
+   ログインできない端末（PWA）・読めない時・オフの時は**従来どおり**（スナップショット／/exec）。
+   ⚠ Firebase に1拠点も無い時は使わない（空配列は truthy なので明示的に null を返す＝0の画面を出さない）。 */
+let rtFbFlags_ = null, rtFbFlagsAt_ = 0;
+async function rtFbLive_() {
+  try {
+    if (typeof fbReady_ === 'undefined' || !fbReady_) return null;
+    const who = await Promise.race([fbReady_, new Promise(r => setTimeout(() => r(null), 4000))]);
+    if (!who || !who.tenant || !window.firebase) return null;
+    const db = firebase.firestore();
+    if (!rtFbFlags_ || Date.now() - rtFbFlagsAt_ > 60000) {
+      const f = await db.doc('t/' + who.tenant + '/config/flags').get();
+      rtFbFlags_ = f.exists ? (f.data() || {}) : {};
+      rtFbFlagsAt_ = Date.now();
+    }
+    if (!rtFbFlags_.rtSales) return null;
+    const q = await db.collection('t/' + who.tenant + '/live/' + fbJstYmd_() + '/locs').get();
+    const locs = {};
+    q.forEach(d => { locs[d.id] = d.data() || {}; });
+    return { flags: rtFbFlags_, locs };
+  } catch (e) { console.warn('rtFbLive_', e); return null; }
+}
+/** Firebase の拠点データ → 実況の行（getTodayIntermediate&withStarted=1 と同じ形）。
+ *  deliv は flags.rtDeliv が無ければ公開スナップショットのものを使う。金額は flags.rtMoney の時だけ載せる。 */
+function rtIntermediateFromFb_(fb, snapLive) {
+  if (!fb || !fb.locs) return null;
+  const useDeliv = !!fb.flags.rtDeliv, useMoney = !!fb.flags.rtMoney;
+  const snapDeliv = (snapLive && snapLive.deliv) || {};
+  const ids = new Set(Object.keys(fb.locs));
+  if (!useDeliv) Object.keys(snapDeliv).forEach(l => ids.add(l));
+  const out = [];
+  ids.forEach(lid => {
+    const v = fb.locs[lid] || {};
+    const sales = {};
+    Object.keys(v.sales || {}).forEach(k => { const n = Number(v.sales[k]) || 0; if (n) sales[k] = n; });
+    const deliv = useDeliv ? (v.deliv || {}) : (snapDeliv[lid] || {});
+    let sold = 0; Object.keys(sales).forEach(k => { sold += sales[k]; });
+    const row = {
+      locationId: lid, locationName: v.locName || '', userName: (v.sellerNames || []).join('・'),
+      soldCount: sold, productSalesJson: JSON.stringify(sales), deliveryCountJson: JSON.stringify(deliv),
+      deliveryCount: deliv, isIntermediate: true, fromFirebase: true,
+    };
+    if (useMoney) { row.cashSales = Number(v.cashSales) || 0; row.paypayAmount = Number(v.paypayAmount) || 0; }
+    if (!sold && Object.keys(deliv).length) row.startedOnly = true;
+    out.push(row);
+  });
+  if (!out.length) return null;
+  return out;
 }
 
 function rtIntermediateFromSnap_(live) {
