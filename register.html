@@ -4102,9 +4102,76 @@ function clearSavedState() { localStorage.removeItem(STATE_KEY); }
 const SHADOW_URL = 'https://asia-northeast1-oedo-bento.cloudfunctions.net/shadow';
 function shadowSend_(p) {
   if (!SHADOW_URL || !p) return;
-  try { fetch(SHADOW_URL, { method: 'POST', body: JSON.stringify(p), keepalive: true }).catch(function () {}); }
-  catch (e) {}
+  // ★2026-10-14 ログイン済みなら Firebase の証明（IDトークン）を付ける。受け口は今は数えるだけで弾かない。
+  var go = function (tok) {
+    try {
+      var body = tok ? Object.assign({}, p, { fbIdToken: tok }) : p;
+      fetch(SHADOW_URL, { method: 'POST', body: JSON.stringify(body), keepalive: true }).catch(function () {});
+    } catch (e) {}
+  };
+  try {
+    var u = (window.firebase && firebase.apps && firebase.apps.length) ? firebase.auth().currentUser : null;
+    if (u) { u.getIdToken().then(go, function () { go(null); }); return; }
+  } catch (e) {}
+  go(null);
 }
+
+/* ★2026-10-14 Firebase へ裏でログインする（LINE の中で開いた時だけ）。→ 設計_GASからの段階移行 §10/14
+   LIFF の IDトークン → 受け口 auth（LINE に本物か問い合わせ）→ ログイン券 → signInWithCustomToken。
+   ログインできたら今日のデータを1回だけ読んで、成否と所要を受け口へ記録する（fbProbe）。
+   画面の表示・動きは一切変えない。PWA（パスワード入口）は LIFF が無いのでログインしない＝従来どおり GAS だけ。 */
+var FB_APP_NAME_ = 'register';
+var FB_CFG_ = { apiKey: 'AIzaSyA_BcnCo7yjc1KXVhCEOgFikNkKW3WmKcc', authDomain: 'oedo-bento.firebaseapp.com',
+                projectId: 'oedo-bento', appId: '1:99139459025:web:13ec30058b25705fef32f0' };
+var FB_AUTH_URL_ = 'https://asia-northeast1-oedo-bento.cloudfunctions.net/auth';
+var FB_SDK_ = 'https://www.gstatic.com/firebasejs/10.14.1/';
+var fbReady_ = null;
+function fbLoadScript_(src) {
+  return new Promise(function (ok, ng) { var s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = ng; document.head.appendChild(s); });
+}
+function fbJstYmd_() { return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10); }
+function fbProbe_(o) { shadowSend_(Object.assign({ action: 'fbProbe', app: FB_APP_NAME_ }, o)); }
+function fbLogin_() {
+  if (fbReady_) return fbReady_;
+  fbReady_ = (async function () {
+    var t0 = Date.now(), step = 'idToken';
+    try {
+      var idt = (window.liff && liff.getIDToken) ? liff.getIDToken() : null;
+      if (!idt) { fbProbe_({ ok: false, step: step, ms: 0 }); return null; }
+      step = 'sdk';
+      if (!window.firebase) {
+        await fbLoadScript_(FB_SDK_ + 'firebase-app-compat.js');
+        await Promise.all([fbLoadScript_(FB_SDK_ + 'firebase-auth-compat.js'), fbLoadScript_(FB_SDK_ + 'firebase-firestore-compat.js')]);
+      }
+      if (!firebase.apps.length) firebase.initializeApp(FB_CFG_);
+      step = 'auth';
+      var r = await fetch(FB_AUTH_URL_, { method: 'POST', body: JSON.stringify({ idToken: idt }) }).then(function (x) { return x.json(); });
+      if (!r || !r.ok || !r.token) { fbProbe_({ ok: false, step: step, ms: Date.now() - t0, err: String((r && r.error) || '') }); return null; }
+      step = 'signin';
+      await firebase.auth().signInWithCustomToken(r.token);
+      step = 'read';
+      var t1 = Date.now();
+      await firebase.firestore().doc('t/' + r.tenant + '/live/' + fbJstYmd_()).get();
+      fbProbe_({ ok: true, step: 'done', ms: Date.now() - t0, readMs: Date.now() - t1 });
+      return { tenant: r.tenant };
+    } catch (e) {
+      fbProbe_({ ok: false, step: step, ms: Date.now() - t0, err: String((e && e.message) || e).slice(0, 120) });
+      return null;
+    }
+  })();
+  return fbReady_;
+}
+// LIFF の準備ができるのを待ってから1回だけ（最大60秒）。liff.init の流れには手を入れない。
+(function () {
+  if (!SHADOW_URL) return;
+  var n = 0;
+  var tick = function () {
+    n++;
+    try { if (window.liff && liff.getIDToken && liff.getIDToken()) { fbLogin_(); return; } } catch (e) {}
+    if (n < 30) setTimeout(tick, 2000);
+  };
+  setTimeout(tick, 3000);
+})();
 
 function sendIntermediateSale(method, amount, items, paypayReceived) {
   const payload = {
