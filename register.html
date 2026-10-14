@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>お江戸弁当 レジ</title>
+<!-- register v3.34 (2026-10-14) 【二次販売レジの締めで「他社弁当の残り」を入力】社長「2次販売でも販売しているから、2次販売後の残数を入力できるようにしてほしい。2次販売後の残数はその数字を入力するようにしたい」。★二次販売レジは300円・500円の2品しか打たないので、**どの弁当が売れたかが記録に残らない**＝他社3品の二次販売後の残りはシステムから計算できない。→ `?mode=2nd` の締め画面にだけ「他社弁当の残り」カードを出す（単価マスタ カテゴリー＝他社商品 を自動で並べる・`state.extProducts`）。**3つとも打たないと送信できない**（持って行かなかった商品は0）。★報告と**同じ1本の送信**（`extResidual2nd`）に載せる＝片方だけ落ちない。GAS が `二次販売後残数ログ` に記録し、その日の二次販売拠点の合計を業者SSの「二次販売後残数」欄へ**上書き**する（入力された数字が正）。前提＝拠点で残った他社弁当は全部二次販売へ持って行く（社長確認 2026-10-14）。★通常レジは何も変わらない。古いGAS（受け口が無い版）では送っても無視されるだけ。要: メインGAS @2026-10-14（submitReport の extResidual2nd 受け）。 -->
 <!-- register v3.33 (2026-10-14) 【Firebase へ裏でログイン（見た目は変わらない）】社長決定 A'（金額も置いて実況サマリー・回収タブを Firebase 読みへ）の下準備。★LINE の中で開いた時だけ、LIFF の IDトークン → 受け口 auth → ログイン券 → signInWithCustomToken。ログインできたら今日のデータを1回読み、成否と所要を受け口へ記録（fbProbe）。★Firebase への送信（shadowSend_）にログインの証明（IDトークン）を付ける。受け口は今は数えるだけで弾かない。★PWA（パスワード入口）は LIFF が無いのでログインしない＝従来どおり。★LINE Developers の LIFF Scope に openid を追加済み（社長 10/14）。 -->
 <!-- register v3.32 (2026-10-13) 【納品数を直せない場面を2つ直した】社長「販売員が納品個数を間違えた時に直せない」。★①営業中の在庫画面：下げられる下限が「販売数」だったため、**車から置いてもらった分（移動＋）を売ったあとは、打ち間違えた納品数を下げられなかった**（例：本当の納品0・移動+5・5個売れた → 3と打つと0に戻せない）→ 下限を「販売数 − 移動±」に（`deliveryFloor_`）。②締めたあとの修正画面：返事を見ずに常に「修正を保存しました」と出していた → GASの返事（updated）を見て「直せませんでした：理由」を出す。あわせて拠点IDを送り、同じ日に2拠点を締めた人で**別拠点の報告が直る**のを防ぐ。16時の締め切りは変えていない（社長決定 A案）。★あわせて Firebase 並走：**再送（retryFailedSends）で通った送信も Firebase へ送る**（混雑で1回目の開始報告が落ちた拠点＝銀座・ダイビル・神田スクエアの納品数が丸ごと欠けていた）。要: メインGAS 2026-10-13（editReport が {updated, reason} を返す）。 -->
 <!-- register v3.31 (2026-10-08) 【Firebase 並走（段階1）】社長決定「B 裏側だけ移す」→ 40_ドキュメント/設計_GASからの段階移行_2026-10-07.md。★GAS に送った同じ内容を Firebase の受け口 `shadow` にも投げる（`shadowSend_`）。1取引ごと（sendIntermediateSale）とレジ開始（submitStart）。結果は見ない・失敗しても画面は何も変わらない（keepalive の投げっぱなし）。★止める時は SHADOW_URL を '' にして配り直すだけ。差し込みは firebase/apply-shadow-front.py。★2026-10-08 追記：納品数の打ち直し（updateDeliveryCount）も送る（初回に漏れていた）。 -->
@@ -1362,6 +1363,15 @@ html, body { overscroll-behavior-y: contain; }
       </div>
     </div>
 
+    <!-- ★2026-10-14 v3.34 二次販売レジだけ：他社弁当の残り（業者SSの「二次販売後残数」になる） -->
+    <div class="form-card" id="card-ext2nd" style="display:none;">
+      <div class="form-card-title">他社弁当の残り</div>
+      <div style="font-size:12px;color:var(--ink-mute);line-height:1.7;margin-bottom:8px;">
+        二次販売が終わった時に<b>残っている数</b>を数えて入れてください。<br>持ってきていない商品は <b>0</b> を入れてください。
+      </div>
+      <div id="ext2nd-inputs"></div>
+    </div>
+
     <div class="form-card" id="card-makanai">
       <div class="form-card-title">賄い</div>
       <div class="form-row">
@@ -2056,6 +2066,8 @@ function applyMasterToState(data) {
   //   一度絞られると元に戻す手段が無く、古いキャッシュで欠けた商品リストのまま営業していた。
   state.allProducts   = normalized;
   state.products      = normalized.slice();
+  // ★2026-10-14 v3.34 二次販売の締めで残りを数える他社弁当（単価マスタ カテゴリー＝他社商品）
+  state.extProducts   = rawProducts.filter(p => String(p.category || '').trim() === '他社商品');
   // ★2026-08-13 拠点も同じ規則で分ける。通常レジに二次販売拠点が並ぶと押し間違えるため。
   //   あわせて、レジを置いていない仮想拠点（車載）は通常レジからも外す。
   state.locations     = (data.locations || []).filter(l =>
@@ -4038,6 +4050,7 @@ function saveState() {
          moveAdj / movePending も持っておく＝取り直す前でも残数の計算がずれない。 */
       residualDetail:  state.residualDetail  || {},
       residualTouched: state.residualTouched || {},
+      ext2nd:          state.ext2nd          || {},   // ★v3.34 二次販売の他社弁当の残り
       makanaiDetail:   state.makanaiDetail   || {},
       moveAdj:         state.moveAdj         || {},
       movePending:     state.movePending     || {},
@@ -4080,6 +4093,7 @@ function restoreState() {
     // ★2026-09-16 v3.30 締めの残数を復元する（打った数字を再起動で失わない）
     state.residualDetail  = save.residualDetail  || {};
     state.residualTouched = save.residualTouched || {};
+    state.ext2nd          = save.ext2nd          || {};
     state.makanaiDetail   = save.makanaiDetail   || {};
     state.moveAdj         = save.moveAdj         || {};
     state.movePending     = save.movePending     || {};
@@ -4515,6 +4529,47 @@ function onResidualInput(pid) {
   updateResidualTotal();
 }
 
+/* ★2026-10-14 v3.34 二次販売レジ：他社弁当の残り。
+   二次販売は300円・500円しか打たないので、他社3品のどれが売れたかは記録に残らない。
+   販売員が締めで数えた残りを、そのまま業者SSの「二次販売後残数」にする。
+   空欄は「まだ数えていない」、0 は「残り0」。空欄のままでは送信させない。 */
+function renderExt2ndInputs() {
+  const card = document.getElementById('card-ext2nd');
+  if (!card) return;
+  const list = state.extProducts || [];
+  if (!IS_2ND || !list.length) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  state.ext2nd = state.ext2nd || {};
+  document.getElementById('ext2nd-inputs').innerHTML = list.map(p => {
+    const v = state.ext2nd[p.id];
+    return `
+    <div class="form-row">
+      <span class="form-label">${p.displayName || p.name}</span>
+      <input type="number" class="form-input" id="ext2nd-${p.id}" placeholder="—" inputmode="numeric" min="0"
+             style="width:80px;text-align:right;" value="${(v === undefined || v === '') ? '' : v}"
+             oninput="onExt2ndInput('${p.id}')">
+      <span class="form-unit">個</span>
+    </div>`;
+  }).join('');
+}
+function onExt2ndInput(pid) {
+  const el = document.getElementById('ext2nd-' + pid);
+  state.ext2nd = state.ext2nd || {};
+  state.ext2nd[pid] = (!el || el.value === '') ? '' : Math.max(0, parseInt(el.value) || 0);
+  saveState();
+}
+function ext2ndMissing_() {
+  if (!IS_2ND) return [];
+  const v = state.ext2nd || {};
+  return (state.extProducts || []).filter(p => v[p.id] === undefined || v[p.id] === '').map(p => p.displayName || p.name);
+}
+function ext2ndPayload_() {
+  if (!IS_2ND || !(state.extProducts || []).length) return null;
+  const o = {};
+  (state.extProducts || []).forEach(p => { o[p.id] = Number((state.ext2nd || {})[p.id]) || 0; });
+  return o;
+}
+
 function renderResidualInputs() {
   const c = document.getElementById('residual-inputs');
   if (!c) return;
@@ -4813,9 +4868,17 @@ async function submitFinal() {
   const hasDiff = diff.includes('差異');
   const comment = document.getElementById('diff-comment').value.trim();
   if (hasDiff && !comment) { showToast('差異の理由を入力してください'); return; }
+  // ★v3.34 二次販売：他社弁当の残りは必須（空欄＝まだ数えていない）
+  const extMissing = ext2ndMissing_();
+  if (extMissing.length) {
+    showToast('他社弁当の残りを入力してください（' + extMissing.join('・') + '）');
+    try { document.getElementById('card-ext2nd').scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+    return;
+  }
 
   const payload = {
     action: 'submitReport',
+    extResidual2nd: ext2ndPayload_(),   // ★v3.34 二次販売レジだけ {P012:n,…}／通常レジは null
     userId: state.userId,
     userName: state.userName,
     locationId: state.location.id,
@@ -5080,6 +5143,7 @@ function enterFinalScreen() {
   // ★2026-07-31 Phase C：残数・賄いの入力欄を用意する
   try {
     renderResidualInputs();
+    renderExt2ndInputs();   // ★v3.34 二次販売レジだけ出る
     const mkBox = document.getElementById('makanai-detail-box');
     if (mkBox) mkBox.style.display = state['makanaiあり'] ? 'block' : 'none';
     loadMakanaiLimit();
