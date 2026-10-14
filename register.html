@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>お江戸弁当 レジ</title>
 <!-- register v3.34 (2026-10-14) 【二次販売レジの締めで「他社弁当の残り」を入力】社長「2次販売でも販売しているから、2次販売後の残数を入力できるようにしてほしい。2次販売後の残数はその数字を入力するようにしたい」。★二次販売レジは300円・500円の2品しか打たないので、**どの弁当が売れたかが記録に残らない**＝他社3品の二次販売後の残りはシステムから計算できない。→ `?mode=2nd` の締め画面にだけ「他社弁当の残り」カードを出す（単価マスタ カテゴリー＝他社商品 を自動で並べる・`state.extProducts`）。**3つとも打たないと送信できない**（持って行かなかった商品は0）。★報告と**同じ1本の送信**（`extResidual2nd`）に載せる＝片方だけ落ちない。GAS が `二次販売後残数ログ` に記録し、その日の二次販売拠点の合計を業者SSの「二次販売後残数」欄へ**上書き**する（入力された数字が正）。前提＝拠点で残った他社弁当は全部二次販売へ持って行く（社長確認 2026-10-14）。★通常レジは何も変わらない。古いGAS（受け口が無い版）では送っても無視されるだけ。要: メインGAS @2026-10-14（submitReport の extResidual2nd 受け）。 -->
+<!-- register v3.34 (2026-10-14) 【Firebase 並走：開始報告と納品数の打ち直しを GAS の返事を待たずに送る】開店直後は GAS が遅く、返事の前に LINE を閉じると GAS には届いたのに Firebase へ送られない拠点が毎日2〜3あった（10/14 浜松町スクエア・Bizタワー／10/13 銀座ほか）。販売（1取引ごと）は元から先に送っていたので欠けていない。二重に届いても上書きなので害はない。 -->
 <!-- register v3.33 (2026-10-14) 【Firebase へ裏でログイン（見た目は変わらない）】社長決定 A'（金額も置いて実況サマリー・回収タブを Firebase 読みへ）の下準備。★LINE の中で開いた時だけ、LIFF の IDトークン → 受け口 auth → ログイン券 → signInWithCustomToken。ログインできたら今日のデータを1回読み、成否と所要を受け口へ記録（fbProbe）。★Firebase への送信（shadowSend_）にログインの証明（IDトークン）を付ける。受け口は今は数えるだけで弾かない。★PWA（パスワード入口）は LIFF が無いのでログインしない＝従来どおり。★LINE Developers の LIFF Scope に openid を追加済み（社長 10/14）。 -->
 <!-- register v3.32 (2026-10-13) 【納品数を直せない場面を2つ直した】社長「販売員が納品個数を間違えた時に直せない」。★①営業中の在庫画面：下げられる下限が「販売数」だったため、**車から置いてもらった分（移動＋）を売ったあとは、打ち間違えた納品数を下げられなかった**（例：本当の納品0・移動+5・5個売れた → 3と打つと0に戻せない）→ 下限を「販売数 − 移動±」に（`deliveryFloor_`）。②締めたあとの修正画面：返事を見ずに常に「修正を保存しました」と出していた → GASの返事（updated）を見て「直せませんでした：理由」を出す。あわせて拠点IDを送り、同じ日に2拠点を締めた人で**別拠点の報告が直る**のを防ぐ。16時の締め切りは変えていない（社長決定 A案）。★あわせて Firebase 並走：**再送（retryFailedSends）で通った送信も Firebase へ送る**（混雑で1回目の開始報告が落ちた拠点＝銀座・ダイビル・神田スクエアの納品数が丸ごと欠けていた）。要: メインGAS 2026-10-13（editReport が {updated, reason} を返す）。 -->
 <!-- register v3.31 (2026-10-08) 【Firebase 並走（段階1）】社長決定「B 裏側だけ移す」→ 40_ドキュメント/設計_GASからの段階移行_2026-10-07.md。★GAS に送った同じ内容を Firebase の受け口 `shadow` にも投げる（`shadowSend_`）。1取引ごと（sendIntermediateSale）とレジ開始（submitStart）。結果は見ない・失敗しても画面は何も変わらない（keepalive の投げっぱなし）。★止める時は SHADOW_URL を '' にして配り直すだけ。差し込みは firebase/apply-shadow-front.py。★2026-10-08 追記：納品数の打ち直し（updateDeliveryCount）も送る（初回に漏れていた）。 -->
@@ -3017,8 +3018,10 @@ async function sendStartReport() {
     deliveryCount: state.deliveryCount,
     timestamp:     new Date().toISOString(),
   };
+  // ★v3.34 Firebase へは GAS の返事を待たずに先に送る。開店直後は GAS が遅く、返事の前に LINE を閉じると
+  //   GAS には届いたのに Firebase へ送られない拠点が毎日2〜3あった（10/14 浜松町スクエア・Bizタワー）。
+  shadowSend_(payload);
   const r = await postJson(payload);
-  if (r.ok) shadowSend_(payload);
   if (r.ok) {
     state.startReported = true;
     saveState();
@@ -3704,9 +3707,9 @@ async function sendDeliveryUpdate(productId, newCount) {
   // 在庫の打ち直しは開始ログ行が前提。未報告なら先に開始報告を通す
   const okStart = await ensureStartReported();
   if (!okStart) { enqueueFailed(payload, '在庫の打ち直し'); return; }
+  shadowSend_(payload);   // ★v3.34 GAS の返事を待たずに先に送る（→ sendStartReport の同じ箇所）
   const r = await postJson(payload);
   if (!r.ok) { enqueueFailed(payload, '在庫の打ち直し'); return; }
-  shadowSend_(payload);
   hideSendErrorIfEmpty();
 }
 
