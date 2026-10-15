@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- driver v8.8 (2026-10-14) 【売れ行き棒が短すぎる】社長「ドライバーアプリの棒グラフが短すぎる」。★原因＝「ほかのエリア」の行が 名前｜棒｜数字 の横並びで、v8.0 で数字の下に「残り◯（車◯）・12:00の予定比◯%」（折り返し無し）が付いて右の列が広がり、棒が幅40〜50pxに潰れていた（行ごとに数字の幅が違うので棒の長さもバラバラ＝縦に見比べられない状態）。★直し＝ほかのエリアも担当エリアと同じ並び（上段＝名前＋数字／下段＝棒を全幅）にした。CSS（`.rt-prow` を2列に・棒を全幅）と `_rtPaceCard_` の並び順だけ。数字・目盛り・線の位置は変えていない。 -->
+<!-- driver v8.8 (2026-10-15) 【実況が /exec を1回も叩かない形（rtReports・rtMoves）】社長決定 A。★v8.7 は販売数・金額を Firebase から読んでも、締めの報告と移動の±のために更新のたび /exec（getRealtimeBundle）を1回叩いていた＝10/14 昼の遅延ログが減らなかった正体。★報告と移動の数字は GAS が計算して1分おきに Firebase へ届ける（メインGAS fbPushDirty_ ← Firebase pullGas）。両方のフラグがオンで移動が届いている日は、報告・休止・移動も Firebase から作り /exec を叩かない（`rtBundleFromFb_`）。★PWA（入口パスワード）も Firebase に入る＝パスワードを入れた瞬間に受け口 auth（mode:pw）が GAS に照合してログイン券を出す（`fbLoginPw_`）。Firebase のログインは端末に残る（`fbPersistedUser_`）。既に PWA で使っている人は「名前をタップ→別の人に切り替え→パスワード」を1回だけ。切り替え時は Firebase からもログアウト。 -->
 <!-- driver v8.7 (2026-10-14) 【実況を Firebase から読む（項目ごとに切り替え）】社長「今日からドライバーで試しちゃっていいよ」。★ログインできていれば実況（`rtLoadAll`）が Firestore の今日の拠点データを読む（`rtFbLive_`→`rtIntermediateFromFb_`）。★オン・オフは t/{FC}/config/flags の rtSales（販売数）／rtMoney（金額＝サマリーが /exec の getTodayIntermediate を使わなくなる）／rtDeliv（納品数。オフの間は公開スナップショット）。画面を配り直さずに切り替え・戻せる。★PWA・読めない時・オフの時は従来どおり。★どこから読んだかを fbProbe（step=rt:firebase/snapshot/exec:表示）で記録。 -->
 <!-- driver v8.6 (2026-10-14) 【Firebase へ裏でログイン（見た目は変わらない）】社長決定 A'（金額も置いて実況サマリー・回収タブを Firebase 読みへ）の下準備。★LINE の中で開いた時だけ、LIFF の IDトークン → 受け口 auth → ログイン券 → signInWithCustomToken。ログインできたら今日のデータを1回読み、成否と所要を受け口へ記録（fbProbe）。★Firebase への送信（shadowSend_）にログインの証明（IDトークン）を付ける。受け口は今は数えるだけで弾かない。★PWA（パスワード入口）は LIFF が無いのでログインしない＝従来どおり。★LINE Developers の LIFF Scope に openid を追加済み（社長 10/14）。 -->
 <!-- driver v8.5 (2026-10-11) 【並走：回収の本流も Firebase へ送る】10/9 の答え合わせで13時以降の回収が Firebase に1件も入っていなかった（GAS 17拠点／Firebase 0）。★原因＝v8.4 で差し込んだのは回収済みボタンのオンオフ（toggle）だけで、現金を入力して確定する本流（confirmCash の② setCollected）に shadowSend_ が無かった。②の成功直後に1行足した（firebase/apply-shadow-front.py にも追加＝何度流しても同じ）。画面の動きは変わらない。 -->
@@ -1646,10 +1646,8 @@ body {
   }
   #tab-realtime .rt-pace-basis { font-size: 10.5px; color: var(--ink-mute); margin: 3px 0 12px; }
   #tab-realtime .rt-pace-rows { display: grid; gap: 6px; }
-  /* ★v8.8 ほかのエリアも「名前＋数字」の下の段に棒を全幅で出す（担当エリアと同じ並び）。
-     v8.0 で右の数字が「残り◯（車◯）・12:00の予定比◯%」と長くなり、横並びだと棒が数十pxに潰れていた。 */
   #tab-realtime .rt-prow {
-    display: grid; grid-template-columns: 1fr auto; align-items: center;
+    display: grid; grid-template-columns: 82px 1fr auto; align-items: center;
     column-gap: 10px; row-gap: 3px; padding: 7px 9px; border-radius: 9px; background: var(--cream-dark);
   }
   #tab-realtime .rt-prow.mine {
@@ -1658,7 +1656,7 @@ body {
   }
   #tab-realtime .rt-prow.mine .rt-pname { font-size: 15px; }
   #tab-realtime .rt-prow.mine .rt-ppct { font-size: 30px; }
-  #tab-realtime .rt-prow .rt-barwrap { grid-column: 1 / -1; }
+  #tab-realtime .rt-prow.mine .rt-barwrap { grid-column: 1 / -1; }
   #tab-realtime .rt-prow.mine .rt-bar { height: 18px; }
   #tab-realtime .rt-prow.mine .rt-bar > i { top: -5px; bottom: -5px; width: 3px; opacity: .85; }
   #tab-realtime .rt-prow.mine .rt-ticks { height: 13px; font-size: 10px; }
@@ -2411,19 +2409,61 @@ function fbLoadScript_(src) {
 }
 function fbJstYmd_() { return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10); }
 function fbProbe_(o) { shadowSend_(Object.assign({ action: 'fbProbe', app: FB_APP_NAME_ }, o)); }
+function fbSdk_() {
+  if (window.firebase && firebase.apps && firebase.apps.length) return Promise.resolve();
+  return (async function () {
+    if (!window.firebase) {
+      await fbLoadScript_(FB_SDK_ + 'firebase-app-compat.js');
+      await Promise.all([fbLoadScript_(FB_SDK_ + 'firebase-auth-compat.js'), fbLoadScript_(FB_SDK_ + 'firebase-firestore-compat.js')]);
+    }
+    if (!firebase.apps.length) firebase.initializeApp(FB_CFG_);
+  })();
+}
+function fbPersistedUser_() {
+  return new Promise(function (res) {
+    var done = false, un = null;
+    var fin = function (u) { if (done) return; done = true; try { if (un) un(); } catch (e) {} res(u || null); };
+    try { un = firebase.auth().onAuthStateChanged(fin); } catch (e) { fin(null); }
+    setTimeout(function () { fin(null); }, 5000);
+  });
+}
+/* ★2026-10-15 PWA の入口パスワードで Firebase にも入る（パスワードは受け口→GAS の照合にだけ使い、どこにも残さない） */
+function fbLoginPw_(pw) {
+  fbReady_ = (async function () {
+    var t0 = Date.now(), step = 'sdk';
+    try {
+      await fbSdk_();
+      step = 'auth';
+      var r = await fetch(FB_AUTH_URL_, { method: 'POST', body: JSON.stringify({ mode: 'pw', password: pw }) }).then(function (x) { return x.json(); });
+      if (!r || !r.ok || !r.token) { fbProbe_({ ok: false, step: 'pw:' + step, ms: Date.now() - t0, err: String((r && r.error) || '') }); return null; }
+      step = 'signin';
+      await firebase.auth().signInWithCustomToken(r.token);
+      fbProbe_({ ok: true, step: 'pw', ms: Date.now() - t0 });
+      return { tenant: r.tenant };
+    } catch (e) {
+      fbProbe_({ ok: false, step: 'pw:' + step, ms: Date.now() - t0, err: String((e && e.message) || e).slice(0, 120) });
+      return null;
+    }
+  })();
+  return fbReady_;
+}
 function fbLogin_() {
   if (fbReady_) return fbReady_;
   fbReady_ = (async function () {
-    var t0 = Date.now(), step = 'idToken';
+    var t0 = Date.now(), step = 'sdk';
     try {
-      var idt = (window.liff && liff.getIDToken) ? liff.getIDToken() : null;
-      if (!idt) { fbProbe_({ ok: false, step: step, ms: 0 }); return null; }
-      step = 'sdk';
-      if (!window.firebase) {
-        await fbLoadScript_(FB_SDK_ + 'firebase-app-compat.js');
-        await Promise.all([fbLoadScript_(FB_SDK_ + 'firebase-auth-compat.js'), fbLoadScript_(FB_SDK_ + 'firebase-firestore-compat.js')]);
+      await fbSdk_();
+      /* ★2026-10-15 端末に Firebase のログインが残っていればそれを使う（PWA はパスワードを入れた時に一度だけ入る） */
+      step = 'persisted';
+      var pu = await fbPersistedUser_();
+      if (pu) {
+        var tr = await pu.getIdTokenResult();
+        var ten = tr && tr.claims && tr.claims.tenant;
+        if (ten) { fbProbe_({ ok: true, step: 'persisted', ms: Date.now() - t0 }); return { tenant: ten }; }
       }
-      if (!firebase.apps.length) firebase.initializeApp(FB_CFG_);
+      step = 'idToken';
+      var idt = (window.liff && liff.getIDToken) ? liff.getIDToken() : null;
+      if (!idt) { fbProbe_({ ok: false, step: step, ms: Date.now() - t0 }); return null; }
       step = 'auth';
       var r = await fetch(FB_AUTH_URL_, { method: 'POST', body: JSON.stringify({ idToken: idt }) }).then(function (x) { return x.json(); });
       if (!r || !r.ok || !r.token) { fbProbe_({ ok: false, step: step, ms: Date.now() - t0, err: String((r && r.error) || '') }); return null; }
@@ -2448,6 +2488,7 @@ function fbLogin_() {
   var tick = function () {
     n++;
     try { if (window.liff && liff.getIDToken && liff.getIDToken()) { fbLogin_(); return; } } catch (e) {}
+    if (n >= 5 && !(window.liff && liff.isInClient && liff.isInClient())) { fbLogin_(); return; }   // ★PWA・外部ブラウザ＝端末に残ったログインを探す
     if (n < 30) setTimeout(tick, 2000);
   };
   setTimeout(tick, 3000);
@@ -2829,6 +2870,7 @@ async function submitPwGate_() {
       return;
     }
     saveDrvIdentity_({ userId: json.userId, name: json.name });
+    try { if (typeof fbLoginPw_ === 'function') fbLoginPw_(pw); } catch (e) {}   // ★v8.8 Firebase にも入る（待たない）
     showScreen('loading');
     init();
   } catch (e) {
@@ -2843,7 +2885,11 @@ function switchDrvUser_() {
   if (!drvViaPassword) return;
   if (!confirm('別の人に切り替えますか？\nもう一度パスワードの入力が必要になります。')) return;
   clearDrvIdentity_();
-  location.reload();
+  // ★v8.8 Firebase のログインも外す（共用端末で前の人のまま読まないように）
+  (async function () {
+    try { if (window.firebase && firebase.apps && firebase.apps.length) await firebase.auth().signOut(); } catch (e) {}
+    location.reload();
+  })();
 }
 
 async function init() {
@@ -8469,9 +8515,11 @@ async function rtLoadAll() {
     if (_snapLive) rtVehByArea = (_snapLive.veh && typeof _snapLive.veh === 'object') ? _snapLive.veh : null;   // ★v8.0
     /* ★v8.3 /exec を5本 → 1本（＋マスタは30分に1回）。束ね口 getRealtimeBundle で報告・販売数・休止・移動差分を1往復。
        販売数をスナップショットから作れた時は束ね口にも販売数を作らせない（noInter）。 */
+    const _fbBundle = _fbInter ? rtBundleFromFb_(_fb) : null;   // ★v8.8 報告・移動も Firebase なら /exec を叩かない
+    if (_fbBundle) rtSourceNote_('firebase-all');
     const [master, _rb] = await Promise.all([
       rtGetMaster_(),
-      rtFetchBundle_(!_snapInter),
+      _fbBundle ? Promise.resolve(_fbBundle) : rtFetchBundle_(!_snapInter),
       /* 🔴 ★2026-09-18 **緊急停止中。**営業中（12:00）に /exec の実行枠が枯れ、
          何もしないアクションすら90秒でエラーページを返す状態になった。
          この口は取得に失敗すると**3回リトライする**作りで、混雑している時に
@@ -8925,12 +8973,29 @@ async function rtFbLive_() {
       rtFbFlagsAt_ = Date.now();
     }
     if (!rtFbFlags_.rtSales) return null;
-    const q = await db.collection('t/' + who.tenant + '/live/' + fbJstYmd_() + '/locs').get();
+    const day = fbJstYmd_();
+    const [q, dd] = await Promise.all([
+      db.collection('t/' + who.tenant + '/live/' + day + '/locs').get(),
+      db.doc('t/' + who.tenant + '/live/' + day).get(),
+    ]);
     const locs = {};
     q.forEach(d => { locs[d.id] = d.data() || {}; });
-    return { flags: rtFbFlags_, locs };
+    return { flags: rtFbFlags_, locs, day: (dd.exists ? dd.data() : {}) || {} };
   } catch (e) { console.warn('rtFbLive_', e); return null; }
 }
+/** ★v8.8 報告・休止・移動も Firebase から作る＝実況が /exec を1回も叩かない（rtReports と rtMoves の両方オンの時）。
+ *  報告と移動の数字は GAS が計算して1分おきに Firebase へ届けている（メインGAS fbPushDirty_）。
+ *  移動がまだ1度も届いていない日（moveAt 無し）は使わない＝従来どおり /exec。 */
+function rtBundleFromFb_(fb) {
+  try {
+    if (!fb || !fb.flags.rtReports || !fb.flags.rtMoves || !fb.day || !fb.day.moveAt) return null;
+    const reports = [];
+    Object.keys(fb.locs || {}).forEach(lid => { const r = fb.locs[lid] && fb.locs[lid].report; if (r && r.locationId) reports.push(r); });
+    const inactive = Object.keys(fb.day.inactive || {}).map(id => ({ locationId: id }));
+    return { reports: { data: reports }, intermediate: null, driverState: { inactive }, moveAdj: { adj: fb.day.moveAdj || {} } };
+  } catch (e) { return null; }
+}
+
 /** Firebase の拠点データ → 実況の行（getTodayIntermediate&withStarted=1 と同じ形）。
  *  deliv は flags.rtDeliv が無ければ公開スナップショットのものを使う。金額は flags.rtMoney の時だけ載せる。 */
 function rtIntermediateFromFb_(fb, snapLive) {
@@ -9480,7 +9545,7 @@ function _rtPaceCard_(areaNames, paceByArea, myArea) {
     const meta = `<span class="rt-pmeta">${_rtPaceMeta_(p)}</span>`;
     rows += mine
       ? `<div class="rt-prow mine">${name}${pct}${_rtPaceBar_(p)}${meta}</div>`
-      : `<div class="rt-prow">${name}${pct}${_rtPaceBar_(p)}${meta}</div>`;
+      : `<div class="rt-prow">${name}${_rtPaceBar_(p)}${pct}${meta}</div>`;
   });
 
   return `

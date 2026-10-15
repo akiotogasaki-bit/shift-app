@@ -4149,19 +4149,61 @@ function fbLoadScript_(src) {
 }
 function fbJstYmd_() { return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10); }
 function fbProbe_(o) { shadowSend_(Object.assign({ action: 'fbProbe', app: FB_APP_NAME_ }, o)); }
+function fbSdk_() {
+  if (window.firebase && firebase.apps && firebase.apps.length) return Promise.resolve();
+  return (async function () {
+    if (!window.firebase) {
+      await fbLoadScript_(FB_SDK_ + 'firebase-app-compat.js');
+      await Promise.all([fbLoadScript_(FB_SDK_ + 'firebase-auth-compat.js'), fbLoadScript_(FB_SDK_ + 'firebase-firestore-compat.js')]);
+    }
+    if (!firebase.apps.length) firebase.initializeApp(FB_CFG_);
+  })();
+}
+function fbPersistedUser_() {
+  return new Promise(function (res) {
+    var done = false, un = null;
+    var fin = function (u) { if (done) return; done = true; try { if (un) un(); } catch (e) {} res(u || null); };
+    try { un = firebase.auth().onAuthStateChanged(fin); } catch (e) { fin(null); }
+    setTimeout(function () { fin(null); }, 5000);
+  });
+}
+/* ★2026-10-15 PWA の入口パスワードで Firebase にも入る（パスワードは受け口→GAS の照合にだけ使い、どこにも残さない） */
+function fbLoginPw_(pw) {
+  fbReady_ = (async function () {
+    var t0 = Date.now(), step = 'sdk';
+    try {
+      await fbSdk_();
+      step = 'auth';
+      var r = await fetch(FB_AUTH_URL_, { method: 'POST', body: JSON.stringify({ mode: 'pw', password: pw }) }).then(function (x) { return x.json(); });
+      if (!r || !r.ok || !r.token) { fbProbe_({ ok: false, step: 'pw:' + step, ms: Date.now() - t0, err: String((r && r.error) || '') }); return null; }
+      step = 'signin';
+      await firebase.auth().signInWithCustomToken(r.token);
+      fbProbe_({ ok: true, step: 'pw', ms: Date.now() - t0 });
+      return { tenant: r.tenant };
+    } catch (e) {
+      fbProbe_({ ok: false, step: 'pw:' + step, ms: Date.now() - t0, err: String((e && e.message) || e).slice(0, 120) });
+      return null;
+    }
+  })();
+  return fbReady_;
+}
 function fbLogin_() {
   if (fbReady_) return fbReady_;
   fbReady_ = (async function () {
-    var t0 = Date.now(), step = 'idToken';
+    var t0 = Date.now(), step = 'sdk';
     try {
-      var idt = (window.liff && liff.getIDToken) ? liff.getIDToken() : null;
-      if (!idt) { fbProbe_({ ok: false, step: step, ms: 0 }); return null; }
-      step = 'sdk';
-      if (!window.firebase) {
-        await fbLoadScript_(FB_SDK_ + 'firebase-app-compat.js');
-        await Promise.all([fbLoadScript_(FB_SDK_ + 'firebase-auth-compat.js'), fbLoadScript_(FB_SDK_ + 'firebase-firestore-compat.js')]);
+      await fbSdk_();
+      /* ★2026-10-15 端末に Firebase のログインが残っていればそれを使う（PWA はパスワードを入れた時に一度だけ入る） */
+      step = 'persisted';
+      var pu = await fbPersistedUser_();
+      if (pu) {
+        var tr = await pu.getIdTokenResult();
+        var ten = tr && tr.claims && tr.claims.tenant;
+        if (ten) { fbProbe_({ ok: true, step: 'persisted', ms: Date.now() - t0 }); return { tenant: ten }; }
       }
-      if (!firebase.apps.length) firebase.initializeApp(FB_CFG_);
+      step = 'idToken';
+      var idt = (window.liff && liff.getIDToken) ? liff.getIDToken() : null;
+      if (!idt) { fbProbe_({ ok: false, step: step, ms: Date.now() - t0 }); return null; }
       step = 'auth';
       var r = await fetch(FB_AUTH_URL_, { method: 'POST', body: JSON.stringify({ idToken: idt }) }).then(function (x) { return x.json(); });
       if (!r || !r.ok || !r.token) { fbProbe_({ ok: false, step: step, ms: Date.now() - t0, err: String((r && r.error) || '') }); return null; }
@@ -4186,6 +4228,7 @@ function fbLogin_() {
   var tick = function () {
     n++;
     try { if (window.liff && liff.getIDToken && liff.getIDToken()) { fbLogin_(); return; } } catch (e) {}
+    if (n >= 5 && !(window.liff && liff.isInClient && liff.isInClient())) { fbLogin_(); return; }   // ★PWA・外部ブラウザ＝端末に残ったログインを探す
     if (n < 30) setTimeout(tick, 2000);
   };
   setTimeout(tick, 3000);
