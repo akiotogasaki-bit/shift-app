@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <!--
   お江戸弁当 shift-admin.html
+  v2026-10-20 拠点マスタの「販売曜日」の外の日は、未割当のマスをグレーの「休み（販売曜日外）」で出す。未割当だけ表示の絞り込みからも外す。手で入れる時は確認を出す（臨時で売る日用）。依存: メインGAS getShiftMatrix の bases[].salesDows。
   v2026-10-13c 休ませ候補の数を当日配分(L列)に（それまでG列＝初回納品）。同じ週に同じ拠点は1回まで。割り当て済みの拠点にも「配分N」を出す（社長「あとから配達が入った時に削ることがある為」）。
   v2026-10-13b 日付の下の食数の配達を午前（1便）だけにした＝配分調整の総合計・午前盛り出し表の計と同じ数（社長「総合計と同じにする」）。表記も「配達午前」。
   v2026-10-13 日付の下の食数に他社製品を含め、内訳に「＋他社N」を出す（社長「他社製品も含む」）。試作品も数える（GAS側）。
@@ -1322,6 +1323,12 @@ input { font-family: inherit; }
   margin-left: 2px;
 }
 
+/* ── 販売曜日の外（その曜日は売らない拠点）★2026-10-20 ── */
+.matrix td.off-dow {
+  background: #EEEEEE;
+  color: #999999;
+}
+
 /* ── 希望者なし（薄い赤）セル ── */
 .matrix td.no-pool {
   background: #FFEEEE;
@@ -2071,8 +2078,10 @@ function applyMatrixToState(data) {
 
   // workHoursMap: 拠点名→勤務時間
   state.workHoursMap = {};
+  state.salesDowsMap = {};   // ★2026-10-20 拠点名 → 販売曜日（'火木' など／無ければ毎日）
   (data.bases || []).forEach(b => {
     if (b.workHours) state.workHoursMap[b.name] = b.workHours;
+    if (b.salesDows) state.salesDowsMap[b.name] = b.salesDows;
   });
 }
 
@@ -2332,11 +2341,11 @@ function renderMatrix() {
   // 重複検知（その日に2拠点以上に入っている人）
   const dupNamesByDate = getDuplicateNamesByDate();
 
-  // 未割当フィルター：未割当セルが1つでもある拠点のみ表示
+  // 未割当フィルター：未割当セルが1つでもある拠点のみ表示（販売曜日の外は未割当に数えない）
   const basesToShow = state.showUnassignedOnly
     ? state.bases.filter(b => state.dates.some(d => {
         const name = (state.matrix[d] && state.matrix[d][b.name]) || '';
-        return !name || name === '【未割当】';
+        return (!name || name === '【未割当】') && !isOffDow(b.name, d);
       }))
     : state.bases;
 
@@ -2356,7 +2365,10 @@ function renderMatrix() {
 
       let cls = '';
       let displayHtml = '';
-      if (isUn) {
+      if (isUn && isOffDow(b.name, d)) {
+        cls = 'off-dow';
+        displayHtml = '<span class="cell-name">休み</span><span class="alloc-tag" title="拠点マスタの販売曜日の外">販売曜日外</span>';
+      } else if (isUn) {
         // 希望者あり → orange（未割当）、希望者なし → no-pool（グレー）
         const hasPool = (state.unassignedPool[d] || []).some(p =>
           p.pref1 === b.name || p.pref2 === b.name || p.pref3 === b.name);
@@ -2532,9 +2544,19 @@ function updateDiffBadge() {
   }
 }
 
+// ★2026-10-20 拠点マスタの「販売曜日」の外か。d は '10/20(火)'。販売曜日が空の拠点は常に false
+function isOffDow(base, d) {
+  const dows = (state.salesDowsMap || {})[base];
+  if (!dows) return false;
+  const m = String(d || '').match(/\(([月火水木金土日])\)/);
+  return !!m && dows.indexOf(m[1]) < 0;
+}
+
 function openSheet(date, base) {
   const current = (state.matrix[date] && state.matrix[date][base]) || '';
   const isUn = !current || current === '【未割当】';
+  if (isUn && isOffDow(base, date)
+      && !confirm(base + ' は ' + state.salesDowsMap[base] + ' だけ販売する拠点です。\n' + date + ' に臨時で人を入れますか？\n（配分は0なので、入れたら配分調整で当日配分も入れてください）')) return;
   state.selected = { date, base, current: isUn ? '' : current };
 
   document.getElementById('sheetTitle').textContent = base;
