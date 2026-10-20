@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- kanri.html v4.14 (2026-10-20) 【配分表：置き弁の満腹を車載へ／拠点合計の車載欄＝米の数】社長「置き弁の分の満腹の数が盛り出し表の米の数に入っていない」「車載の玄米の下の拠点合計の数字は白米・玄米の米だけの盛り出しの数の合計を入れて欲しい」（A案）。★①満腹の行の車載欄（v4.00）も置き弁を含める（10/21 白米 車載計39→41・玄米37→39＝合計と一致）。カテゴリー別「満腹系」の車載計も同じ。②拠点合計の行の車載5列と車載計＝白米＋玄米のセパレート行の和（10/21＝35/28/34/36/35・車載計168）。中計・合計・他の拠点は弁当の数のまま。GAS変更なし。 -->
 <!-- kanri.html v4.13 (2026-10-13) 【配分調整に「総合計」行】社長「配達合計の下にさらに合計を出したい」。配達合計（午前）の下に1行、合計列＝拠点合計＋配達（午前）。②初回納品で見れば午前盛り出し表の「計」と一致（10/13＝1246＋141＝1387）。GAS変更なし。 -->
 <!-- kanri.html v4.12 (2026-10-13) 【配達合計は午前だけ】社長「配達合計が午前だけでいいね」。行名を「配達合計（午前）」に。数はGAS側で午前（1便）だけに絞った（便の決め方は盛り出し表と同じ）。 -->
 <!-- kanri.html v4.11 (2026-10-13) 【配分調整に「配達合計」行】社長「配分調整のタブの合計数表示の下に配達の合計も出して欲しい」。★拠点合計の行の直下に1行。拠点列は空けて合計列だけ＝その日の配達の弁当数（お茶を除く・午前午後の合計）。拠点合計には足さない。①当日配分・②初回納品の両方に出る。要メインGAS（getBasicMasterMatrix の応答に deliveryTotals をキャッシュの外で毎回付ける・_bmDeliveryTotals_）。 -->
@@ -4360,12 +4361,13 @@ function renderSheet1(data) {
   // ⚠ 満腹の商品は名前に「満腹」が入らない（集約グループ名だけが満腹）。カテゴリーで見る（SHEET1_CATEGORIES の満腹系と同じ表記）
   const s1IsManRow = r => !!(r && !r.isExternal
     && (['満腹系', '満腹シリーズ'].indexOf(String(r.category || '').trim()) >= 0 || /満腹/.test(String(r.baseName || ''))));
-  function s1ManArea(row, vehId, withOkiben) {
+  // ★2026-10-20 v4.14 置き弁の満腹も常に車載へ入れる（社長「置き弁の分の満腹の数が入っていない」）
+  function s1ManArea(row, vehId) {
     const area = BM_VEH_AREA_[String(vehId)];
     if (!area || !row || !row.byLocation) return 0;
     let s = 0;
     locations.forEach(l => {
-      if (VEH_RE_S1.test(l.id) || (l.isOkiben && !withOkiben)) return;   // ★v4.08 セパレート行だけ置き弁も入れる
+      if (VEH_RE_S1.test(l.id)) return;   // ★v4.14 置き弁も入れる（v4.08まではセパレート行だけ）
       if (String(l.area || '').trim() !== area) return;
       s += Number(row.byLocation[l.id]) || 0;
     });
@@ -4466,7 +4468,7 @@ function renderSheet1(data) {
             // ★v4.00 車載の満腹欄＝エリアの満腹合計
             const a = s1ManArea(row, lid);
             const txt = (Number(q) || 0) > 0 ? `${q} / ${a}` : (a || '');
-            html += `<td class="cell-data${bcls}" style="color:#1b5e20;font-weight:800;" title="エリア（${escHtml(BM_VEH_AREA_[lid] || '')}）の満腹合計＝${a}個（置き弁を除く）">${txt}</td>`;
+            html += `<td class="cell-data${bcls}" style="color:#1b5e20;font-weight:800;" title="エリア（${escHtml(BM_VEH_AREA_[lid] || '')}）の満腹合計＝${a}個（置き弁を含む）">${txt}</td>`;
             return;
           }
           html += `<td class="cell-data${bcls}">${q ? q : ''}</td>`;
@@ -4492,9 +4494,9 @@ function renderSheet1(data) {
      対象＝単価マスタ「セパレート」○の商品（GAS getSheet1Data の isSeparate）。新商品は○を付けるだけで乗る。
      拠点列は byLocation（他社は車載の内訳がある日だけ）、合計列は各行の合計（他社は納品総数）を足す。
      ★v4.07 満腹は拠点の列に出さず、車載の列にエリアの満腹合計（置き弁を除く）を入れる。 */
-  function s1SepRowHTML(sepRows, label, isBrown) {
+  function s1SepCalc(sepRows) {
     const byLoc = {};
-    let sub = 0, veh = 0, tot = 0, extNoVeh = 0;
+    let sub = 0, veh = 0;
     // ★v4.07 満腹は拠点の列に出さず、車載の列にエリアの満腹合計として入れる（拠点別は予定表に出るため）。
     //   社長「白米の数だけど、満腹の分も入れて欲しい。満腹の拠点別は予定表に入るから、配分表には入れなくていい」
     locIds.forEach((lid, idx) => {
@@ -4502,7 +4504,7 @@ function renderSheet1(data) {
       let v = 0;
       sepRows.forEach(r => {
         if (s1IsManRow(r)) {
-          if (isVeh) v += (Number((r.byLocation || {})[lid]) || 0) + s1ManArea(r, lid, true);   // ★v4.08 置き弁も車載でいい（社長）
+          if (isVeh) v += (Number((r.byLocation || {})[lid]) || 0) + s1ManArea(r, lid);   // ★v4.08 置き弁も車載でいい（社長）
           return;
         }
         v += Number((r.byLocation || {})[lid]) || 0;
@@ -4511,6 +4513,11 @@ function renderSheet1(data) {
       if (idx < subtotalSplit) sub += v;
       if (VEH_RE_S1.test(lid)) veh += v;
     });
+    return { byLoc: byLoc, sub: sub, veh: veh };
+  }
+  function s1SepRowHTML(sepRows, label, isBrown) {
+    const { byLoc, sub, veh } = s1SepCalc(sepRows);
+    let tot = 0, extNoVeh = 0;
     sepRows.forEach(r => {
       tot += Number(r.total) || 0;
       if (r.isExternal && !s1ExtHasVeh(r)) extNoVeh += Number(r.total) || 0;
@@ -4548,7 +4555,12 @@ function renderSheet1(data) {
       if (idx < subtotalSplit) grandSub += sum;
       if (VEH_RE_S1.test(lid)) grandVeh += sum;
     });
-    allRows.forEach(r => { grandVeh += s1ManVehExtra(r); });   // ★v4.00 車載計にだけ満腹のエリア合計を足す
+    /* ★2026-10-20 v4.14【社長指示】拠点合計の車載5列と車載計＝**米だけの盛り出し数**（白米＋玄米のセパレート行の和）。
+       社長「車載の玄米の下の拠点合計の数字は白米・玄米の米だけの盛り出しの数の合計を入れて欲しい」。
+       中計・合計・他の拠点は従来どおり弁当の数（中計は grandByLoc から先に数えてあるので変わらない）。 */
+    const riceVeh = s1SepCalc(allRows.filter(r => r && r.isSeparate));
+    grandVeh = riceVeh.veh;
+    s1VehIds.forEach(vid => { grandByLoc[vid] = riceVeh.byLoc[vid] || 0; });
     allRows.forEach(r => {
       if (isTea(r)) return;
       if (r.isExternal) { if (s1ExtHasVeh(r)) grandTotal += Number(r.total) || 0; return; }
