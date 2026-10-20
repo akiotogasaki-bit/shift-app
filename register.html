@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>お江戸弁当 レジ</title>
+<!-- register v3.36 (2026-10-21) 【シフトの担当拠点を最初から選んでおき、違う拠点を選んだら確認を出す】10/20 に販売員が担当と違う拠点に入って混乱した件（社長決定A）。v3.35 の確認は「今日すでに別の拠点を開始している人」にしか出ず、**その日最初に違う拠点を選ぶ間違いは素通り**していた。★getMaster が今日のシフト（`todayShift`＝拠点ID→販売員名）を返すので、スタッフ設定の名前（空白を無視）と突き合わせて担当拠点を出す。拠点の一覧で担当拠点を最初から選んでおき、名前に「（シフトの担当）」を付け、下に「📅 今日のシフト：◯◯」と出す。担当以外を選ぶと「シフトでは◯◯の担当です。本当に△△で売りますか？」と確認（キャンセルで選び直し）。ここでOKした拠点には v3.35 の確認を重ねて出さない。★シフトに名前が無い人・シフト表が無い日・スポット名乗り・二次販売レジ（`?mode=2nd`）は何も変わらない。古いGAS（todayShift が無い）でも何も起きないだけ。要: メインGAS 2026-10-21（getMasterData の todayShift）。 -->
 <!-- register v3.35 (2026-10-20) 【別の拠点への引き継ぎに確認を出す】10/20 神保町の販売員が11:11に神保町を開始したあと、開き直した時に**すでに別の人が開始していた神谷町**を選んで引き継ぎで入り、11:22〜11:48の売上15個が神谷町に記録された（実況の神保町が0。神保町と神谷町は名前が似ている）。社長決定A。★**レジ画面の拠点名をタップすると拠点を選び直せる**（同日・社長「神保町に入り直せない」）。それまでは同じ人がアプリを開き直すと保存中の拠点（神谷町）へ確認なしで戻り、拠点を変える手段が1つも無かった。**「売上ごと移す」を選ぶと、今日この人が元の拠点で打った売上・取消をサーバー側で新しい拠点へ付け替え（メインGAS moveMySales）、Firebase の実況も元の拠点を0・新しい拠点に累計を置き直す**＝端末の累計とサーバーが揃い、締めも新しい拠点で出る。「残す」は交代などで元の拠点の売上をそのまま残し、端末を空にして選択へ戻る。神保町のように自分が開始済みの拠点を選べば「そのまま使う」で納品数と開始金が戻る。★**今日この端末で別の拠点を開始している人**が、他の人の開始済みの拠点に引き継ぎで入ろうとした時だけ「あなたは今日 ◯◯ でレジを開始しています。本当に △△ で売りますか？」と確認を出す。キャンセルで拠点の選択に戻る。★今日開始した拠点は `oedo_started_today`（日付・userId つき）に開始報告の時点で残す。あわせて保存中のレジ状態（自分が開始済みの拠点）も見る＝この版を入れる前に開始していた人にも効く。★普通の交代（今日まだどこも開始していない人の引き継ぎ）と、2拠点目を自分で開始する時は何も変わらない。GAS変更なし。 -->
 <!-- register v3.35 (2026-10-21) 【在庫の画面の移動±を Firebase から読む】社長決定 B。昼の /exec で2番目に多い getMoveAdjByLoc（10/20 11〜12時で61件）のうち、在庫の画面を開くたびの分を外す（`moveAdjFromFb_`）。締めの画面と受け取りの直後は最新が要るので今までどおり GAS。あわせて Firebase ログインは IDトークンが無ければ LIFF のアクセストークンで入る（openid の許可を出し直していない人向け）。 -->
 <!-- register v3.34 (2026-10-14) 【二次販売レジの締めで「他社弁当の残り」を入力】社長「2次販売でも販売しているから、2次販売後の残数を入力できるようにしてほしい。2次販売後の残数はその数字を入力するようにしたい」。★二次販売レジは300円・500円の2品しか打たないので、**どの弁当が売れたかが記録に残らない**＝他社3品の二次販売後の残りはシステムから計算できない。→ `?mode=2nd` の締め画面にだけ「他社弁当の残り」カードを出す（単価マスタ カテゴリー＝他社商品 を自動で並べる・`state.extProducts`）。**3つとも打たないと送信できない**（持って行かなかった商品は0）。★報告と**同じ1本の送信**（`extResidual2nd`）に載せる＝片方だけ落ちない。GAS が `二次販売後残数ログ` に記録し、その日の二次販売拠点の合計を業者SSの「二次販売後残数」欄へ**上書き**する（入力された数字が正）。前提＝拠点で残った他社弁当は全部二次販売へ持って行く（社長確認 2026-10-14）。★通常レジは何も変わらない。古いGAS（受け口が無い版）では送っても無視されるだけ。要: メインGAS @2026-10-14（submitReport の extResidual2nd 受け）。 -->
@@ -1039,6 +1040,7 @@ html, body { overscroll-behavior-y: contain; }
     <select id="location-select" style="width:100%;padding:14px 16px;font-size:16px;font-family:inherit;background:var(--white);border:1.5px solid var(--border);border-radius:12px;color:var(--ink);appearance:none;-webkit-appearance:none;background-image:url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2224%22 height=%2224%22 viewBox=%220 0 24 24%22><path fill=%22%239A9A9A%22 d=%22M7 10l5 5 5-5z%22/></svg>');background-repeat:no-repeat;background-position:right 12px center;">
       <option value="">拠点を選択してください</option>
     </select>
+    <div id="loc-shift-hint" style="display:none;margin-top:8px;font-size:13px;color:var(--ink-soft);"></div>
     <button onclick="confirmLocation()" style="width:100%;margin-top:12px;padding:16px;background:var(--red);color:#fff;border:none;border-radius:12px;font-size:16px;font-weight:700;font-family:inherit;cursor:pointer;">選択する</button>
   </div>
 </div>
@@ -2079,6 +2081,9 @@ function applyMasterToState(data) {
   state.incentiveRate = data.incentiveRate || 100;
   state.couponDefault = data.couponDefault || 300;
   state.staffList     = data.staffList || [];
+  // ★v3.36 今日のシフト。日付が今日のものだけ使う（マスタは24時間キャッシュされるので前日のシフトが残りうる）
+  const _ts = data.todayShift;
+  state.todayShift = (!IS_2ND && _ts && _ts.locs && _ts.date === menuToday_()) ? _ts.locs : {};
   return true;
 }
 
@@ -2435,8 +2440,40 @@ function renderLocations() {
     if (sub) sub.textContent = '🛒 二次販売 ／ 拠点マスタの「エリア」列に 二次販売 と入れてください';
     return;
   }
+  const mine = myShiftLocIds_();
   select.innerHTML = '<option value="">拠点を選択してください</option>' +
-    locs.map(loc => `<option value="${loc.id}">${loc.name}</option>`).join('');
+    locs.map(loc => `<option value="${loc.id}">${loc.name}${mine.includes(loc.id) ? '（シフトの担当）' : ''}</option>`).join('');
+  // ★v3.36 シフトの担当拠点を最初から選んでおく
+  const hint = document.getElementById('loc-shift-hint');
+  if (mine.length) {
+    select.value = mine[0];
+    if (hint) { hint.textContent = `📅 今日のシフト：${myShiftLocNames_().join('・')}`; hint.style.display = ''; }
+  } else if (hint) { hint.style.display = 'none'; }
+}
+// ★v3.36 今日のシフトでこの人が担当している拠点ID（シフト表の名前＝スタッフ設定の名前・空白は無視）
+function myShiftLocIds_() {
+  const shift = state.todayShift || {};
+  const me = (state.staffList || []).find(s => s.userId === state.userId);
+  if (!me || !me.name) return [];
+  const norm = v => String(v || '').replace(/\s/g, '');
+  const key = norm(me.name);
+  const ids = new Set((state.locations || []).map(l => l.id));
+  return Object.keys(shift).filter(id => ids.has(id) && norm(shift[id]) === key);
+}
+function myShiftLocNames_() {
+  return myShiftLocIds_().map(id => (state.locations.find(l => l.id === id) || {}).name || id);
+}
+// 担当以外を選んだ時の確認。進めてよければ true
+function confirmOffShift_(id) {
+  if (state.isSpot) return true;
+  const mine = myShiftLocIds_();
+  if (!mine.length || mine.includes(id)) return true;
+  const loc = (state.locations || []).find(l => l.id === id);
+  const ok = confirm(`⚠ シフトでは今日「${myShiftLocNames_().join('・')}」の担当です。\n\n`
+    + `本当に「${loc ? loc.name : id}」で売りますか？\n\n`
+    + `OK : ${loc ? loc.name : id} で売る\nキャンセル : 拠点を選び直す`);
+  if (ok) state.offShiftOk = id;
+  return ok;
 }
 function showSpotInput() { document.getElementById('spot-input-area').style.display = 'block'; }
 function cancelSpot() {
@@ -2457,6 +2494,7 @@ function confirmLocation() {
   const select = document.getElementById('location-select');
   const id = select.value;
   if (!id) { showToast('拠点を選択してください'); return; }
+  if (!confirmOffShift_(id)) { const m = myShiftLocIds_(); if (m.length) select.value = m[0]; return; }
   selectLocation(id);
 }
 // ★v3.35 今日この端末で開始した拠点を覚えておく（別の拠点への引き継ぎで確認を出すため）
@@ -2516,7 +2554,7 @@ async function selectLocation(id) {
       const isSameUser = data.userId === state.userId;
       /* ★v3.35 今日すでに別の拠点を開始している人が、他の人の拠点に引き継ぎで入ろうとしている。
          10/20 神保町の人が神谷町に入り、売上が丸ごと神谷町に付いた。先に確認を1枚はさむ。 */
-      const _other = isSameUser ? '' : otherStartedToday_(id);
+      const _other = (isSameUser || state.offShiftOk === id) ? '' : otherStartedToday_(id);   // v3.36 シフトの確認でOK済みなら重ねない
       if (_other && !confirm(`⚠ あなたは今日「${_other}」でレジを開始しています。\n\n`
             + `「${state.location.name}」は ${data.userName} さんが開始した拠点です。\n`
             + `本当に「${state.location.name}」で売りますか？\n\n`
