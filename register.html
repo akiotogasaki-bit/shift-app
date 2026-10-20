@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>お江戸弁当 レジ</title>
+<!-- register v3.35 (2026-10-20) 【別の拠点への引き継ぎに確認を出す】10/20 神保町の販売員が11:11に神保町を開始したあと、開き直した時に**すでに別の人が開始していた神谷町**を選んで引き継ぎで入り、11:22〜11:48の売上15個が神谷町に記録された（実況の神保町が0。神保町と神谷町は名前が似ている）。社長決定A。★**レジ画面の拠点名をタップすると拠点を選び直せる**（同日・社長「神保町に入り直せない」）。それまでは同じ人がアプリを開き直すと保存中の拠点（神谷町）へ確認なしで戻り、拠点を変える手段が1つも無かった。打った売上は元の拠点に残し、端末の売上・納品数・開始金を空にして拠点の選択へ戻る。神保町のように自分が開始済みの拠点を選べば「そのまま使う」で納品数と開始金が戻る。★**今日この端末で別の拠点を開始している人**が、他の人の開始済みの拠点に引き継ぎで入ろうとした時だけ「あなたは今日 ◯◯ でレジを開始しています。本当に △△ で売りますか？」と確認を出す。キャンセルで拠点の選択に戻る。★今日開始した拠点は `oedo_started_today`（日付・userId つき）に開始報告の時点で残す。あわせて保存中のレジ状態（自分が開始済みの拠点）も見る＝この版を入れる前に開始していた人にも効く。★普通の交代（今日まだどこも開始していない人の引き継ぎ）と、2拠点目を自分で開始する時は何も変わらない。GAS変更なし。 -->
 <!-- register v3.34 (2026-10-14) 【二次販売レジの締めで「他社弁当の残り」を入力】社長「2次販売でも販売しているから、2次販売後の残数を入力できるようにしてほしい。2次販売後の残数はその数字を入力するようにしたい」。★二次販売レジは300円・500円の2品しか打たないので、**どの弁当が売れたかが記録に残らない**＝他社3品の二次販売後の残りはシステムから計算できない。→ `?mode=2nd` の締め画面にだけ「他社弁当の残り」カードを出す（単価マスタ カテゴリー＝他社商品 を自動で並べる・`state.extProducts`）。**3つとも打たないと送信できない**（持って行かなかった商品は0）。★報告と**同じ1本の送信**（`extResidual2nd`）に載せる＝片方だけ落ちない。GAS が `二次販売後残数ログ` に記録し、その日の二次販売拠点の合計を業者SSの「二次販売後残数」欄へ**上書き**する（入力された数字が正）。前提＝拠点で残った他社弁当は全部二次販売へ持って行く（社長確認 2026-10-14）。★通常レジは何も変わらない。古いGAS（受け口が無い版）では送っても無視されるだけ。要: メインGAS @2026-10-14（submitReport の extResidual2nd 受け）。 -->
 <!-- register v3.34 (2026-10-14) 【Firebase 並走：開始報告と納品数の打ち直しを GAS の返事を待たずに送る】開店直後は GAS が遅く、返事の前に LINE を閉じると GAS には届いたのに Firebase へ送られない拠点が毎日2〜3あった（10/14 浜松町スクエア・Bizタワー／10/13 銀座ほか）。販売（1取引ごと）は元から先に送っていたので欠けていない。二重に届いても上書きなので害はない。 -->
 <!-- register v3.33 (2026-10-14) 【Firebase へ裏でログイン（見た目は変わらない）】社長決定 A'（金額も置いて実況サマリー・回収タブを Firebase 読みへ）の下準備。★LINE の中で開いた時だけ、LIFF の IDトークン → 受け口 auth → ログイン券 → signInWithCustomToken。ログインできたら今日のデータを1回読み、成否と所要を受け口へ記録（fbProbe）。★Firebase への送信（shadowSend_）にログインの証明（IDトークン）を付ける。受け口は今は数えるだけで弾かない。★PWA（パスワード入口）は LIFF が無いのでログインしない＝従来どおり。★LINE Developers の LIFF Scope に openid を追加済み（社長 10/14）。 -->
@@ -1194,8 +1195,8 @@ html, body { overscroll-behavior-y: contain; }
 <div id="screen-register" class="screen">
   <div class="app-header" style="background:#111;">
     <div>
-      <div class="header-title" id="reg-location-name">拠点名</div>
-      <div class="header-sub" style="color:rgba(255,255,255,.6);">販売レジ</div>
+      <div class="header-title" id="reg-location-name" onclick="switchLocation_()" style="cursor:pointer;">拠点名</div>
+      <div class="header-sub" style="color:rgba(255,255,255,.6);" onclick="switchLocation_()">販売レジ ・ <u>拠点を選び直す</u></div>
     </div>
     <div style="display:flex;align-items:center;gap:6px;">
       <span class="header-user" id="reg-sales-count" style="color:#F4C430;">0個</span>
@@ -2457,6 +2458,38 @@ function confirmLocation() {
   if (!id) { showToast('拠点を選択してください'); return; }
   selectLocation(id);
 }
+// ★v3.35 今日この端末で開始した拠点を覚えておく（別の拠点への引き継ぎで確認を出すため）
+const STARTED_TODAY_KEY = IS_2ND ? 'oedo_started_today_2nd' : 'oedo_started_today';
+function markStartedToday_(locId, locName) {
+  try {
+    if (!locId) return;
+    const today = new Date().toLocaleDateString('ja-JP');
+    let v = null;
+    try { v = JSON.parse(localStorage.getItem(STARTED_TODAY_KEY) || 'null'); } catch (e) { v = null; }
+    if (!v || v.date !== today || v.userId !== state.userId) v = { date: today, userId: state.userId, locs: {} };
+    v.locs[locId] = locName || locId;
+    localStorage.setItem(STARTED_TODAY_KEY, JSON.stringify(v));
+  } catch (e) { console.warn('markStartedToday_:', e); }
+}
+// 今日この人が開始した「id 以外」の拠点名。無ければ ''
+function otherStartedToday_(id) {
+  const today = new Date().toLocaleDateString('ja-JP');
+  try {
+    const v = JSON.parse(localStorage.getItem(STARTED_TODAY_KEY) || 'null');
+    if (v && v.date === today && v.userId === state.userId) {
+      const k = Object.keys(v.locs || {}).find(x => x !== id);
+      if (k) return v.locs[k] || k;
+    }
+  } catch (e) {}
+  // この版を入れる前に開始した人のぶん＝保存中のレジ状態（自分が開始済み）を見る
+  try {
+    const sv = JSON.parse(localStorage.getItem(STATE_KEY) || 'null');
+    if (sv && sv.startReported && sv.userId === state.userId && sv.locationId && sv.locationId !== id
+        && new Date(sv.savedAt).toLocaleDateString('ja-JP') === today) return sv.locationName || sv.locationId;
+  } catch (e) {}
+  return '';
+}
+
 async function selectLocation(id) {
   state.location = state.locations.find(l => l.id === id);
   state.baseGigSalary = state.location.baseGigSalary || 0;
@@ -2476,6 +2509,16 @@ async function selectLocation(id) {
     const data = await res.json();
     if (data && data.userName && data.deliveryCount && Object.keys(data.deliveryCount).length > 0) {
       const isSameUser = data.userId === state.userId;
+      /* ★v3.35 今日すでに別の拠点を開始している人が、他の人の拠点に引き継ぎで入ろうとしている。
+         10/20 神保町の人が神谷町に入り、売上が丸ごと神谷町に付いた。先に確認を1枚はさむ。 */
+      const _other = isSameUser ? '' : otherStartedToday_(id);
+      if (_other && !confirm(`⚠ あなたは今日「${_other}」でレジを開始しています。\n\n`
+            + `「${state.location.name}」は ${data.userName} さんが開始した拠点です。\n`
+            + `本当に「${state.location.name}」で売りますか？\n\n`
+            + `OK : ${state.location.name} で売る\nキャンセル : 拠点を選び直す`)) {
+        showScreen('location');
+        return;
+      }
       const tsLabel = data.timestamp ? `（${data.timestamp}）` : '';
       const msg = isSameUser
         ? `すでにあなた自身が納品数を入力済みです${tsLabel}。\n\nOK : そのまま使う\nキャンセル : 入力し直す`
@@ -3021,6 +3064,7 @@ async function sendStartReport() {
   // ★v3.34 Firebase へは GAS の返事を待たずに先に送る。開店直後は GAS が遅く、返事の前に LINE を閉じると
   //   GAS には届いたのに Firebase へ送られない拠点が毎日2〜3あった（10/14 浜松町スクエア・Bizタワー）。
   shadowSend_(payload);
+  markStartedToday_(payload.locationId, payload.locationName);   // ★v3.35 送れたかどうかに関係なく「開始した」を残す
   const r = await postJson(payload);
   if (r.ok) {
     state.startReported = true;
@@ -4113,6 +4157,24 @@ function restoreState() {
 }
 
 function clearSavedState() { localStorage.removeItem(STATE_KEY); }
+
+/* ★v3.35 拠点を選び直す（レジ画面の拠点名をタップ）。
+   10/20 神保町の人が神谷町に入ってしまい、開き直しても保存中の神谷町へ戻るだけで抜けられなかった。
+   打った売上はサーバー側で今の拠点に残る（取り消すならこの前に履歴から）。端末の売上・納品数を空にして選択へ戻る。 */
+function switchLocation_() {
+  const cur = (state.location && state.location.name) || '';
+  if (!confirm(`拠点を選び直しますか？\n\nいまの拠点：${cur}\nこの拠点で打った売上（${state.soldCount}個）は${cur}に残ります。\n\nOK : 拠点の選択へ戻る\nキャンセル : このまま続ける`)) return;
+  if ((state.cart || []).length && !confirm('カートに入っている商品は消えます。よろしいですか？')) return;
+  state.cart = []; state.cashSales = 0; state.paypayCount = 0; state.paypayAmount = 0; state.paypayReceivedTotal = 0;
+  state.soldCount = 0; state.teaSoldCount = 0; state.productSales = {}; state.soldOutMap = {}; state.history = [];
+  state.deliveryCount = {}; state.moveAdj = {}; state.movePending = {}; state.registerStart = 0;
+  state.startReported = false; state.takeoverStartOnly = false;
+  state.takeoverFromUserId = ''; state.takeoverFromUserName = '';
+  state.residualDetail = {}; state.residualTouched = {}; state.makanaiDetail = {};
+  clearSavedState();
+  try { document.getElementById('reg-sales-count').textContent = '0個'; } catch (e) {}
+  showScreen('location');
+}
 
 // ★2026-10-07 段階1（並走）→ 40_ドキュメント/設計_GASからの段階移行_2026-10-07.md
 //   GAS に送った同じ内容を Firebase にも投げる。結果は見ない・失敗しても何もしない。
