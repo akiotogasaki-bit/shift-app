@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v8.9 (2026-10-21) 【実況の残りの /exec を外す】社長決定 B。10/20 の昼も getRealtimeBundle が89件残っていた。★①エリアごとの🔄更新（rtRefreshArea）も Firebase から読む（ここだけ v8.8 で直し漏れ）②LINE で開いてもIDトークンが出ない人（openid を足す前から使っている人は許可を出し直すまで出ない・1日30回）は LIFF のアクセストークンでログイン（受け口 auth が LINE に問い合わせて本人を確かめる）。 -->
 <!-- driver v8.8 (2026-10-15) 【実況が /exec を1回も叩かない形（rtReports・rtMoves）】社長決定 A。★v8.7 は販売数・金額を Firebase から読んでも、締めの報告と移動の±のために更新のたび /exec（getRealtimeBundle）を1回叩いていた＝10/14 昼の遅延ログが減らなかった正体。★報告と移動の数字は GAS が計算して1分おきに Firebase へ届ける（メインGAS fbPushDirty_ ← Firebase pullGas）。両方のフラグがオンで移動が届いている日は、報告・休止・移動も Firebase から作り /exec を叩かない（`rtBundleFromFb_`）。★PWA（入口パスワード）も Firebase に入る＝パスワードを入れた瞬間に受け口 auth（mode:pw）が GAS に照合してログイン券を出す（`fbLoginPw_`）。Firebase のログインは端末に残る（`fbPersistedUser_`）。既に PWA で使っている人は「名前をタップ→別の人に切り替え→パスワード」を1回だけ。切り替え時は Firebase からもログアウト。 -->
 <!-- driver v8.7 (2026-10-14) 【実況を Firebase から読む（項目ごとに切り替え）】社長「今日からドライバーで試しちゃっていいよ」。★ログインできていれば実況（`rtLoadAll`）が Firestore の今日の拠点データを読む（`rtFbLive_`→`rtIntermediateFromFb_`）。★オン・オフは t/{FC}/config/flags の rtSales（販売数）／rtMoney（金額＝サマリーが /exec の getTodayIntermediate を使わなくなる）／rtDeliv（納品数。オフの間は公開スナップショット）。画面を配り直さずに切り替え・戻せる。★PWA・読めない時・オフの時は従来どおり。★どこから読んだかを fbProbe（step=rt:firebase/snapshot/exec:表示）で記録。 -->
 <!-- driver v8.6 (2026-10-14) 【Firebase へ裏でログイン（見た目は変わらない）】社長決定 A'（金額も置いて実況サマリー・回収タブを Firebase 読みへ）の下準備。★LINE の中で開いた時だけ、LIFF の IDトークン → 受け口 auth → ログイン券 → signInWithCustomToken。ログインできたら今日のデータを1回読み、成否と所要を受け口へ記録（fbProbe）。★Firebase への送信（shadowSend_）にログインの証明（IDトークン）を付ける。受け口は今は数えるだけで弾かない。★PWA（パスワード入口）は LIFF が無いのでログインしない＝従来どおり。★LINE Developers の LIFF Scope に openid を追加済み（社長 10/14）。 -->
@@ -2463,9 +2464,11 @@ function fbLogin_() {
       }
       step = 'idToken';
       var idt = (window.liff && liff.getIDToken) ? liff.getIDToken() : null;
-      if (!idt) { fbProbe_({ ok: false, step: step, ms: Date.now() - t0 }); return null; }
-      step = 'auth';
-      var r = await fetch(FB_AUTH_URL_, { method: 'POST', body: JSON.stringify({ idToken: idt }) }).then(function (x) { return x.json(); });
+      // ★2026-10-21 IDトークンが無い（openid の許可を出し直していない人）ならアクセストークンで入る
+      var act = (!idt && window.liff && liff.getAccessToken) ? liff.getAccessToken() : null;
+      if (!idt && !act) { fbProbe_({ ok: false, step: step, ms: Date.now() - t0 }); return null; }
+      step = idt ? 'auth' : 'auth-at';
+      var r = await fetch(FB_AUTH_URL_, { method: 'POST', body: JSON.stringify(idt ? { idToken: idt } : { accessToken: act }) }).then(function (x) { return x.json(); });
       if (!r || !r.ok || !r.token) { fbProbe_({ ok: false, step: step, ms: Date.now() - t0, err: String((r && r.error) || '') }); return null; }
       step = 'signin';
       await firebase.auth().signInWithCustomToken(r.token);
@@ -2487,7 +2490,7 @@ function fbLogin_() {
   var n = 0;
   var tick = function () {
     n++;
-    try { if (window.liff && liff.getIDToken && liff.getIDToken()) { fbLogin_(); return; } } catch (e) {}
+    try { if (window.liff && ((liff.getIDToken && liff.getIDToken()) || (liff.getAccessToken && liff.getAccessToken()))) { fbLogin_(); return; } } catch (e) {}
     if (n >= 5 && !(window.liff && liff.isInClient && liff.isInClient())) { fbLogin_(); return; }   // ★PWA・外部ブラウザ＝端末に残ったログインを探す
     if (n < 30) setTimeout(tick, 2000);
   };
@@ -9571,8 +9574,26 @@ async function rtRefreshArea(key) {
   const btn = document.getElementById('area-btn-' + key);
   if (btn) { btn.disabled = true; btn.textContent = '更新中…'; }
   try {
+    /* ★v8.9 (2026-10-21) Firebase から読めるならそちら（rtLoadAll と同じ条件）。10/20 まではこのボタンだけ
+       毎回 /exec（getRealtimeBundle）を叩いていた。読めない・フラグがオフの時は従来どおり。 */
+    let _fbB = null;
+    try {
+      const _fbA = await rtFbLive_();
+      if (_fbA && _fbA.flags.rtMoney) {
+        const _snapA = _fbA.flags.rtDeliv ? null : await fetchSnapLive_(30000);
+        const _interA = rtIntermediateFromFb_(_fbA, _snapA);
+        const _bb = _interA ? rtBundleFromFb_(_fbA) : null;
+        if (_bb) {
+          const nm = {}; ((rtMasterData && rtMasterData.locations) || []).forEach(l => { if (l && l.id) nm[l.id] = l.name || ''; });
+          _interA.forEach(r => { if (!r.locationName) r.locationName = nm[r.locationId] || r.locationId; });
+          _bb.intermediate = { data: _interA };
+          _fbB = _bb;
+          rtSourceNote_('firebase-all:refresh');
+        }
+      }
+    } catch (e) { _fbB = null; }
     // ★v8.3 /exec を4本 → 1本（束ね口 getRealtimeBundle）。古いGASでは従来の4本に落ちる。
-    const { reports, intermediate, driverState, moveAdj } = await rtFetchBundle_(true);
+    const { reports, intermediate, driverState, moveAdj } = _fbB || await rtFetchBundle_(true);
     if (intermediate && intermediate.data) rtApplySalesFloor_(intermediate.data, true);   // ★v8.2 /exec＝最新で床を置き直す
     rtMoveAdjMap = (moveAdj && moveAdj.adj) ? moveAdj.adj : {};  // v7
     // ★ v5.8 getDriverState の既定は軽量版（手動休止だけ）。端末が持つ自動休止を混ぜる。
