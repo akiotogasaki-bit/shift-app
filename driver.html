@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v8.9.1 (2026-10-22) 【Firebase に入れていない端末を特定する】社長決定 A。10/21 の昼も getRealtimeBundle が66件残り、出所は Firebase にログインできていない端末（probe driver:idToken: 失敗25＝LIFF のトークンが両方無い＝PWA でログインが端末に残っていない人と推定）。★fbProbe に名前（state.userName）・画面の版・入口（pw/line）を載せる。受け口 shadowReport の probes.byWho で人ごとに Firebase/exec/スナップショットで読んだ回数と失敗が出る。画面の見た目・動きは変えない。 -->
 <!-- driver v8.9 (2026-10-21) 【実況の残りの /exec を外す】社長決定 B。10/20 の昼も getRealtimeBundle が89件残っていた。★①エリアごとの🔄更新（rtRefreshArea）も Firebase から読む（ここだけ v8.8 で直し漏れ）②LINE で開いてもIDトークンが出ない人（openid を足す前から使っている人は許可を出し直すまで出ない・1日30回）は LIFF のアクセストークンでログイン（受け口 auth が LINE に問い合わせて本人を確かめる）。 -->
 <!-- driver v8.8 (2026-10-15) 【実況が /exec を1回も叩かない形（rtReports・rtMoves）】社長決定 A。★v8.7 は販売数・金額を Firebase から読んでも、締めの報告と移動の±のために更新のたび /exec（getRealtimeBundle）を1回叩いていた＝10/14 昼の遅延ログが減らなかった正体。★報告と移動の数字は GAS が計算して1分おきに Firebase へ届ける（メインGAS fbPushDirty_ ← Firebase pullGas）。両方のフラグがオンで移動が届いている日は、報告・休止・移動も Firebase から作り /exec を叩かない（`rtBundleFromFb_`）。★PWA（入口パスワード）も Firebase に入る＝パスワードを入れた瞬間に受け口 auth（mode:pw）が GAS に照合してログイン券を出す（`fbLoginPw_`）。Firebase のログインは端末に残る（`fbPersistedUser_`）。既に PWA で使っている人は「名前をタップ→別の人に切り替え→パスワード」を1回だけ。切り替え時は Firebase からもログアウト。 -->
 <!-- driver v8.7 (2026-10-14) 【実況を Firebase から読む（項目ごとに切り替え）】社長「今日からドライバーで試しちゃっていいよ」。★ログインできていれば実況（`rtLoadAll`）が Firestore の今日の拠点データを読む（`rtFbLive_`→`rtIntermediateFromFb_`）。★オン・オフは t/{FC}/config/flags の rtSales（販売数）／rtMoney（金額＝サマリーが /exec の getTodayIntermediate を使わなくなる）／rtDeliv（納品数。オフの間は公開スナップショット）。画面を配り直さずに切り替え・戻せる。★PWA・読めない時・オフの時は従来どおり。★どこから読んだかを fbProbe（step=rt:firebase/snapshot/exec:表示）で記録。 -->
@@ -2409,7 +2410,15 @@ function fbLoadScript_(src) {
   return new Promise(function (ok, ng) { var s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = ng; document.head.appendChild(s); });
 }
 function fbJstYmd_() { return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10); }
-function fbProbe_(o) { shadowSend_(Object.assign({ action: 'fbProbe', app: FB_APP_NAME_ }, o)); }
+/* ★2026-10-22 v8.9.1 誰の端末か（名前・画面の版・入口）も載せる。Firebase に入れていない人を特定するため（社長決定 A）。
+   state / drvViaPassword は後ろで宣言しているので、まだ無い時（TDZ）は try で空にする。 */
+var FB_PROBE_VER_ = '8.9.1';
+function fbProbe_(o) {
+  var who = '', via = '';
+  try { who = (state && state.userName) || ''; } catch (e) {}
+  try { via = drvViaPassword ? 'pw' : 'line'; } catch (e) {}
+  shadowSend_(Object.assign({ action: 'fbProbe', app: FB_APP_NAME_, who: who, ver: FB_PROBE_VER_, via: via }, o));
+}
 function fbSdk_() {
   if (window.firebase && firebase.apps && firebase.apps.length) return Promise.resolve();
   return (async function () {
