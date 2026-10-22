@@ -7389,7 +7389,7 @@ async function ptRecFromFb_() {
     const v = d.exists ? d.data() : null;
     if (!v || !v.json || Date.now() - ptTsMs_(v.at) > 15 * 60000) return null;
     const o = JSON.parse(v.json);
-    return (o && o.ok && o.byLoc) ? o : null;
+    return (o && o.ok && o.byLoc && Object.keys(o.byLoc).length) ? o : null;   // 拠点が1つも無い答え（時間外）は使わない
   } catch (e) { console.warn('ptRecFromFb_', e); return null; }
 }
 async function ptVehFromFb_() {
