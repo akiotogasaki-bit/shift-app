@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v8.9.2 (2026-10-22) 【エリアの🔄更新に手応えを出す】ドライバー報告「更新ボタンが反応していない」。実際は動いていた（10/21 に16回以上、Firebase から1秒未満で最新に置き換わっていた）が、速すぎて「更新中…」が見えず、5分の自動更新とほぼ同じ数字が返るので押したことが分からなかった。社長決定（①＋③）＝★ボタンは「⏳ 更新中…」を最低0.8秒→「✓ 済」を1秒→元へ ★見出しに「✓ HH:MM 更新・nマス変化」／変化が無ければ「✓ HH:MM 最新です（変化なし）」を2秒緑で目立たせる（数えるのは押したエリアの拠点×商品のマス・合計行は除く）。読み方・数字・通信は1つも変えていない。 -->
 <!-- driver v8.9.1 (2026-10-22) 【Firebase に入れていない端末を特定する】社長決定 A。10/21 の昼も getRealtimeBundle が66件残り、出所は Firebase にログインできていない端末（probe driver:idToken: 失敗25＝LIFF のトークンが両方無い＝PWA でログインが端末に残っていない人と推定）。★fbProbe に名前（state.userName）・画面の版・入口（pw/line）を載せる。受け口 shadowReport の probes.byWho で人ごとに Firebase/exec/スナップショットで読んだ回数と失敗が出る。画面の見た目・動きは変えない。 -->
 <!-- driver v8.9 (2026-10-21) 【実況の残りの /exec を外す】社長決定 B。10/20 の昼も getRealtimeBundle が89件残っていた。★①エリアごとの🔄更新（rtRefreshArea）も Firebase から読む（ここだけ v8.8 で直し漏れ）②LINE で開いてもIDトークンが出ない人（openid を足す前から使っている人は許可を出し直すまで出ない・1日30回）は LIFF のアクセストークンでログイン（受け口 auth が LINE に問い合わせて本人を確かめる）。 -->
 <!-- driver v8.8 (2026-10-15) 【実況が /exec を1回も叩かない形（rtReports・rtMoves）】社長決定 A。★v8.7 は販売数・金額を Firebase から読んでも、締めの報告と移動の±のために更新のたび /exec（getRealtimeBundle）を1回叩いていた＝10/14 昼の遅延ログが減らなかった正体。★報告と移動の数字は GAS が計算して1分おきに Firebase へ届ける（メインGAS fbPushDirty_ ← Firebase pullGas）。両方のフラグがオンで移動が届いている日は、報告・休止・移動も Firebase から作り /exec を叩かない（`rtBundleFromFb_`）。★PWA（入口パスワード）も Firebase に入る＝パスワードを入れた瞬間に受け口 auth（mode:pw）が GAS に照合してログイン券を出す（`fbLoginPw_`）。Firebase のログインは端末に残る（`fbPersistedUser_`）。既に PWA で使っている人は「名前をタップ→別の人に切り替え→パスワード」を1回だけ。切り替え時は Firebase からもログアウト。 -->
@@ -1631,6 +1632,13 @@ body {
   #tab-realtime .area-refresh-btn:disabled {
     opacity: .5; cursor: default;
   }
+  /* ★v8.9.2 押した手応え（更新中を最低0.8秒・済・結果を2秒目立たせる） */
+  #tab-realtime .area-refresh-btn.done {
+    opacity: 1; background: var(--green-light, #D5F5E3); border-color: var(--green); color: var(--green);
+  }
+  #tab-realtime .area-updated.flash {
+    background: var(--green-light, #D5F5E3); padding: 2px 8px; border-radius: 6px; font-size: 12px;
+  }
   /* ═══ ★2026-09-13 v7.2 エリアの売れ行き棒（社長指示） ═══
      棒＝実販売数／縦線＝いまいる区間までの販売予定数（＝いつもどおりのペース）。
      🔴 **色分けのしきい値は持たせない**（社長決定 2026-09-13）。
@@ -2412,7 +2420,7 @@ function fbLoadScript_(src) {
 function fbJstYmd_() { return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10); }
 /* ★2026-10-22 v8.9.1 誰の端末か（名前・画面の版・入口）も載せる。Firebase に入れていない人を特定するため（社長決定 A）。
    state / drvViaPassword は後ろで宣言しているので、まだ無い時（TDZ）は try で空にする。 */
-var FB_PROBE_VER_ = '8.9.1';
+var FB_PROBE_VER_ = '8.9.2';
 function fbProbe_(o) {
   var who = '', via = '';
   try { who = (state && state.userName) || ''; } catch (e) {}
@@ -9579,9 +9587,39 @@ function _rtPaceCard_(areaNames, paceByArea, myArea) {
 
 // 単一エリアの更新ボタン:
 //   本日データを全取得 → 全マトリクス再描画 → 押下エリアのみ「✓ HH:MM 更新」表示
+/* ★2026-10-22 v8.9.2【押した手応え】ドライバー報告「更新ボタンが反応していない」。実際は動いていて、
+   Firebase から読めると1秒かからず終わり、5分の自動更新とほぼ同じ数字が返るので押したことが見えなかった。
+   ★①「更新中…」を最低0.8秒出し、終わったら「✓ 済」を1秒 ②見出しに「✓ HH:MM 更新・nマス変化」
+   （変化なしは「最新です（変化なし）」）を2秒目立たせる。数えるのは押したエリアの拠点×商品のマス（合計行は除く）。
+   読み方・数字は1つも変えていない。 */
+function _rtAreaCells_(key) {
+  const out = {};
+  const block = document.getElementById('area-block-' + key);
+  if (!block) return out;
+  const cols = Array.from(block.querySelectorAll('thead th')).map(th => {
+    const n = th.querySelector('.matrix-loc-name'); return n ? n.textContent : th.textContent;
+  });
+  block.querySelectorAll('tbody tr').forEach(tr => {
+    if (tr.classList.contains('matrix-total-row')) return;
+    const cells = tr.children;
+    const row = cells[0] ? cells[0].textContent : '';
+    for (let i = 1; i < cells.length; i++) out[row + '|' + (cols[i] || i)] = cells[i].textContent;
+  });
+  return out;
+}
+function _rtRefreshBtnState_(key, mode) {
+  const b = document.getElementById('area-btn-' + key);
+  if (!b) return;
+  b.classList.toggle('done', mode === 'done');
+  if (mode === 'busy') { b.disabled = true; b.textContent = '⏳ 更新中…'; }
+  else if (mode === 'done') { b.disabled = true; b.textContent = '✓ 済'; }
+  else { b.disabled = false; b.textContent = '🔄 更新'; }
+}
 async function rtRefreshArea(key) {
-  const btn = document.getElementById('area-btn-' + key);
-  if (btn) { btn.disabled = true; btn.textContent = '更新中…'; }
+  const t0 = Date.now();
+  const before = _rtAreaCells_(key);
+  _rtRefreshBtnState_(key, 'busy');
+  let okDone = false, changed = 0;
   try {
     /* ★v8.9 (2026-10-21) Firebase から読めるならそちら（rtLoadAll と同じ条件）。10/20 まではこのボタンだけ
        毎回 /exec（getRealtimeBundle）を叩いていた。読めない・フラグがオフの時は従来どおり。 */
@@ -9620,19 +9658,34 @@ async function rtRefreshArea(key) {
     // 全マトリクス再描画（データは全エリア最新化）＋ サマリー側も整合
     renderAreaMatrix();
     try { renderLocationTable(); } catch (e) {}
+    _rtRefreshBtnState_(key, 'busy');   // 描き直しでボタンが作り直されるので、最低0.8秒までは更新中のまま
 
-    // 押したエリアだけ「✓ HH:MM 更新」を表示
-    const now  = new Date();
-    const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    const stamp = document.getElementById('area-stamp-' + key);
-    if (stamp) { stamp.style.color = 'var(--green)'; stamp.textContent = '✓ ' + hhmm + ' 更新'; }
+    const after = _rtAreaCells_(key);
+    Object.keys(after).forEach(k => { if (before[k] !== after[k]) changed++; });
+    okDone = true;
   } catch (e) {
     const stamp = document.getElementById('area-stamp-' + key);
     if (stamp) { stamp.style.color = 'var(--red)'; stamp.textContent = '更新失敗'; }
     console.error('rtRefreshArea error:', e);
   } finally {
-    const btn2 = document.getElementById('area-btn-' + key);
-    if (btn2) { btn2.disabled = false; btn2.textContent = '🔄 更新'; }
+    const wait = 800 - (Date.now() - t0);
+    if (wait > 0) await new Promise(r => setTimeout(r, wait));
+    if (okDone) {
+      // 押したエリアだけ「✓ HH:MM 更新・nマス変化／最新です（変化なし）」を2秒目立たせる
+      const now  = new Date();
+      const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      const stamp = document.getElementById('area-stamp-' + key);
+      if (stamp) {
+        stamp.style.color = 'var(--green)';
+        stamp.textContent = '✓ ' + hhmm + (changed ? ' 更新・' + changed + 'マス変化' : ' 最新です（変化なし）');
+        stamp.classList.add('flash');
+        setTimeout(() => { const s = document.getElementById('area-stamp-' + key); if (s) s.classList.remove('flash'); }, 2000);
+      }
+      _rtRefreshBtnState_(key, 'done');
+      setTimeout(() => _rtRefreshBtnState_(key, 'idle'), 1000);
+    } else {
+      _rtRefreshBtnState_(key, 'idle');
+    }
   }
 }
 
