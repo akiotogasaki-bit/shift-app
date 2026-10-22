@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v8.10 (2026-10-22) 【巡回を Firebase から読む（rtPatrol）】社長決定 B。10/22 昼も getSupplyRecommend 26件/595秒・getVehicleStock 16件が /exec に残っていた。★置く・下げるは GAS が5分ごとに Firebase へ置いた答え（live/{日}/patrol/now）を読む＝中身は getSupplyRecommend と同じ（元から全員共通の5分キャッシュ）。★車載の残りは土台（live/{日}/veh/{車載}＝積み込み確定値か配分表G列・メイン返却分・確定の有無）＋移動の出入り（moveAdj）・0未満は0＝_vehicleRemaining_ と同じ式。★自分で置く・下げる・積み込み確定をした直後は、Firebase の数字がその操作より新しくなるまで /exec で取り直す。車の特定はその日最初の1回だけ /exec。★フラグ rtPatrol がオフ・読めない・15分より古い時は従来どおり /exec。probe に pt:/veh: の読み先を記録。要: メインGAS 2026-10-22b（fbPushDirty_ の patrol/vehbase）・Firebase ingest。 -->
 <!-- driver v8.9.2 (2026-10-22) 【エリアの🔄更新に手応えを出す】ドライバー報告「更新ボタンが反応していない」。実際は動いていた（10/21 に16回以上、Firebase から1秒未満で最新に置き換わっていた）が、速すぎて「更新中…」が見えず、5分の自動更新とほぼ同じ数字が返るので押したことが分からなかった。社長決定（①＋③）＝★ボタンは「⏳ 更新中…」を最低0.8秒→「✓ 済」を1秒→元へ ★見出しに「✓ HH:MM 更新・nマス変化」／変化が無ければ「✓ HH:MM 最新です（変化なし）」を2秒緑で目立たせる（数えるのは押したエリアの拠点×商品のマス・合計行は除く）。読み方・数字・通信は1つも変えていない。 -->
 <!-- driver v8.9.1 (2026-10-22) 【Firebase に入れていない端末を特定する】社長決定 A。10/21 の昼も getRealtimeBundle が66件残り、出所は Firebase にログインできていない端末（probe driver:idToken: 失敗25＝LIFF のトークンが両方無い＝PWA でログインが端末に残っていない人と推定）。★fbProbe に名前（state.userName）・画面の版・入口（pw/line）を載せる。受け口 shadowReport の probes.byWho で人ごとに Firebase/exec/スナップショットで読んだ回数と失敗が出る。画面の見た目・動きは変えない。 -->
 <!-- driver v8.9 (2026-10-21) 【実況の残りの /exec を外す】社長決定 B。10/20 の昼も getRealtimeBundle が89件残っていた。★①エリアごとの🔄更新（rtRefreshArea）も Firebase から読む（ここだけ v8.8 で直し漏れ）②LINE で開いてもIDトークンが出ない人（openid を足す前から使っている人は許可を出し直すまで出ない・1日30回）は LIFF のアクセストークンでログイン（受け口 auth が LINE に問い合わせて本人を確かめる）。 -->
@@ -2420,7 +2421,7 @@ function fbLoadScript_(src) {
 function fbJstYmd_() { return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10); }
 /* ★2026-10-22 v8.9.1 誰の端末か（名前・画面の版・入口）も載せる。Firebase に入れていない人を特定するため（社長決定 A）。
    state / drvViaPassword は後ろで宣言しているので、まだ無い時（TDZ）は try で空にする。 */
-var FB_PROBE_VER_ = '8.9.2';
+var FB_PROBE_VER_ = '8.10';
 function fbProbe_(o) {
   var who = '', via = '';
   try { who = (state && state.userName) || ''; } catch (e) {}
@@ -7092,6 +7093,7 @@ async function vlSubmit_() {
       qty: qty, planned: vlPlanned || {},
     })});
     const d = await res.json();
+    ptOwnPostAt_ = Date.now();     // ★v8.10 積み込みの土台が Firebase に届くまで /exec
     if (!d.ok) throw new Error(d.error || '登録に失敗しました');
     vlDraft = {}; vlOpen = false; vlMore = false;
     showToast(veh.name + ' の積み込みを ' + total + '個 で確定しました', 'success', 3500);
@@ -7347,7 +7349,77 @@ async function ptLoadPlan_() {
   } catch (e) { console.warn('getPatrolPlan', e); }
 }
 
+/* ★2026-10-22 v8.10【巡回を Firebase から読む】社長決定 B。10/22 昼も getSupplyRecommend 26件・getVehicleStock 16件が /exec に残っていた。
+   置く・下げるの答えは元から全員共通（GAS が5分キャッシュ）なので、GAS が5分ごとに Firebase へ置いたもの（live/{日}/patrol/now）を読む。
+   車載の残りは「土台（live/{日}/veh/{車載}）＋移動の出入り（moveAdj）・0未満は0」＝サーバーの _vehicleRemaining_ と同じ式。
+   ⚠ フラグ rtPatrol がオンの時だけ。読めない・古い（15分超）・オフの時は従来どおり /exec。
+   ⚠ 自分で置く・下げる・積み込み確定をした直後は、Firebase の数字がその操作より新しくなるまで /exec で取り直す（ptOwnPostAt_）。
+   ⚠ 車の特定はその日の最初の1回だけ /exec の答えを使い、端末の車（_svVehicle_）と一致した時だけ Firebase へ切り替える。 */
+let ptOwnPostAt_ = 0;
+let ptVehOk_ = null;        // { date, id } … /exec が答えた車と端末の車が一致した日
+let ptSrcLast_ = {}, ptSrcAt_ = {};
+function ptSourceNote_(kind, src) {
+  try {
+    if (ptSrcLast_[kind] === src && Date.now() - (ptSrcAt_[kind] || 0) < 30 * 60000) return;
+    ptSrcLast_[kind] = src; ptSrcAt_[kind] = Date.now();
+    if (typeof fbProbe_ === 'function') fbProbe_({ ok: true, step: kind + ':' + src, ms: 0 });
+  } catch (e) {}
+}
+async function ptFbCtx_() {
+  try {
+    if (typeof fbReady_ === 'undefined' || !fbReady_) return null;
+    const who = await Promise.race([fbReady_, new Promise(r => setTimeout(() => r(null), 4000))]);
+    if (!who || !who.tenant || !window.firebase) return null;
+    const db = firebase.firestore();
+    if (!rtFbFlags_ || Date.now() - rtFbFlagsAt_ > 60000) {
+      const f = await db.doc('t/' + who.tenant + '/config/flags').get();
+      rtFbFlags_ = f.exists ? (f.data() || {}) : {};
+      rtFbFlagsAt_ = Date.now();
+    }
+    if (!rtFbFlags_.rtPatrol) return null;
+    return { db, base: 't/' + who.tenant + '/live/' + fbJstYmd_() };
+  } catch (e) { console.warn('ptFbCtx_', e); return null; }
+}
+function ptTsMs_(t) { try { return (t && t.toMillis) ? t.toMillis() : 0; } catch (e) { return 0; } }
+async function ptRecFromFb_() {
+  const ctx = await ptFbCtx_();
+  if (!ctx) return null;
+  try {
+    const d = await ctx.db.doc(ctx.base + '/patrol/now').get();
+    const v = d.exists ? d.data() : null;
+    if (!v || !v.json || Date.now() - ptTsMs_(v.at) > 15 * 60000) return null;
+    const o = JSON.parse(v.json);
+    return (o && o.ok && o.byLoc) ? o : null;
+  } catch (e) { console.warn('ptRecFromFb_', e); return null; }
+}
+async function ptVehFromFb_() {
+  const veh = _svVehicle_();
+  if (!veh || !ptVehOk_ || ptVehOk_.date !== getDateStrOffset_(0) || String(ptVehOk_.id) !== String(veh.id)) return null;
+  const ctx = await ptFbCtx_();
+  if (!ctx) return null;
+  try {
+    const [vd, dd] = await Promise.all([ctx.db.doc(ctx.base + '/veh/' + veh.id).get(), ctx.db.doc(ctx.base).get()]);
+    const v = vd.exists ? vd.data() : null, day = dd.exists ? (dd.data() || {}) : {};
+    const vAt = ptTsMs_(v && v.at), mAt = ptTsMs_(day.moveAt);
+    if (!v || !v.json || !mAt || Date.now() - vAt > 15 * 60000) return null;
+    if (ptOwnPostAt_ && (mAt <= ptOwnPostAt_ || vAt <= ptOwnPostAt_)) return null;   // 自分の操作がまだ届いていない
+    const o = JSON.parse(v.json) || {};
+    const base = o.base || {}, mine = (day.moveAdj || {})[veh.id] || {};
+    const items = {}; let total = 0;
+    new Set(Object.keys(base).concat(Object.keys(mine))).forEach(p => {
+      let n = (Number(base[p]) || 0) + (Number(mine[p]) || 0);
+      if (n < 0) n = 0;
+      items[p] = n; total += n;
+    });
+    return { ok: true, vehicle: veh, remaining: { total, items }, mainReturn: o.mainReturn || null,
+             load: o.load || { found: false }, src: 'firebase' };
+  } catch (e) { console.warn('ptVehFromFb_', e); return null; }
+}
+
 async function ptLoadRec_() {
+  const _fb = await ptRecFromFb_();
+  if (_fb) { ptRec = _fb; ptSourceNote_('pt', 'firebase'); return; }
+  ptSourceNote_('pt', 'exec');
   try {
     const url = `${GAS_URL}?action=getSupplyRecommend&driverUserId=${encodeURIComponent(state.userId || '')}`;
     const d = await fetch(url, { redirect: 'follow' }).then(r => r.json());
@@ -7980,6 +8052,7 @@ async function ptSubmit() {
         toLocationId: ptPicked, toLocationName: name, qty: put,
       })});
       const d = await res.json();
+      ptOwnPostAt_ = Date.now();   // ★v8.10 Firebase に届くまで車載は /exec で取り直す
       if (!d.ok) throw new Error(d.error || '置く登録に失敗しました');
       done.push('置いた ' + _fmtQtyObj_(put));
     }
@@ -7991,6 +8064,7 @@ async function ptSubmit() {
         fromLocationId: ptPicked, fromLocationName: name, qty: back,
       })});
       const d = await res.json();
+      ptOwnPostAt_ = Date.now();
       if (!d.ok) throw new Error(d.error || '下げる登録に失敗しました');
       done.push('下げた ' + _fmtQtyObj_(back));
     }
@@ -8042,6 +8116,10 @@ async function ptSaveLog_(locId, locName, put, back, note) {
 }
 
 async function loadVehicleStock_() {
+  // ★v8.10 Firebase から作れるならそちら（→ ptVehFromFb_）
+  const _fbSt = await ptVehFromFb_();
+  if (_fbSt) { state.move.vehicle = _fbSt; ptSourceNote_('veh', 'firebase'); return _fbSt; }
+  ptSourceNote_('veh', 'exec');
   try {
     // ★2026-08-25 v5.9 手で別の車を選んだ日は、その車の残数を出す（既定は送らず uid 解決に任せる）
     const _v = _svVehicle_();
@@ -8051,6 +8129,8 @@ async function loadVehicleStock_() {
     const data = await fetch(url, { redirect: 'follow' }).then(r => r.json());
     if (!data || !data.ok) return null;
     state.move.vehicle = data;
+    // ★v8.10 /exec が答えた車と端末の車が同じなら、今日はここから Firebase へ切り替えてよい
+    try { const _sv = _svVehicle_(); if (_sv && data.vehicle && String(data.vehicle.id) === String(_sv.id)) ptVehOk_ = { date: getDateStrOffset_(0), id: _sv.id }; } catch (e) {}
     return data;
   } catch (e) { console.warn('getVehicleStock', e); return null; }
 }
