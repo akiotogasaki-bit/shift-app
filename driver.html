@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v8.11 (2026-10-22) 【12:20の再分配：作成中は出さない・理由を出す】10/22 12:21 神保町（メイン）に計画（+29置く）と正反対の「銀鮭玄8・塩麹4を下げる（在庫0〜1）」が出てドライバーが従えなかった。原因＝計画を作る30秒の間の問い合わせが旧式（閉店までに余る見込み）に戻っていた。社長決定＝★12:20以降の指示は再分配計画だけ（旧式の下げるは出さない）★計画がまだの時は「作成中」と出して15秒おきに最大3回取り直す（Firebase の答えが12:20より前のものでも作成中扱い）★理由を出す＝「12:20以降の予定◯／12:20の残り◯→目標◯＝◯個置く・下げる」。メインは「サテライトへ回す（予定◯個は残す）」と出す（メインが自分の予定より少なくなる指示はサーバーが出さない）。要: メインGAS 2026-10-22c（tailPending・_rt_tailPlanBuild_ の新ルール）。 -->
 <!-- driver v8.10 (2026-10-22) 【巡回を Firebase から読む（rtPatrol）】社長決定 B。10/22 昼も getSupplyRecommend 26件/595秒・getVehicleStock 16件が /exec に残っていた。★置く・下げるは GAS が5分ごとに Firebase へ置いた答え（live/{日}/patrol/now）を読む＝中身は getSupplyRecommend と同じ（元から全員共通の5分キャッシュ）。★車載の残りは土台（live/{日}/veh/{車載}＝積み込み確定値か配分表G列・メイン返却分・確定の有無）＋移動の出入り（moveAdj）・0未満は0＝_vehicleRemaining_ と同じ式。★自分で置く・下げる・積み込み確定をした直後は、Firebase の数字がその操作より新しくなるまで /exec で取り直す。車の特定はその日最初の1回だけ /exec。★フラグ rtPatrol がオフ・読めない・15分より古い時は従来どおり /exec。probe に pt:/veh: の読み先を記録。要: メインGAS 2026-10-22b（fbPushDirty_ の patrol/vehbase）・Firebase ingest。 -->
 <!-- driver v8.9.2 (2026-10-22) 【エリアの🔄更新に手応えを出す】ドライバー報告「更新ボタンが反応していない」。実際は動いていた（10/21 に16回以上、Firebase から1秒未満で最新に置き換わっていた）が、速すぎて「更新中…」が見えず、5分の自動更新とほぼ同じ数字が返るので押したことが分からなかった。社長決定（①＋③）＝★ボタンは「⏳ 更新中…」を最低0.8秒→「✓ 済」を1秒→元へ ★見出しに「✓ HH:MM 更新・nマス変化」／変化が無ければ「✓ HH:MM 最新です（変化なし）」を2秒緑で目立たせる（数えるのは押したエリアの拠点×商品のマス・合計行は除く）。読み方・数字・通信は1つも変えていない。 -->
 <!-- driver v8.9.1 (2026-10-22) 【Firebase に入れていない端末を特定する】社長決定 A。10/21 の昼も getRealtimeBundle が66件残り、出所は Firebase にログインできていない端末（probe driver:idToken: 失敗25＝LIFF のトークンが両方無い＝PWA でログインが端末に残っていない人と推定）。★fbProbe に名前（state.userName）・画面の版・入口（pw/line）を載せる。受け口 shadowReport の probes.byWho で人ごとに Firebase/exec/スナップショットで読んだ回数と失敗が出る。画面の見た目・動きは変えない。 -->
@@ -2421,7 +2422,7 @@ function fbLoadScript_(src) {
 function fbJstYmd_() { return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10); }
 /* ★2026-10-22 v8.9.1 誰の端末か（名前・画面の版・入口）も載せる。Firebase に入れていない人を特定するため（社長決定 A）。
    state / drvViaPassword は後ろで宣言しているので、まだ無い時（TDZ）は try で空にする。 */
-var FB_PROBE_VER_ = '8.10';
+var FB_PROBE_VER_ = '8.11';
 function fbProbe_(o) {
   var who = '', via = '';
   try { who = (state && state.userName) || ''; } catch (e) {}
@@ -7389,7 +7390,16 @@ async function ptRecFromFb_() {
     const v = d.exists ? d.data() : null;
     if (!v || !v.json || Date.now() - ptTsMs_(v.at) > 15 * 60000) return null;
     const o = JSON.parse(v.json);
-    return (o && o.ok && o.byLoc && Object.keys(o.byLoc).length) ? o : null;   // 拠点が1つも無い答え（時間外）は使わない
+    if (!(o && o.ok && o.byLoc && Object.keys(o.byLoc).length)) return null;   // 拠点が1つも無い答え（時間外）は使わない
+    /* ★v8.11 12:20を過ぎたのに置いてある答えが12:20より前に作られたもの＝再分配計画がまだ載っていない。
+       古い答えで置く・下げるを出さず「作成中」として扱う（次の1分で GAS が計画入りの答えを置く）。 */
+    const _nm = new Date().getHours() * 60 + new Date().getMinutes();
+    if (_nm >= PT_TAIL_AT_ && Number(o.nowMin) < PT_TAIL_AT_) {
+      const bl = {};
+      Object.keys(o.byLoc).forEach(k => { bl[k] = Object.assign({}, o.byLoc[k], { place: [], back: [], tail: null }); });
+      return Object.assign({}, o, { tailPending: true, byLoc: bl });
+    }
+    return o;
   } catch (e) { console.warn('ptRecFromFb_', e); return null; }
 }
 async function ptVehFromFb_() {
@@ -7416,15 +7426,31 @@ async function ptVehFromFb_() {
   } catch (e) { console.warn('ptVehFromFb_', e); return null; }
 }
 
+/* ★2026-10-22 v8.11【12:20の再分配計画が作成中の時】10/22 12:21 神保町（メイン）に計画と正反対の
+   「銀鮭玄8・塩麹4を下げる（在庫0〜1）」が出た。計画を作っている30秒の間に来た問い合わせが旧式に戻っていた。
+   → サーバーは計画が取れない時 `tailPending:true`（置く・下げるは空）を返すようにした（メインGAS 2026-10-22c）。
+   画面は「作成中」と出して15秒おきに最大3回だけ取り直す（新しいタイマーを常駐させない）。 */
+const PT_TAIL_AT_ = 12 * 60 + 20;
+let ptPendTries_ = 0, ptPendTimer_ = null;
+function ptPendRetry_() {
+  if (!(ptRec && ptRec.tailPending)) { ptPendTries_ = 0; return; }
+  if (ptPendTimer_ || ptPendTries_ >= 3) return;
+  ptPendTries_++;
+  ptPendTimer_ = setTimeout(async () => {
+    ptPendTimer_ = null;
+    try { await ptLoadRec_(); if (ptPicked) ptRenderRows_(); else ptRenderLocs_(); } catch (e) {}
+  }, 15000);
+}
 async function ptLoadRec_() {
   const _fb = await ptRecFromFb_();
-  if (_fb) { ptRec = _fb; ptSourceNote_('pt', 'firebase'); return; }
+  if (_fb) { ptRec = _fb; ptSourceNote_('pt', 'firebase'); ptPendRetry_(); return; }
   ptSourceNote_('pt', 'exec');
   try {
     const url = `${GAS_URL}?action=getSupplyRecommend&driverUserId=${encodeURIComponent(state.userId || '')}`;
     const d = await fetch(url, { redirect: 'follow' }).then(r => r.json());
     ptRec = (d && d.ok) ? d : null;
   } catch (e) { console.warn('getSupplyRecommend', e); ptRec = null; }
+  ptPendRetry_();
 }
 
 // 拠点の商品別残数 ＝ 納品 ＋拠点間移動± −販売。calcMyResidualDetail_ と同じ材料。
@@ -7952,6 +7978,26 @@ function ptRenderWhy_(locId, put, back, resOK) {
      従来はこの状態でも「置く数」が出ており（平均−0＝平均まるごと）、
      ドライバーから「この推奨の数はおかしい」と指摘が入った（2026-08-19 芝パーク②）。
      数字を黙って出すより、材料が無いことを言って手入力にゆだねる方が安全。 */
+  /* ★v8.11 12:20以降は再分配計画の理由を出す（目標・いま・差）。メインは「下げる」ではなく「サテライトへ回す」 */
+  if (ptRec && ptRec.tailPending) {
+    el.className = 'pt-why';
+    el.innerHTML = '⏳ <b>12:20の再分配の計画を作成中です。</b>数秒で自動で取り直します（それまで置く・下げるは出しません）。';
+    return;
+  }
+  const _T = ptRec && ptRec.byLoc && ptRec.byLoc[locId] && ptRec.byLoc[locId].tail;
+  if (_T) {
+    const _d = Number(_T.diff) || 0;
+    const _act = _d > 0 ? '<b>' + _d + '個置く</b>'
+               : _d < 0 ? (_T.main ? '<b>' + (-_d) + '個をサテライトへ回す</b>（予定' + (Number(_T.want) || 0) + '個は残す）'
+                                   : '<b>' + (-_d) + '個下げる</b>')
+               : '<b>そのまま</b>';
+    el.className = 'pt-why';
+    el.innerHTML = '12:20の再分配' + (_T.main ? '（<b>メイン拠点</b>＝エリアの余りを集める）' : '') + '：'
+      + '12:20以降の予定 ' + (Number(_T.want) || 0) + '個／12:20の残り ' + (Number(_T.hold) || 0) + '個 → 目標 '
+      + (Number(_T.target) || 0) + '個＝' + _act + '。'
+      + (resOK === false ? '<br>⚠ この拠点の残数がまだ届いていません。見て判断してください。' : '');
+    return;
+  }
   if (resOK === false) {
     msg.push('⚠ <b>この拠点の残数がまだ届いていません</b>（レジで最初の1件が売れると入ります）。'
            + '<b>推奨は出せないので、見て判断して入れてください。</b>');
