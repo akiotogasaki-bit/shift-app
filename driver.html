@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v8.12 (2026-10-24) 【売れ行き棒が短すぎる（再修正）】社長「昨日の昼、棒グラフがまた短かった」。10/14 に直した（230ee79）が、10/15 の front deploy（a1493af）で手元の古い driver.html に上書きされて消えていた。★原因＝「ほかのエリア」の行が 名前｜棒｜数字 の横並びで、v8.0 の「残り◯（車◯）・12:00の予定比◯%」（折り返し無し）が右の列を広げ、棒が幅40〜50pxに潰れていた。★直し＝ほかのエリアも担当エリアと同じ並び（上段＝名前＋数字／下段＝棒を全幅）。CSS（`.rt-prow` を2列・棒を全幅）と `_rtPaceCard_` の並び順だけ。数字・目盛り・線の位置は変えていない。 -->
 <!-- driver v8.11 (2026-10-22) 【12:20の再分配：作成中は出さない・理由を出す】10/22 12:21 神保町（メイン）に計画（+29置く）と正反対の「銀鮭玄8・塩麹4を下げる（在庫0〜1）」が出てドライバーが従えなかった。原因＝計画を作る30秒の間の問い合わせが旧式（閉店までに余る見込み）に戻っていた。社長決定＝★12:20以降の指示は再分配計画だけ（旧式の下げるは出さない）★計画がまだの時は「作成中」と出して15秒おきに最大3回取り直す（Firebase の答えが12:20より前のものでも作成中扱い）★理由を出す＝「12:20以降の予定◯／12:20の残り◯→目標◯＝◯個置く・下げる」。メインは「サテライトへ回す（予定◯個は残す）」と出す（メインが自分の予定より少なくなる指示はサーバーが出さない）。要: メインGAS 2026-10-22c（tailPending・_rt_tailPlanBuild_ の新ルール）。 -->
 <!-- driver v8.10 (2026-10-22) 【巡回を Firebase から読む（rtPatrol）】社長決定 B。10/22 昼も getSupplyRecommend 26件/595秒・getVehicleStock 16件が /exec に残っていた。★置く・下げるは GAS が5分ごとに Firebase へ置いた答え（live/{日}/patrol/now）を読む＝中身は getSupplyRecommend と同じ（元から全員共通の5分キャッシュ）。★車載の残りは土台（live/{日}/veh/{車載}＝積み込み確定値か配分表G列・メイン返却分・確定の有無）＋移動の出入り（moveAdj）・0未満は0＝_vehicleRemaining_ と同じ式。★自分で置く・下げる・積み込み確定をした直後は、Firebase の数字がその操作より新しくなるまで /exec で取り直す。車の特定はその日最初の1回だけ /exec。★フラグ rtPatrol がオフ・読めない・15分より古い時は従来どおり /exec。probe に pt:/veh: の読み先を記録。要: メインGAS 2026-10-22b（fbPushDirty_ の patrol/vehbase）・Firebase ingest。 -->
 <!-- driver v8.9.2 (2026-10-22) 【エリアの🔄更新に手応えを出す】ドライバー報告「更新ボタンが反応していない」。実際は動いていた（10/21 に16回以上、Firebase から1秒未満で最新に置き換わっていた）が、速すぎて「更新中…」が見えず、5分の自動更新とほぼ同じ数字が返るので押したことが分からなかった。社長決定（①＋③）＝★ボタンは「⏳ 更新中…」を最低0.8秒→「✓ 済」を1秒→元へ ★見出しに「✓ HH:MM 更新・nマス変化」／変化が無ければ「✓ HH:MM 最新です（変化なし）」を2秒緑で目立たせる（数えるのは押したエリアの拠点×商品のマス・合計行は除く）。読み方・数字・通信は1つも変えていない。 -->
@@ -1658,8 +1659,10 @@ body {
   }
   #tab-realtime .rt-pace-basis { font-size: 10.5px; color: var(--ink-mute); margin: 3px 0 12px; }
   #tab-realtime .rt-pace-rows { display: grid; gap: 6px; }
+  /* ★v8.12 ほかのエリアも「名前＋数字」の下の段に棒を全幅で出す（担当エリアと同じ並び）。
+     v8.0 で右の数字が「残り◯（車◯）・12:00の予定比◯%」と長くなり、横並びだと棒が数十pxに潰れていた。 */
   #tab-realtime .rt-prow {
-    display: grid; grid-template-columns: 82px 1fr auto; align-items: center;
+    display: grid; grid-template-columns: 1fr auto; align-items: center;
     column-gap: 10px; row-gap: 3px; padding: 7px 9px; border-radius: 9px; background: var(--cream-dark);
   }
   #tab-realtime .rt-prow.mine {
@@ -1668,7 +1671,7 @@ body {
   }
   #tab-realtime .rt-prow.mine .rt-pname { font-size: 15px; }
   #tab-realtime .rt-prow.mine .rt-ppct { font-size: 30px; }
-  #tab-realtime .rt-prow.mine .rt-barwrap { grid-column: 1 / -1; }
+  #tab-realtime .rt-prow .rt-barwrap { grid-column: 1 / -1; }
   #tab-realtime .rt-prow.mine .rt-bar { height: 18px; }
   #tab-realtime .rt-prow.mine .rt-bar > i { top: -5px; bottom: -5px; width: 3px; opacity: .85; }
   #tab-realtime .rt-prow.mine .rt-ticks { height: 13px; font-size: 10px; }
@@ -9691,7 +9694,7 @@ function _rtPaceCard_(areaNames, paceByArea, myArea) {
     const meta = `<span class="rt-pmeta">${_rtPaceMeta_(p)}</span>`;
     rows += mine
       ? `<div class="rt-prow mine">${name}${pct}${_rtPaceBar_(p)}${meta}</div>`
-      : `<div class="rt-prow">${name}${_rtPaceBar_(p)}${pct}${meta}</div>`;
+      : `<div class="rt-prow">${name}${pct}${_rtPaceBar_(p)}${meta}</div>`;
   });
 
   return `
