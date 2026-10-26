@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v8.14 (2026-10-26) 【車載の残りが /exec に戻っていた】メインGAS @956 で車載の土台（スタート時の積み込み数）を「確定の時＋30分おき」の送信に減らしたのに、端末は「土台が15分より古ければ /exec」のままだった＝10/26 昼は veh:exec 16／firebase 5。★土台の古さは45分で見る。★日中に動く移動の出入り（moveAt）は15分より古ければ /exec に戻す（それまで移動の古さは見ていなかった）。 -->
 <!-- driver v8.13 (2026-10-26) 【💬 相談】社長決定（案①）「押し引きの指示をベテランドライバーも混ぜて話したい。不具合の報告も入れられるように。緊急なら俺に通知」。★ヘッダーの「📝 日報」の隣に「💬 相談」（タブは8本で幅いっぱいなので増やさない）。押し引きの相談／不具合の報告を選んで送ると、Firebase の consult 関数が今のルール（functions/consult-rules.md）と今日の巡回の数字を添えて Claude に聞き、返事を出す。急ぎ（仕事が止まる・指示が明らかに違う・数字が合わない・事故）と判断したら社長へLINE＋Todoist の受付に積む。★ボタンは許可リスト（consultCfg）に載った人だけ＝最初は戸賀崎智信さん。GAS は通らない（/exec の枠を使わない）。★FB_PROBE_VER_ を 8.13 に。 -->
 <!-- driver v8.12 (2026-10-24) 【売れ行き棒が短すぎる（再修正）】社長「昨日の昼、棒グラフがまた短かった」。10/14 に直した（230ee79）が、10/15 の front deploy（a1493af）で手元の古い driver.html に上書きされて消えていた。★原因＝「ほかのエリア」の行が 名前｜棒｜数字 の横並びで、v8.0 の「残り◯（車◯）・12:00の予定比◯%」（折り返し無し）が右の列を広げ、棒が幅40〜50pxに潰れていた。★直し＝ほかのエリアも担当エリアと同じ並び（上段＝名前＋数字／下段＝棒を全幅）。CSS（`.rt-prow` を2列・棒を全幅）と `_rtPaceCard_` の並び順だけ。数字・目盛り・線の位置は変えていない。 -->
 <!-- driver v8.11 (2026-10-22) 【12:20の再分配：作成中は出さない・理由を出す】10/22 12:21 神保町（メイン）に計画（+29置く）と正反対の「銀鮭玄8・塩麹4を下げる（在庫0〜1）」が出てドライバーが従えなかった。原因＝計画を作る30秒の間の問い合わせが旧式（閉店までに余る見込み）に戻っていた。社長決定＝★12:20以降の指示は再分配計画だけ（旧式の下げるは出さない）★計画がまだの時は「作成中」と出して15秒おきに最大3回取り直す（Firebase の答えが12:20より前のものでも作成中扱い）★理由を出す＝「12:20以降の予定◯／12:20の残り◯→目標◯＝◯個置く・下げる」。メインは「サテライトへ回す（予定◯個は残す）」と出す（メインが自分の予定より少なくなる指示はサーバーが出さない）。要: メインGAS 2026-10-22c（tailPending・_rt_tailPlanBuild_ の新ルール）。 -->
@@ -2458,7 +2459,7 @@ function fbLoadScript_(src) {
 function fbJstYmd_() { return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10); }
 /* ★2026-10-22 v8.9.1 誰の端末か（名前・画面の版・入口）も載せる。Firebase に入れていない人を特定するため（社長決定 A）。
    state / drvViaPassword は後ろで宣言しているので、まだ無い時（TDZ）は try で空にする。 */
-var FB_PROBE_VER_ = '8.13';
+var FB_PROBE_VER_ = '8.14';
 function fbProbe_(o) {
   var who = '', via = '';
   try { who = (state && state.userName) || ''; } catch (e) {}
@@ -7542,7 +7543,9 @@ async function ptVehFromFb_() {
     const [vd, dd] = await Promise.all([ctx.db.doc(ctx.base + '/veh/' + veh.id).get(), ctx.db.doc(ctx.base).get()]);
     const v = vd.exists ? vd.data() : null, day = dd.exists ? (dd.data() || {}) : {};
     const vAt = ptTsMs_(v && v.at), mAt = ptTsMs_(day.moveAt);
-    if (!v || !v.json || !mAt || Date.now() - vAt > 15 * 60000) return null;
+    /* ★v8.14 土台（スタート時の積み込み数）はほぼ朝しか変わらず、GAS は確定の時＋30分おきにしか送らない（@956）。
+       古さは45分で見る。日中に動く移動の出入りの方は15分より古ければ /exec に戻す。 */
+    if (!v || !v.json || !mAt || Date.now() - vAt > 45 * 60000 || Date.now() - mAt > 15 * 60000) return null;
     if (ptOwnPostAt_ && (mAt <= ptOwnPostAt_ || vAt <= ptOwnPostAt_)) return null;   // 自分の操作がまだ届いていない
     const o = JSON.parse(v.json) || {};
     const base = o.base || {}, mine = (day.moveAdj || {})[veh.id] || {};
