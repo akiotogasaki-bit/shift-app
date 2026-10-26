@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v8.13 (2026-10-26) 【💬 相談】社長決定（案①）「押し引きの指示をベテランドライバーも混ぜて話したい。不具合の報告も入れられるように。緊急なら俺に通知」。★ヘッダーの「📝 日報」の隣に「💬 相談」（タブは8本で幅いっぱいなので増やさない）。押し引きの相談／不具合の報告を選んで送ると、Firebase の consult 関数が今のルール（functions/consult-rules.md）と今日の巡回の数字を添えて Claude に聞き、返事を出す。急ぎ（仕事が止まる・指示が明らかに違う・数字が合わない・事故）と判断したら社長へLINE＋Todoist の受付に積む。★ボタンは許可リスト（consultCfg）に載った人だけ＝最初は戸賀崎智信さん。GAS は通らない（/exec の枠を使わない）。★FB_PROBE_VER_ を 8.13 に。 -->
 <!-- driver v8.12 (2026-10-24) 【売れ行き棒が短すぎる（再修正）】社長「昨日の昼、棒グラフがまた短かった」。10/14 に直した（230ee79）が、10/15 の front deploy（a1493af）で手元の古い driver.html に上書きされて消えていた。★原因＝「ほかのエリア」の行が 名前｜棒｜数字 の横並びで、v8.0 の「残り◯（車◯）・12:00の予定比◯%」（折り返し無し）が右の列を広げ、棒が幅40〜50pxに潰れていた。★直し＝ほかのエリアも担当エリアと同じ並び（上段＝名前＋数字／下段＝棒を全幅）。CSS（`.rt-prow` を2列・棒を全幅）と `_rtPaceCard_` の並び順だけ。数字・目盛り・線の位置は変えていない。 -->
 <!-- driver v8.11 (2026-10-22) 【12:20の再分配：作成中は出さない・理由を出す】10/22 12:21 神保町（メイン）に計画（+29置く）と正反対の「銀鮭玄8・塩麹4を下げる（在庫0〜1）」が出てドライバーが従えなかった。原因＝計画を作る30秒の間の問い合わせが旧式（閉店までに余る見込み）に戻っていた。社長決定＝★12:20以降の指示は再分配計画だけ（旧式の下げるは出さない）★計画がまだの時は「作成中」と出して15秒おきに最大3回取り直す（Firebase の答えが12:20より前のものでも作成中扱い）★理由を出す＝「12:20以降の予定◯／12:20の残り◯→目標◯＝◯個置く・下げる」。メインは「サテライトへ回す（予定◯個は残す）」と出す（メインが自分の予定より少なくなる指示はサーバーが出さない）。要: メインGAS 2026-10-22c（tailPending・_rt_tailPlanBuild_ の新ルール）。 -->
 <!-- driver v8.10 (2026-10-22) 【巡回を Firebase から読む（rtPatrol）】社長決定 B。10/22 昼も getSupplyRecommend 26件/595秒・getVehicleStock 16件が /exec に残っていた。★置く・下げるは GAS が5分ごとに Firebase へ置いた答え（live/{日}/patrol/now）を読む＝中身は getSupplyRecommend と同じ（元から全員共通の5分キャッシュ）。★車載の残りは土台（live/{日}/veh/{車載}＝積み込み確定値か配分表G列・メイン返却分・確定の有無）＋移動の出入り（moveAdj）・0未満は0＝_vehicleRemaining_ と同じ式。★自分で置く・下げる・積み込み確定をした直後は、Firebase の数字がその操作より新しくなるまで /exec で取り直す。車の特定はその日最初の1回だけ /exec。★フラグ rtPatrol がオフ・読めない・15分より古い時は従来どおり /exec。probe に pt:/veh: の読み先を記録。要: メインGAS 2026-10-22b（fbPushDirty_ の patrol/vehbase）・Firebase ingest。 -->
@@ -157,6 +158,19 @@ body {
 .drr-cancel { background:#eceff1; }
 .drr-send { background:var(--blue); color:#fff; }
 .drr-hint { font-size:11px; color:#666; margin-top:8px; }
+/* ★v8.13 相談（日報と同じシートを使う） */
+.cst-log { max-height:46vh; overflow:auto; background:var(--cream); border-radius:10px; padding:8px; margin-bottom:10px; }
+.cst-empty { font-size:12px; color:#888; text-align:center; padding:14px 0; }
+.cst-day { font-size:11px; color:#888; text-align:center; margin:6px 0; }
+.cst-msg { font-size:14px; line-height:1.55; padding:8px 10px; border-radius:10px; margin:4px 0; white-space:pre-wrap; word-break:break-word; max-width:88%; }
+.cst-msg.user { background:var(--blue); color:#fff; margin-left:auto; }
+.cst-msg.ai { background:#fff; border:1px solid var(--border); }
+.cst-msg.urgent { border:2px solid var(--red); }
+.cst-tag { font-size:11px; font-weight:700; color:var(--red); margin-bottom:2px; }
+.cst-kinds { display:flex; gap:8px; margin-bottom:8px; }
+.cst-kind { flex:1; padding:9px 4px; font-size:13px; font-weight:700; border-radius:10px; border:1px solid var(--border); background:#fff; color:var(--ink-soft); font-family:inherit; }
+.cst-kind.on { background:var(--blue-light); border-color:var(--blue); color:var(--blue); }
+#cst-text { width:100%; box-sizing:border-box; font-size:16px; padding:8px; border:1px solid #bbb; border-radius:8px; font-family:inherit; }
 
 #screen-loading { align-items: center; justify-content: center; background: var(--blue); }
 
@@ -1876,8 +1890,27 @@ body {
       <div class="header-sub" id="main-date">--</div>
     </div>
     <div style="display:flex;align-items:center;gap:8px;">
+      <button type="button" class="drr-btn" id="cst-btn" onclick="cstOpen()" style="display:none;">💬 相談</button>
       <button type="button" class="drr-btn" onclick="drrOpen()">📝 日報</button>
       <div class="header-user" id="driver-name">--</div>
+    </div>
+  </div>
+  <!-- ★v8.13 ドライバーの相談（押し引きの相談・不具合の報告）。Firebase consult 関数が Claude に聞いて返す。
+       許可リストに載っている人だけボタンが出る（最初は戸賀崎智信さんだけ）。 -->
+  <div id="cst-bg" class="drr-bg" onclick="if(event.target===this)cstClose()">
+    <div class="drr-sheet">
+      <div class="drr-title">💬 相談 <span style="font-size:11px;font-weight:500;color:#666;">Claude が答えます・急ぎは社長に届きます</span></div>
+      <div id="cst-log" class="cst-log"><div class="cst-empty">読み込み中…</div></div>
+      <div class="cst-kinds">
+        <button type="button" class="cst-kind on" data-kind="push" onclick="cstKind_('push')">🔄 押し引きの相談</button>
+        <button type="button" class="cst-kind" data-kind="bug" onclick="cstKind_('bug')">⚠️ 不具合の報告</button>
+      </div>
+      <textarea id="cst-text" rows="3" placeholder="例：芝パークで「下げる3」と出たけど、まだ12時前で棚が薄い"></textarea>
+      <div class="drr-actions">
+        <button type="button" class="drr-cancel" onclick="cstClose()">閉じる</button>
+        <button type="button" class="drr-send" id="cst-send" onclick="cstSend()">送信</button>
+      </div>
+      <div class="drr-hint">決めるのは社長です。良い意見は提案として社長に届きます。アプリが動かない・数字が合わないなど急ぎの時は、すぐ社長にLINEが飛びます。</div>
     </div>
   </div>
   <!-- ★v8.1 ドライバー日報 -->
@@ -2425,7 +2458,7 @@ function fbLoadScript_(src) {
 function fbJstYmd_() { return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10); }
 /* ★2026-10-22 v8.9.1 誰の端末か（名前・画面の版・入口）も載せる。Firebase に入れていない人を特定するため（社長決定 A）。
    state / drvViaPassword は後ろで宣言しているので、まだ無い時（TDZ）は try で空にする。 */
-var FB_PROBE_VER_ = '8.11';
+var FB_PROBE_VER_ = '8.13';
 function fbProbe_(o) {
   var who = '', via = '';
   try { who = (state && state.userName) || ''; } catch (e) {}
@@ -2785,6 +2818,101 @@ async function drrSend() {
     } else {
       showToast('送れませんでした：' + ((j && j.error) || '通信エラー'), 'error', 5000);
     }
+  } finally { btn.disabled = false; btn.textContent = '送信'; }
+}
+
+/* ★v8.13 ドライバーの相談。GAS は通さない（/exec の枠を使わない）＝Firebase の consult 関数へ直接。
+   本人確認は Firebase のログイン（fbLogin_）の IDトークン。ログインできていない端末にはボタンを出さない。 */
+var CST_URL_ = 'https://asia-northeast1-oedo-bento.cloudfunctions.net/consult';
+var cstKindSel_ = 'push';
+async function cstPost_(body) {
+  var u = (window.firebase && firebase.apps && firebase.apps.length) ? firebase.auth().currentUser : null;
+  if (!u) throw new Error('ログインできていません。開き直してください');
+  var tok = await u.getIdToken();
+  var r = await fetch(CST_URL_, { method: 'POST', body: JSON.stringify(Object.assign({ fbIdToken: tok }, body)) });
+  var j = await r.json().catch(function () { return null; });
+  if (!j || !j.ok) throw new Error((j && j.error) || ('通信エラー ' + r.status));
+  return j;
+}
+// Firebase のログイン（起動の3秒後〜最大60秒）を待ってから1回だけ「出してよい人か」を聞く
+(function () {
+  var n = 0;
+  var tick = async function () {
+    n++;
+    if (!fbReady_) { if (n < 60) setTimeout(tick, 2000); return; }
+    try {
+      var who = await fbReady_;
+      if (!who) return;
+      var j = await cstPost_({ mode: 'me' });
+      if (j.allowed) document.getElementById('cst-btn').style.display = '';
+    } catch (e) {}
+  };
+  setTimeout(tick, 4000);
+})();
+function cstKind_(k) {
+  cstKindSel_ = k;
+  document.querySelectorAll('#cst-bg .cst-kind').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-kind') === k); });
+  document.getElementById('cst-text').placeholder = k === 'bug'
+    ? '例：11:40 回収タブが真っ白になって開けない（神保町に着いた時）'
+    : '例：芝パークで「下げる3」と出たけど、まだ12時前で棚が薄い';
+}
+function cstOpen() {
+  document.getElementById('cst-bg').classList.add('show');
+  try { document.getElementById('cst-text').value = localStorage.getItem('cstDraft') || ''; } catch (e) {}
+  cstLoad_();
+}
+function cstClose() {
+  try { localStorage.setItem('cstDraft', document.getElementById('cst-text').value); } catch (e) {}
+  document.getElementById('cst-bg').classList.remove('show');
+}
+function cstRender_(rows) {
+  var box = document.getElementById('cst-log');
+  box.innerHTML = '';
+  if (!rows.length) { box.innerHTML = '<div class="cst-empty">まだ相談はありません</div>'; return; }
+  var lastDay = '';
+  rows.forEach(function (r) {
+    if (r.day !== lastDay) {
+      lastDay = r.day;
+      var d = document.createElement('div'); d.className = 'cst-day'; d.textContent = r.day.slice(5).replace('-', '/');
+      box.appendChild(d);
+    }
+    var m = document.createElement('div');
+    m.className = 'cst-msg ' + (r.role === 'ai' ? 'ai' : 'user') + (r.role === 'ai' && r.urgency === 'urgent' ? ' urgent' : '');
+    if (r.role === 'ai' && r.urgency === 'urgent') {
+      var t = document.createElement('div'); t.className = 'cst-tag'; t.textContent = '🚨 社長に届けました';
+      m.appendChild(t);
+    }
+    m.appendChild(document.createTextNode((r.role !== 'ai' && r.kind === 'bug' ? '⚠️ ' : '') + r.text));
+    box.appendChild(m);
+  });
+  box.scrollTop = box.scrollHeight;
+}
+var cstRows_ = [];
+async function cstLoad_() {
+  try { var j = await cstPost_({ mode: 'list' }); cstRows_ = j.rows || []; cstRender_(cstRows_); }
+  catch (e) { document.getElementById('cst-log').innerHTML = '<div class="cst-empty">読み込めませんでした</div>'; }
+}
+async function cstSend() {
+  var ta = document.getElementById('cst-text');
+  var text = ta.value.trim();
+  if (!text) { showToast('内容を書いてください', 'error'); return; }
+  var btn = document.getElementById('cst-send');
+  btn.disabled = true; btn.textContent = '考え中…';
+  var day = fbJstYmd_();
+  cstRows_.push({ day: day, role: 'user', kind: cstKindSel_, text: text });
+  cstRender_(cstRows_);
+  try {
+    var act = document.querySelector('.tab-panel.active');
+    var j = await cstPost_({ mode: 'send', kind: cstKindSel_, text: text,
+                             ctx: { tab: act ? act.id.replace('tab-', '') : '', ver: FB_PROBE_VER_ } });
+    cstRows_.push({ day: day, role: 'ai', kind: cstKindSel_, text: j.reply, urgency: j.urgency });
+    cstRender_(cstRows_);
+    ta.value = '';
+    try { localStorage.removeItem('cstDraft'); } catch (e) {}
+    if (j.urgency === 'urgent') showToast(j.notified ? '急ぎの内容なので社長にLINEしました' : '急ぎの内容です（LINEは送れませんでした）', j.notified ? 'success' : 'error', 4000);
+  } catch (e) {
+    cstRows_.pop(); cstRender_(cstRows_);
+    showToast('送れませんでした：' + e.message, 'error', 5000);
   } finally { btn.disabled = false; btn.textContent = '送信'; }
 }
 
