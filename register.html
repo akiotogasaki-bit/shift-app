@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>お江戸弁当 レジ</title>
+<!-- register v3.37 (2026-10-26) 【普通のレジ⇔二次販売レジの入口】社長確認「調理との兼業スタッフ・社員は2次販売レジが開けないのかな？」＝社員用メニューと兼任の調理面に二次販売ボタンが無い（社長決定B）。★拠点選択画面の下に「🛒 二次販売のレジはこちら」（二次販売レジでは「← 普通のレジに戻る」）。リッチメニューと同じ LIFF URL（?mode=2nd）を開き直すだけ＝保存キーも別なので途中データを壊さない。★締めた後に普通のレジを開くと「報告を修正しますか？」→キャンセルで自動復帰して販売画面に戻り、入口まで行けない。→ キャンセルの後に「二次販売のレジを開きますか？」を出す。GAS変更なし。 -->
 <!-- register v3.36 (2026-10-21) 【シフトの担当拠点を最初から選んでおき、違う拠点を選んだら確認を出す】10/20 に販売員が担当と違う拠点に入って混乱した件（社長決定A）。v3.35 の確認は「今日すでに別の拠点を開始している人」にしか出ず、**その日最初に違う拠点を選ぶ間違いは素通り**していた。★getMaster が今日のシフト（`todayShift`＝拠点ID→販売員名）を返すので、スタッフ設定の名前（空白を無視）と突き合わせて担当拠点を出す。拠点の一覧で担当拠点を最初から選んでおき、名前に「（シフトの担当）」を付け、下に「📅 今日のシフト：◯◯」と出す。担当以外を選ぶと「シフトでは◯◯の担当です。本当に△△で売りますか？」と確認（キャンセルで選び直し）。ここでOKした拠点には v3.35 の確認を重ねて出さない。★シフトに名前が無い人・シフト表が無い日・スポット名乗り・二次販売レジ（`?mode=2nd`）は何も変わらない。古いGAS（todayShift が無い）でも何も起きないだけ。要: メインGAS 2026-10-21（getMasterData の todayShift）。 -->
 <!-- register v3.35 (2026-10-20) 【別の拠点への引き継ぎに確認を出す】10/20 神保町の販売員が11:11に神保町を開始したあと、開き直した時に**すでに別の人が開始していた神谷町**を選んで引き継ぎで入り、11:22〜11:48の売上15個が神谷町に記録された（実況の神保町が0。神保町と神谷町は名前が似ている）。社長決定A。★**レジ画面の拠点名をタップすると拠点を選び直せる**（同日・社長「神保町に入り直せない」）。それまでは同じ人がアプリを開き直すと保存中の拠点（神谷町）へ確認なしで戻り、拠点を変える手段が1つも無かった。**「売上ごと移す」を選ぶと、今日この人が元の拠点で打った売上・取消をサーバー側で新しい拠点へ付け替え（メインGAS moveMySales）、Firebase の実況も元の拠点を0・新しい拠点に累計を置き直す**＝端末の累計とサーバーが揃い、締めも新しい拠点で出る。「残す」は交代などで元の拠点の売上をそのまま残し、端末を空にして選択へ戻る。神保町のように自分が開始済みの拠点を選べば「そのまま使う」で納品数と開始金が戻る。★**今日この端末で別の拠点を開始している人**が、他の人の開始済みの拠点に引き継ぎで入ろうとした時だけ「あなたは今日 ◯◯ でレジを開始しています。本当に △△ で売りますか？」と確認を出す。キャンセルで拠点の選択に戻る。★今日開始した拠点は `oedo_started_today`（日付・userId つき）に開始報告の時点で残す。あわせて保存中のレジ状態（自分が開始済みの拠点）も見る＝この版を入れる前に開始していた人にも効く。★普通の交代（今日まだどこも開始していない人の引き継ぎ）と、2拠点目を自分で開始する時は何も変わらない。GAS変更なし。 -->
 <!-- register v3.35 (2026-10-21) 【在庫の画面の移動±を Firebase から読む】社長決定 B。昼の /exec で2番目に多い getMoveAdjByLoc（10/20 11〜12時で61件）のうち、在庫の画面を開くたびの分を外す（`moveAdjFromFb_`）。締めの画面と受け取りの直後は最新が要るので今までどおり GAS。あわせて Firebase ログインは IDトークンが無ければ LIFF のアクセストークンで入る（openid の許可を出し直していない人向け）。 -->
@@ -1042,6 +1043,8 @@ html, body { overscroll-behavior-y: contain; }
     </select>
     <div id="loc-shift-hint" style="display:none;margin-top:8px;font-size:13px;color:var(--ink-soft);"></div>
     <button onclick="confirmLocation()" style="width:100%;margin-top:12px;padding:16px;background:var(--red);color:#fff;border:none;border-radius:12px;font-size:16px;font-weight:700;font-family:inherit;cursor:pointer;">選択する</button>
+    <!-- ★2026-10-26 v3.37 もう一方のレジへの入口（社員用・兼任の調理面のメニューに二次販売ボタンが無いため） -->
+    <button id="btn-other-register" onclick="goOtherRegister_()" style="width:100%;margin-top:20px;padding:12px;background:transparent;color:#E07B00;border:1.5px solid #E07B00;border-radius:12px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;">🛒 二次販売のレジはこちら</button>
   </div>
 </div>
 
@@ -1768,6 +1771,16 @@ function apply2ndSaleUi_() {
   document.querySelectorAll('.header-sub').forEach(function (el) {
     el.textContent = '🛒 二次販売 ／ ' + el.textContent;
   });
+  const _other = document.getElementById('btn-other-register');
+  if (_other) _other.textContent = '← 普通のレジに戻る';
+}
+
+// ★2026-10-26 v3.37 普通のレジ ⇔ 二次販売レジ の行き来。
+//   社員用メニュー・兼任の調理面には二次販売ボタンが無く、社員は二次販売レジを開く手段が無かった（社長確認）。
+//   リッチメニューと同じ LIFF の URL を開き直す＝保存キーも別なので、どちらのレジの途中データも壊さない。
+const REGISTER_LIFF_URL = 'https://liff.line.me/2009637457-O8NspH8f';
+function goOtherRegister_() {
+  location.href = IS_2ND ? REGISTER_LIFF_URL : REGISTER_LIFF_URL + '?mode=2nd';
 }
 
 async function init() {
@@ -1894,6 +1907,12 @@ async function init() {
       const msg = `本日すでに報告が提出されています。\n\n拠点：${todayReport.locationName}\n販売数：${todayReport.soldCount}個\n完売率：${todayReport.sellRate}%\n\n報告内容を修正しますか？`;
       if (confirm(msg)) {
         loadEditFromReport(todayReport);
+        return;
+      }
+      // ★2026-10-26 v3.37 締めた後は自動復帰で販売画面に戻り、拠点選択画面の入口まで行けない。
+      //   締めた後に開き直す用事はたいてい二次販売なので、ここで聞く。
+      if (!IS_2ND && confirm('二次販売のレジを開きますか？')) {
+        goOtherRegister_();
         return;
       }
     }
