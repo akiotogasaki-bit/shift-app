@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- kanri.html v4.18 (2026-10-29) 【📦 配達ラベル印刷】社長「もっと簡単に納品管理のアプリに印刷ボタン作れる？」。★拠点配分タブに茶色のボタン。押すと Mac の印刷係（print-server.py の新しい窓口 POST /labels）が、選んでいる日の配達分を押した時点の注文で作り直し（delivery-label.py と同じ中身）、拡大縮小なしで lp。この Mac からのみ。GAS変更なし。 -->
+<!-- kanri.html v4.18 (2026-10-29) 【📦 配達ラベル・🧾 帳票の印刷】★追記：社長「日付の指定ができた方がいい」「必要な帳票もここで」「必要な枚数も」「表裏になってる」→ ボタンの横に専用の配達日（初めは明日）。押すと先に「ラベル用紙◯枚」「請求書◯・納品書◯ → 普通紙◯枚」を出して確認。帳票は print-server.py の POST /docs が delivery-docs.py で freee の中身を描く（PDFの口が無いため。番号・金額は freee と同じ）。どちらも片面。　【元の内容】社長「もっと簡単に納品管理のアプリに印刷ボタン作れる？」。★拠点配分タブに茶色のボタン。押すと Mac の印刷係（print-server.py の新しい窓口 POST /labels）が、選んでいる日の配達分を押した時点の注文で作り直し（delivery-label.py と同じ中身）、拡大縮小なしで lp。この Mac からのみ。GAS変更なし。 -->
 <!-- kanri.html v4.17 (2026-10-22) 【🚚 月曜は販売カレンダーも同梱】社長「これも毎週月曜日にドライバーに渡したいから振り返りと合わせてエリア別でプリントしようか」。★月曜はエリアごとに 予定表→振り返り→カレンダー→拠点別 の順（印刷係 print-server.py 側）。ここは確認の文言と「カレンダー：10枚」の表示だけ。 -->
 <!-- kanri.html v4.16 (2026-10-22) 【🚚 予定表 全エリア印刷に前日の巡回ふりかえりを同梱】社長「予定表 全エリア印刷を押したら、前日の振り返りも一緒に全エリア出るようにして。振り返りは23時の定期実行で毎晩作る」。★印刷係（print-server.py の /driverplan）がエリアごとに「予定表→前日の振り返り」の順で刷る（振り返りは ~/.oedo/reports/巡回振り返り/<日付>/ の作り置きPDF）。★ここは確認の文言と、終わった時に「振り返り：10/21ぶん5枚」／「振り返りなし」を出すだけ。GAS変更なし。 -->
 <!-- kanri.html v4.15 (2026-10-20) 【置き弁の満腹は車載ではなく拠点の列に】社長「アスエネの分の米の数は車載ではなくアスエネの行に出して欲しい。盛る数はそれも含む合計で」「拠点合計はそのまま」。★満腹の行・白米/玄米のセパレート行とも、車載の列から置き弁を外し、置き弁の満腹はその拠点（アスエネ）の列に出す。★車載計（満腹の行・白米/玄米行・拠点合計・満腹系）は置き弁ぶんも含めた盛る数のまま＝10/21 白米69・玄米99・拠点合計168。車載5列を足した数とは置き弁ぶんずれる。拠点合計のアスエネ列は弁当の数のまま。GAS変更なし。 -->
@@ -2412,7 +2412,12 @@ body {
     <button class="btn btn-print" id="s1-btn-print-all" onclick="printAllForDay()" style="background:#ef6c00;color:#fff;border-color:#ef6c00;font-weight:bold;">📚 一括印刷</button>
     <button class="btn btn-print" onclick="printAllForDay(true)" style="background:#2e7d32;color:#fff;border-color:#2e7d32;font-weight:bold;" title="印刷画面を出さずに、この Mac の印刷係がまとめてプリンターへ送ります">📚 Macで一括印刷</button>
     <button class="btn btn-print" onclick="macPrintDriverPlan()" style="background:#1565c0;color:#fff;border-color:#1565c0;font-weight:bold;" title="この日のドライバー予定表（全エリア）を、いまの配分で作ってこの Mac からプリンターへ送ります">🚚 予定表 全エリア印刷</button>
-    <button class="btn btn-print" onclick="macPrintLabels()" style="background:#6d4c41;color:#fff;border-color:#6d4c41;font-weight:bold;" title="この日の配達分の段ボールラベル（A4 2面・1箱1枚）を、いまの注文で作ってこの Mac からプリンターへ送ります">📦 配達ラベル印刷</button>
+    <span style="display:inline-flex;align-items:center;gap:4px;margin-left:6px;padding:2px 6px;border:1px solid #6d4c41;border-radius:6px;" title="配達ラベルと帳票はこの日付（拠点配分の日付とは別）">
+      <label style="font-size:12px;color:#6d4c41;">配達日</label>
+      <input type="date" id="lbl-date-input" style="font-size:13px;">
+      <button class="btn btn-print" onclick="macPrintLabels()" style="background:#6d4c41;color:#fff;border-color:#6d4c41;font-weight:bold;" title="この配達日の段ボールラベル（A4 2面・1箱1枚）を、いまの注文で作ってこの Mac からプリンターへ送ります">📦 ラベル</button>
+      <button class="btn btn-print" onclick="macPrintDocs()" style="background:#455a64;color:#fff;border-color:#455a64;font-weight:bold;" title="この配達日の請求書・納品書・領収書を freee から読んで、この Mac からプリンターへ送ります（普通紙）">🧾 帳票</button>
+    </span>
     <span class="status-msg" id="s1-status-msg"></span>
   </div>
   <div id="sheet1-body"></div>
@@ -9394,28 +9399,60 @@ async function macPrintDriverPlan() {
   }
 }
 
-/** ★v4.18 配達ラベル（段ボールに貼る）をこの日の注文で作り直して印刷 */
-async function macPrintLabels() {
-  const ymd = document.getElementById('s1-date-input').value;
-  if (!ymd) { alert('日付を選んでください'); return; }
-  if (!confirm(ymd + ' 配達分の段ボールラベルを印刷します\n（ラベル用紙をセットしてください・A4 2面）')) return;
-  s1SetStatus('配達ラベルを作って印刷中...（30秒〜1分）');
-  let r;
+/** ★v4.18 配達ラベル・帳票の配達日（初めは明日。拠点配分の日付とは別） */
+function lblDate() {
+  const el = document.getElementById('lbl-date-input');
+  if (!el.value) { const d = new Date(); d.setDate(d.getDate() + 1); el.value = d.toLocaleDateString('sv-SE'); }
+  return el.value;
+}
+document.addEventListener('DOMContentLoaded', () => { try { lblDate(); } catch (e) {} });
+
+async function _macPost(path, body) {
   try {
-    const res = await fetch(MAC_PRINT_URL + '/labels', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date: ymd })
+    const res = await fetch(MAC_PRINT_URL + path, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
     });
-    r = await res.json();
+    return await res.json();
   } catch (e) {
-    r = { ok: false, offline: true, error: 'Mac の印刷係につながりません。\n（この Mac 以外の端末では使えません／印刷係が止まっている可能性）' };
+    return { ok: false, offline: true, error: 'Mac の印刷係につながりません。\n（この Mac 以外の端末では使えません／印刷係が止まっている可能性）' };
   }
+}
+
+/** ★v4.18 配達ラベル（段ボールに貼る）をこの日の注文で作り直して印刷。先に必要な用紙の枚数を出す */
+async function macPrintLabels() {
+  const ymd = lblDate();
+  s1SetStatus('配達ラベルの枚数を数えています...');
+  const c = await _macPost('/labels', { date: ymd, count: true });
+  if (!c || !c.ok) { s1SetStatus('配達ラベルを数えられませんでした', true); alert('配達ラベル（' + ymd + '）\n\n' + ((c && c.error) || '数えられませんでした')); return; }
+  if (!confirm(ymd + ' 配達分の段ボールラベル\n\n' + c.labels + '箱ぶん → ラベル用紙 ' + c.sheets + '枚（A4 2面・片面）\n\nラベル用紙を ' + c.sheets + '枚以上セットしてから OK を押してください')) { s1SetStatus(''); return; }
+  s1SetStatus('配達ラベルを作って印刷中...（30秒〜1分）');
+  const r = await _macPost('/labels', { date: ymd });
   if (r && r.ok) {
-    s1SetStatus('✅ 配達ラベルを印刷しました（' + r.labels + '箱ぶん）');
+    s1SetStatus('✅ 配達ラベルを印刷しました（' + r.labels + '箱ぶん・用紙' + Math.ceil(r.labels / 2) + '枚）');
     alert('配達ラベルを印刷しました（' + r.labels + '箱ぶん）\n\n' + macPrintSummary(r));
   } else {
     s1SetStatus('配達ラベルを印刷できませんでした', true);
     alert('配達ラベルを印刷できませんでした\n\n' + (r && (r.offline || !r.results || !r.results.length) ? r.error : macPrintSummary(r)));
+  }
+}
+
+/** ★v4.18 この配達日の帳票（請求書・納品書・領収書）を freee から読んで印刷。番号・金額は freee と同じ */
+async function macPrintDocs() {
+  const ymd = lblDate();
+  s1SetStatus('帳票を freee から読んでいます...');
+  const c = await _macPost('/docs', { date: ymd, count: true });
+  if (!c || !c.ok) { s1SetStatus('帳票を読めませんでした', true); alert('帳票（' + ymd + '）\n\n' + ((c && c.error) || '読めませんでした')); return; }
+  const kinds = Object.keys(c.kinds).map(k => k + c.kinds[k]).join('・');
+  const miss = (c.missing && c.missing.length) ? '\n⚠ freeeに無い・取り消し済み（刷りません）：' + c.missing.join('、') : '';
+  if (!confirm(ymd + ' 配達分の帳票\n\n' + kinds + ' → 普通紙 ' + c.total + '枚（1通1枚・片面）' + miss + '\n\n普通紙をセットしてから OK を押してください')) { s1SetStatus(''); return; }
+  s1SetStatus('帳票を作って印刷中...（30秒〜1分）');
+  const r = await _macPost('/docs', { date: ymd });
+  if (r && r.ok) {
+    s1SetStatus('✅ 帳票を印刷しました（' + kinds + '）');
+    alert('帳票を印刷しました（' + kinds + '）\n\n' + macPrintSummary(r));
+  } else {
+    s1SetStatus('帳票を印刷できませんでした', true);
+    alert('帳票を印刷できませんでした\n\n' + (r && (r.offline || !r.results || !r.results.length) ? r.error : macPrintSummary(r)));
   }
 }
 
