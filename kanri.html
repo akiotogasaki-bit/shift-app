@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- kanri.html v4.18 (2026-10-29) 【📦 配達ラベル印刷】社長「もっと簡単に納品管理のアプリに印刷ボタン作れる？」。★拠点配分タブに茶色のボタン。押すと Mac の印刷係（print-server.py の新しい窓口 POST /labels）が、選んでいる日の配達分を押した時点の注文で作り直し（delivery-label.py と同じ中身）、拡大縮小なしで lp。この Mac からのみ。GAS変更なし。 -->
 <!-- kanri.html v4.17 (2026-10-22) 【🚚 月曜は販売カレンダーも同梱】社長「これも毎週月曜日にドライバーに渡したいから振り返りと合わせてエリア別でプリントしようか」。★月曜はエリアごとに 予定表→振り返り→カレンダー→拠点別 の順（印刷係 print-server.py 側）。ここは確認の文言と「カレンダー：10枚」の表示だけ。 -->
 <!-- kanri.html v4.16 (2026-10-22) 【🚚 予定表 全エリア印刷に前日の巡回ふりかえりを同梱】社長「予定表 全エリア印刷を押したら、前日の振り返りも一緒に全エリア出るようにして。振り返りは23時の定期実行で毎晩作る」。★印刷係（print-server.py の /driverplan）がエリアごとに「予定表→前日の振り返り」の順で刷る（振り返りは ~/.oedo/reports/巡回振り返り/<日付>/ の作り置きPDF）。★ここは確認の文言と、終わった時に「振り返り：10/21ぶん5枚」／「振り返りなし」を出すだけ。GAS変更なし。 -->
 <!-- kanri.html v4.15 (2026-10-20) 【置き弁の満腹は車載ではなく拠点の列に】社長「アスエネの分の米の数は車載ではなくアスエネの行に出して欲しい。盛る数はそれも含む合計で」「拠点合計はそのまま」。★満腹の行・白米/玄米のセパレート行とも、車載の列から置き弁を外し、置き弁の満腹はその拠点（アスエネ）の列に出す。★車載計（満腹の行・白米/玄米行・拠点合計・満腹系）は置き弁ぶんも含めた盛る数のまま＝10/21 白米69・玄米99・拠点合計168。車載5列を足した数とは置き弁ぶんずれる。拠点合計のアスエネ列は弁当の数のまま。GAS変更なし。 -->
@@ -2411,6 +2412,7 @@ body {
     <button class="btn btn-print" id="s1-btn-print-all" onclick="printAllForDay()" style="background:#ef6c00;color:#fff;border-color:#ef6c00;font-weight:bold;">📚 一括印刷</button>
     <button class="btn btn-print" onclick="printAllForDay(true)" style="background:#2e7d32;color:#fff;border-color:#2e7d32;font-weight:bold;" title="印刷画面を出さずに、この Mac の印刷係がまとめてプリンターへ送ります">📚 Macで一括印刷</button>
     <button class="btn btn-print" onclick="macPrintDriverPlan()" style="background:#1565c0;color:#fff;border-color:#1565c0;font-weight:bold;" title="この日のドライバー予定表（全エリア）を、いまの配分で作ってこの Mac からプリンターへ送ります">🚚 予定表 全エリア印刷</button>
+    <button class="btn btn-print" onclick="macPrintLabels()" style="background:#6d4c41;color:#fff;border-color:#6d4c41;font-weight:bold;" title="この日の配達分の段ボールラベル（A4 2面・1箱1枚）を、いまの注文で作ってこの Mac からプリンターへ送ります">📦 配達ラベル印刷</button>
     <span class="status-msg" id="s1-status-msg"></span>
   </div>
   <div id="sheet1-body"></div>
@@ -9389,6 +9391,31 @@ async function macPrintDriverPlan() {
   } else {
     s1SetStatus('ドライバー予定表を印刷できませんでした', true);
     alert('ドライバー予定表を印刷できませんでした\n\n' + (r && (r.offline || !r.results || !r.results.length) ? r.error : macPrintSummary(r)));
+  }
+}
+
+/** ★v4.18 配達ラベル（段ボールに貼る）をこの日の注文で作り直して印刷 */
+async function macPrintLabels() {
+  const ymd = document.getElementById('s1-date-input').value;
+  if (!ymd) { alert('日付を選んでください'); return; }
+  if (!confirm(ymd + ' 配達分の段ボールラベルを印刷します\n（ラベル用紙をセットしてください・A4 2面）')) return;
+  s1SetStatus('配達ラベルを作って印刷中...（30秒〜1分）');
+  let r;
+  try {
+    const res = await fetch(MAC_PRINT_URL + '/labels', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: ymd })
+    });
+    r = await res.json();
+  } catch (e) {
+    r = { ok: false, offline: true, error: 'Mac の印刷係につながりません。\n（この Mac 以外の端末では使えません／印刷係が止まっている可能性）' };
+  }
+  if (r && r.ok) {
+    s1SetStatus('✅ 配達ラベルを印刷しました（' + r.labels + '箱ぶん）');
+    alert('配達ラベルを印刷しました（' + r.labels + '箱ぶん）\n\n' + macPrintSummary(r));
+  } else {
+    s1SetStatus('配達ラベルを印刷できませんでした', true);
+    alert('配達ラベルを印刷できませんでした\n\n' + (r && (r.offline || !r.results || !r.results.length) ? r.error : macPrintSummary(r)));
   }
 }
 
