@@ -9444,7 +9444,8 @@ async function macPrintDocs() {
   if (!c || !c.ok) { s1SetStatus('帳票を読めませんでした', true); alert('帳票（' + ymd + '）\n\n' + ((c && c.error) || '読めませんでした')); return; }
   const kinds = Object.keys(c.kinds).map(k => k + c.kinds[k]).join('・');
   const miss = (c.missing && c.missing.length) ? '\n⚠ freeeに無い・取り消し済み（刷りません）：' + c.missing.join('、') : '';
-  if (!confirm(ymd + ' 配達分の帳票\n\n' + kinds + ' → 普通紙 ' + c.total + '枚（1通1枚・片面）' + miss + '\n\n普通紙をセットしてから OK を押してください')) { s1SetStatus(''); return; }
+  const skip = (c.skipped && c.skipped.length) ? '\n（請求書' + c.skipped.length + '通は当日手渡しではないので刷りません）' : '';
+  if (!confirm(ymd + ' 配達分の帳票\n\n' + kinds + ' → 普通紙 ' + c.total + '枚（1通1枚・片面）' + skip + miss + '\n\n普通紙をセットしてから OK を押してください')) { s1SetStatus(''); return; }
   s1SetStatus('帳票を作って印刷中...（30秒〜1分）');
   const r = await _macPost('/docs', { date: ymd });
   if (r && r.ok) {
