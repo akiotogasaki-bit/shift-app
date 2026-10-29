@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- delivery v1.2 (2026-10-30) 【🖨 印刷できない】社長報告「納品管理からの印刷はできるけど、配達アプリからの印刷ができない」。★原因＝ボタンが Drive のプレビュー画面を開くだけで、①LINE内ブラウザには印刷が無い ②プレビューからの印刷は Chrome→Brother 直送（kanri v3.98 で止まった経路）。★直し（A案）＝PDFそのもの（drive.usercontent の download）を開く・LINE内なら liff.openWindow で外のブラウザへ／この Mac で開いた時だけ「🖨 Macで印刷（ラベル・帳票）」（印刷係 127.0.0.1:8765 の /labels・/docs＝kanri と同じ）。GAS変更なし。 -->
 <!-- delivery v1.1 (2026-10-29) 【🖨 印刷】社長決定（B案）「帳票・ラベルを俺が休みの日にスタッフに印刷用で渡したい」「配達アプリに入れて」。★日付の下に「📦 ラベル（全部）」「🧾 帳票（全部）」、各配達先カードに「その配達先のラベル・帳票」。タップすると Drive のPDFが開き、そこから印刷する。★PDFは Mac の帳票バッチ（21:00〜翌5:00の7回）が delivery-print.py で作って置く＝中身が変わった時だけ置き直す。リンクは getDeliveryOrders が一緒に返す（GAS @962・/exec の回数は増えない）。★まだ無い日は「前日21時以降にできます」と出す。 -->
 <!-- お江戸弁当 配達アプリ delivery.html v1.0 (2026-08-14)
      【dashboard の「配達」タブを独立アプリにした：アプリ再編⑥-2】
@@ -383,11 +384,79 @@ async function selectDeliveryDate(date) {
 }
 
 // ★v1.1 印刷用PDFのボタン（無い時は薄く出して押せない）
+// ★v1.2 Drive のプレビュー画面は印刷できない＋LINE内ブラウザも印刷できない →
+//   PDFそのもの（drive.usercontent の download）を、LINE内なら外のブラウザで開く。スマホは「共有→プリント」で刷る
 function dvPrintBtn_(url, label, big) {
-  var base = 'flex:1;text-align:center;border-radius:8px;font-family:inherit;text-decoration:none;'
+  var base = 'flex:1;text-align:center;border-radius:8px;font-family:inherit;text-decoration:none;cursor:pointer;border:none;'
     + (big ? 'padding:9px 6px;font-size:13px;' : 'padding:6px 6px;font-size:12px;');
   if (!url) return '<span style="' + base + 'background:#F2F3F4;color:#B0B3B7;border:1px solid #E5E7E9;">' + label + '（まだ無し）</span>';
-  return '<a href="' + url + '" target="_blank" rel="noopener" style="' + base + 'background:#1A3C5E;color:white;font-weight:bold;">' + label + '</a>';
+  return '<button onclick="dvOpenPdf_(\'' + encodeURIComponent(url) + '\')" style="' + base + 'background:#1A3C5E;color:white;font-weight:bold;">' + label + '</button>';
+}
+
+function dvOpenPdf_(enc) {
+  var url = decodeURIComponent(enc);
+  var m = url.match(/\/file\/d\/([^\/?#]+)/);
+  if (m) url = 'https://drive.usercontent.google.com/download?id=' + m[1] + '&export=download';
+  try {
+    if (typeof liff !== 'undefined' && liff.isInClient && liff.isInClient() && liff.openWindow) {
+      liff.openWindow({ url: url, external: true });
+      return;
+    }
+  } catch (e) {}
+  window.open(url, '_blank');
+}
+
+// ★v1.2 この Mac で開いた時だけ「🖨 Macで印刷」（kanri と同じ印刷係 127.0.0.1:8765 → Brother）
+//   Chrome の印刷画面から Brother へ直送すると止まるため（kanri v3.98 と同じ理由）
+const DV_MAC_PRINT_URL = 'http://127.0.0.1:8765';
+let dvMacOk = null;   // null=未確認 / true / false
+async function dvMacProbe_() {
+  if (dvMacOk !== null) return dvMacOk;
+  try {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 1500);
+    const r = await fetch(DV_MAC_PRINT_URL + '/health', { signal: ctl.signal });
+    clearTimeout(t);
+    dvMacOk = r.ok;
+  } catch (e) { dvMacOk = false; }
+  return dvMacOk;
+}
+async function dvMacPost_(path, body) {
+  try {
+    const r = await fetch(DV_MAC_PRINT_URL + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    return await r.json();
+  } catch (e) { return { ok: false, error: 'Mac の印刷係につながりません（この Mac 以外では使えません）' }; }
+}
+async function dvMacPrint_(kind, date) {
+  const ymd = String(date).replace(/\//g, '-');
+  const st = document.getElementById('dv-mac-status');
+  const say = (t) => { if (st) st.textContent = t; };
+  say(kind === 'labels' ? 'ラベルの枚数を数えています...' : '帳票を freee から読んでいます...');
+  const c = await dvMacPost_('/' + kind, { date: ymd, count: true });
+  if (!c || !c.ok) { say(''); alert(ymd + '\n\n' + ((c && c.error) || '数えられませんでした')); return; }
+  let msg;
+  if (kind === 'labels') {
+    msg = ymd + ' 配達分の段ボールラベル\n\n' + c.labels + '箱ぶん → ラベル用紙 ' + c.sheets + '枚（A4 2面・片面）\n\nラベル用紙を ' + c.sheets + '枚以上セットしてから OK を押してください';
+  } else {
+    const kinds = Object.keys(c.kinds || {}).map(k => k + c.kinds[k]).join('・');
+    const miss = (c.missing && c.missing.length) ? '\n⚠ freeeに無い・取り消し済み（刷りません）：' + c.missing.join('、') : '';
+    msg = ymd + ' 配達分の帳票\n\n' + kinds + ' → 普通紙 ' + c.total + '枚（1通1枚・片面）' + miss + '\n\n普通紙をセットしてから OK を押してください';
+  }
+  if (!confirm(msg)) { say(''); return; }
+  say('作って印刷中...（30秒〜1分）');
+  const r = await dvMacPost_('/' + kind, { date: ymd });
+  if (r && r.ok) { say('✅ 印刷しました'); }
+  else { say('印刷できませんでした'); alert('印刷できませんでした\n\n' + ((r && r.error) || ((r && r.results || []).map(x => x.label + '：' + (x.error || '')).join('\n')))); }
+}
+async function dvShowMacButtons_(date) {
+  if (!(await dvMacProbe_())) return;
+  const box = document.getElementById('dv-mac-print');
+  if (!box) return;
+  const b = 'flex:1;padding:9px 6px;font-size:13px;border-radius:8px;border:none;background:#8B5A2B;color:white;font-weight:bold;font-family:inherit;cursor:pointer;';
+  box.innerHTML = '<div style="display:flex;gap:8px;margin-top:8px;">'
+    + '<button style="' + b + '" onclick="dvMacPrint_(\'labels\',\'' + date + '\')">🖨 Macで印刷（ラベル）</button>'
+    + '<button style="' + b + '" onclick="dvMacPrint_(\'docs\',\'' + date + '\')">🖨 Macで印刷（帳票）</button>'
+    + '</div><div id="dv-mac-status" style="font-size:11px;color:#4A4A4A;margin-top:4px;"></div>';
 }
 
 function renderDeliveryOrders(orders, date) {
@@ -411,7 +480,10 @@ function renderDeliveryOrders(orders, date) {
     + ((pa.label || pa.docs)
         ? '<div style="display:flex;gap:8px;">' + dvPrintBtn_(pa.label, '📦 ラベル（全部）', true) + dvPrintBtn_(pa.docs, '🧾 帳票（全部）', true) + '</div>'
         : '<div style="font-size:12px;color:#9A9A9A;">印刷用PDFはまだできていません（前日21時以降にできます）</div>')
+    + '<div style="font-size:11px;color:#9A9A9A;margin-top:4px;">スマホはPDFが開いたら「共有 → プリント」</div>'
+    + '<div id="dv-mac-print"></div>'
     + '</div>';
+  setTimeout(() => dvShowMacButtons_(date), 0);
 
   orders.sort((a, b) => (a.time || '').localeCompare(b.time || ''));
 
