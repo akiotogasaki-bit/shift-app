@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- delivery v1.1 (2026-10-29) 【🖨 印刷】社長決定（B案）「帳票・ラベルを俺が休みの日にスタッフに印刷用で渡したい」「配達アプリに入れて」。★日付の下に「📦 ラベル（全部）」「🧾 帳票（全部）」、各配達先カードに「その配達先のラベル・帳票」。タップすると Drive のPDFが開き、そこから印刷する。★PDFは Mac の帳票バッチ（21:00〜翌5:00の7回）が delivery-print.py で作って置く＝中身が変わった時だけ置き直す。リンクは getDeliveryOrders が一緒に返す（GAS @962・/exec の回数は増えない）。★まだ無い日は「前日21時以降にできます」と出す。 -->
 <!-- お江戸弁当 配達アプリ delivery.html v1.0 (2026-08-14)
      【dashboard の「配達」タブを独立アプリにした：アプリ再編⑥-2】
      → [[設計_アプリ再編_振り分け確定_2026-08-10]]（第2軸＝業務内容で分ける／配達は独立）
@@ -306,6 +307,7 @@ async function init() {
 let deliveryDates    = [];
 let selectedDelivery = '';
 const deliveryCache  = {};
+const deliveryPrintAll = {};   // ★v1.1 日付 → {label, docs}（その日まとめての印刷用PDF）
 
 // 住所をGoogleマップで開く（LIFFブラウザ内では外部アプリ起動）
 function openMapByEncoded(encodedAddr) {
@@ -372,11 +374,20 @@ async function selectDeliveryDate(date) {
     const res    = await fetchJSON(`${GAS_URL}?action=getDeliveryOrders&date=${encodeURIComponent(date)}`);
     const orders = res.orders || [];
     deliveryCache[date] = orders;
+    deliveryPrintAll[date] = res.printAll || null;
     renderDeliveryOrders(orders, date);
   } catch(e) {
     document.getElementById('dv-content').innerHTML = `<p style="color:var(--red);">取得エラー：${e.message}</p>`;
   }
   document.getElementById('dv-loading').style.display = 'none';
+}
+
+// ★v1.1 印刷用PDFのボタン（無い時は薄く出して押せない）
+function dvPrintBtn_(url, label, big) {
+  var base = 'flex:1;text-align:center;border-radius:8px;font-family:inherit;text-decoration:none;'
+    + (big ? 'padding:9px 6px;font-size:13px;' : 'padding:6px 6px;font-size:12px;');
+  if (!url) return '<span style="' + base + 'background:#F2F3F4;color:#B0B3B7;border:1px solid #E5E7E9;">' + label + '（まだ無し）</span>';
+  return '<a href="' + url + '" target="_blank" rel="noopener" style="' + base + 'background:#1A3C5E;color:white;font-weight:bold;">' + label + '</a>';
 }
 
 function renderDeliveryOrders(orders, date) {
@@ -392,6 +403,15 @@ function renderDeliveryOrders(orders, date) {
     document.getElementById('dv-content').innerHTML = html;
     return;
   }
+
+  // ★v1.1 🖨 その日まとめての印刷
+  var pa = deliveryPrintAll[date] || {};
+  html += '<div style="background:white;border:1px solid #D5D8DC;border-radius:12px;padding:10px 12px;margin-bottom:12px;">'
+    + '<div style="font-size:12px;color:#4A4A4A;font-weight:bold;margin-bottom:6px;">🖨 この日の印刷（タップでPDFが開きます）</div>'
+    + ((pa.label || pa.docs)
+        ? '<div style="display:flex;gap:8px;">' + dvPrintBtn_(pa.label, '📦 ラベル（全部）', true) + dvPrintBtn_(pa.docs, '🧾 帳票（全部）', true) + '</div>'
+        : '<div style="font-size:12px;color:#9A9A9A;">印刷用PDFはまだできていません（前日21時以降にできます）</div>')
+    + '</div>';
 
   orders.sort((a, b) => (a.time || '').localeCompare(b.time || ''));
 
@@ -410,6 +430,15 @@ function renderDeliveryOrders(orders, date) {
       + '<div style="font-size:12px;opacity:0.85;display:flex;align-items:center;gap:8px;"><span style="flex:1;min-width:0;">' + (o.address || '住所未定') + '</span>' + mapBtn + '</div>'
       + '<div style="font-size:10px;opacity:0.6;margin-top:2px;">' + (o.orderNo || '') + '</div>';
     card.appendChild(hdr);
+
+    // ★v1.1 🖨 この配達先だけの印刷
+    var pr = o.prints || {};
+    if (pr.label || pr.docs) {
+      var pb = document.createElement('div');
+      pb.style.cssText = 'display:flex;gap:8px;padding:8px 14px;background:#EEF3F8;';
+      pb.innerHTML = dvPrintBtn_(pr.label, '📦 ラベル', false) + dvPrintBtn_(pr.docs, '🧾 帳票', false);
+      card.appendChild(pb);
+    }
 
     if (o.detail) {
       var det = document.createElement('div');
