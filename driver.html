@@ -1,5 +1,6 @@
 <!DOCTYPE html>
-<!-- driver v8.15 (2026-10-28) 【💬 相談のボタンがPWAで出なかった】社長「出てないんだけど」。★原因＝起動直後に1回だけ Firebase のログインを見て、未ログインならそれきり諦めていた。PWA（パスワード入口）は起動直後はまだ未ログインで、パスワードを入れた後にログインする＝許可を聞き直していなかった（10/27 の裏ログイン記録に「起動直後 idToken なし」2件）。★直し＝firebase.auth().onAuthStateChanged で「ログインできた瞬間」ごとに聞く。FB_PROBE_VER_ を 8.15 に。 -->
+<!-- driver v8.16 (2026-10-30) 【12:05までのエリア内の融通】社長決定（②案）。10/29 12:04 お茶の水の銀鮭白が5/5で完売、同じエリアの神保町は0/8なのに指示が出なかった。★12:05まで、サーバーの `xfer`（ここから下げて◯◯へ）を「下げる」に入れ、理由欄に行き先を出す。受け手には `xferIn`（◯◯から◯個来る）を出す。12:05〜12:20は従来どおり下げるは出さない。要: メインGAS 2026-10-30（`_rt_earlyXfer_`）。 -->
+<!-- driver v8.15(2026-10-28) 【💬 相談のボタンがPWAで出なかった】社長「出てないんだけど」。★原因＝起動直後に1回だけ Firebase のログインを見て、未ログインならそれきり諦めていた。PWA（パスワード入口）は起動直後はまだ未ログインで、パスワードを入れた後にログインする＝許可を聞き直していなかった（10/27 の裏ログイン記録に「起動直後 idToken なし」2件）。★直し＝firebase.auth().onAuthStateChanged で「ログインできた瞬間」ごとに聞く。FB_PROBE_VER_ を 8.15 に。 -->
 <!-- driver v8.14 (2026-10-26) 【車載の残りが /exec に戻っていた】メインGAS @956 で車載の土台（スタート時の積み込み数）を「確定の時＋30分おき」の送信に減らしたのに、端末は「土台が15分より古ければ /exec」のままだった＝10/26 昼は veh:exec 16／firebase 5。★土台の古さは45分で見る。★日中に動く移動の出入り（moveAt）は15分より古ければ /exec に戻す（それまで移動の古さは見ていなかった）。 -->
 <!-- driver v8.13 (2026-10-26) 【💬 相談】社長決定（案①）「押し引きの指示をベテランドライバーも混ぜて話したい。不具合の報告も入れられるように。緊急なら俺に通知」。★ヘッダーの「📝 日報」の隣に「💬 相談」（タブは8本で幅いっぱいなので増やさない）。押し引きの相談／不具合の報告を選んで送ると、Firebase の consult 関数が今のルール（functions/consult-rules.md）と今日の巡回の数字を添えて Claude に聞き、返事を出す。急ぎ（仕事が止まる・指示が明らかに違う・数字が合わない・事故）と判断したら社長へLINE＋Todoist の受付に積む。★ボタンは許可リスト（consultCfg）に載った人だけ＝最初は戸賀崎智信さん。GAS は通らない（/exec の枠を使わない）。★FB_PROBE_VER_ を 8.13 に。 -->
 <!-- driver v8.12 (2026-10-24) 【売れ行き棒が短すぎる（再修正）】社長「昨日の昼、棒グラフがまた短かった」。10/14 に直した（230ee79）が、10/15 の front deploy（a1493af）で手元の古い driver.html に上書きされて消えていた。★原因＝「ほかのエリア」の行が 名前｜棒｜数字 の横並びで、v8.0 の「残り◯（車◯）・12:00の予定比◯%」（折り返し無し）が右の列を広げ、棒が幅40〜50pxに潰れていた。★直し＝ほかのエリアも担当エリアと同じ並び（上段＝名前＋数字／下段＝棒を全幅）。CSS（`.rt-prow` を2列・棒を全幅）と `_rtPaceCard_` の並び順だけ。数字・目盛り・線の位置は変えていない。 -->
@@ -2460,7 +2461,7 @@ function fbLoadScript_(src) {
 function fbJstYmd_() { return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10); }
 /* ★2026-10-22 v8.9.1 誰の端末か（名前・画面の版・入口）も載せる。Firebase に入れていない人を特定するため（社長決定 A）。
    state / drvViaPassword は後ろで宣言しているので、まだ無い時（TDZ）は try で空にする。 */
-var FB_PROBE_VER_ = '8.15';
+var FB_PROBE_VER_ = '8.16';
 function fbProbe_(o) {
   var who = '', via = '';
   try { who = (state && state.userName) || ''; } catch (e) {}
@@ -8023,7 +8024,19 @@ function ptCalcPut_(locId, res, veh) {
 // 下げる数＝今日の売れ行きだと最後まで残りそうな数。その拠点の残りが上限。
 function ptCalcBack_(locId, res) {
   const out = {};
-  if (!ptRec || ptRec.tooEarly) return out;      // ★12:00より前は出さない
+  /* ★v8.16 12:05までの融通（サーバーの xfer）だけは12:20より前でも出す。
+     「下げて、別の拠点へ持って行く」数。自分の12時以降の分（区間2+3）は残してある。 */
+  if (ptRec && ptRec.tooEarly) {
+    const X = ptRec.byLoc && ptRec.byLoc[locId];
+    ((X && X.xfer) || []).forEach(r => {
+      const pid = String(r.pid);
+      const have = (res && res[pid] != null) ? Number(res[pid]) : 0;
+      const q = Math.min((out[pid] || 0) + (Number(r.qty) || 0), have);
+      if (q > 0) out[pid] = q;
+    });
+    return out;
+  }
+  if (!ptRec) return out;
   const L = ptRec.byLoc && ptRec.byLoc[locId];
   if (!L || !L.back) return out;
   const tea = getTeaIdSet_();
@@ -8147,6 +8160,17 @@ function ptRenderWhy_(locId, put, back, resOK) {
            + '<b>推奨は出せないので、見て判断して入れてください。</b>');
   }
   const hasPace = !!(ptPace && ptPace.byLoc && ptPace.byLoc[locId]);
+  // ★v8.16 12:05までの融通。送り元には行き先、受け手には出どころを出す
+  const _X = ptRec && ptRec.byLoc && ptRec.byLoc[locId];
+  const _xo = (_X && _X.xfer) || [], _xi = (_X && _X.xferIn) || [];
+  if (ptRec && ptRec.tooEarly && _xo.length) {
+    msg.push('🔁 <b>ピーク前の融通</b>：' + _xo.map(r => _esc(r.name) + ' <b>' + r.qty + '個</b> → <b>' + _esc(r.toName) + '</b>').join(' / ')
+      + '<br>ここから下げて持って行ってください（この拠点の12時以降の分は残してあります）。');
+  }
+  if (_xi.length) {
+    msg.push('🔁 <b>ピーク前の融通</b>：' + _xi.map(r => _esc(r.fromName) + ' から ' + _esc(r.name) + ' <b>' + r.qty + '個</b>').join(' / ')
+      + ' が回ってきます。車に積んでいれば「置く」に入ります。');
+  }
   if (Object.keys(put).length) {
     /* ★2026-08-18 v4.5 12:15を境に「置く」の意味が変わるので、根拠の文も切り替える。
        社長「12:15超えたらピーク＋フル」。〜12:15＝ピーク20分の不足だけ／12:15〜＝
@@ -8173,7 +8197,9 @@ function ptRenderWhy_(locId, put, back, resOK) {
       .map(p => _moveProdName_(p) + ' あと' + ((Number(ptWant[p]) || 0) - (Number(put[p]) || 0)) + '個');
     if (shortOf.length) msg.push('⚠ 車載が足りず、推奨どおり置けません：' + shortOf.join(' / '));
   }
-  if (Object.keys(back).length) {
+  if (Object.keys(back).length && ptRec && ptRec.tooEarly) {
+    // 融通の「下げる」だけ（理由は上の🔁に出している）
+  } else if (Object.keys(back).length) {
     let ex = 0;
     const L = ptRec && ptRec.byLoc && ptRec.byLoc[locId];
     ((L && L.back) || []).forEach(r => { ex = Math.max(ex, Number(r.excess) || 0); });
