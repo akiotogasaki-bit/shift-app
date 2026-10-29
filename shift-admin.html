@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <!--
   お江戸弁当 shift-admin.html
+  v2026-10-30 「🆘 急募」タブ：未割当の枠を選んでその日シフトに入っていない販売員全員へ急募（先着1名で決定）。募集中の取り消し。変更通知の「承認／不可」の回答一覧。依存: メインGAS createShiftBoshu / cancelShiftBoshu / getShiftBoshuStatus。
   v2026-10-20 拠点マスタの「販売曜日」の外の日は、未割当のマスをグレーの「休み（販売曜日外）」で出す。未割当だけ表示の絞り込みからも外す。手で入れる時は確認を出す（臨時で売る日用）。依存: メインGAS getShiftMatrix の bases[].salesDows。
   v2026-10-13c 休ませ候補の数を当日配分(L列)に（それまでG列＝初回納品）。同じ週に同じ拠点は1回まで。割り当て済みの拠点にも「配分N」を出す（社長「あとから配達が入った時に削ることがある為」）。
   v2026-10-13b 日付の下の食数の配達を午前（1便）だけにした＝配分調整の総合計・午前盛り出し表の計と同じ数（社長「総合計と同じにする」）。表記も「配達午前」。
@@ -862,6 +863,14 @@ input { font-family: inherit; }
 
 /* ═══ 確認状況タブ（v2026-07-12） ═══ */
 .cf-section { margin: 12px 16px; }
+/* ── 🆘 急募タブ（v2026-10-30） ── */
+.bs-form { display:flex; flex-direction:column; gap:8px; background:#fff; border:1px solid var(--border); border-radius:10px; padding:12px; margin-bottom:8px; }
+.bs-form label { display:flex; flex-direction:column; gap:4px; font-size:12px; font-weight:700; color:var(--ink); }
+.bs-form select { font-size:14px; padding:8px; border:1px solid var(--border); border-radius:8px; background:#fff; }
+.bs-preview { font-size:12px; color:#666; line-height:1.5; }
+.bs-send { background:#D35400; color:#fff; border:none; border-radius:8px; padding:12px; font-size:15px; font-weight:700; cursor:pointer; }
+.bs-send:disabled { background:#ccc; cursor:default; }
+.bs-cancel { border:1px solid #C0392B; color:#C0392B; background:#fff; border-radius:6px; padding:3px 8px; font-size:11px; cursor:pointer; }
 .cf-summary {
   display: flex;
   align-items: center;
@@ -1570,6 +1579,7 @@ input { font-family: inherit; }
   <div class="tab-bar">
     <button class="tab-btn active" id="tab-shift" onclick="switchTab('shift')">📋 シフト</button>
     <button class="tab-btn" id="tab-confirm" onclick="switchTab('confirm')">✅ 確認状況<span class="badge-tab red" id="unconfirmedBadge" hidden>0</span></button>
+    <button class="tab-btn" id="tab-boshu" onclick="switchTab('boshu')">🆘 急募<span class="badge-tab red" id="boshuBadge" hidden>0</span></button>
     <button class="tab-btn" id="tab-staff" onclick="switchTab('staff')">👥 スタッフ<span class="badge-tab" id="orphanBadge" hidden>0</span></button>
     <button class="tab-btn" id="tab-kitchen" onclick="switchTab('kitchen')">🍳 キッチン</button>
   </div>
@@ -1694,6 +1704,33 @@ input { font-family: inherit; }
     </div>
 
   </div><!-- /panel-confirm -->
+
+  <!-- ═══ 🆘 急募タブ（v2026-10-30 新設） ═══ -->
+  <div class="tab-panel" id="panel-boshu">
+    <div class="cf-section">
+      <div class="sec-title">🆘 急募を出す</div>
+      <div class="bs-form">
+        <label>日付<select id="bsDate" onchange="bsFillBases()"></select></label>
+        <label>拠点（未割当のみ）<select id="bsBase" onchange="bsPreview()"></select></label>
+        <div class="bs-preview" id="bsPreview">日付と拠点を選ぶと、送り先の人数が出ます</div>
+        <button class="bs-send" id="bsSendBtn" onclick="bsSend()" disabled>🆘 急募を送る</button>
+      </div>
+      <div class="cf-note">
+        ※ 送り先＝その日どこにもシフトに入っていない販売員全員（社員・ドライバー・スポット・LINE未登録・この枠を「不可」と答えた人は除く）。<br>
+        ※ 最初に「🙋 勤務可能」を押した人でシフト表に書き、送った全員とドライバー全員にLINEでお知らせします。
+      </div>
+
+      <div class="sec-title">📣 急募の状況</div>
+      <div class="cf-list" id="bsList"><div class="cf-empty"><div>読み込み中...</div></div></div>
+
+      <div class="sec-title">🙆 承認／不可の回答</div>
+      <div class="cf-list" id="bsAckList"><div class="cf-empty"><div>読み込み中...</div></div></div>
+      <div class="cf-note">※ 変更通知の「承認」「不可」ボタンの回答。不可の枠は自動で【未割当】に戻り、ドライバー全員に急募ボタン付きで届きます。</div>
+    </div>
+    <div class="reload-wrap">
+      <button class="reload-btn" onclick="loadBoshuTab()">🔄 再読み込み</button>
+    </div>
+  </div><!-- /panel-boshu -->
 
   <div class="tab-panel" id="panel-staff">
 
@@ -3646,6 +3683,8 @@ function switchTab(tab) {
   document.getElementById('tab-staff').classList.toggle('active', tab === 'staff');
   document.getElementById('tab-confirm').classList.toggle('active', tab === 'confirm');
   document.getElementById('tab-kitchen').classList.toggle('active', tab === 'kitchen');
+  document.getElementById('tab-boshu').classList.toggle('active', tab === 'boshu');
+  document.getElementById('panel-boshu').classList.toggle('active', tab === 'boshu');
   document.getElementById('panel-shift').classList.toggle('active', tab === 'shift');
   document.getElementById('panel-staff').classList.toggle('active', tab === 'staff');
   document.getElementById('panel-confirm').classList.toggle('active', tab === 'confirm');
@@ -3663,6 +3702,11 @@ function switchTab(tab) {
   // ★v2026-07-12 確認状況：未読込 or 週が変わっていたら取得
   if (tab === 'confirm' && state.confirmLoadedWeek !== state.weekTarget) {
     loadConfirmTab();
+  }
+  // ★v2026-10-30 急募：開くたびに取り直す（LINEで決まるので画面の外で変わる）
+  if (tab === 'boshu') {
+    bsFillDates();
+    loadBoshuTab();
   }
   // ★2026-08-14 キッチン：初回表示のときだけ取得（3並列APIを毎回叩かない）
   if (kitchenOn && !KA.loaded) {
@@ -3767,6 +3811,137 @@ function updateUnconfirmedBadge() {
     badge.hidden = false;
   } else {
     badge.hidden = true;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 🆘 急募タブ（v2026-10-30）
+//   GAS: GET getShiftBoshuStatus → { boshu:[{id,date,base,status,winner,...}], acks:[...] }
+//        POST createShiftBoshu {date, base, dry} ／ cancelShiftBoshu {id}
+//   日付・拠点の候補は読み込み済みの週（state.matrix）の【未割当】で、今日以降だけ。
+// ═══════════════════════════════════════════════════════════════
+function bsYmd(d) {
+  const m = String(d || '').match(/^(\d{1,2})\/(\d{1,2})/);
+  if (!m) return '';
+  const now = new Date();
+  let y = now.getFullYear();
+  const mo = parseInt(m[1], 10);
+  if (mo - (now.getMonth() + 1) < -6) y++;
+  if (mo - (now.getMonth() + 1) > 6) y--;
+  return y + '-' + String(mo).padStart(2, '0') + '-' + String(parseInt(m[2], 10)).padStart(2, '0');
+}
+function bsTodayYmd() {
+  const n = new Date();
+  return n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0') + '-' + String(n.getDate()).padStart(2, '0');
+}
+function bsOpenBases(date) {
+  const row = state.matrix[date] || {};
+  return (state.bases || []).filter(b => {
+    const n = row[b.name];
+    return (!n || n === '【未割当】') && !isOffDow(b.name, date);
+  });
+}
+function bsFillDates() {
+  const sel = document.getElementById('bsDate');
+  const today = bsTodayYmd();
+  const dates = (state.dates || []).filter(d => { const y = bsYmd(d); return !y || y >= today; })
+                                   .filter(d => bsOpenBases(d).length > 0);
+  const keep = sel.value;
+  sel.innerHTML = dates.length
+    ? dates.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}（未割当 ${bsOpenBases(d).length}）</option>`).join('')
+    : '<option value="">（この週に未割当の枠はありません）</option>';
+  if (keep && dates.indexOf(keep) >= 0) sel.value = keep;
+  bsFillBases();
+}
+function bsFillBases() {
+  const date = document.getElementById('bsDate').value;
+  const sel = document.getElementById('bsBase');
+  const bases = date ? bsOpenBases(date) : [];
+  sel.innerHTML = '<option value="">拠点を選ぶ</option>' + bases.map(b =>
+    `<option value="${escapeHtml(b.name)}">${escapeHtml(b.name)}${b.workHours ? '（' + escapeHtml(b.workHours) + '）' : ''}</option>`).join('');
+  bsPreview();
+}
+async function bsPreview() {
+  const date = document.getElementById('bsDate').value;
+  const base = document.getElementById('bsBase').value;
+  const pv = document.getElementById('bsPreview');
+  const btn = document.getElementById('bsSendBtn');
+  btn.disabled = true;
+  if (!date || !base) { pv.textContent = '日付と拠点を選ぶと、送り先の人数が出ます'; return; }
+  pv.textContent = '送り先を確認中...';
+  try {
+    const r = await apiPost('createShiftBoshu', { date, base, dry: true });
+    if (document.getElementById('bsBase').value !== base) return;   // 選び直された
+    if (!r.success) { pv.textContent = '⚠️ ' + (r.error || '確認できませんでした'); return; }
+    if (!r.count) { pv.textContent = '⚠️ 送れる人がいません（その日全員シフトに入っているか、LINE未登録）'; return; }
+    pv.innerHTML = `送り先 <b>${r.count}名</b>：${escapeHtml((r.names || []).join('、'))}`;
+    btn.disabled = false;
+  } catch (e) {
+    pv.textContent = '⚠️ 確認に失敗しました：' + e.message;
+  }
+}
+async function bsSend() {
+  const date = document.getElementById('bsDate').value;
+  const base = document.getElementById('bsBase').value;
+  if (!date || !base) return;
+  if (!confirm(`${date} ${base} の急募を送ります。\nその日シフトに入っていない販売員全員にLINEが届きます。よろしいですか？`)) return;
+  const btn = document.getElementById('bsSendBtn');
+  btn.disabled = true;
+  setStatus('busy', '急募を送信中...');
+  try {
+    const r = await apiPost('createShiftBoshu', { date, base, by: '社長' });
+    if (!r.success) throw new Error(r.error || '送信できませんでした');
+    setStatus('ok', `🆘 急募を送りました（${r.sent}名）`);
+    await loadBoshuTab();
+  } catch (e) {
+    setStatus('err', '急募の送信に失敗：' + e.message);
+    btn.disabled = false;
+  }
+}
+async function bsCancel(id, label) {
+  if (!confirm(`${label} の急募を取り消します。\n送った人に「締め切りました」と届きます。よろしいですか？`)) return;
+  setStatus('busy', '取り消し中...');
+  try {
+    const r = await apiPost('cancelShiftBoshu', { id });
+    if (!r.success) throw new Error(r.error || '取り消せませんでした');
+    setStatus('ok', '急募を取り消しました');
+    await loadBoshuTab();
+  } catch (e) {
+    setStatus('err', '取り消しに失敗：' + e.message);
+  }
+}
+async function loadBoshuTab() {
+  const listEl = document.getElementById('bsList');
+  const ackEl  = document.getElementById('bsAckList');
+  try {
+    const r = await apiGet('getShiftBoshuStatus', { _cb: Date.now() });
+    if (!r.success) throw new Error(r.error || '取得に失敗しました');
+    const stColor = { '募集中': '#D35400', '決定': 'var(--green)', '充足': 'var(--green)', '取消': '#999' };
+    const boshu = r.boshu || [];
+    listEl.innerHTML = boshu.length ? boshu.map(b => {
+      const label = b.date + ' ' + b.base;
+      const right = b.status === '募集中'
+        ? `<button class="bs-cancel" onclick="bsCancel('${escapeHtml(b.id)}','${escapeHtml(label)}')">取り消す</button>`
+        : `<span class="cf-at">${escapeHtml(b.decidedAt || '')}</span>`;
+      const who = b.status === '決定' ? `→ ${escapeHtml(b.winner)}さん`
+               : b.status === '充足' ? `→ ${escapeHtml(b.winner)}さん（手で割当）`
+               : b.status === '募集中' ? `送信 ${b.sent}名・${escapeHtml(b.createdAt)}` : '';
+      return `<div class="cf-row${b.status === '募集中' ? ' ng' : ''}">
+        <span class="cf-name">${escapeHtml(label)}<br><span style="font-size:11px;font-weight:400;color:#666">${who}${b.by ? '（出した人：' + escapeHtml(b.by) + '）' : ''}</span></span>
+        <span class="cf-badge" style="background:${stColor[b.status] || '#999'}">${escapeHtml(b.status)}</span>
+        ${right}</div>`;
+    }).join('') : '<div class="cf-empty"><div>今日以降の急募はありません</div></div>';
+    const acks = r.acks || [];
+    ackEl.innerHTML = acks.length ? acks.map(a => `<div class="cf-row${a.result === '不可' ? ' ng' : ''}">
+        <span class="cf-name">${escapeHtml(a.date + ' ' + a.base)}<br><span style="font-size:11px;font-weight:400;color:#666">${escapeHtml(a.name)}さん</span></span>
+        <span class="cf-badge ${a.result === '承認' ? 'ok' : 'ng'}">${escapeHtml(a.result)}</span>
+        <span class="cf-at">${escapeHtml(a.at)}</span></div>`).join('')
+      : '<div class="cf-empty"><div>今日以降の回答はありません</div></div>';
+    const open = boshu.filter(b => b.status === '募集中').length;
+    const badge = document.getElementById('boshuBadge');
+    badge.textContent = open; badge.hidden = open === 0;
+  } catch (e) {
+    listEl.innerHTML = '<div class="cf-empty"><div>⚠️ 読み込みに失敗しました<br>' + escapeHtml(e.message) + '</div></div>';
   }
 }
 
