@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- delivery v1.3 (2026-11-01) 【🖨 スタッフのスマホで開けない】社長報告「俺のスマホだと見れるがスタッフは開けなかった」「ブラウザで開いたらできた」。★原因＝トークのリンク等から開くとLIFFではなくLINE内の簡易ブラウザになり、PDFが外へ出ない。★直し（A案）＝LINE内の簡易ブラウザなら openExternalBrowser=1 を付けて移動。GAS変更なし。 -->
 <!-- delivery v1.2 (2026-10-30) 【🖨 印刷できない】社長報告「納品管理からの印刷はできるけど、配達アプリからの印刷ができない」。★原因＝ボタンが Drive のプレビュー画面を開くだけで、①LINE内ブラウザには印刷が無い ②プレビューからの印刷は Chrome→Brother 直送（kanri v3.98 で止まった経路）。★直し（A案）＝PDFそのもの（drive.usercontent の download）を開く・LINE内なら liff.openWindow で外のブラウザへ／この Mac で開いた時だけ「🖨 Macで印刷（ラベル・帳票）」（印刷係 127.0.0.1:8765 の /labels・/docs＝kanri と同じ）。GAS変更なし。 -->
 <!-- delivery v1.1 (2026-10-29) 【🖨 印刷】社長決定（B案）「帳票・ラベルを俺が休みの日にスタッフに印刷用で渡したい」「配達アプリに入れて」。★日付の下に「📦 ラベル（全部）」「🧾 帳票（全部）」、各配達先カードに「その配達先のラベル・帳票」。タップすると Drive のPDFが開き、そこから印刷する。★PDFは Mac の帳票バッチ（21:00〜翌5:00の7回）が delivery-print.py で作って置く＝中身が変わった時だけ置き直す。リンクは getDeliveryOrders が一緒に返す（GAS @962・/exec の回数は増えない）。★まだ無い日は「前日21時以降にできます」と出す。 -->
 <!-- お江戸弁当 配達アプリ delivery.html v1.0 (2026-08-14)
@@ -403,6 +404,12 @@ function dvOpenPdf_(enc) {
       return;
     }
   } catch (e) {}
+  // ★v1.3 トークのリンク等から開いた「LINE内の簡易ブラウザ」は liff.openWindow も window.open も外へ出ない
+  //   → LINE の合図 openExternalBrowser=1 を付けて自分で移動する＝外のブラウザでPDFが開く
+  if (/\bLine\//i.test(navigator.userAgent || '')) {
+    location.href = url + (url.indexOf('?') >= 0 ? '&' : '?') + 'openExternalBrowser=1';
+    return;
+  }
   window.open(url, '_blank');
 }
 
