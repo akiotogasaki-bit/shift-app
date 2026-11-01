@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- kanri.html v4.19 (2026-11-01) 【配分調整を速く】社長決定 C。メインGASが配分表のキャッシュを3分→15分、進捗（bmstat）を10分持つようにしたので、🔄 再取得だけ &fresh=1 を付けてサーバーにも作り直させる（シフトの割り当て変更など、版が上がらない変化を即反映するため）。保存・決定・取込の後の取り直しはサーバー側で版が上がるので付けない。 -->
 <!-- kanri.html v4.18 (2026-10-29) 【📦 配達ラベル・🧾 帳票の印刷】★追記：社長「日付の指定ができた方がいい」「必要な帳票もここで」「必要な枚数も」「表裏になってる」→ ボタンの横に専用の配達日（初めは明日）。押すと先に「ラベル用紙◯枚」「請求書◯・納品書◯ → 普通紙◯枚」を出して確認。帳票は print-server.py の POST /docs が delivery-docs.py で freee の中身を描く（PDFの口が無いため。番号・金額は freee と同じ）。どちらも片面。　【元の内容】社長「もっと簡単に納品管理のアプリに印刷ボタン作れる？」。★拠点配分タブに茶色のボタン。押すと Mac の印刷係（print-server.py の新しい窓口 POST /labels）が、選んでいる日の配達分を押した時点の注文で作り直し（delivery-label.py と同じ中身）、拡大縮小なしで lp。この Mac からのみ。GAS変更なし。 -->
 <!-- kanri.html v4.17 (2026-10-22) 【🚚 月曜は販売カレンダーも同梱】社長「これも毎週月曜日にドライバーに渡したいから振り返りと合わせてエリア別でプリントしようか」。★月曜はエリアごとに 予定表→振り返り→カレンダー→拠点別 の順（印刷係 print-server.py 側）。ここは確認の文言と「カレンダー：10枚」の表示だけ。 -->
 <!-- kanri.html v4.16 (2026-10-22) 【🚚 予定表 全エリア印刷に前日の巡回ふりかえりを同梱】社長「予定表 全エリア印刷を押したら、前日の振り返りも一緒に全エリア出るようにして。振り返りは23時の定期実行で毎晩作る」。★印刷係（print-server.py の /driverplan）がエリアごとに「予定表→前日の振り返り」の順で刷る（振り返りは ~/.oedo/reports/巡回振り返り/<日付>/ の作り置きPDF）。★ここは確認の文言と、終わった時に「振り返り：10/21ぶん5枚」／「振り返りなし」を出すだけ。GAS変更なし。 -->
@@ -6169,9 +6170,11 @@ async function drResend() {
 }
 
 // API
-async function bmFetchMatrix(dateStr) {
+async function bmFetchMatrix(dateStr, fresh) {
   // ★2026-09-13 v3.83 リトライ経由に変更（上の gasGetJson の説明を読むこと）
-  return await gasGetJson(GAS_URL + '?action=getBasicMasterMatrix&date=' + encodeURIComponent(dateStr));
+  // ★2026-11-01 v4.19 サーバーの表キャッシュが15分になった。🔄 再取得だけ &fresh=1 で作り直させる
+  return await gasGetJson(GAS_URL + '?action=getBasicMasterMatrix&date=' + encodeURIComponent(dateStr)
+                          + (fresh ? '&fresh=1&_cb=' + Date.now() : ''));
 }
 
 async function bmPostAction(action, payload) {
@@ -6390,10 +6393,12 @@ function bmApplyViewChrome_() {
 const BM_STAGE_LABEL = { proposed: '推奨', daily: '当日配分', shelf: '初回納品＋車載', band: '3区間予定', plan: '予定納品数' };
 let bmStatCache = {};
 
-async function bmLoadStat(dateStr) {
+async function bmLoadStat(dateStr, fresh) {
+  if (fresh) delete bmStatCache[dateStr];
   if (bmStatCache[dateStr]) { bmRenderStageNote(); return; }
   try {
     const d = await gasGetJson(GAS_URL + '?action=bmstat&date=' + encodeURIComponent(dateStr)
+                            + (fresh ? '&fresh=1' : '')
                             + '&_cb=' + Date.now());   // ★2026-09-13 v3.83
     if (d && d.ok && d.days && d.days.length) {
       bmStatCache[dateStr] = d.days[0];
@@ -7445,7 +7450,7 @@ async function bmSetDate(dateStr) {
 }
 
 // v3.41: 取得済みデータを画面へ反映（fetch経路・キャッシュ経路で共通利用）
-function bmApplyData(dateStr, r, colorMap) {
+function bmApplyData(dateStr, r, colorMap, fresh) {
   /* ★2026-09-10 拠点をエリア別に並べ替える（社長指示）。
      ⚠ **ここで `locations` 自体を差し替える**のが一番安全。配分調整は 32か所で
        `bmServerData.locations` を参照しているので、入口で1回並べ替えれば全部そろう。
@@ -7463,7 +7468,7 @@ function bmApplyData(dateStr, r, colorMap) {
   bmRenderAll();
   bmUpdateSaveDirty();             // v3.19: 保存ボタン状態更新
   bmRenderStageNote();             // ★2026-09-09 段階タブの下の1行（分割済みか・作る数）
-  bmLoadStat(dateStr);             // ★2026-09-10 進捗バッジ（別便・届いたら足す）
+  bmLoadStat(dateStr, fresh);      // ★2026-09-10 進捗バッジ（別便・届いたら足す）
   bmRenderMenuWarn(dateStr);       // ★2026-08-03 v3.57 献立と配分表のズレを帯で表示（非同期・待たせない）
 }
 
@@ -7507,14 +7512,14 @@ function bmPrefetchWeek() {
   });
 }
 
-async function bmLoadDate(dateStr) {
+async function bmLoadDate(dateStr, fresh) {
   const wrap = document.getElementById('bm-matrix-wrap');
   wrap.innerHTML = '<div class="bm-loading">配分調整を読み込み中...</div>';
   document.getElementById('bm-calc-info').innerHTML = '';
   // Phase 4: ドライバー色マップを並列取得
   // v3.49: 献立（0連動用）と献立表の管理対象商品も同時に取得。失敗しても従来表示になるだけ。
   const [r, colorMap, menu] = await Promise.all([
-    bmFetchMatrix(dateStr),
+    bmFetchMatrix(dateStr, fresh),
     loadDriverColorMap(dateStr),
     bmFetchMenu(dateStr),
     bmLoadMenuTargets()
@@ -7528,7 +7533,8 @@ async function bmLoadDate(dateStr) {
   // ★v3.64 色は取れた時だけ入れる（空を入れると、その日は色無しで固定されてしまう）
   if (colorMap && Object.keys(colorMap).length > 0) bmColorCache[dateStr] = colorMap;
   if (menu) bmMenuCache[dateStr] = menu;
-  bmApplyData(dateStr, r, colorMap || {});
+  if (fresh) delete bmStatCache[dateStr];   // ★v4.19 🔄 は進捗も取り直す
+  bmApplyData(dateStr, r, colorMap || {}, fresh);
   /* ★2026-09-16 v3.85 その日に未保存の編集が残っていたら、**編集した段へ戻す**。
      リロードで必ず①に戻る作りだったため、②の編集がL列へ書かれていた（→ bmEditsMode）。 */
   bmRestoreViewForDate();
@@ -7553,7 +7559,7 @@ async function bmReload() {
     delete bmEditsMode[bmCurrentDate];
     bmSaveEdits();
   }
-  await bmLoadDate(bmCurrentDate);
+  await bmLoadDate(bmCurrentDate, true);   // ★v4.19 サーバーの15分キャッシュも飛ばす
 }
 
 // ★他社弁当（外部納品・総数）を手動取込 → 総数セルを更新
