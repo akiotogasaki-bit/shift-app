@@ -4,7 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>社長のマンダラ</title>
-<!-- boss/mandala v1.0 (2026-11-01) 【社長専用の目標マンダラ＋Claudeに聞く】社長決定（Firebase・アプリは別々・裏は共通）。
+<!-- boss/mandala v1.1 (2026-11-01) ★v1.1 右上に「今日の机」へのリンク。
+     v1.0 (2026-11-01) 【社長専用の目標マンダラ＋Claudeに聞く】社長決定（Firebase・アプリは別々・裏は共通）。
      営業アプリ（sales-report の④目標）の 9×9・複数枚・メモ・AI提案 をそのまま持ってきて、「💬 Claude に聞く」を足した。
      ★サーバーは GAS ではなく Firebase の boss 関数（/exec の実行枠を使わない）。入れるのは社長本人だけ（関数側の BOSS_UIDS）。
      ★ログイン＝①この端末に残っている Firebase のログイン ②LINE（LIFF）→ 受け口 auth ③入口パスワード（ドライバーと同じ口）。
@@ -111,7 +112,7 @@ input,select,textarea{width:100%;font-size:13px;padding:8px;border:.5px solid rg
 </head>
 <body>
 <div class="app">
-  <div class="hdr"><i class="ti ti-target-arrow" aria-hidden="true"></i>社長のマンダラ</div>
+  <div class="hdr"><i class="ti ti-target-arrow" aria-hidden="true"></i>社長のマンダラ<span style="flex:1"></span><a href="desk.html" aria-label="今日の机" style="color:#fff;font-size:18px;text-decoration:none;display:flex"><i class="ti ti-briefcase"></i></a></div>
   <div class="tabs">
     <button class="tab on" data-t="mandala"><i class="ti ti-layout-grid"></i> マンダラ</button>
     <button class="tab" data-t="ask"><i class="ti ti-message-chatbot"></i> Claude に聞く</button>
@@ -120,7 +121,7 @@ input,select,textarea{width:100%;font-size:13px;padding:8px;border:.5px solid rg
     <div id="m-root"><div class="inline-loading"><span class="spinner"></span>読み込み中…</div></div>
     <div id="a-root" style="display:none"></div>
   </div>
-  <div class="ver">boss/mandala v1.0</div>
+  <div class="ver">boss/mandala v1.1</div>
 </div>
 <div class="overlay" id="gate"><span class="spinner"></span><div>ログインしています…</div></div>
 <div class="toast" id="toast"></div>
