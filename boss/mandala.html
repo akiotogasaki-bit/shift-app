@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>社長のマンダラ</title>
+<!-- boss/mandala v1.0 (2026-11-01) 【社長専用の目標マンダラ＋Claudeに聞く】社長決定（Firebase・アプリは別々・裏は共通）。
+     営業アプリ（sales-report の④目標）の 9×9・複数枚・メモ・AI提案 をそのまま持ってきて、「💬 Claude に聞く」を足した。
+     ★サーバーは GAS ではなく Firebase の boss 関数（/exec の実行枠を使わない）。入れるのは社長本人だけ（関数側の BOSS_UIDS）。
+     ★ログイン＝①この端末に残っている Firebase のログイン ②LINE（LIFF）→ 受け口 auth ③入口パスワード（ドライバーと同じ口）。
+     設計: 40_ドキュメント/設計_社長専用アプリ_2026-11-01.md -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.3.0/dist/tabler-icons.min.css">
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<style>
+:root{
+  --navy:#1A3C5E; --bg:#F2F2EE; --panel:#F6F6F3; --card:#fff;
+  --line:rgba(0,0,0,.10); --line2:rgba(0,0,0,.14); --muted:#7a7a74; --text:#222;
+  --green:#3B6D11; --orange:#854F0B; --red:#A32D2D;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP",Meiryo,sans-serif;color:var(--text);-webkit-text-size-adjust:100%;}
+.app{max-width:560px;margin:0 auto;min-height:100vh;background:var(--panel);display:flex;flex-direction:column;}
+.hdr{background:var(--navy);color:#fff;padding:13px 16px;display:flex;align-items:center;gap:8px;font-size:15px;font-weight:600;}
+.hdr i{font-size:18px;}
+.tabs{display:flex;background:#fff;border-bottom:.5px solid var(--line2);}
+.tab{flex:1;padding:10px 2px;text-align:center;font-size:12px;color:var(--muted);background:none;border:none;cursor:pointer;border-bottom:2px solid transparent;font-family:inherit;}
+.tab.on{color:var(--navy);border-bottom-color:var(--navy);font-weight:600;}
+.body{padding:12px 16px 40px;flex:1;}
+input,select,textarea{width:100%;font-size:13px;padding:8px;border:.5px solid rgba(0,0,0,.18);border-radius:8px;font-family:inherit;color:var(--text);background:#fff;margin-bottom:10px;}
+.btn{background:var(--navy);color:#fff;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:500;width:100%;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px;}
+.btn:disabled{opacity:.5;cursor:default;}
+.btn.sub{background:#fff;color:var(--navy);border:.5px solid var(--navy);}
+.empty{background:#fff;border:.5px dashed var(--line2);border-radius:10px;padding:18px;text-align:center;color:#9a9a93;font-size:12px;line-height:1.6;}
+.overlay{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:28px;gap:12px;color:var(--muted);z-index:60;font-size:13px;line-height:1.6;}
+.overlay i{font-size:34px;color:var(--navy);}
+.overlay input{max-width:260px;text-align:center;margin:0;}
+.overlay .btn{max-width:260px;}
+.spinner{width:30px;height:30px;border:3px solid rgba(0,0,0,.12);border-top-color:var(--navy);border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.inline-loading{display:flex;align-items:center;justify-content:center;gap:8px;color:#9a9a93;font-size:12px;padding:18px;}
+.inline-loading .spinner{width:18px;height:18px;border-width:2px;}
+.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;border-radius:9px;font-size:13px;z-index:70;opacity:0;transition:opacity .25s;pointer-events:none;max-width:88%;box-shadow:0 4px 14px rgba(0,0,0,.25);}
+.toast.show{opacity:.96;}
+.toast.err{background:var(--red);}
+.ver{font-size:9px;color:#c4c4bd;text-align:center;padding:6px 0 2px;}
+
+/* マンダラ（営業アプリ④と同じ） */
+.m-bar{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+.m-bar .upd{font-size:10px;color:#9a9a93;margin-left:auto;white-space:nowrap;}
+.m-save{display:flex;gap:8px;align-items:center;margin-bottom:10px;}
+.m-save .btn{flex:1;}
+.m-save .dirty{font-size:10px;color:var(--orange);white-space:nowrap;}
+.m-pick{display:flex;gap:6px;align-items:center;margin-bottom:8px;}
+.m-pick select{flex:1;min-width:0;margin:0;}
+.m-pick .mbtn{flex:0 0 auto;padding:7px 11px;font-size:12px;white-space:nowrap;border-radius:8px;border:.5px solid var(--navy);background:var(--navy);color:#fff;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:4px;}
+.m-pick .mbtn.del{background:#fff;color:var(--red);border-color:var(--red);}
+.m-pick .mbtn:disabled{opacity:.45;cursor:default;}
+.m-title-in{margin:0 0 10px;}
+.m-blocks{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;}
+.m-blk{background:var(--line2);border-radius:8px;padding:3px;cursor:pointer;display:grid;grid-template-columns:repeat(3,1fr);gap:2px;}
+.m-blk.center{outline:2px solid var(--navy);outline-offset:1px;}
+.m-cellm{background:#fff;border-radius:3px;aspect-ratio:1;display:flex;align-items:center;justify-content:center;text-align:center;font-size:7.5px;line-height:1.05;color:#444;padding:1px;overflow:hidden;word-break:break-all;}
+.m-cellm.anchor{background:var(--navy);color:#fff;font-weight:600;font-size:8px;}
+.m-cellm.theme{background:#E6EEF5;color:#143A5E;font-weight:600;}
+.m-ovhint{font-size:11px;color:#8a8a84;text-align:center;margin:10px 2px 0;line-height:1.45;}
+.m-crumb{display:flex;align-items:center;gap:6px;font-size:12px;color:#555;margin-bottom:10px;flex-wrap:wrap;}
+.m-crumb .bk{background:#fff;border:.5px solid var(--line2);border-radius:8px;padding:5px 10px;font-size:12px;color:var(--navy);cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:4px;}
+.m-crumb .cur{font-weight:600;color:var(--navy);}
+.m-edit-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px;}
+.m-cell{background:#fff;border:.5px solid var(--line2);border-radius:8px;padding:5px;display:flex;flex-direction:column;min-height:78px;}
+.m-cell .ci{font-size:8px;color:#b0b0a9;margin-bottom:2px;display:flex;align-items:center;justify-content:space-between;gap:4px;}
+.m-cell textarea{flex:1;border:none;background:none;resize:none;font-size:11px;line-height:1.3;padding:0;margin:0;min-height:50px;}
+.m-cell textarea:focus{outline:none;}
+.m-cell.anchor{background:var(--navy);border-color:var(--navy);}
+.m-cell.anchor .ci{color:rgba(255,255,255,.7);}
+.m-cell.anchor textarea{color:#fff;font-weight:600;}
+.m-cell.theme{background:#EAF1F8;border-color:#BCD3E6;}
+.m-cell.act.sel{border-color:var(--navy);box-shadow:0 0 0 1.5px var(--navy) inset;}
+.memo-dot{flex:none;width:15px;height:15px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#c9c9c2;}
+.memo-dot i{font-size:11px;}
+.memo-dot.on{color:#fff;background:var(--green);}
+.m-ai{margin-bottom:10px;}
+.m-ai .btn{background:#2E5A86;}
+.m-suggest{background:#F3F7FB;border:.5px solid #CFE0EF;border-radius:10px;padding:10px;margin-bottom:10px;}
+.m-suggest .st{font-size:11px;color:#456;margin:0 0 8px;display:flex;align-items:center;gap:6px;}
+.m-chips{display:flex;flex-direction:column;gap:6px;}
+.m-chip{display:flex;align-items:center;gap:8px;background:#fff;border:.5px solid var(--line2);border-radius:8px;padding:7px 9px;font-size:12px;color:#333;cursor:pointer;text-align:left;font-family:inherit;line-height:1.35;width:100%;}
+.m-chip .n{flex:none;width:18px;height:18px;border-radius:50%;background:var(--navy);color:#fff;font-size:10px;display:flex;align-items:center;justify-content:center;}
+.m-suggest .allbtn{margin-top:8px;}
+.m-memo{background:#FBF7EF;border:.5px solid #E6D9C0;border-radius:10px;padding:10px;margin-bottom:10px;}
+.m-memo .mt{font-size:11px;color:#7a5a1a;margin:0 0 8px;display:flex;align-items:center;gap:6px;}
+.m-mp-pills{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px;}
+.m-mp-pill{position:relative;width:30px;height:30px;border-radius:8px;border:.5px solid var(--line2);background:#fff;color:#555;font-size:12px;font-family:inherit;cursor:pointer;}
+.m-mp-pill.on{background:var(--navy);color:#fff;border-color:var(--navy);font-weight:600;}
+.m-mp-pill .d{position:absolute;top:3px;right:3px;width:6px;height:6px;border-radius:50%;background:var(--green);}
+.m-mp-pill.on .d{background:#fff;}
+.m-mp-subj{font-size:11px;color:#8a6a2a;margin-bottom:6px;font-weight:600;word-break:break-all;}
+.m-memo textarea{min-height:88px;border-color:#E6D9C0;resize:vertical;line-height:1.4;margin:0;}
+
+/* 💬 Claude に聞く */
+.ask-ctx{font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.5;}
+.ask-log{display:flex;flex-direction:column;gap:8px;margin-bottom:10px;}
+.msg{max-width:92%;padding:9px 11px;border-radius:12px;font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-word;}
+.msg.user{align-self:flex-end;background:var(--navy);color:#fff;border-bottom-right-radius:4px;}
+.msg.ai{align-self:flex-start;background:#fff;border:.5px solid var(--line);border-bottom-left-radius:4px;}
+.msg .t{display:block;font-size:9px;opacity:.6;margin-top:4px;}
+.ask-in textarea{min-height:76px;resize:vertical;}
+.ask-quick{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;}
+.ask-quick button{background:#fff;border:.5px solid var(--line2);border-radius:14px;padding:5px 10px;font-size:11px;color:var(--navy);cursor:pointer;font-family:inherit;}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="hdr"><i class="ti ti-target-arrow" aria-hidden="true"></i>社長のマンダラ</div>
+  <div class="tabs">
+    <button class="tab on" data-t="mandala"><i class="ti ti-layout-grid"></i> マンダラ</button>
+    <button class="tab" data-t="ask"><i class="ti ti-message-chatbot"></i> Claude に聞く</button>
+  </div>
+  <div class="body">
+    <div id="m-root"><div class="inline-loading"><span class="spinner"></span>読み込み中…</div></div>
+    <div id="a-root" style="display:none"></div>
+  </div>
+  <div class="ver">boss/mandala v1.0</div>
+</div>
+<div class="overlay" id="gate"><span class="spinner"></span><div>ログインしています…</div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   設定
+   ============================================================ */
+// ★LINE Developers で作る LIFF（エンドポイント https://akiotogasaki-bit.github.io/shift-app/boss/ ）。空の間は LINE ログインを使わない
+var BOSS_LIFF_ID = '';
+var FB_CFG_ = { apiKey: 'AIzaSyA_BcnCo7yjc1KXVhCEOgFikNkKW3WmKcc', authDomain: 'oedo-bento.firebaseapp.com',
+                projectId: 'oedo-bento', appId: '1:99139459025:web:13ec30058b25705fef32f0' };
+var FB_AUTH_URL_ = 'https://asia-northeast1-oedo-bento.cloudfunctions.net/auth';
+var BOSS_URL_ = 'https://asia-northeast1-oedo-bento.cloudfunctions.net/boss';
+var FB_SDK_ = 'https://www.gstatic.com/firebasejs/10.14.1/';
+
+var S = {
+  mandala:null, mandalaId:'', mandalaTitle:'', mandalaList:[], updatedAt:0, mdDirty:false,
+  mdView:'overview', mdBlock:null, mdMemoIdx:0, mdSuggest:null, mdSuggesting:false,
+  tab:'mandala', askLog:[], askLoaded:'', asking:false
+};
+
+function $(id){ return document.getElementById(id); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+var toastTimer = null;
+function toast(msg, err){
+  var t = $('toast'); t.textContent = msg; t.className = 'toast show' + (err ? ' err' : '');
+  clearTimeout(toastTimer); toastTimer = setTimeout(function(){ t.className = 'toast' + (err ? ' err' : ''); }, 2600);
+}
+function fmtTime(ms){
+  if(!ms) return '';
+  var d = new Date(ms + 9*3600*1000);
+  return (d.getUTCMonth()+1)+'/'+d.getUTCDate()+' '+d.getUTCHours()+':'+('0'+d.getUTCMinutes()).slice(-2);
+}
+
+/* ============================================================
+   ログイン（driver.html の fbLogin_ と同じ流れ）
+   ============================================================ */
+function fbLoadScript_(src){
+  return new Promise(function(ok, ng){ var s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = ng; document.head.appendChild(s); });
+}
+async function fbSdk_(){
+  if(!window.firebase){
+    await fbLoadScript_(FB_SDK_ + 'firebase-app-compat.js');
+    await fbLoadScript_(FB_SDK_ + 'firebase-auth-compat.js');
+  }
+  if(!firebase.apps.length) firebase.initializeApp(FB_CFG_);
+}
+function fbPersistedUser_(){
+  return new Promise(function(res){
+    var done = false, un = null;
+    var fin = function(u){ if(done) return; done = true; try{ if(un) un(); }catch(e){} res(u || null); };
+    try{ un = firebase.auth().onAuthStateChanged(fin); }catch(e){ fin(null); }
+    setTimeout(function(){ fin(null); }, 5000);
+  });
+}
+async function signInWith_(body){
+  var r = await fetch(FB_AUTH_URL_, { method:'POST', body:JSON.stringify(body) }).then(function(x){ return x.json(); });
+  if(!r || !r.ok || !r.token) throw new Error((r && r.error) || 'ログインできませんでした');
+  await firebase.auth().signInWithCustomToken(r.token);
+}
+async function login_(){
+  await fbSdk_();
+  if(await fbPersistedUser_()) return true;
+  if(BOSS_LIFF_ID && window.liff){
+    try{
+      await liff.init({ liffId: BOSS_LIFF_ID });
+      if(!liff.isLoggedIn()){ liff.login({ redirectUri: location.href }); return false; }
+      var idt = liff.getIDToken && liff.getIDToken();
+      var act = !idt && liff.getAccessToken ? liff.getAccessToken() : null;
+      if(idt || act){ await signInWith_(idt ? { idToken: idt } : { accessToken: act }); return true; }
+    }catch(e){ console.warn('LIFF', e); }
+  }
+  return null;   // パスワード入口を出す
+}
+function showPwGate_(msg){
+  $('gate').innerHTML = '<i class="ti ti-lock"></i><div>'+esc(msg || '入口パスワードを入れてください')+'</div>'
+    + '<input id="gate-pw" type="password" autocomplete="current-password" placeholder="パスワード">'
+    + '<button class="btn" id="gate-go">入る</button>';
+  var go = function(){
+    var pw = $('gate-pw').value.trim(); if(!pw) return;
+    $('gate-go').disabled = true;
+    signInWith_({ mode:'pw', password: pw }).then(afterLogin_).catch(function(){ showPwGate_('パスワードが違います'); });
+  };
+  $('gate-go').addEventListener('click', go);
+  $('gate-pw').addEventListener('keydown', function(e){ if(e.key === 'Enter') go(); });
+}
+function denyGate_(){
+  $('gate').innerHTML = '<i class="ti ti-ban"></i><div>このアプリは社長専用です。</div>'
+    + '<button class="btn sub" id="gate-out">別のアカウントで入り直す</button>';
+  $('gate-out').addEventListener('click', function(){ firebase.auth().signOut().then(function(){ location.reload(); }); });
+}
+async function afterLogin_(){
+  var me = await api('me').catch(function(){ return null; });
+  if(!me || !me.allowed){ denyGate_(); return; }
+  $('gate').style.display = 'none';
+  loadMandala();
+}
+
+async function api(mode, body){
+  var u = firebase.auth().currentUser;
+  if(!u) throw new Error('ログインできていません。開き直してください');
+  var tok = await u.getIdToken();
+  var r = await fetch(BOSS_URL_, { method:'POST', body:JSON.stringify(Object.assign({ mode: mode, fbIdToken: tok }, body || {})) });
+  var j = await r.json().catch(function(){ return null; });
+  if(!j) throw new Error('通信エラー ' + r.status);
+  if(j.ok === false && mode !== 'me') throw new Error(j.error || '失敗しました');
+  return j;
+}
+
+/* ============================================================
+   マンダラ（大谷式9×9）— 営業アプリ④と同じ並び
+   ブロック位置 0..8（4=中心ブロック）。中心=大目標+8テーマ／外周=各テーマ+8行動。
+   スロット 0..8（4=anchor）。anchor以外の0..7が「サブ番号」に対応。
+   ============================================================ */
+function mdBlockToTheme(pos){ return pos < 4 ? pos : pos - 1; }
+function mdSlotToIdx(slot){ return slot < 4 ? slot : slot - 1; }
+function mdIdxToSlot(idx){ return idx < 4 ? idx : idx + 1; }
+function emptyMandala(){
+  var a = [], mm = [];
+  for(var i=0;i<8;i++){ a.push(['','','','','','','','']); mm.push(['','','','','','','','']); }
+  return { center:'', themes:['','','','','','','',''], actions:a, actionMemos:mm };
+}
+
+function loadMandala(){
+  $('m-root').innerHTML = '<div class="inline-loading"><span class="spinner"></span>読み込み中…</div>';
+  refreshMandalaList().then(function(){ return fetchMandala(''); }).then(function(){
+    S.mdView = 'overview'; S.mdSuggest = null; renderMandala();
+  }).catch(function(e){ $('m-root').innerHTML = '<div class="empty">読み込みに失敗しました。<br>'+esc(e.message)+'</div>'; });
+}
+function refreshMandalaList(){
+  return api('mlist').then(function(r){ S.mandalaList = r.mandalas || []; }).catch(function(){ S.mandalaList = []; });
+}
+function fetchMandala(id){
+  return api('mget', { id: id || '' }).then(function(r){
+    S.mandala = r.mandala || emptyMandala();
+    S.mandalaId = r.id || ''; S.mandalaTitle = r.title || ''; S.updatedAt = r.updatedAt || 0;
+    S.mdDirty = false; S.askLoaded = '';
+  });
+}
+function renderMandala(){
+  if(S.mdView === 'editor' && S.mdBlock !== null) renderMandalaEditor();
+  else renderMandalaOverview();
+}
+function mdSaveBar(btnId){
+  return '<div class="m-save"><button class="btn" id="'+btnId+'"'+(S.mdDirty?'':' disabled')+'>'
+    + '<i class="ti ti-device-floppy"></i> 保存</button>'
+    + (S.mdDirty?'<span class="dirty">未保存の変更があります</span>':'') + '</div>';
+}
+function mdPickBar(){
+  var opts = (S.mandalaList || []).map(function(x){
+    var lbl = (x.title || x.center || '(無題)') + (x.updatedAt ? '・' + fmtTime(x.updatedAt) : '');
+    return '<option value="'+esc(x.id)+'"'+(x.id===S.mandalaId?' selected':'')+'>'+esc(lbl)+'</option>';
+  }).join('');
+  if(!S.mandalaId) opts = '<option value="" selected>＜新規（未保存）＞</option>' + opts;
+  return '<div class="m-pick"><select id="md-list">'+opts+'</select>'
+    + '<button class="mbtn" id="md-new"><i class="ti ti-plus"></i>新規</button>'
+    + '<button class="mbtn del" id="md-del"'+(S.mandalaId?'':' disabled')+'><i class="ti ti-trash"></i>削除</button></div>'
+    + '<input class="m-title-in" id="md-title" maxlength="40" placeholder="このマンダラの名前（例：2027年／お江戸弁当10年計画）" value="'+esc(S.mandalaTitle||'')+'">';
+}
+function renderMandalaOverview(){
+  var m = S.mandala || emptyMandala();
+  var html = '<div class="m-bar"><span class="upd">'+(S.updatedAt ? '更新 '+esc(fmtTime(S.updatedAt)) : '未保存')+'</span></div>'
+    + mdPickBar() + mdSaveBar('md-save') + '<div class="m-blocks">';
+  for(var pos=0; pos<9; pos++){
+    var isCenter = (pos === 4);
+    html += '<div class="m-blk'+(isCenter?' center':'')+'" data-blk="'+(isCenter?'center':mdBlockToTheme(pos))+'">';
+    for(var slot=0; slot<9; slot++) html += mdMiniCell(m, pos, slot);
+    html += '</div>';
+  }
+  html += '</div><div class="m-ovhint">9つのブロックをタップすると拡大して編集できます。<br>中央＝大目標＋テーマ、外周＝各テーマの行動。</div>';
+  $('m-root').innerHTML = html;
+  bindOverview();
+}
+function mdMiniCell(m, pos, slot){
+  var txt = '', cls = 'm-cellm';
+  if(pos === 4){
+    if(slot === 4){ txt = m.center; cls += ' anchor'; }
+    else { txt = m.themes[mdSlotToIdx(slot)] || ''; cls += ' theme'; }
+  } else {
+    var t = mdBlockToTheme(pos);
+    if(slot === 4){ txt = m.themes[t] || ''; cls += ' anchor'; }
+    else { txt = (m.actions[t] || [])[mdSlotToIdx(slot)] || ''; }
+  }
+  return '<div class="'+cls+'">'+(txt ? esc(txt) : '')+'</div>';
+}
+function bindOverview(){
+  $('md-save').addEventListener('click', saveMandalaNow);
+  $('md-list').addEventListener('change', function(){
+    var id = this.value;
+    if(id === S.mandalaId) return;
+    if(!id){ this.value = S.mandalaId; return; }
+    if(S.mdDirty && !confirm('未保存の変更があります。切り替えると破棄されます。よろしいですか？')){ this.value = S.mandalaId; return; }
+    $('m-root').innerHTML = '<div class="inline-loading"><span class="spinner"></span>読み込み中…</div>';
+    fetchMandala(id).then(function(){ S.mdView='overview'; renderMandala(); })
+      .catch(function(){ $('m-root').innerHTML = '<div class="empty">読み込みに失敗しました。</div>'; });
+  });
+  $('md-new').addEventListener('click', function(){
+    if(S.mdDirty && !confirm('未保存の変更があります。新規作成すると破棄されます。よろしいですか？')) return;
+    S.mandala = emptyMandala(); S.mandalaId = ''; S.mandalaTitle = ''; S.updatedAt = 0;
+    S.mdView = 'overview'; S.mdSuggest = null; S.mdDirty = true; S.askLoaded = '';
+    renderMandala(); toast('新しいマンダラです。記入して保存してください');
+  });
+  $('md-del').addEventListener('click', deleteMandalaNow);
+  $('md-title').addEventListener('input', function(){
+    S.mandalaTitle = this.value; S.mdDirty = true; $('md-save').disabled = false;
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('#m-root .m-blk'), function(b){
+    b.addEventListener('click', function(){
+      var k = b.getAttribute('data-blk');
+      S.mdBlock = (k === 'center') ? 'center' : Number(k);
+      S.mdView = 'editor'; S.mdSuggest = null; S.mdMemoIdx = 0;
+      renderMandala();
+    });
+  });
+}
+
+function renderMandalaEditor(){
+  var m = S.mandala, blk = S.mdBlock, isCenter = (blk === 'center'), t = isCenter ? -1 : Number(blk);
+  var curLabel = isCenter ? '中央ブロック（大目標＋テーマ）' : ('テーマ：' + (m.themes[t] || ('テーマ'+(t+1))));
+  var html = '<div class="m-crumb"><button class="bk" id="md-back"><i class="ti ti-arrow-left"></i> 俯瞰へ</button>'
+    + '<span class="cur">'+esc(curLabel)+'</span></div><div class="m-edit-grid">';
+  for(var slot=0; slot<9; slot++) html += mdEditCell(m, blk, slot);
+  html += '</div>';
+  html += '<div class="m-ai"><button class="btn" id="md-ai"'+(S.mdSuggesting?' disabled':'')+'>'
+    + (S.mdSuggesting ? '<span class="spinner" style="width:16px;height:16px;border-width:2px;"></span> 考え中…'
+                      : '<i class="ti ti-wand"></i> '+(isCenter ? 'Claude にテーマを提案してもらう' : 'Claude に行動を提案してもらう'))
+    + '</button></div><div id="md-suggest"></div>';
+  if(!isCenter) html += '<div id="md-memo"></div>';
+  html += mdSaveBar('md-save2');
+  $('m-root').innerHTML = html;
+  bindEditor();
+  if(S.mdSuggest) renderSuggest();
+  if(!isCenter) renderMemoPanel();
+}
+function mdEditCell(m, blk, slot){
+  var isCenter = (blk === 'center'), t = isCenter ? -1 : Number(blk);
+  var val = '', cls = 'm-cell', label = '', ph = '', badge = '', attr = '';
+  if(isCenter){
+    if(slot === 4){ val = m.center; cls += ' anchor'; label = '大目標'; ph = '例）年商◯億円'; }
+    else { val = m.themes[mdSlotToIdx(slot)] || ''; cls += ' theme'; label = 'テーマ'+(mdSlotToIdx(slot)+1); ph = 'テーマ'; }
+  } else {
+    if(slot === 4){ val = m.themes[t] || ''; cls += ' anchor'; label = 'テーマ'; ph = 'テーマ名'; }
+    else {
+      var ai = mdSlotToIdx(slot);
+      val = (m.actions[t] || [])[ai] || ''; label = '行動'+(ai+1); ph = 'やること';
+      cls += ' act'; attr = ' data-act="'+ai+'"';
+      if(ai === S.mdMemoIdx) cls += ' sel';
+      var hasMemo = !!(((m.actionMemos||[])[t]||[])[ai] || '').trim();
+      badge = '<span class="memo-dot'+(hasMemo?' on':'')+'"><i class="ti ti-note"></i></span>';
+    }
+  }
+  return '<div class="'+cls+'"'+attr+'><div class="ci"><span>'+esc(label)+'</span>'+badge+'</div>'
+    + '<textarea data-slot="'+slot+'" placeholder="'+esc(ph)+'">'+esc(val)+'</textarea></div>';
+}
+function mdWriteCell(blk, slot, value){
+  var m = S.mandala;
+  if(blk === 'center'){ if(slot === 4) m.center = value; else m.themes[mdSlotToIdx(slot)] = value; }
+  else { var t = Number(blk); if(slot === 4) m.themes[t] = value; else m.actions[t][mdSlotToIdx(slot)] = value; }
+  S.mdDirty = true;
+}
+function bindEditor(){
+  $('md-back').addEventListener('click', function(){ S.mdView='overview'; S.mdSuggest=null; renderMandala(); });
+  Array.prototype.forEach.call(document.querySelectorAll('#m-root .m-cell textarea'), function(ta){
+    var actIdx = ta.parentNode.getAttribute('data-act');
+    ta.addEventListener('focus', function(){
+      if(actIdx !== null && S.mdBlock !== 'center'){ S.mdMemoIdx = Number(actIdx); renderMemoPanel(); }
+    });
+    ta.addEventListener('input', function(){
+      mdWriteCell(S.mdBlock, Number(ta.getAttribute('data-slot')), ta.value);
+      $('md-save2').disabled = false;
+      if(actIdx !== null && S.mdBlock !== 'center' && Number(actIdx) === S.mdMemoIdx){
+        var subj = document.querySelector('#md-memo .m-mp-subj');
+        if(subj){ var nm = ta.value.trim(); subj.textContent = '行動'+(S.mdMemoIdx+1)+(nm ? '：'+nm : '（未入力）'); }
+      }
+    });
+  });
+  $('md-ai').addEventListener('click', runSuggest);
+  $('md-save2').addEventListener('click', saveMandalaNow);
+}
+function runSuggest(){
+  if(S.mdSuggesting) return;
+  var m = S.mandala, isCenter = (S.mdBlock === 'center'), body;
+  if(isCenter) body = { kind:'themes', center: m.center || '' };
+  else {
+    var t = Number(S.mdBlock);
+    if(!(m.themes[t]||'').trim()){ toast('先にテーマ名を入れてください', true); return; }
+    body = { kind:'actions', center: m.center || '', themeName: m.themes[t] };
+  }
+  S.mdSuggesting = true; S.mdSuggest = null; renderMandalaEditor();
+  api('suggest', body).then(function(r){
+    S.mdSuggesting = false; S.mdSuggest = r.items || []; renderMandalaEditor();
+  }).catch(function(e){
+    S.mdSuggesting = false; renderMandalaEditor(); toast('提案に失敗：' + e.message, true);
+  });
+}
+function renderSuggest(){
+  var host = $('md-suggest'); if(!host) return;
+  if(!(S.mdSuggest || []).some(Boolean)){ host.innerHTML = ''; return; }
+  var isCenter = (S.mdBlock === 'center');
+  var html = '<div class="m-suggest"><p class="st"><i class="ti ti-bulb"></i>'+(isCenter?'テーマ':'行動')+'の候補（タップで枠に入る）</p><div class="m-chips">';
+  html += S.mdSuggest.map(function(x, i){
+    return x ? '<button class="m-chip" data-i="'+i+'"><span class="n">'+(i+1)+'</span><span>'+esc(x)+'</span></button>' : '';
+  }).join('');
+  html += '</div><button class="btn sub allbtn" id="md-applyall">すべて反映（上書き確認）</button></div>';
+  host.innerHTML = html;
+  Array.prototype.forEach.call(host.querySelectorAll('.m-chip'), function(c){
+    c.addEventListener('click', function(){
+      var i = Number(c.getAttribute('data-i'));
+      mdWriteCell(S.mdBlock, mdIdxToSlot(i), S.mdSuggest[i]); renderMandalaEditor();
+      toast((isCenter?'テーマ':'行動')+(i+1)+'に入れました');
+    });
+  });
+  $('md-applyall').addEventListener('click', function(){
+    var m = S.mandala, t = isCenter ? -1 : Number(S.mdBlock), list = S.mdSuggest, clash = false;
+    for(var i=0;i<8;i++){
+      var cur = isCenter ? (m.themes[i]||'') : ((m.actions[t]||[])[i]||'');
+      if(cur && list[i] && cur !== list[i]){ clash = true; break; }
+    }
+    if(clash && !confirm('入力済みの枠を上書きします。よろしいですか？')) return;
+    for(var j=0;j<8;j++){ if(list[j]) mdWriteCell(S.mdBlock, mdIdxToSlot(j), list[j]); }
+    renderMandalaEditor(); toast('候補を反映しました');
+  });
+}
+function renderMemoPanel(){
+  var host = $('md-memo'); if(!host) return;
+  var m = S.mandala, t = Number(S.mdBlock), idx = S.mdMemoIdx;
+  if(idx == null || idx < 0 || idx > 7){ idx = 0; S.mdMemoIdx = 0; }
+  var actName = ((m.actions[t] || [])[idx] || '').trim();
+  var pills = '';
+  for(var i=0;i<8;i++){
+    var has = !!((m.actionMemos[t] || [])[i] || '').trim();
+    pills += '<button class="m-mp-pill'+(i===idx?' on':'')+'" data-mi="'+i+'">'+(i+1)+(has?'<span class="d"></span>':'')+'</button>';
+  }
+  host.innerHTML = '<div class="m-memo"><p class="mt"><i class="ti ti-note"></i>メモ（選んだ行動の詳細）</p>'
+    + '<div class="m-mp-pills">'+pills+'</div>'
+    + '<div class="m-mp-subj">行動'+(idx+1)+(actName ? '：'+esc(actName) : '（未入力）')+'</div>'
+    + '<textarea id="md-memo-ta" placeholder="手順・期限・気づきなどを自由に">'+esc((m.actionMemos[t] || [])[idx] || '')+'</textarea></div>';
+  Array.prototype.forEach.call(host.querySelectorAll('.m-mp-pill'), function(b){
+    b.addEventListener('click', function(){ S.mdMemoIdx = Number(b.getAttribute('data-mi')); renderMemoPanel(); });
+  });
+  $('md-memo-ta').addEventListener('input', function(){
+    m.actionMemos[t][S.mdMemoIdx] = this.value; S.mdDirty = true; $('md-save2').disabled = false;
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('#m-root .m-cell.act'), function(c){
+    c.classList.toggle('sel', Number(c.getAttribute('data-act')) === idx);
+  });
+}
+function saveMandalaNow(){
+  var btns = [ $('md-save'), $('md-save2') ];
+  btns.forEach(function(b){ if(b) b.disabled = true; });
+  var wasNew = !S.mandalaId;
+  api('msave', { id: S.mandalaId, title: S.mandalaTitle, data: S.mandala }).then(function(r){
+    S.mdDirty = false; S.mandalaId = r.id; S.updatedAt = r.updatedAt || Date.now();
+    if(wasNew) S.askLoaded = '';
+    toast('保存しました');
+    return refreshMandalaList().then(renderMandala);
+  }).catch(function(e){
+    toast('保存に失敗：' + e.message, true);
+    btns.forEach(function(b){ if(b) b.disabled = false; });
+  });
+}
+function deleteMandalaNow(){
+  if(!S.mandalaId) return;
+  var nm = S.mandalaTitle || S.mandala.center || 'このマンダラ';
+  if(!confirm('「'+nm+'」を削除します。Claude との会話も消えます。元に戻せません。よろしいですか？')) return;
+  $('m-root').innerHTML = '<div class="inline-loading"><span class="spinner"></span>削除中…</div>';
+  api('mdel', { id: S.mandalaId }).then(function(){
+    toast('削除しました'); loadMandala();
+  }).catch(function(e){ toast('削除に失敗：' + e.message, true); renderMandala(); });
+}
+
+/* ============================================================
+   💬 Claude に聞く（いま開いているマンダラを見せて相談。会話はマンダラごとに残る）
+   ============================================================ */
+var ASK_QUICK = ['このマンダラで一番手薄なところは？', '今週やるべき3つは？', '大目標から逆算すると足りないテーマは？', '行動を数字で測れる形に直して'];
+function askKey(){ return S.mandalaId || '_new'; }
+function renderAsk(){
+  var host = $('a-root');
+  if(!S.mandala){ host.innerHTML = '<div class="inline-loading"><span class="spinner"></span>読み込み中…</div>'; return; }
+  // 会話はマンダラごとに残すので、まだ保存していない新規は先に保存してもらう
+  if(!S.mandalaId){ host.innerHTML = '<div class="empty">このマンダラはまだ保存されていません。<br>「マンダラ」タブで一度保存すると、ここで Claude に聞けます。</div>'; return; }
+  var title = S.mandalaTitle || S.mandala.center || '(無題)';
+  var html = '<div class="ask-ctx"><i class="ti ti-layout-grid"></i> 「'+esc(title)+'」を見せて聞きます。会社の直近週の数字（売上・完売率）も渡します。'
+    + (S.mdDirty ? '<br>※ 未保存の書きかけも、そのまま見せます。' : '') + '</div>';
+  if(S.askLoaded !== askKey()){
+    host.innerHTML = html + '<div class="inline-loading"><span class="spinner"></span>会話を読み込み中…</div>';
+    var k = askKey();
+    api('asklog', { id: S.mandalaId }).then(function(r){ S.askLog = r.log || []; S.askLoaded = k; renderAsk(); })
+      .catch(function(){ S.askLog = []; S.askLoaded = k; renderAsk(); });
+    return;
+  }
+  html += '<div class="ask-log" id="ask-log">';
+  if(!S.askLog.length) html += '<div class="empty">まだ会話はありません。下の欄から聞いてください。</div>';
+  html += S.askLog.map(function(x){
+    return '<div class="msg '+(x.role==='ai'?'ai':'user')+'">'+esc(x.text)+(x.at?'<span class="t">'+esc(fmtTime(x.at))+'</span>':'')+'</div>';
+  }).join('');
+  if(S.asking) html += '<div class="msg ai"><span class="inline-loading" style="padding:0;justify-content:flex-start"><span class="spinner"></span>考え中…</span></div>';
+  html += '</div>';
+  if(!S.askLog.length) html += '<div class="ask-quick">' + ASK_QUICK.map(function(q){ return '<button data-q="'+esc(q)+'">'+esc(q)+'</button>'; }).join('') + '</div>';
+  html += '<div class="ask-in"><textarea id="ask-ta" placeholder="Claude に聞きたいこと"'+(S.asking?' disabled':'')+'></textarea>'
+    + '<button class="btn" id="ask-go"'+(S.asking?' disabled':'')+'><i class="ti ti-send"></i> 送る</button></div>';
+  host.innerHTML = html;
+  Array.prototype.forEach.call(host.querySelectorAll('.ask-quick button'), function(b){
+    b.addEventListener('click', function(){ $('ask-ta').value = b.getAttribute('data-q'); $('ask-ta').focus(); });
+  });
+  $('ask-go').addEventListener('click', sendAsk);
+  var lg = $('ask-log'); if(lg && lg.lastElementChild) lg.lastElementChild.scrollIntoView({ block:'end' });
+}
+function sendAsk(){
+  var text = ($('ask-ta').value || '').trim();
+  if(!text || S.asking) return;
+  S.asking = true;
+  S.askLog.push({ role:'user', text:text, at:Date.now() });
+  renderAsk();
+  api('ask', { id: S.mandalaId, text: text, data: S.mandala }).then(function(r){
+    S.asking = false; S.askLog.push({ role:'ai', text:r.reply, at:r.at || Date.now() }); renderAsk();
+  }).catch(function(e){
+    S.asking = false; S.askLog.pop(); renderAsk();
+    $('ask-ta').value = text; toast('送れませんでした：' + e.message, true);
+  });
+}
+
+/* ============================================================
+   起動
+   ============================================================ */
+Array.prototype.forEach.call(document.querySelectorAll('.tab'), function(b){
+  b.addEventListener('click', function(){
+    S.tab = b.getAttribute('data-t');
+    Array.prototype.forEach.call(document.querySelectorAll('.tab'), function(x){ x.classList.toggle('on', x === b); });
+    $('m-root').style.display = S.tab === 'mandala' ? '' : 'none';
+    $('a-root').style.display = S.tab === 'ask' ? '' : 'none';
+    if(S.tab === 'ask') renderAsk();
+  });
+});
+window.addEventListener('beforeunload', function(e){ if(S.mdDirty){ e.preventDefault(); e.returnValue = ''; } });
+login_().then(function(ok){
+  if(ok === true) afterLogin_();
+  else if(ok === null) showPwGate_();
+}).catch(function(e){ showPwGate_('ログインに失敗しました（' + e.message + '）'); });
+</script>
+</body>
+</html>
