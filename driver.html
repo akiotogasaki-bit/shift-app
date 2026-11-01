@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v8.17 (2026-11-01) 【回収タブも Firebase から読む】社長決定 A。回収タブの自動の取り直しを /exec の getCollectionBundle（10/26〜10/30 で1日約75件・中央値19秒＝遅い呼び出しの首位）から、実況タブと同じ Firebase（報告・営業中）＋公開スナップショット（回収済み・休止）に切り替えた。🔄 は従来どおり /exec。スナップショットの「報告済み・営業中」が Firebase に揃っていない時も /exec に落ちる（fetchCollectionFromFb_）。 -->
 <!-- driver v8.16 (2026-10-30) 【12:05までのエリア内の融通】社長決定（②案）。10/29 12:04 お茶の水の銀鮭白が5/5で完売、同じエリアの神保町は0/8なのに指示が出なかった。★12:05まで、エリアの残りを12:20までの予定の比率で平らにする（C案）。サーバーの `xfer`（ここから下げて◯◯へ）を「下げる」に入れ、理由欄に行き先を出す。受け手には `xferIn`（◯◯から◯個来る）を出す。12:05〜12:20は従来どおり下げるは出さない。要: メインGAS 2026-10-30（`_rt_earlyXfer_`）。 -->
 <!-- driver v8.15(2026-10-28) 【💬 相談のボタンがPWAで出なかった】社長「出てないんだけど」。★原因＝起動直後に1回だけ Firebase のログインを見て、未ログインならそれきり諦めていた。PWA（パスワード入口）は起動直後はまだ未ログインで、パスワードを入れた後にログインする＝許可を聞き直していなかった（10/27 の裏ログイン記録に「起動直後 idToken なし」2件）。★直し＝firebase.auth().onAuthStateChanged で「ログインできた瞬間」ごとに聞く。FB_PROBE_VER_ を 8.15 に。 -->
 <!-- driver v8.14 (2026-10-26) 【車載の残りが /exec に戻っていた】メインGAS @956 で車載の土台（スタート時の積み込み数）を「確定の時＋30分おき」の送信に減らしたのに、端末は「土台が15分より古ければ /exec」のままだった＝10/26 昼は veh:exec 16／firebase 5。★土台の古さは45分で見る。★日中に動く移動の出入り（moveAt）は15分より古ければ /exec に戻す（それまで移動の古さは見ていなかった）。 -->
@@ -2461,7 +2462,7 @@ function fbLoadScript_(src) {
 function fbJstYmd_() { return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10); }
 /* ★2026-10-22 v8.9.1 誰の端末か（名前・画面の版・入口）も載せる。Firebase に入れていない人を特定するため（社長決定 A）。
    state / drvViaPassword は後ろで宣言しているので、まだ無い時（TDZ）は try で空にする。 */
-var FB_PROBE_VER_ = '8.16';
+var FB_PROBE_VER_ = '8.17';
 function fbProbe_(o) {
   var who = '', via = '';
   try { who = (state && state.userName) || ''; } catch (e) {}
@@ -3450,6 +3451,37 @@ async function fetchCollectionData_(withAuto) {
    ⚠ **🔄ボタン（force）は必ず取りに行く。**現場が「更新したのに変わらない」と感じるのが一番まずい。
    ⚠ スナップショットが取れない時も**必ず取りに行く**（公開が外れても止まらないように）。
    ⚠ 現金有高（レジ最終金額−本日合計ギャラ）は**公開できない**ので、本体は従来どおり `/exec`。 */
+/* ★2026-11-01 v8.17【回収タブも Firebase から読む】社長決定 A（「ドライバーアプリが一番使ってると思うから、まずそこ」）。
+   【なぜ】10/26〜10/30 の doGet遅延ログで `getCollectionBundle` が**1日約75件・中央値19秒（最大81秒）**＝
+     遅い呼び出しの首位。11〜13時に集中していた。
+   中身（報告・営業中・回収済み/休止）は**実況タブ（v8.8）が既に Firebase と公開スナップショットから作っている**：
+     報告 … t/{FC}/live/{日}/locs/{拠点}.report（GAS `_getTodayReportsRaw_` と同じ行・LINE UID 抜き。1分おきに届く）
+     営業中 … 同じ locs の販売数・納品数（`rtIntermediateFromFb_`）
+     回収済み・休止 … 公開スナップショット1行目（`fetchDriverStatePublic_`）
+   ⚠ **🔄（force）は従来どおり /exec**＝報告は最大1分遅れるので、急ぐ時は押せば最新。
+   ⚠ **揃っていない時は使わない（null）＝ /exec に落ちる。**スナップショットが「報告済み(done)」「営業中(selling)」と
+     言っている拠点が Firebase に無ければ、届く前とみなす。ここで中途半端な中身を描くと、
+     変化マーカー（drvCollSig）が同じままになり**次に何か変わるまで直らない**ため。 */
+async function fetchCollectionFromFb_(live, st) {
+  try {
+    if (!live || !st || typeof rtFbLive_ !== 'function') return null;
+    const fb = await rtFbLive_();
+    if (!fb || !fb.flags || !fb.flags.rtReports || !fb.locs) return null;
+    const reports = [];
+    Object.keys(fb.locs).forEach(lid => { const r = fb.locs[lid] && fb.locs[lid].report; if (r && r.locationId) reports.push(r); });
+    const inter = rtIntermediateFromFb_(fb, live) || [];
+    const has = new Set(reports.map(r => String(r.locationId)));
+    const open = new Set(inter.map(r => String(r.locationId)));
+    const status = live.status || {};
+    for (const lid of Object.keys(status)) {
+      if (status[lid] === 'done' && !has.has(lid)) return null;
+      if (status[lid] === 'selling' && !has.has(lid) && !open.has(lid)) return null;
+    }
+    try { if (typeof fbProbe_ === 'function') fbProbe_({ ok: true, step: 'coll:fb', ms: 0 }); } catch (e) {}
+    return { reportsRes: { data: reports }, intermediateRes: { data: inter }, driverStateRes: st };
+  } catch (e) { console.warn('fetchCollectionFromFb_', e); return null; }
+}
+
 let drvCollSig = null;
 function _collSig_(live, st) {
   try {
@@ -3464,11 +3496,12 @@ function _collSig_(live, st) {
 async function reloadCollectionData_(force) {
   if (collectionReloading) return false;
   if (!force && Date.now() - collectionReloadAt < COLLECTION_RELOAD_MIN_MS) return false;
+  let live = null, st = null;
   if (!force) {
     /* 変化マーカーを見る。取れて、かつ前回と同じなら**サーバーへ行かない**。 */
     try {
-      const live = await fetchSnapLive_(20000);
-      const st   = await fetchDriverStatePublic_();
+      live = await fetchSnapLive_(20000);
+      st   = await fetchDriverStatePublic_();
       if (live && st) {
         const sig = _collSig_(live, st);
         if (sig !== null && drvCollSig !== null && sig === drvCollSig) {
@@ -3483,7 +3516,9 @@ async function reloadCollectionData_(force) {
   const btn = document.getElementById('collection-refresh-btn');
   if (btn && force) { btn.disabled = true; btn.textContent = '更新中…'; }
   try {
-    const { reportsRes, intermediateRes, driverStateRes } = await fetchCollectionData_(false);
+    // ★v8.17 自動の取り直しは Firebase から（🔄 と、Firebase で揃わない時は従来どおり /exec）
+    const fromFb = force ? null : await fetchCollectionFromFb_(live, st);
+    const { reportsRes, intermediateRes, driverStateRes } = fromFb || await fetchCollectionData_(false);
     /* ⚠ 取れなかった時は**古い値を消さない**。空で上書きすると
        報告済みの拠点がカードごと「未報告」に戻り、リマインドが誤発射される。
        （置き弁のリストで同じ事故を一度やっている＝loadSpotToday のコメント参照） */
