@@ -3,8 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>今日の机</title>
-<!-- boss/desk v1.0 (2026-11-01) 【社長専用・今日の机】社長決定（B案＝承認まで一気に）。
+<title>Cockpit</title>
+<meta name="apple-mobile-web-app-title" content="Cockpit">
+<!-- boss/desk v1.1 (2026-11-02) ★v1.1 名前を「Cockpit」に（社長決定・旧「今日の机」。URLは desk.html のまま＝ホーム画面のアイコンはそのまま使える）。
+     勤怠の修正申告（type=att）の承認／却下。却下は理由を聞いてから送る（本人へLINEで届く）。
+     boss/desk v1.0 (2026-11-01) 【社長専用・今日の机】社長決定（B案＝承認まで一気に）。
      承認／確認事項／レポートを1画面に。Mac のバッチと Claude の定期タスクが Firebase の boss 関数へ載せる（mode=dpost）。
      ★承認ボタンで実行するのは関数側の許可リスト（GAS_ACTIONS＝拠点レベル・初回納品の作り直し）だけ。
        請求書の送付・郵送代行・消込はボタンでは実行しない＝「チャットで『送って』」の文面を出して待つ（A案）。
@@ -76,7 +79,7 @@ input,select,textarea{width:100%;font-size:13px;padding:8px;border:.5px solid rg
 </head>
 <body>
 <div class="app">
-  <div class="hdr"><i class="ti ti-briefcase" aria-hidden="true"></i>今日の机<span class="sp"></span>
+  <div class="hdr"><i class="ti ti-gauge" aria-hidden="true"></i>Cockpit<span class="sp"></span>
     <button id="reload" aria-label="読み直す"><i class="ti ti-refresh"></i></button>
     <a href="mandala.html" aria-label="マンダラ"><i class="ti ti-target-arrow"></i></a></div>
   <div class="tabs">
@@ -290,7 +293,7 @@ function card(x){
   if(OPEN_ST.indexOf(x.status) >= 0 && x.status !== 'running' && x.status !== 'waiting'){
     if(x.kind === 'approve'){
       (x.choices || []).forEach(function(c){
-        var tag = c.type === 'gas' ? '▶ ボタンで実行' : c.type === 'chat' ? '💬 チャットで「送って」' : '実行するものなし';
+        var tag = (c.type === 'gas' || c.type === 'att') ? '▶ ボタンで実行' : c.type === 'chat' ? '💬 チャットで「送って」' : '実行するものなし';
         h += '<button class="btn choice'+(c.type ? '' : ' sub')+'" data-a="choose" data-c="'+esc(c.id)+'"'+(busy ? ' disabled' : '')+'>'
           + '<b>'+esc(c.id)+'　'+esc(c.label)+'</b><span class="tag"> ・'+tag+'</span>'
           + (c.detail ? '<small>'+esc(c.detail)+'</small>' : '') + '</button>';
@@ -314,7 +317,7 @@ function find(k){ return S.items.filter(function(x){ return x.key === k; })[0]; 
 function act(key, body, okMsg){
   S.busy[key] = true; render();
   return api('dact', Object.assign({ key: key }, body)).then(function(r){
-    toast(r.ok ? okMsg : '失敗しました', !r.ok);
+    toast(r.ok ? okMsg : (r.error || r.result || '失敗しました'), !r.ok);
   }).catch(function(e){ toast(e.message, true); })
     .then(function(){ delete S.busy[key]; loadDesk(); });
 }
@@ -335,7 +338,14 @@ $('root').addEventListener('click', function(e){
     var c = (x.choices || []).filter(function(y){ return y.id === b.getAttribute('data-c'); })[0];
     if(!c) return;
     if(c.type === 'gas' && !confirm(c.id+'「'+c.label+'」を実行します。\n本番に書き込みます。よろしいですか？')) return;
-    act(k, { act:'approve', choice: c.id }, c.type === 'gas' ? '実行しました' : c.type === 'chat' ? 'チャットで「送って」を送ってください' : '片付けました');
+    var body = { act:'approve', choice: c.id };
+    if(c.needNote){
+      var note = prompt('却下の理由を入れてください（本人にLINEで届きます）');
+      if(note === null) return;
+      note = note.trim(); if(!note){ toast('理由が空です', true); return; }
+      body.note = note;
+    } else if(c.type === 'att' && !confirm('「'+x.title+'」を'+c.label+'します。\n勤怠記録に反映し、本人へLINEが届きます。よろしいですか？')) return;
+    act(k, body, (c.type === 'gas' || c.type === 'att') ? '実行しました' : c.type === 'chat' ? 'チャットで「送って」を送ってください' : '片付けました');
   }
 });
 document.querySelectorAll('.tab').forEach(function(t){
