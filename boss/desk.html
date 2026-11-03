@@ -5,7 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Cockpit</title>
 <meta name="apple-mobile-web-app-title" content="Cockpit">
-<!-- boss/desk v1.1 (2026-11-02) ★v1.1 名前を「Cockpit」に（社長決定・旧「今日の机」。URLは desk.html のまま＝ホーム画面のアイコンはそのまま使える）。
+<!-- boss/desk v1.2 (2026-11-04) ★v1.2 レポートをカードで（社長決定 B案）。バッチが cards（数字）を載せた物は、大きな数字のカードで出す
+     （表は「▼ 詳しい表を見る」に畳む）。画面の幅で広がる＝iPhone 2列／iPad・PC はカードが横に並び、机の項目も2〜3列。
+     boss/desk v1.1 (2026-11-02) ★v1.1 名前を「Cockpit」に（社長決定・旧「今日の机」。URLは desk.html のまま＝ホーム画面のアイコンはそのまま使える）。
      勤怠の修正申告（type=att）の承認／却下。却下は理由を聞いてから送る（本人へLINEで届く）。
      boss/desk v1.0 (2026-11-01) 【社長専用・今日の机】社長決定（B案＝承認まで一気に）。
      承認／確認事項／レポートを1画面に。Mac のバッチと Claude の定期タスクが Firebase の boss 関数へ載せる（mode=dpost）。
@@ -75,6 +77,35 @@ input,select,textarea{width:100%;font-size:13px;padding:8px;border:.5px solid rg
 .result{font-size:11px;white-space:pre-wrap;background:var(--panel);border-radius:6px;padding:6px 8px;margin-top:8px;color:#444;}
 .chatbox{background:#FFF8EC;border:.5px solid #E7C98F;border-radius:8px;padding:10px;margin-top:8px;font-size:12px;line-height:1.6;}
 .chatbox pre{white-space:pre-wrap;font-family:inherit;background:#fff;border-radius:6px;padding:6px 8px;margin:6px 0;font-size:13px;}
+/* v1.2 カード表示（数字） */
+.kgt{font-size:11px;color:var(--muted);margin:10px 0 5px;font-weight:600;}
+.kg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;}
+.kc{background:var(--panel);border-radius:9px;padding:9px 10px;min-width:0;}
+.kc .l{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.kc .v{font-size:21px;font-weight:600;color:var(--navy);line-height:1.25;margin-top:2px;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.kc .s{font-size:10px;color:var(--muted);line-height:1.4;margin-top:2px;}
+.kc.bad .v{color:var(--red);} .kc.warn .v{color:var(--orange);} .kc.good .v{color:var(--green);}
+#root.grid{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;align-items:start;}
+#root.grid .card{margin-bottom:0;}
+/* iPad・PC：横に広げる */
+@media (min-width:700px){
+  .app{max-width:1180px;}
+  .body{padding:16px 22px 48px;}
+  .hdr{font-size:17px;padding:15px 22px;}
+  .tab{font-size:14px;padding:12px 2px;}
+  .card{padding:16px;}
+  .card h3{font-size:16px;}
+  .sum{font-size:14px;}
+  .kg{grid-template-columns:repeat(auto-fit,minmax(124px,1fr));gap:10px;}
+  .kc{padding:12px 14px;}
+  .kc .l{font-size:12px;}
+  .kc .v{font-size:27px;}
+  .kc .s{font-size:11px;}
+  .kgt{font-size:12px;margin:14px 0 6px;}
+  #root.grid{grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:14px;}
+  #root.grid .card.wide{grid-column:1/-1;}
+}
+@media (min-width:1100px){ .kc .v{font-size:30px;} }
 </style>
 </head>
 <body>
@@ -89,7 +120,7 @@ input,select,textarea{width:100%;font-size:13px;padding:8px;border:.5px solid rg
     <button class="tab" data-t="done">済み</button>
   </div>
   <div class="body"><div id="root"><div class="inline-loading"><span class="spinner"></span>読み込み中…</div></div></div>
-  <div class="ver">boss/desk v1.0</div>
+  <div class="ver">boss/desk v1.2</div>
 </div>
 <div class="overlay" id="gate"><span class="spinner"></span><div>ログインしています…</div></div>
 <div class="toast" id="toast"></div>
@@ -265,21 +296,25 @@ function render(){
     return S.tab === 'done' ? !open : (open && x.kind === S.tab);
   });
   if(!list.length){
+    $('root').className = '';
     $('root').innerHTML = '<div class="empty">'+(S.tab === 'done' ? '直近14日で片付いた物はありません' : 'いまは何もありません')+'</div>';
     return;
   }
+  $('root').className = 'grid';
   $('root').innerHTML = list.map(card).join('');
 }
 function card(x){
   var busy = S.busy[x.key] || x.status === 'running';
-  var h = '<div class="card" data-k="'+esc(x.key)+'">';
+  var hasCards = x.cards && x.cards.length;
+  var h = '<div class="card'+(hasCards ? ' wide' : '')+'" data-k="'+esc(x.key)+'">';
   h += '<h3>'+esc(x.title || '（無題）')+'</h3>';
   h += '<div class="meta"><span class="badge b-'+esc(x.status)+'">'+esc(ST_LABEL[x.status] || x.status)+'</span>'
      + (x.source ? '<span>'+esc(x.source)+'</span>' : '') + (x.date ? '<span>'+esc(x.date)+'</span>' : '')
      + '<span>'+esc(fmtTime(x.updatedAt))+'</span></div>';
-  if(x.summary) h += '<div class="sum">'+esc(x.summary)+'</div>';
+  if(hasCards) h += kpiCards(x.cards);
+  else if(x.summary) h += '<div class="sum">'+esc(x.summary)+'</div>';
   if(x.body){
-    h += '<button class="more" data-a="more">'+(S.open[x.key] ? '▲ 閉じる' : '▼ 中身を見る')+'</button>';
+    h += '<button class="more" data-a="more">'+(S.open[x.key] ? '▲ 閉じる' : hasCards ? '▼ 詳しい表を見る' : '▼ 中身を見る')+'</button>';
     if(S.open[x.key]) h += '<div class="md">'+mdRender(x.body)+'</div>';
   }
   if(x.links && x.links.length){
@@ -308,6 +343,14 @@ function card(x){
   if(OPEN_ST.indexOf(x.status) < 0) h += '<button class="btn sub" data-a="reopen">未対応に戻す</button>';
   h += '</div></div>';
   return h;
+}
+function kpiCards(groups){
+  return groups.map(function(g){
+    return (g.title ? '<div class="kgt">'+esc(g.title)+'</div>' : '') + '<div class="kg">' + g.items.map(function(c){
+      return '<div class="kc'+(c.tone ? ' '+esc(c.tone) : '')+'"><div class="l">'+esc(c.label)+'</div><div class="v">'+esc(c.value)+'</div>'
+        + (c.sub ? '<div class="s">'+esc(c.sub)+'</div>' : '') + '</div>';
+    }).join('') + '</div>';
+  }).join('');
 }
 function chatBox(text){
   return '<div class="chatbox">これはボタンでは実行しません。Claude のチャット（夜に届く送付確認など）に次の一言を送ってください。'
