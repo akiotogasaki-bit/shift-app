@@ -1,0 +1,13 @@
+{
+  "name": "Cockpit",
+  "short_name": "Cockpit",
+  "start_url": "./desk.html",
+  "scope": "./desk.html",
+  "display": "standalone",
+  "background_color": "#FDF8F0",
+  "theme_color": "#C0392B",
+  "icons": [
+    { "src": "./cockpit-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
+    { "src": "./cockpit-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
