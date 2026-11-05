@@ -1,6 +1,6 @@
 {
-  "name": "手帳",
-  "short_name": "手帳",
+  "name": "ジャーナル",
+  "short_name": "ジャーナル",
   "start_url": "./journal.html",
   "scope": "./",
   "display": "standalone",

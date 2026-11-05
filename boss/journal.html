@@ -4,12 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="手帳">
+<meta name="apple-mobile-web-app-title" content="ジャーナル">
 <meta name="theme-color" content="#111111">
 <link rel="apple-touch-icon" href="cockpit-icon.png">
 <link rel="icon" href="cockpit-icon.png">
 <link rel="manifest" href="journal.webmanifest">
-<!-- boss/journal v1.1 (2026-11-05) ★v1.1 社長「見開きだと小さい」→いつも1ページずつ大きく。指ではらう／「次のページ」で 左→右→追加→次の日の左 とめくる。
+<!-- boss/journal v1.2 (2026-11-05) ★v1.2 アプリ名を「手帳」→「ジャーナル」（社長指示）。
+     boss/journal v1.1 (2026-11-05) ★v1.1 社長「見開きだと小さい」→いつも1ページずつ大きく。指ではらう／「次のページ」で 左→右→追加→次の日の左 とめくる。
      boss/journal v1.0 (2026-11-05) 社長の手帳（バレットジャーナル）段階1＝書けて保存できる。
      設計: 40_ドキュメント/設計_バレットジャーナル手帳_2026-11-05.md
      ・2026年11月〜12月の INDEX／月間／週間／デイリー（見開き＋追加ページ）。見た目＝日付は革の手帳風の明朝・他はモノトーン
@@ -17,7 +18,7 @@
      ・Apple Pencil だけが線を引く。指は左右にはらってページ送り（「指でも書く」で切り替え）
      ・書いた線はまず端末の中（IndexedDB）に保存し、つながったら関数 boss の jsave へ自動で送る（ページ画像も一緒に）
      ・段階2（日付の横の数字・Todoist）と段階3（23時の読み取り）はまだ -->
-<title>手帳</title>
+<title>ジャーナル</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Noto+Sans+JP:wght@400;500;700&family=Zen+Old+Mincho:wght@600;700&display=swap">
 <style>
@@ -643,7 +644,7 @@ function pwGate(msg){
 }
 async function afterLogin(){
   var me = await api('me').catch(function(){ return null; });
-  if(!me || !me.allowed){ gate('<div>この手帳は社長専用です。</div><button id="gate-out">別のアカウントで入り直す</button>'); $('gate-out').onclick = function(){ firebase.auth().signOut().then(function(){ location.reload(); }); }; return; }
+  if(!me || !me.allowed){ gate('<div>このジャーナルは社長専用です。</div><button id="gate-out">別のアカウントで入り直す</button>'); $('gate-out').onclick = function(){ firebase.auth().signOut().then(function(){ location.reload(); }); }; return; }
   S.user = firebase.auth().currentUser; gate('');
   showSync(); syncNow(); if(S.view) pullFromServer(viewPages(S.view));
 }
