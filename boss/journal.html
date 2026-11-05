@@ -9,7 +9,8 @@
 <link rel="apple-touch-icon" href="cockpit-icon.png">
 <link rel="icon" href="cockpit-icon.png">
 <link rel="manifest" href="journal.webmanifest">
-<!-- boss/journal v1.3 (2026-11-05) ★v1.3 2本指でピンチイン／アウト（1〜4倍）。拡大中は1本指で動かす・「100%に戻す」。拡大後はくっきり描き直す。
+<!-- boss/journal v1.4 (2026-11-05) ★v1.4 社長「ペンを離して次の画を書く時の反応が遅い」＝①iPadのダブルタップ判定の待ちを止める（ページ上の touch を preventDefault）②1画ごとの全描き直し・全保存をやめる（足した1画だけ描く・端末保存は0.6秒まとめ）③送信（ページ画像づくり）は手を10秒止めてから。
+     v1.3 (2026-11-05) ★v1.3 2本指でピンチイン／アウト（1〜4倍）。拡大中は1本指で動かす・「100%に戻す」。拡大後はくっきり描き直す。
      boss/journal v1.2 (2026-11-05) ★v1.2 アプリ名を「手帳」→「ジャーナル」（社長指示）。
      boss/journal v1.1 (2026-11-05) ★v1.1 社長「見開きだと小さい」→いつも1ページずつ大きく。指ではらう／「次のページ」で 左→右→追加→次の日の左 とめくる。
      boss/journal v1.0 (2026-11-05) 社長の手帳（バレットジャーナル）段階1＝書けて保存できる。
@@ -340,10 +341,18 @@ async function loadPage(id){
   if(row){ p.strokes = dec(row.json); p.clientAt = row.clientAt || 0; p.dirty = !!row.dirty; }
   p.loaded = true; return p;
 }
+// ★v1.4 1画ごとに全部を保存し直すと書くほど重くなる＝印だけ付けて0.6秒まとめて端末へ保存
+var pendSave = {}, pendT = null;
 function touchPage(id){
   var p = pageState(id); p.clientAt = Date.now(); p.dirty = true;
-  idbPut('pages', { id: id, json: enc(p.strokes), clientAt: p.clientAt, dirty: true });
-  showSync(); scheduleSync();
+  pendSave[id] = 1; clearTimeout(pendT); pendT = setTimeout(flushSave, 600);
+  scheduleSync();
+}
+function flushSave(){
+  clearTimeout(pendT); pendT = null;
+  var ids = Object.keys(pendSave); pendSave = {};
+  if(!ids.length) return Promise.resolve();
+  return Promise.all(ids.map(function(id){ var p = pageState(id); return idbPut('pages', { id: id, json: enc(p.strokes), clientAt: p.clientAt, dirty: true }); })).then(showSync);
 }
 
 /* ============================================================
@@ -477,9 +486,12 @@ function bindDraw(id, page){
     var tt = touches[e.pointerId];
     if(tt){ gesture(e, tt); delete touches[e.pointerId]; return; }
     if(!cur) return;
-    if(!cur.erase){ pageState(id).strokes.push(cur); S.hist.push({ t: 'add', id: id, s: cur }); S.redo = []; clear(els[id].live); redraw(id); touchPage(id); }
+    if(!cur.erase){ pageState(id).strokes.push(cur); S.hist.push({ t: 'add', id: id, s: cur }); S.redo = []; clear(els[id].live); if(cur.h) redraw(id); else paint(els[id].ink.getContext('2d'), cur); touchPage(id); }   // ★v1.4 蛍光ペンは文字の下に入れるので描き直し・ペンは上に1画足すだけ
     cur = null; navState();
   }
+  // ★v1.4 iPad はペンを離して次に触れるとダブルタップ（拡大）かを判定して待つ＝touch を止めて待たせない（リンクのボタンは除く）
+  ['touchstart', 'touchmove', 'touchend'].forEach(function(t){ page.addEventListener(t, function(e){ if(e.target.closest && e.target.closest('button')) return; if(e.cancelable) e.preventDefault(); }, { passive: false }); });
+  page.addEventListener('dblclick', function(e){ e.preventDefault(); });
   page.addEventListener('pointerup', end); page.addEventListener('pointercancel', function(e){ delete touches[e.pointerId]; if(cur && !cur.erase){ clear(els[id].live); } cur = null; });
 }
 /* 指：2本指タップ＝戻す／左右にはらう＝前後へ */
@@ -607,7 +619,7 @@ fingerBtn();
    送る（つながったら自動）
    ============================================================ */
 var syncT = null;
-function scheduleSync(){ clearTimeout(syncT); syncT = setTimeout(syncNow, 2500); }
+function scheduleSync(){ clearTimeout(syncT); syncT = setTimeout(syncNow, 10000); }   // ★v1.4 ページ画像づくりの間はペンが効かない＝手を10秒止めてから送る
 async function dirtyRows(){ return (await idbAll('pages')).filter(function(r){ return r.dirty; }); }
 async function showSync(){
   var n = (await dirtyRows()).length, el = $('sync');
@@ -628,6 +640,7 @@ async function syncNow(){
   if(S.syncing || !navigator.onLine || !S.user) { showSync(); return; }
   S.syncing = true;
   try{
+    await flushSave();
     var rows = await dirtyRows();
     for(var i = 0; i < rows.length; i++){
       var r = rows[i], strokes = dec(r.json);
@@ -660,7 +673,8 @@ async function pullFromServer(ids){
 }
 window.addEventListener('online', function(){ showSync(); syncNow(); });
 window.addEventListener('offline', showSync);
-document.addEventListener('visibilitychange', function(){ if(document.hidden) syncNow(); else if(S.view) pullFromServer(viewPages(S.view)); });
+window.addEventListener('pagehide', function(){ flushSave(); });
+document.addEventListener('visibilitychange', function(){ if(document.hidden){ flushSave(); syncNow(); } else if(S.view) pullFromServer(viewPages(S.view)); });
 setInterval(function(){ syncNow(); }, 60000);
 
 /* ============================================================
