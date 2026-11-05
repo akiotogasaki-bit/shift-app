@@ -1,0 +1,14 @@
+{
+  "name": "手帳",
+  "short_name": "手帳",
+  "start_url": "./journal.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#ECECEC",
+  "theme_color": "#111111",
+  "icons": [
+    { "src": "./cockpit-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
+    { "src": "./cockpit-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

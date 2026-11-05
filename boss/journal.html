@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="手帳">
+<meta name="theme-color" content="#111111">
+<link rel="apple-touch-icon" href="cockpit-icon.png">
+<link rel="icon" href="cockpit-icon.png">
+<link rel="manifest" href="journal.webmanifest">
+<!-- boss/journal v1.0 (2026-11-05) 社長の手帳（バレットジャーナル）段階1＝書けて保存できる。
+     設計: 40_ドキュメント/設計_バレットジャーナル手帳_2026-11-05.md
+     ・2026年11月〜12月の INDEX／月間／週間／デイリー（見開き＋追加ページ）。見た目＝日付は革の手帳風の明朝・他はモノトーン
+     ・ペン（黒赤青×細太）・蛍光ペン（黄）・消しゴム（線ごと）・戻す／やり直し（2本指タップでも戻す）
+     ・Apple Pencil だけが線を引く。指は左右にはらってページ送り（「指でも書く」で切り替え）
+     ・書いた線はまず端末の中（IndexedDB）に保存し、つながったら関数 boss の jsave へ自動で送る（ページ画像も一緒に）
+     ・段階2（日付の横の数字・Todoist）と段階3（23時の読み取り）はまだ -->
+<title>手帳</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Noto+Sans+JP:wght@400;500;700&family=Zen+Old+Mincho:wght@600;700&display=swap">
+<style>
+:root{
+  --desk:#ECECEC; --chrome:#FFFFFF; --fg:#111111; --sub:#777777; --line:#E0E0E0;
+  --on-bg:#111111; --on-fg:#FFFFFF; --nav-bg:#F2F2F2;
+  --paper:#FFFFFF; --warn:#B03A2E; --ok:#3E9B66;
+  --f-body:"Noto Sans JP","Hiragino Sans",sans-serif;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--desk);color:var(--fg);font-family:var(--f-body);font-size:14px;display:flex;flex-direction:column;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;overscroll-behavior:none}
+.gut{padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px))}
+.bar{background:var(--chrome);border-bottom:1px solid var(--line);padding-top:calc(6px + env(safe-area-inset-top,0px));padding-bottom:6px;display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center}
+.grp{display:flex;gap:5px;align-items:center}
+.sep{width:1px;height:26px;background:var(--line)}
+button{font-family:inherit;font-size:13px;color:var(--fg);background:transparent;border:1px solid var(--line);border-radius:2px;padding:6px 10px;cursor:pointer;min-height:34px;letter-spacing:.02em;touch-action:manipulation}
+button:focus-visible{outline:2px solid #111;outline-offset:2px}
+button.on{background:var(--on-bg);border-color:var(--on-bg);color:var(--on-fg);font-weight:700}
+button:disabled{opacity:.35;cursor:default}
+.sw{width:34px;padding:0;display:grid;place-items:center}
+.sw i{width:18px;height:18px;border-radius:50%;display:block}
+.nav button{background:var(--nav-bg);border-color:transparent}
+.stage{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;padding-block:10px}
+.tabs{display:none;gap:6px;margin-bottom:8px}
+.spread{display:flex;gap:14px;justify-content:center;align-items:flex-start}
+.pw{display:flex;flex-direction:column;align-items:center;gap:6px}
+.page{position:relative;background:var(--paper);box-shadow:0 1px 2px rgba(0,0,0,.14),0 8px 22px rgba(0,0,0,.10);touch-action:none}
+.page canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.page .lk{position:absolute;background:transparent;border:0;padding:0;min-height:0;border-radius:3px}
+.page .lk:active{background:rgba(0,0,0,.06)}
+.add{font-size:12px}
+.foot{background:var(--chrome);border-top:1px solid var(--line);padding-top:6px;padding-bottom:calc(6px + env(safe-area-inset-bottom,0px));display:flex;flex-wrap:wrap;gap:4px 16px;font-size:12px;color:var(--sub);align-items:center}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:var(--ok)}
+.dot.wait{background:#D89B2B}.dot.ng{background:var(--warn)}
+.gate{position:fixed;inset:0;background:rgba(236,236,236,.97);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;z-index:50;font-size:14px}
+.gate[hidden]{display:none}
+.gate input{font-size:16px;padding:8px 10px;border:1px solid #bbb;width:220px;-webkit-user-select:text;user-select:text}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(52px + env(safe-area-inset-bottom,0px));background:#22252B;color:#fff;font-size:12px;padding:8px 12px;border-radius:6px;z-index:60;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.show{opacity:1}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="bar gut" role="toolbar" aria-label="ペンと操作">
+  <div class="grp" aria-label="ペンの色">
+    <button class="sw on" id="c-k" data-c="#222222" aria-label="黒"><i style="background:#222"></i></button>
+    <button class="sw" id="c-r" data-c="#C0392B" aria-label="赤"><i style="background:#C0392B"></i></button>
+    <button class="sw" id="c-b" data-c="#2E6DB4" aria-label="青"><i style="background:#2E6DB4"></i></button>
+  </div>
+  <div class="grp" aria-label="太さ"><button class="on" id="w-thin" data-w="1.6">細</button><button id="w-bold" data-w="3.4">太</button></div>
+  <div class="grp"><button id="hl" aria-pressed="false"><span style="background:#FFE34D;color:#333;padding:0 4px">蛍光ペン</span></button></div>
+  <div class="sep"></div>
+  <div class="grp">
+    <button id="eraser" aria-pressed="false">消しゴム</button>
+    <button id="undo" aria-label="戻す">↶ 戻す</button>
+    <button id="redo" aria-label="やり直し">↷</button>
+    <button id="finger" aria-pressed="false" title="指でも線を引く">指で書く</button>
+  </div>
+  <div class="sep"></div>
+  <div class="grp nav" aria-label="ページ移動">
+    <button id="n-idx">INDEX</button><button id="n-11">11月</button><button id="n-12">12月</button><button id="n-wk">この週</button>
+    <button id="n-prev">◀</button><button id="n-today">今日</button><button id="n-next">▶</button>
+  </div>
+</div>
+
+<div class="stage gut" id="stage">
+  <div class="tabs" id="tabs"></div>
+  <div class="spread" id="spread"></div>
+</div>
+
+<div class="foot gut">
+  <span id="sync"><span class="dot"></span>読み込み中…</span>
+  <span id="where"></span>
+</div>
+<div class="toast" id="toast"></div>
+<div class="gate" id="gate" hidden></div>
+
+<script>
+/* ============================================================
+   設定（マンダラ・Cockpit と同じ）
+   ============================================================ */
+var FB_CFG_ = { apiKey: 'AIzaSyA_BcnCo7yjc1KXVhCEOgFikNkKW3WmKcc', authDomain: 'oedo-bento.firebaseapp.com',
+                projectId: 'oedo-bento', appId: '1:99139459025:web:13ec30058b25705fef32f0' };
+var FB_AUTH_URL_ = 'https://asia-northeast1-oedo-bento.cloudfunctions.net/auth';
+var BOSS_URL_ = 'https://asia-northeast1-oedo-bento.cloudfunctions.net/boss';
+var FB_SDK_ = 'https://www.gstatic.com/firebasejs/10.14.1/';
+
+var W = 600, H = 914, M = 26;
+var START = ymd(2026, 11, 1), END = ymd(2026, 12, 31);
+var HOL = { '2026-11-03': '文化の日', '2026-11-23': '勤労感謝の日' };
+var WD = '月火水木金土日';
+var INK = '#111111', SUB = '#8A8A8A', LINE = '#E3E3E3', DASH = '#EDEDED', DOT = '#C2C2C2', RED = '#C0392B', BLUE = '#2E6DB4', GREY = '#C8C8C8';
+var F_NUM = '"Cormorant Garamond", "Times New Roman", serif', F_BODY = '"Noto Sans JP", "Hiragino Sans", sans-serif', F_DATE = '"Zen Old Mincho", "Hiragino Mincho ProN", serif';
+
+function $(id){ return document.getElementById(id); }
+var toastT = null;
+function toast(msg){ var t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(function(){ t.classList.remove('show'); }, 2200); }
+
+/* ============================================================
+   日付
+   ============================================================ */
+function ymd(y, m, d){ return y + '-' + ('0'+m).slice(-2) + '-' + ('0'+d).slice(-2); }
+function parse(s){ var a = s.split('-').map(Number); return new Date(Date.UTC(a[0], a[1]-1, a[2])); }
+function fmt(dt){ return ymd(dt.getUTCFullYear(), dt.getUTCMonth()+1, dt.getUTCDate()); }
+function addDays(s, n){ var d = parse(s); d.setUTCDate(d.getUTCDate() + n); return fmt(d); }
+function wday(s){ return (parse(s).getUTCDay() + 6) % 7; }        // 月=0 … 日=6
+function monday(s){ return addDays(s, -wday(s)); }
+function inRange(s){ return s >= START && s <= END; }
+function todayJst(){ var d = new Date(Date.now() + 9*3600*1000); return ymd(d.getUTCFullYear(), d.getUTCMonth()+1, d.getUTCDate()); }
+function isoWeek(s){ var d = parse(s); d.setUTCDate(d.getUTCDate() + 3 - wday(s)); var y1 = Date.UTC(d.getUTCFullYear(), 0, 4); return 1 + Math.round(((d - y1) / 864e5 - 3 + ((new Date(y1).getUTCDay() + 6) % 7)) / 7); }
+function dcolor(s){ var w = wday(s); return (HOL[s] || w === 6) ? RED : (w === 5 ? BLUE : INK); }
+function md(s){ var d = parse(s); return (d.getUTCMonth()+1) + '月' + d.getUTCDate() + '日'; }
+function WEEKS(){ var a = [], w = monday(START); while(w <= END){ a.push(w); w = addDays(w, 7); } return a; }
+
+/* ビュー＝ INDEX / M-2026-11 / W-2026-11-02 / D-2026-11-05 */
+function viewPages(v){
+  if(v.indexOf('D-') === 0){ var ids = [v + '-L', v + '-R']; for(var i = 2; i <= (S.extras[v] || 1); i++) ids.push(v + '-R' + i); return ids; }
+  return [v];
+}
+
+/* ============================================================
+   印刷済みの紙面（make_planner_v3.py と同じ割り付け・モノトーン）
+   返り値＝リンクの当たり判定 [{x,y,w,h,to}]（紙面の座標）
+   ============================================================ */
+function txt(g, s, x, y, size, col, font, align, weight, ls){
+  g.font = (weight || 400) + ' ' + size + 'px ' + (font || F_BODY); g.fillStyle = col || INK; g.textAlign = align || 'left';
+  if('letterSpacing' in g) g.letterSpacing = (ls || 0) + 'px';
+  g.fillText(s, x, y);
+  if('letterSpacing' in g) g.letterSpacing = '0px';
+}
+function hline(g, x0, x1, y, col, w){ g.strokeStyle = col; g.lineWidth = w || .6; g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y); g.stroke(); }
+function dots(g, x0, y0, x1, y1){ g.fillStyle = DOT; for(var y = y0 + 7; y < y1; y += 14) for(var x = x0 + 7; x < x1; x += 14){ g.beginPath(); g.arc(x, y, .75, 0, 7); g.fill(); } }
+function ruled(g, x0, y0, x1, y1, step){ for(var y = y0 + step; y <= y1; y += step) hline(g, x0, x1, y, LINE); }
+function sec(g, en, ja, x, y){ txt(g, en, x, y - 11, 8.5, INK, F_BODY, 'left', 500, 3); txt(g, ja, x, y, 8.5, SUB); }
+function legend(g){ txt(g, '記号：□タスク ☒完了 □>先送り ○予定 −メモ !重要 ？迷い ◎決定 Q分析・調査', M, H - 14, 8.5, '#333', F_BODY, 'left', 500); }
+function pid(g, id){ txt(g, id, W - M, H - 14, 7.5, SUB, F_BODY, 'right'); }
+
+function drawPage(g, id){
+  g.clearRect(0, 0, W, H); g.fillStyle = '#FFFFFF'; g.fillRect(0, 0, W, H);
+  var links = [];
+  if(id === 'INDEX') drawIndex(g, links);
+  else if(id.indexOf('M-') === 0) drawMonth(g, id, links);
+  else if(id.indexOf('W-') === 0) drawWeek(g, id, links);
+  else drawDay(g, id);
+  return links;
+}
+
+function dateHeader(g, s, y){
+  txt(g, s.slice(0, 4), M, y, 10, SUB, F_BODY, 'left', 500, 2);
+  var label = md(s); txt(g, label, M, y + 38, 30, INK, F_DATE, 'left', 700);
+  g.font = '700 30px ' + F_DATE; var tw = g.measureText(label).width;
+  txt(g, '（' + WD[wday(s)] + '）', M + tw + 2, y + 38, 18, dcolor(s), F_DATE, 'left', 700);
+  if(HOL[s]) txt(g, HOL[s], M + tw + 50, y + 36, 11, RED, F_BODY, 'left', 500);
+}
+
+function drawDay(g, id){
+  var s = id.slice(2, 12), side = id.slice(13);
+  if(side === 'L'){
+    dateHeader(g, s, 46);
+    hline(g, M, W - M, 128, INK, .8);
+    var x0 = M, x1 = W - M, y1 = 144, y0 = H - M - 10, gap = 12, cw = (x1 - x0 - 2*gap) / 3, cx = [x0, x0 + cw + gap, x0 + 2*(cw + gap)];
+    var mid = y1 + (y0 - (y1 + 22)) / 2 + 22;
+    sec(g, 'SCHEDULE', 'スケジュール', cx[0], y1 + 14);
+    var top = y1 + 28, hh = (mid - top) / 12.6;
+    for(var k = 0; k <= 12; k++){
+      var yy = top + k*hh; hline(g, cx[0] + 22, cx[0] + cw, yy, LINE);
+      if(k < 12){ g.setLineDash([1, 2]); hline(g, cx[0] + 22, cx[0] + cw, yy + hh/2, DASH); g.setLineDash([]); }
+      txt(g, String(6 + k), cx[0], yy + 3.5, 11, SUB, F_NUM, 'left', 500);
+    }
+    sec(g, 'TASKS', 'タスク', cx[1], y1 + 14);
+    ruled(g, cx[1], y1 + 28, cx[1] + cw, mid + hh*.6, 24);
+    sec(g, 'NOTES', 'メモ', cx[0], mid + hh*.6 + 24); dots(g, cx[0], mid + hh*.6 + 30, cx[1] + cw, y0);
+    sec(g, 'NOTES', 'メモ', cx[2], y1 + 14); dots(g, cx[2], y1 + 22, cx[2] + cw, y0);
+    g.strokeStyle = DASH; g.lineWidth = .6; g.beginPath(); g.moveTo(cx[2] - gap/2, y1); g.lineTo(cx[2] - gap/2, y0); g.stroke();
+    legend(g);
+  } else {
+    txt(g, md(s), M, 50, 14, INK, F_DATE, 'left', 700);
+    g.font = '700 14px ' + F_DATE; var tw = g.measureText(md(s)).width;
+    txt(g, '（' + WD[wday(s)] + '）' + (side === 'R' ? '' : '　追加ページ ' + side.slice(1)), M + tw, 50, 11, dcolor(s), F_DATE, 'left', 700);
+    txt(g, side === 'R' ? 'FREE' : 'EXTRA', W - M, 50, 8.5, SUB, F_BODY, 'right', 500, 3);
+    dots(g, M, 66, W - M, H - M - 6);
+  }
+  pid(g, id);
+}
+
+function drawWeek(g, id, links){
+  var wk = id.slice(2), e = addDays(wk, 6), wn = isoWeek(wk);
+  txt(g, 'WEEK ' + ('0' + wn).slice(-2), M, 46, 9, INK, F_BODY, 'left', 500, 4);
+  txt(g, md(wk) + '（月）〜 ' + md(e) + '（日）', M, 84, 22, INK, F_DATE, 'left', 700);
+  hline(g, M, W - M, 100, INK, .8);
+  var top = 108, rh = 74;
+  for(var i = 0; i < 7; i++){
+    var s = addDays(wk, i), y = top + i*rh, ok = inRange(s), col = ok ? dcolor(s) : GREY;
+    txt(g, String(parse(s).getUTCDate()), M + 2, y + 30, 26, col, F_NUM, 'left', 600);
+    txt(g, WD[i], M + 4, y + 48, 10, col, F_BODY, 'left', 500);
+    if(HOL[s]) txt(g, HOL[s], M + 2, y + 62, 7.5, RED);
+    if(ok){
+      links.push({ x: M, y: y + 4, w: 44, h: 50, to: 'D-' + s });
+      hline(g, M + 54, W - M, y + rh/3, '#F0F0F0'); hline(g, M + 54, W - M, y + 2*rh/3, '#F0F0F0');
+    } else txt(g, '（期間外）', M + 54, y + rh/2 + 3, 9, GREY);
+    hline(g, M, W - M, y + rh, LINE, .7);
+  }
+  var by = top + 7*rh + 26, half = (W - 2*M - 14) / 2;
+  sec(g, 'THIS WEEK', '今週のタスク', M, by); sec(g, 'REVIEW', '振り返り', M + half + 14, by);
+  ruled(g, M, by + 4, M + half, H - 34, 24); ruled(g, M + half + 14, by + 4, W - M, H - 34, 24);
+  pid(g, id);
+}
+
+function drawMonth(g, id, links){
+  var y = +id.slice(2, 6), m = +id.slice(7, 9);
+  txt(g, String(y), M, 46, 10, SUB, F_BODY, 'left', 500, 2);
+  txt(g, m + '月', M, 90, 36, INK, F_DATE, 'left', 700);
+  txt(g, '日付を押すとその日へ', W - M, 90, 8.5, SUB, F_BODY, 'right');
+  var first = ymd(y, m, 1), last = addDays(m === 12 ? ymd(y + 1, 1, 1) : ymd(y, m + 1, 1), -1);
+  var rows = []; for(var d = monday(first); d <= last; d = addDays(d, 7)) rows.push(d);
+  var gx0 = M + 30, gw = W - 2*M - 30, cw = gw / 7, gtop = 124, gh = 520, rh = gh / rows.length;
+  for(var i = 0; i < 7; i++) txt(g, WD[i], gx0 + i*cw + cw/2, gtop - 6, 9, i === 6 ? RED : i === 5 ? BLUE : SUB, F_BODY, 'center', 500);
+  rows.forEach(function(wk, r){
+    var ry = gtop + r*rh;
+    txt(g, 'W' + ('0' + isoWeek(wk)).slice(-2), M, ry + 14, 8.5, INK, F_BODY, 'left', 500, 1);
+    links.push({ x: M - 2, y: ry, w: 28, h: 20, to: 'W-' + wk });
+    for(var i = 0; i < 7; i++){
+      var dd = addDays(wk, i), x = gx0 + i*cw, inM = +dd.slice(5, 7) === m;
+      if(!inM){ g.fillStyle = '#F6F6F6'; g.fillRect(x, ry, cw, rh); txt(g, String(+dd.slice(8)), x + 5, ry + 15, 10, GREY, F_NUM, 'left', 500); continue; }
+      txt(g, String(+dd.slice(8)), x + 5, ry + 17, 14, dcolor(dd), F_NUM, 'left', 600);
+      if(HOL[dd]) txt(g, HOL[dd], x + 5, ry + 29, 6.5, RED);
+      links.push({ x: x, y: ry, w: 30, h: 22, to: 'D-' + dd });
+    }
+  });
+  g.strokeStyle = LINE; g.lineWidth = .7;
+  rows.forEach(function(wk, r){ for(var i = 0; i < 7; i++) g.strokeRect(gx0 + i*cw, gtop + r*rh, cw, rh); });
+  var by = gtop + gh + 30, half = (W - 2*M - 14) / 2;
+  sec(g, 'GOALS', '今月の目標', M, by); sec(g, 'TASKS', '今月のタスク', M + half + 14, by);
+  ruled(g, M, by + 4, M + half, H - 34, 24); ruled(g, M + half + 14, by + 4, W - M, H - 34, 24);
+  pid(g, id);
+}
+
+function drawIndex(g, links){
+  txt(g, 'BULLET JOURNAL', M, 46, 9, INK, F_BODY, 'left', 500, 4);
+  txt(g, '2026年 11月 – 12月', M, 84, 24, INK, F_DATE, 'left', 700);
+  hline(g, M, W - M, 100, INK, .8);
+  [[11, M], [12, W/2 + 10]].forEach(function(a){
+    var m = a[0], x = a[1], top = 128, cw = 36, ch = 26;
+    txt(g, m + '月', x, top, 16, INK, F_DATE, 'left', 700); links.push({ x: x - 2, y: top - 18, w: 60, h: 24, to: 'M-2026-' + m });
+    for(var i = 0; i < 7; i++) txt(g, WD[i], x + i*cw + cw/2, top + 22, 8.5, i === 6 ? RED : i === 5 ? BLUE : SUB, F_BODY, 'center', 500);
+    var first = ymd(2026, m, 1), last = addDays(m === 12 ? ymd(2027, 1, 1) : ymd(2026, m + 1, 1), -1), r = 0;
+    for(var d = monday(first); d <= last; d = addDays(d, 7), r++){
+      for(var i = 0; i < 7; i++){
+        var dd = addDays(d, i); if(+dd.slice(5, 7) !== m) continue;
+        var cx = x + i*cw, cy = top + 46 + r*ch;
+        txt(g, String(+dd.slice(8)), cx + cw/2, cy, 12, dcolor(dd), F_NUM, 'center', 600);
+        links.push({ x: cx + 2, y: cy - 16, w: cw - 4, h: ch - 4, to: 'D-' + dd });
+      }
+    }
+  });
+  var top = 356;
+  sec(g, 'WEEKS', '週間ページ', M, top);
+  WEEKS().forEach(function(wk, i){
+    var col = i % 2, row = Math.floor(i / 2), x = M + col*(W/2 - 10), y = top + 14 + row*28, e = addDays(wk, 6);
+    g.strokeStyle = LINE; g.lineWidth = .7; g.strokeRect(x, y, W/2 - 40, 22);
+    txt(g, 'W' + ('0' + isoWeek(wk)).slice(-2) + '　' + md(wk) + '（月）〜 ' + md(e) + '（日）', x + 10, y + 15, 10, INK);
+    links.push({ x: x, y: y, w: W/2 - 40, h: 22, to: 'W-' + wk });
+  });
+  top = top + 14 + Math.ceil(WEEKS().length / 2)*28 + 30;
+  sec(g, 'SYMBOLS', '記号ルール（夜にClaudeが読み取る時もこの記号で判定します）', M, top);
+  [['□', 'タスク（未完了）'], ['☒', '完了（□に×）'], ['□>', '先送り（□に>）'], ['○', '予定・イベント'], ['−', 'メモ'],
+   ['!', '重要（記号の左に付ける）'], ['？', '迷っていること'], ['◎', '決めたこと（何を／なぜ）'], ['Q', 'Claudeに分析・調べてほしい']].forEach(function(a, i){
+    var col = i % 2, row = Math.floor(i / 2), x = M + 8 + col*(W/2 - 10), y = top + 26 + row*22;
+    txt(g, a[0], x, y, 12, INK, F_BODY, 'left', 700); txt(g, a[1], x + 28, y, 10, INK);
+  });
+  top = top + 26 + 5*22 + 14;
+  sec(g, 'HOW TO', '使い方', M, top);
+  ['日付・週・月を押すとそのページへ移動します。', '1日は見開き：左＝スケジュール・タスク・メモ／右＝ドット方眼で自由に。足りなければページを追加。',
+   '？・◎・Q はどこに書いてもOK。夜のブリーフでClaudeが整理・調査します。'].forEach(function(t, i){ txt(g, (i + 1) + '. ' + t, M + 8, top + 22 + i*19, 9.5, INK); });
+  pid(g, 'INDEX');
+}
+
+/* ============================================================
+   状態
+   ============================================================ */
+var S = {
+  view: '', color: '#222222', width: 1.6, mode: 'pen', finger: false,
+  pages: {},       // id → {strokes:[], clientAt, dirty, loaded}
+  extras: {},      // 'D-2026-11-05' → 右ページの枚数（1＝R だけ）
+  hist: [], redo: [], cur: 0, user: null, syncing: false, lastSent: 0
+};
+try{ S.finger = localStorage.getItem('journal-finger') === '1'; }catch(e){}
+
+/* ---- 端末の中の保存（IndexedDB） ---- */
+var idb = null;
+function idbOpen(){
+  return new Promise(function(ok){
+    try{
+      var r = indexedDB.open('oedo-journal', 1);
+      r.onupgradeneeded = function(){ r.result.createObjectStore('pages', { keyPath: 'id' }); r.result.createObjectStore('meta', { keyPath: 'k' }); };
+      r.onsuccess = function(){ idb = r.result; ok(); };
+      r.onerror = function(){ ok(); };
+    }catch(e){ ok(); }
+  });
+}
+function idbGet(store, key){ return new Promise(function(ok){ if(!idb) return ok(null); try{ var q = idb.transaction(store).objectStore(store).get(key); q.onsuccess = function(){ ok(q.result || null); }; q.onerror = function(){ ok(null); }; }catch(e){ ok(null); } }); }
+function idbAll(store){ return new Promise(function(ok){ if(!idb) return ok([]); try{ var q = idb.transaction(store).objectStore(store).getAll(); q.onsuccess = function(){ ok(q.result || []); }; q.onerror = function(){ ok([]); }; }catch(e){ ok([]); } }); }
+function idbPut(store, val){ return new Promise(function(ok){ if(!idb) return ok(); try{ var t = idb.transaction(store, 'readwrite'); t.objectStore(store).put(val); t.oncomplete = function(){ ok(); }; t.onerror = function(){ ok(); }; }catch(e){ ok(); } }); }
+
+/* 線の持ち方：{c:色, w:太さ, h:1(蛍光ペン), p:[x,y,x,y…]}（紙面の座標・小数1桁） */
+function enc(strokes){ return JSON.stringify(strokes.map(function(s){ var o = { c: s.c, w: s.w, p: s.p.map(function(v){ return Math.round(v*10)/10; }) }; if(s.h) o.h = 1; return o; })); }
+function dec(json){ try{ var a = JSON.parse(json || '[]'); return Array.isArray(a) ? a.filter(function(s){ return s && Array.isArray(s.p); }) : []; }catch(e){ return []; } }
+
+function pageState(id){ return S.pages[id] || (S.pages[id] = { strokes: [], clientAt: 0, dirty: false, loaded: false }); }
+async function loadPage(id){
+  var p = pageState(id); if(p.loaded) return p;
+  var row = await idbGet('pages', id);
+  if(row){ p.strokes = dec(row.json); p.clientAt = row.clientAt || 0; p.dirty = !!row.dirty; }
+  p.loaded = true; return p;
+}
+function touchPage(id){
+  var p = pageState(id); p.clientAt = Date.now(); p.dirty = true;
+  idbPut('pages', { id: id, json: enc(p.strokes), clientAt: p.clientAt, dirty: true });
+  showSync(); scheduleSync();
+}
+
+/* ============================================================
+   画面の組み立て
+   ============================================================ */
+var els = {};   // id → {page, bg, ink, live, scale}
+function fitSize(n){
+  var st = $('stage'), sw = st.clientWidth - 24, sh = st.clientHeight - 60;
+  var narrow = sw < 700, k = narrow ? 1 : Math.min(n, 2);
+  var w = Math.min((sw - (k - 1)*14) / k, sh * W / H, 640);
+  return { w: Math.max(200, Math.floor(w)), narrow: narrow };
+}
+async function show(view){
+  if(!view) view = 'INDEX';
+  S.view = view; S.cur = 0;
+  try{ history.replaceState(null, '', '#' + view); }catch(e){}
+  var ids = viewPages(view);
+  await Promise.all(ids.map(loadPage));
+  build(); pullFromServer(ids);
+}
+function build(){
+  var ids = viewPages(S.view), sp = $('spread'), tabs = $('tabs'), fs = fitSize(ids.length);
+  sp.innerHTML = ''; tabs.innerHTML = ''; els = {};
+  tabs.style.display = fs.narrow && ids.length > 1 ? 'flex' : 'none';
+  var visible = fs.narrow ? [ids[Math.min(S.cur, ids.length - 1)]] : ids.slice(S.cur, S.cur + 2);
+  if(!fs.narrow && ids.length > 2){   // 追加ページがある日は2枚ずつめくる
+    ids.forEach(function(id, i){ if(i % 2) return; var b = document.createElement('button'); b.textContent = i === 0 ? '見開き' : '追加 ' + (i/2); if(S.cur === i) b.className = 'on'; b.onclick = function(){ S.cur = i; build(); }; tabs.appendChild(b); });
+    tabs.style.display = 'flex';
+  }
+  if(fs.narrow) ids.forEach(function(id, i){ var b = document.createElement('button'); b.textContent = label(id); if(S.cur === i) b.className = 'on'; b.onclick = function(){ S.cur = i; build(); }; tabs.appendChild(b); });
+  visible.forEach(function(id){ sp.appendChild(makePage(id, fs.w)); });
+  if(S.view.indexOf('D-') === 0){
+    var last = sp.lastChild, add = document.createElement('button'); add.className = 'add'; add.textContent = '＋ この日にページを追加';
+    add.onclick = function(){ var n = (S.extras[S.view] || 1) + 1; if(n > 9){ toast('追加は8枚までです'); return; } S.extras[S.view] = n; idbPut('meta', { k: 'extras:' + S.view, n: n }); var ids2 = viewPages(S.view); S.cur = fs.narrow ? ids2.length - 1 : ids2.length - 1 - ((ids2.length - 1) % 2); build(); };
+    if(last) last.appendChild(add);
+  }
+  $('where').textContent = whereText();
+  navState();
+}
+function label(id){ if(/-L$/.test(id)) return '左'; if(/-R$/.test(id)) return '右'; var m = /-R(\d+)$/.exec(id); return m ? '追加' + (m[1] - 1) : id; }
+function whereText(){
+  var v = S.view;
+  if(v === 'INDEX') return 'INDEX';
+  if(v.indexOf('M-') === 0) return v.slice(2, 6) + '年' + (+v.slice(7)) + '月';
+  if(v.indexOf('W-') === 0) return 'WEEK ' + isoWeek(v.slice(2)) + '（' + md(v.slice(2)) + '〜）';
+  return md(v.slice(2)) + '（' + WD[wday(v.slice(2))] + '）';
+}
+
+function makePage(id, w){
+  var h = Math.round(w * H / W), wrap = document.createElement('div'); wrap.className = 'pw';
+  var page = document.createElement('div'); page.className = 'page'; page.style.width = w + 'px'; page.style.height = h + 'px';
+  var bg = document.createElement('canvas'), ink = document.createElement('canvas'), live = document.createElement('canvas');
+  page.appendChild(bg); page.appendChild(ink); page.appendChild(live);
+  var d = window.devicePixelRatio || 1, sc = w / W;
+  [bg, ink, live].forEach(function(c){ c.width = Math.round(w*d); c.height = Math.round(h*d); c.getContext('2d').setTransform(sc*d, 0, 0, sc*d, 0, 0); });
+  var links = drawPage(bg.getContext('2d'), id);
+  links.forEach(function(L){
+    var b = document.createElement('button'); b.className = 'lk'; b.setAttribute('aria-label', L.to);
+    b.style.left = (L.x/W*100) + '%'; b.style.top = (L.y/H*100) + '%'; b.style.width = (L.w/W*100) + '%'; b.style.height = (L.h/H*100) + '%';
+    b.addEventListener('pointerdown', function(e){ e.stopPropagation(); });
+    b.onclick = function(){ show(L.to); };
+    page.appendChild(b);
+  });
+  wrap.appendChild(page);
+  els[id] = { page: page, bg: bg, ink: ink, live: live, sc: sc };
+  redraw(id); bindDraw(id, page);
+  return wrap;
+}
+
+/* ============================================================
+   線を描く
+   ============================================================ */
+function paint(g, s){
+  var p = s.p; if(!p.length) return;
+  g.globalAlpha = s.h ? .45 : 1; g.strokeStyle = s.c; g.lineWidth = s.w; g.lineCap = 'round'; g.lineJoin = 'round';
+  g.beginPath(); g.moveTo(p[0], p[1]);
+  if(p.length === 2) g.lineTo(p[0] + .1, p[1]);
+  for(var i = 2; i < p.length; i += 2){
+    if(i + 2 < p.length){ var mx = (p[i] + p[i+2]) / 2, my = (p[i+1] + p[i+3]) / 2; g.quadraticCurveTo(p[i], p[i+1], mx, my); }
+    else g.lineTo(p[i], p[i+1]);
+  }
+  g.stroke(); g.globalAlpha = 1;
+}
+function clear(c){ var g = c.getContext('2d'); g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, c.width, c.height); g.restore(); return g; }
+function redraw(id){
+  var e = els[id]; if(!e) return;
+  var g = clear(e.ink), st = pageState(id).strokes;
+  st.forEach(function(s){ if(s.h) paint(g, s); });     // 蛍光ペンは文字の下
+  st.forEach(function(s){ if(!s.h) paint(g, s); });
+}
+
+var touches = {};     // 指（2本指タップ・はらい）
+function bindDraw(id, page){
+  var cur = null, penSeen = false;
+  function pt(e){ var r = page.getBoundingClientRect(); return [(e.clientX - r.left) * W / r.width, (e.clientY - r.top) * H / r.height]; }
+  function drawsWith(e){ return e.pointerType === 'pen' || e.pointerType === 'mouse' || (e.pointerType === 'touch' && S.finger && !penSeen); }
+  function eraseAt(q){
+    var st = pageState(id).strokes;
+    for(var i = st.length - 1; i >= 0; i--){
+      var p = st[i].p, r = Math.max(8, st[i].w);
+      for(var j = 0; j < p.length; j += 2){ var dx = p[j] - q[0], dy = p[j+1] - q[1]; if(dx*dx + dy*dy < r*r){
+        var s = st.splice(i, 1)[0]; S.hist.push({ t: 'del', id: id, s: s, at: i }); S.redo = []; redraw(id); touchPage(id); return; } }
+    }
+  }
+  page.addEventListener('pointerdown', function(e){
+    if(e.pointerType === 'pen') penSeen = true;
+    if(e.pointerType === 'touch' && !drawsWith(e)){
+      touches[e.pointerId] = { x: e.clientX, y: e.clientY, t: Date.now(), moved: false, maxN: 1 };
+      var n = Object.keys(touches).length; Object.keys(touches).forEach(function(k){ touches[k].maxN = Math.max(touches[k].maxN, n); });
+      return;
+    }
+    if(!drawsWith(e)) return;
+    e.preventDefault(); try{ page.setPointerCapture(e.pointerId); }catch(x){}
+    var q = pt(e);
+    if(S.mode === 'eraser'){ cur = { erase: true }; eraseAt(q); return; }
+    cur = S.mode === 'hl' ? { c: '#FFE34D', w: 14, h: 1, p: [q[0], q[1]] } : { c: S.color, w: S.width, p: [q[0], q[1]] };
+    liveDraw();
+  });
+  page.addEventListener('pointermove', function(e){
+    var tt = touches[e.pointerId];
+    if(tt){ if(Math.abs(e.clientX - tt.x) + Math.abs(e.clientY - tt.y) > 12) tt.moved = true; return; }
+    if(!cur) return;
+    var evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e]; if(!evs.length) evs = [e];
+    evs.forEach(function(ev){ var q = pt(ev); if(cur.erase) eraseAt(q); else cur.p.push(q[0], q[1]); });
+    if(!cur.erase) liveDraw();
+  });
+  function liveDraw(){ var e2 = els[id]; if(!e2) return; var g = clear(e2.live); paint(g, cur); }
+  function end(e){
+    var tt = touches[e.pointerId];
+    if(tt){ gesture(e, tt); delete touches[e.pointerId]; return; }
+    if(!cur) return;
+    if(!cur.erase){ pageState(id).strokes.push(cur); S.hist.push({ t: 'add', id: id, s: cur }); S.redo = []; clear(els[id].live); redraw(id); touchPage(id); }
+    cur = null; navState();
+  }
+  page.addEventListener('pointerup', end); page.addEventListener('pointercancel', function(e){ delete touches[e.pointerId]; if(cur && !cur.erase){ clear(els[id].live); } cur = null; });
+}
+/* 指：2本指タップ＝戻す／左右にはらう＝前後へ */
+var lastTwoTap = 0;
+function gesture(e, tt){
+  var dx = e.clientX - tt.x, dt = Date.now() - tt.t;
+  if(!tt.moved && dt < 350 && tt.maxN >= 2){ if(Date.now() - lastTwoTap > 400){ lastTwoTap = Date.now(); undo(); } return; }
+  if(tt.maxN === 1 && Math.abs(dx) > 70 && dt < 700) step(dx < 0 ? 1 : -1);
+}
+
+function undo(){
+  var h = S.hist.pop(); if(!h){ toast('戻せる操作はありません'); return; }
+  var st = pageState(h.id).strokes;
+  if(h.t === 'add'){ var i = st.indexOf(h.s); if(i >= 0) st.splice(i, 1); } else st.splice(Math.min(h.at, st.length), 0, h.s);
+  S.redo.push(h); redraw(h.id); touchPage(h.id); navState();
+}
+function redo(){
+  var h = S.redo.pop(); if(!h) return;
+  var st = pageState(h.id).strokes;
+  if(h.t === 'add') st.push(h.s); else { var i = st.indexOf(h.s); if(i >= 0) st.splice(i, 1); }
+  S.hist.push(h); redraw(h.id); touchPage(h.id); navState();
+}
+
+/* ============================================================
+   ページ移動
+   ============================================================ */
+function step(dir){
+  var v = S.view;
+  if(v.indexOf('D-') === 0){ var s = addDays(v.slice(2), dir); if(inRange(s)) show('D-' + s); return; }
+  if(v.indexOf('W-') === 0){ var w = WEEKS(), i = w.indexOf(v.slice(2)) + dir; if(i >= 0 && i < w.length) show('W-' + w[i]); return; }
+  if(v.indexOf('M-') === 0){ show(v === 'M-2026-11' ? (dir > 0 ? 'M-2026-12' : 'INDEX') : (dir > 0 ? 'M-2026-12' : 'M-2026-11')); return; }
+  if(dir > 0) show('M-2026-11');
+}
+function navState(){
+  var v = S.view, isD = v.indexOf('D-') === 0, isW = v.indexOf('W-') === 0;
+  $('n-idx').classList.toggle('on', v === 'INDEX'); $('n-11').classList.toggle('on', v === 'M-2026-11'); $('n-12').classList.toggle('on', v === 'M-2026-12');
+  $('n-wk').disabled = !isD; $('n-wk').classList.toggle('on', isW);
+  $('n-prev').disabled = isD ? v.slice(2) <= START : isW ? v.slice(2) <= WEEKS()[0] : v === 'INDEX';
+  $('n-next').disabled = isD ? v.slice(2) >= END : isW ? v.slice(2) >= WEEKS()[WEEKS().length - 1] : v === 'M-2026-12';
+  $('n-prev').textContent = isD ? '◀ 前の日' : '◀'; $('n-next').textContent = isD ? '次の日 ▶' : '▶';
+  $('undo').disabled = !S.hist.length; $('redo').disabled = !S.redo.length;
+}
+$('n-idx').onclick = function(){ show('INDEX'); };
+$('n-11').onclick = function(){ show('M-2026-11'); };
+$('n-12').onclick = function(){ show('M-2026-12'); };
+$('n-wk').onclick = function(){ if(S.view.indexOf('D-') === 0) show('W-' + monday(S.view.slice(2))); };
+$('n-prev').onclick = function(){ step(-1); };
+$('n-next').onclick = function(){ step(1); };
+$('n-today').onclick = function(){ var t = todayJst(); show(inRange(t) ? 'D-' + t : 'INDEX'); };
+$('undo').onclick = undo; $('redo').onclick = redo;
+
+/* ---- 道具 ---- */
+function sel(ids, el){ ids.forEach(function(i){ $(i).classList.remove('on'); }); el.classList.add('on'); }
+function setMode(m){ S.mode = m; $('eraser').classList.toggle('on', m === 'eraser'); $('eraser').setAttribute('aria-pressed', String(m === 'eraser')); $('hl').classList.toggle('on', m === 'hl'); $('hl').setAttribute('aria-pressed', String(m === 'hl')); }
+['c-k', 'c-r', 'c-b'].forEach(function(i){ $(i).onclick = function(){ S.color = $(i).dataset.c; setMode('pen'); sel(['c-k', 'c-r', 'c-b'], $(i)); }; });
+['w-thin', 'w-bold'].forEach(function(i){ $(i).onclick = function(){ S.width = +$(i).dataset.w; setMode('pen'); sel(['w-thin', 'w-bold'], $(i)); }; });
+$('hl').onclick = function(){ setMode(S.mode === 'hl' ? 'pen' : 'hl'); };
+$('eraser').onclick = function(){ setMode(S.mode === 'eraser' ? 'pen' : 'eraser'); };
+function fingerBtn(){ $('finger').classList.toggle('on', S.finger); $('finger').setAttribute('aria-pressed', String(S.finger)); }
+$('finger').onclick = function(){ S.finger = !S.finger; try{ localStorage.setItem('journal-finger', S.finger ? '1' : '0'); }catch(e){} fingerBtn(); toast(S.finger ? '指でも線を引きます' : 'Apple Pencil だけが線を引きます'); };
+fingerBtn();
+
+/* ============================================================
+   送る（つながったら自動）
+   ============================================================ */
+var syncT = null;
+function scheduleSync(){ clearTimeout(syncT); syncT = setTimeout(syncNow, 2500); }
+async function dirtyRows(){ return (await idbAll('pages')).filter(function(r){ return r.dirty; }); }
+async function showSync(){
+  var n = (await dirtyRows()).length, el = $('sync');
+  if(!navigator.onLine) el.innerHTML = '<span class="dot wait"></span>電波なし・この端末に保存済み' + (n ? '（未送信 ' + n + 'ページ）' : '');
+  else if(!S.user) el.innerHTML = '<span class="dot wait"></span>この端末に保存済み・ログインすると送ります' + (n ? '（未送信 ' + n + 'ページ）' : '');
+  else if(n) el.innerHTML = '<span class="dot wait"></span>この端末に保存済み・送信待ち ' + n + 'ページ';
+  else el.innerHTML = '<span class="dot"></span>保存・送信済み' + (S.lastSent ? ' ' + hm(S.lastSent) : '');
+}
+function hm(ms){ var d = new Date(ms + 9*3600*1000); return d.getUTCHours() + ':' + ('0' + d.getUTCMinutes()).slice(-2); }
+/* 23時に読む用のページ画像（紙面＋線を1枚にする・JPEG） */
+function snapshot(id, strokes){
+  var k = 1.5, c = document.createElement('canvas'); c.width = W*k; c.height = H*k;
+  var g = c.getContext('2d'); g.setTransform(k, 0, 0, k, 0, 0); drawPage(g, id);
+  strokes.forEach(function(s){ if(s.h) paint(g, s); }); strokes.forEach(function(s){ if(!s.h) paint(g, s); });
+  return c.toDataURL('image/jpeg', .82);
+}
+async function syncNow(){
+  if(S.syncing || !navigator.onLine || !S.user) { showSync(); return; }
+  S.syncing = true;
+  try{
+    var rows = await dirtyRows();
+    for(var i = 0; i < rows.length; i++){
+      var r = rows[i], strokes = dec(r.json);
+      var res = await api('jsave', { id: r.id, json: r.json, png: snapshot(r.id, strokes), clientAt: r.clientAt });
+      if(!res || res.ok === false) throw new Error((res && res.error) || '送れませんでした');
+      var now = await idbGet('pages', r.id);
+      if(now && now.clientAt === r.clientAt){ now.dirty = false; await idbPut('pages', now); var p = S.pages[r.id]; if(p && p.clientAt === r.clientAt) p.dirty = false; }
+      S.lastSent = Date.now();
+    }
+  }catch(e){ console.warn('sync', e); $('sync').innerHTML = '<span class="dot ng"></span>送れませんでした（この端末には保存済み・あとで自動で送ります）'; S.syncing = false; setTimeout(syncNow, 30000); return; }
+  S.syncing = false; showSync();
+}
+/* ほかの端末で書いた分を取り込む（この端末で未送信のページは触らない） */
+async function pullFromServer(ids){
+  if(!S.user || !navigator.onLine) return;
+  var want = ids.slice(); if(S.view.indexOf('D-') === 0) for(var i = (S.extras[S.view] || 1) + 1; i <= 9; i++) want.push(S.view + '-R' + i);
+  try{
+    var r = await api('jget', { ids: want }), changed = false;
+    for(var j = 0; j < (r.pages || []).length; j++){
+      var sp = r.pages[j], p = pageState(sp.id); p.loaded = true;
+      var m = /^(D-\d{4}-\d{2}-\d{2})-R(\d+)$/.exec(sp.id);
+      if(m && +m[2] > (S.extras[m[1]] || 1)){ S.extras[m[1]] = +m[2]; idbPut('meta', { k: 'extras:' + m[1], n: +m[2] }); changed = true; }
+      if(p.dirty || sp.clientAt <= p.clientAt) continue;
+      p.strokes = dec(sp.json); p.clientAt = sp.clientAt;
+      await idbPut('pages', { id: sp.id, json: sp.json, clientAt: sp.clientAt, dirty: false });
+      if(els[sp.id]) redraw(sp.id);
+    }
+    if(changed) build();
+  }catch(e){ console.warn('pull', e); }
+}
+window.addEventListener('online', function(){ showSync(); syncNow(); });
+window.addEventListener('offline', showSync);
+document.addEventListener('visibilitychange', function(){ if(document.hidden) syncNow(); else if(S.view) pullFromServer(viewPages(S.view)); });
+setInterval(function(){ syncNow(); }, 60000);
+
+/* ============================================================
+   ログイン（Cockpit と同じ。電波が無い時はこの端末の中だけで書ける）
+   ============================================================ */
+function fbLoadScript_(src){ return new Promise(function(ok, ng){ var s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = ng; document.head.appendChild(s); }); }
+async function fbSdk_(){
+  if(!window.firebase){ await fbLoadScript_(FB_SDK_ + 'firebase-app-compat.js'); await fbLoadScript_(FB_SDK_ + 'firebase-auth-compat.js'); }
+  if(!firebase.apps.length) firebase.initializeApp(FB_CFG_);
+}
+function fbPersistedUser_(){
+  return new Promise(function(res){
+    var done = false, un = null, fin = function(u){ if(done) return; done = true; try{ if(un) un(); }catch(e){} res(u || null); };
+    try{ un = firebase.auth().onAuthStateChanged(fin); }catch(e){ fin(null); }
+    setTimeout(function(){ fin(null); }, 5000);
+  });
+}
+async function api(mode, body){
+  var u = firebase.auth().currentUser; if(!u) throw new Error('ログインできていません');
+  var tok = await u.getIdToken();
+  var r = await fetch(BOSS_URL_, { method: 'POST', body: JSON.stringify(Object.assign({ mode: mode, fbIdToken: tok }, body || {})) });
+  var j = await r.json().catch(function(){ return null; });
+  if(!j) throw new Error('通信エラー ' + r.status);
+  if(j.ok === false && mode !== 'me') throw new Error(j.error || '失敗しました');
+  return j;
+}
+function gate(html){ var g = $('gate'); g.innerHTML = html; g.hidden = !html; }
+function pwGate(msg){
+  gate('<div>' + (msg || '入口パスワードを入れてください') + '</div><input id="gate-pw" type="password" autocomplete="current-password" placeholder="パスワード"><button class="on" id="gate-go">入る</button>');
+  var go = function(){ var pw = $('gate-pw').value.trim(); if(!pw) return; $('gate-go').disabled = true;
+    fetch(FB_AUTH_URL_, { method: 'POST', body: JSON.stringify({ mode: 'pw', password: pw }) }).then(function(x){ return x.json(); })
+      .then(function(r){ if(!r || !r.ok || !r.token) throw new Error(); return firebase.auth().signInWithCustomToken(r.token); })
+      .then(afterLogin).catch(function(){ pwGate('パスワードが違います'); }); };
+  $('gate-go').onclick = go; $('gate-pw').addEventListener('keydown', function(e){ if(e.key === 'Enter') go(); });
+}
+async function afterLogin(){
+  var me = await api('me').catch(function(){ return null; });
+  if(!me || !me.allowed){ gate('<div>この手帳は社長専用です。</div><button id="gate-out">別のアカウントで入り直す</button>'); $('gate-out').onclick = function(){ firebase.auth().signOut().then(function(){ location.reload(); }); }; return; }
+  S.user = firebase.auth().currentUser; gate('');
+  showSync(); syncNow(); if(S.view) pullFromServer(viewPages(S.view));
+}
+async function login(){
+  try{ await fbSdk_(); }catch(e){ showSync(); return; }        // 電波が無い：この端末の中だけで書く
+  if(await fbPersistedUser_()) return afterLogin();
+  if(!navigator.onLine){ showSync(); return; }
+  pwGate();
+}
+
+/* ============================================================
+   起動
+   ============================================================ */
+window.addEventListener('resize', function(){ clearTimeout(window.__rz); window.__rz = setTimeout(function(){ if(S.view) build(); }, 150); });
+window.addEventListener('hashchange', function(){ var h = decodeURIComponent(location.hash.slice(1)); if(h && h !== S.view) show(h); });
+function validView(v){ return v === 'INDEX' || /^M-2026-1[12]$/.test(v) || (/^W-\d{4}-\d{2}-\d{2}$/.test(v) && WEEKS().indexOf(v.slice(2)) >= 0) || (/^D-\d{4}-\d{2}-\d{2}$/.test(v) && inRange(v.slice(2))); }
+(async function(){
+  await idbOpen();
+  (await idbAll('meta')).forEach(function(r){ if(r.k.indexOf('extras:') === 0) S.extras[r.k.slice(7)] = r.n; });
+  if(document.fonts && document.fonts.ready) await Promise.race([document.fonts.ready, new Promise(function(r){ setTimeout(r, 2500); })]);
+  var h = decodeURIComponent(location.hash.slice(1)), t = todayJst();
+  await show(validView(h) ? h : (inRange(t) ? 'D-' + t : 'INDEX'));
+  showSync();
+  if('serviceWorker' in navigator) navigator.serviceWorker.register('journal-sw.js').catch(function(){});
+  login();
+})();
+</script>
+</body>
+</html>
