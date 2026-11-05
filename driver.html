@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v8.18 (2026-11-06) 【12:20の再分配に行き先を出す】社長決定（A案）。11/5 の「推奨の勝ち」の大半は閉店前に置いて売れなかった弁当で、47個中23個はエリアに回す先が無かった＝メインへ寄せるのが正解だった。★理由欄に、下げる拠点は「🚚 持って行く先：2個 → 茶2／寄せ 1個 → 神保町（メイン）」、置く拠点は「🚚 来る元：車 2個 / 茶3 1個」、メインは「📥 寄せ：◯◯ ◯個」を出す。出どころはサーバーの `tail.dest` / `tail.src`（再分配計画の11列目）。11/5以前の計画には無いので出さない。要: メインGAS 2026-11-06（`_rt_tailPairs_`）。 -->
 <!-- driver v8.17 (2026-11-01) 【回収タブも Firebase から読む】社長決定 A。回収タブの自動の取り直しを /exec の getCollectionBundle（10/26〜10/30 で1日約75件・中央値19秒＝遅い呼び出しの首位）から、実況タブと同じ Firebase（報告・営業中）＋公開スナップショット（回収済み・休止）に切り替えた。🔄 は従来どおり /exec。スナップショットの「報告済み・営業中」が Firebase に揃っていない時も /exec に落ちる（fetchCollectionFromFb_）。 -->
 <!-- driver v8.16 (2026-10-30) 【12:05までのエリア内の融通】社長決定（②案）。10/29 12:04 お茶の水の銀鮭白が5/5で完売、同じエリアの神保町は0/8なのに指示が出なかった。★12:05まで、エリアの残りを12:20までの予定の比率で平らにする（C案）。サーバーの `xfer`（ここから下げて◯◯へ）を「下げる」に入れ、理由欄に行き先を出す。受け手には `xferIn`（◯◯から◯個来る）を出す。12:05〜12:20は従来どおり下げるは出さない。要: メインGAS 2026-10-30（`_rt_earlyXfer_`）。 -->
 <!-- driver v8.15(2026-10-28) 【💬 相談のボタンがPWAで出なかった】社長「出てないんだけど」。★原因＝起動直後に1回だけ Firebase のログインを見て、未ログインならそれきり諦めていた。PWA（パスワード入口）は起動直後はまだ未ログインで、パスワードを入れた後にログインする＝許可を聞き直していなかった（10/27 の裏ログイン記録に「起動直後 idToken なし」2件）。★直し＝firebase.auth().onAuthStateChanged で「ログインできた瞬間」ごとに聞く。FB_PROBE_VER_ を 8.15 に。 -->
@@ -2462,7 +2463,7 @@ function fbLoadScript_(src) {
 function fbJstYmd_() { return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10); }
 /* ★2026-10-22 v8.9.1 誰の端末か（名前・画面の版・入口）も載せる。Firebase に入れていない人を特定するため（社長決定 A）。
    state / drvViaPassword は後ろで宣言しているので、まだ無い時（TDZ）は try で空にする。 */
-var FB_PROBE_VER_ = '8.17';
+var FB_PROBE_VER_ = '8.18';
 function fbProbe_(o) {
   var who = '', via = '';
   try { who = (state && state.userName) || ''; } catch (e) {}
@@ -8183,10 +8184,25 @@ function ptRenderWhy_(locId, put, back, resOK) {
                : _d < 0 ? (_T.main ? '<b>' + (-_d) + '個をサテライトへ回す</b>（予定' + (Number(_T.want) || 0) + '個は残す）'
                                    : '<b>' + (-_d) + '個下げる</b>')
                : '<b>そのまま</b>';
+    /* ★v8.18 行き先を出す（社長決定 2026-11-06 A案）。回す先がある分は「→ ◯◯へ」、
+       回す先が無くメインへ行く分は「寄せ」。メインには「寄せ：◯◯から」。11/5以前の計画には無い（空なら出さない） */
+    const _dest = (_T.dest || []).filter(r => (Number(r.qty) || 0) > 0);
+    const _src  = (_T.src  || []).filter(r => (Number(r.qty) || 0) > 0);
+    let _go = '';
+    if (_d < 0 && _dest.length) {
+      _go = '<br>🚚 <b>持って行く先</b>：' + _dest.map(r => r.yose
+        ? '<b>寄せ ' + r.qty + '個</b> → ' + _esc(r.toName) + '（メイン）'
+        : '<b>' + r.qty + '個</b> → <b>' + _esc(r.toName) + '</b>').join(' / ');
+    } else if (_d > 0 && _src.length) {
+      const _ys = _src.filter(r => r.yose), _ns = _src.filter(r => !r.yose);
+      if (_ns.length) _go += '<br>🚚 <b>来る元</b>：' + _ns.map(r => _esc(r.veh ? '車' : r.fromName) + ' ' + r.qty + '個').join(' / ');
+      if (_ys.length) _go += '<br>📥 <b>寄せ</b>：' + _ys.map(r => _esc(r.veh ? '車' : r.fromName) + ' ' + r.qty + '個').join(' / ')
+        + '（回す先が無い余りをここに集めます）';
+    }
     el.className = 'pt-why';
     el.innerHTML = '12:20の再分配' + (_T.main ? '（<b>メイン拠点</b>＝エリアの余りを集める）' : '') + '：'
       + '12:20以降の予定 ' + (Number(_T.want) || 0) + '個／12:20の残り ' + (Number(_T.hold) || 0) + '個 → 目標 '
-      + (Number(_T.target) || 0) + '個＝' + _act + '。'
+      + (Number(_T.target) || 0) + '個＝' + _act + '。' + _go
       + (resOK === false ? '<br>⚠ この拠点の残数がまだ届いていません。見て判断してください。' : '');
     return;
   }
