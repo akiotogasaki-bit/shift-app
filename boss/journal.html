@@ -9,7 +9,8 @@
 <link rel="apple-touch-icon" href="cockpit-icon.png">
 <link rel="icon" href="cockpit-icon.png">
 <link rel="manifest" href="journal.webmanifest">
-<!-- boss/journal v1.0 (2026-11-05) 社長の手帳（バレットジャーナル）段階1＝書けて保存できる。
+<!-- boss/journal v1.1 (2026-11-05) ★v1.1 社長「見開きだと小さい」→いつも1ページずつ大きく。指ではらう／「次のページ」で 左→右→追加→次の日の左 とめくる。
+     boss/journal v1.0 (2026-11-05) 社長の手帳（バレットジャーナル）段階1＝書けて保存できる。
      設計: 40_ドキュメント/設計_バレットジャーナル手帳_2026-11-05.md
      ・2026年11月〜12月の INDEX／月間／週間／デイリー（見開き＋追加ページ）。見た目＝日付は革の手帳風の明朝・他はモノトーン
      ・ペン（黒赤青×細太）・蛍光ペン（黄）・消しゴム（線ごと）・戻す／やり直し（2本指タップでも戻す）
@@ -82,6 +83,7 @@ button:disabled{opacity:.35;cursor:default}
   <div class="grp nav" aria-label="ページ移動">
     <button id="n-idx">INDEX</button><button id="n-11">11月</button><button id="n-12">12月</button><button id="n-wk">この週</button>
     <button id="n-prev">◀</button><button id="n-today">今日</button><button id="n-next">▶</button>
+    <button id="n-pp" hidden>‹ 前のページ</button><button id="n-np" hidden>次のページ ›</button>
   </div>
 </div>
 
@@ -347,8 +349,9 @@ function touchPage(id){
 var els = {};   // id → {page, bg, ink, live, scale}
 function fitSize(n){
   var st = $('stage'), sw = st.clientWidth - 24, sh = st.clientHeight - 60;
-  var narrow = sw < 700, k = narrow ? 1 : Math.min(n, 2);
-  var w = Math.min((sw - (k - 1)*14) / k, sh * W / H, 640);
+  // ★v1.1 社長「見開きだと小さい」＝いつも1ページずつ大きく出す（左→右→追加ページの順にめくる）
+  var narrow = true;
+  var w = Math.min(sw, sh * W / H, 1000);
   return { w: Math.max(200, Math.floor(w)), narrow: narrow };
 }
 async function show(view){
@@ -501,7 +504,13 @@ function redo(){
    ============================================================ */
 function step(dir){
   var v = S.view;
-  if(v.indexOf('D-') === 0){ var s = addDays(v.slice(2), dir); if(inRange(s)) show('D-' + s); return; }
+  if(v.indexOf('D-') === 0){
+    var n = viewPages(v).length;
+    if(S.cur + dir >= 0 && S.cur + dir < n){ S.cur += dir; build(); return; }   // 同じ日の左→右→追加
+    var s = addDays(v.slice(2), dir); if(!inRange(s)) return;
+    show('D-' + s).then(function(){ if(dir < 0){ S.cur = viewPages(S.view).length - 1; build(); } });
+    return;
+  }
   if(v.indexOf('W-') === 0){ var w = WEEKS(), i = w.indexOf(v.slice(2)) + dir; if(i >= 0 && i < w.length) show('W-' + w[i]); return; }
   if(v.indexOf('M-') === 0){ show(v === 'M-2026-11' ? (dir > 0 ? 'M-2026-12' : 'INDEX') : (dir > 0 ? 'M-2026-12' : 'M-2026-11')); return; }
   if(dir > 0) show('M-2026-11');
@@ -513,14 +522,18 @@ function navState(){
   $('n-prev').disabled = isD ? v.slice(2) <= START : isW ? v.slice(2) <= WEEKS()[0] : v === 'INDEX';
   $('n-next').disabled = isD ? v.slice(2) >= END : isW ? v.slice(2) >= WEEKS()[WEEKS().length - 1] : v === 'M-2026-12';
   $('n-prev').textContent = isD ? '◀ 前の日' : '◀'; $('n-next').textContent = isD ? '次の日 ▶' : '▶';
+  $('n-pp').hidden = $('n-np').hidden = !isD;
+  if(isD){ var n = viewPages(v).length; $('n-pp').disabled = S.cur <= 0 && v.slice(2) <= START; $('n-np').disabled = S.cur >= n - 1 && v.slice(2) >= END; }
   $('undo').disabled = !S.hist.length; $('redo').disabled = !S.redo.length;
 }
 $('n-idx').onclick = function(){ show('INDEX'); };
 $('n-11').onclick = function(){ show('M-2026-11'); };
 $('n-12').onclick = function(){ show('M-2026-12'); };
 $('n-wk').onclick = function(){ if(S.view.indexOf('D-') === 0) show('W-' + monday(S.view.slice(2))); };
-$('n-prev').onclick = function(){ step(-1); };
-$('n-next').onclick = function(){ step(1); };
+$('n-prev').onclick = function(){ if(S.view.indexOf('D-') === 0){ var s = addDays(S.view.slice(2), -1); if(inRange(s)) show('D-' + s); } else step(-1); };
+$('n-next').onclick = function(){ if(S.view.indexOf('D-') === 0){ var s = addDays(S.view.slice(2), 1); if(inRange(s)) show('D-' + s); } else step(1); };
+$('n-pp').onclick = function(){ step(-1); };
+$('n-np').onclick = function(){ step(1); };
 $('n-today').onclick = function(){ var t = todayJst(); show(inRange(t) ? 'D-' + t : 'INDEX'); };
 $('undo').onclick = undo; $('redo').onclick = redo;
 
