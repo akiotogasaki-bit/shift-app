@@ -5,10 +5,10 @@
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#ECECEC",
+  "background_color": "#F4ECDE",
   "theme_color": "#111111",
   "icons": [
-    { "src": "./cockpit-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
-    { "src": "./cockpit-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+    { "src": "./journal-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
+    { "src": "./journal-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
   ]
 }

@@ -2,7 +2,7 @@
    ・画面（html）は「まずネット、だめなら控え」＝直した版がすぐ届く
    ・書体と Firebase の部品は「まず控え」＝一度読めば電波が無くても使える
    ・関数（cloudfunctions）への送信は触らない（控えない） */
-var CACHE = 'journal-v2';
+var CACHE = 'journal-v3';
 self.addEventListener('install', function(e){
   e.waitUntil(caches.open(CACHE).then(function(c){ return c.addAll(['./journal.html', './journal.webmanifest', './cockpit-icon.png']); }).catch(function(){}));
   self.skipWaiting();
