@@ -9,7 +9,8 @@
 <link rel="apple-touch-icon" href="cockpit-icon.png">
 <link rel="icon" href="cockpit-icon.png">
 <link rel="manifest" href="journal.webmanifest">
-<!-- boss/journal v1.2 (2026-11-05) ★v1.2 アプリ名を「手帳」→「ジャーナル」（社長指示）。
+<!-- boss/journal v1.3 (2026-11-05) ★v1.3 2本指でピンチイン／アウト（1〜4倍）。拡大中は1本指で動かす・「100%に戻す」。拡大後はくっきり描き直す。
+     boss/journal v1.2 (2026-11-05) ★v1.2 アプリ名を「手帳」→「ジャーナル」（社長指示）。
      boss/journal v1.1 (2026-11-05) ★v1.1 社長「見開きだと小さい」→いつも1ページずつ大きく。指ではらう／「次のページ」で 左→右→追加→次の日の左 とめくる。
      boss/journal v1.0 (2026-11-05) 社長の手帳（バレットジャーナル）段階1＝書けて保存できる。
      設計: 40_ドキュメント/設計_バレットジャーナル手帳_2026-11-05.md
@@ -46,7 +47,7 @@ button:disabled{opacity:.35;cursor:default}
 .nav button{background:var(--nav-bg);border-color:transparent}
 .stage{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;padding-block:10px}
 .tabs{display:none;gap:6px;margin-bottom:8px}
-.spread{display:flex;gap:14px;justify-content:center;align-items:flex-start}
+.spread{display:flex;gap:14px;justify-content:center;align-items:flex-start;transform-origin:0 0}
 .pw{display:flex;flex-direction:column;align-items:center;gap:6px}
 .page{position:relative;background:var(--paper);box-shadow:0 1px 2px rgba(0,0,0,.14),0 8px 22px rgba(0,0,0,.10);touch-action:none}
 .page canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
@@ -79,6 +80,7 @@ button:disabled{opacity:.35;cursor:default}
     <button id="undo" aria-label="戻す">↶ 戻す</button>
     <button id="redo" aria-label="やり直し">↷</button>
     <button id="finger" aria-pressed="false" title="指でも線を引く">指で書く</button>
+    <button id="zoom100" hidden>100%に戻す</button>
   </div>
   <div class="sep"></div>
   <div class="grp nav" aria-label="ページ移動">
@@ -357,7 +359,7 @@ function fitSize(n){
 }
 async function show(view){
   if(!view) view = 'INDEX';
-  S.view = view; S.cur = 0;
+  S.view = view; S.cur = 0; resetZoom();
   try{ history.replaceState(null, '', '#' + view); }catch(e){}
   var ids = viewPages(view);
   await Promise.all(ids.map(loadPage));
@@ -396,7 +398,8 @@ function makePage(id, w){
   var page = document.createElement('div'); page.className = 'page'; page.style.width = w + 'px'; page.style.height = h + 'px';
   var bg = document.createElement('canvas'), ink = document.createElement('canvas'), live = document.createElement('canvas');
   page.appendChild(bg); page.appendChild(ink); page.appendChild(live);
-  var d = window.devicePixelRatio || 1, sc = w / W;
+  // 拡大中は細かく描き直す（拡大してもぼやけない）。iPad のメモリを考えて1辺4000px まで
+  var d = (window.devicePixelRatio || 1) * Math.min(S.zoom, 4000 / (w * (window.devicePixelRatio || 1))), sc = w / W;
   [bg, ink, live].forEach(function(c){ c.width = Math.round(w*d); c.height = Math.round(h*d); c.getContext('2d').setTransform(sc*d, 0, 0, sc*d, 0, 0); });
   var links = drawPage(bg.getContext('2d'), id);
   links.forEach(function(L){
@@ -483,8 +486,9 @@ function bindDraw(id, page){
 var lastTwoTap = 0;
 function gesture(e, tt){
   var dx = e.clientX - tt.x, dt = Date.now() - tt.t;
+  if(Date.now() - Z.endAt < 400 || Z.active) return;            // ピンチ・拡大中の移動はページ送りにしない
   if(!tt.moved && dt < 350 && tt.maxN >= 2){ if(Date.now() - lastTwoTap > 400){ lastTwoTap = Date.now(); undo(); } return; }
-  if(tt.maxN === 1 && Math.abs(dx) > 70 && dt < 700) step(dx < 0 ? 1 : -1);
+  if(tt.maxN === 1 && S.zoom <= 1.01 && Math.abs(dx) > 70 && dt < 700) step(dx < 0 ? 1 : -1);
 }
 
 function undo(){
@@ -499,6 +503,56 @@ function redo(){
   if(h.t === 'add') st.push(h.s); else { var i = st.indexOf(h.s); if(i >= 0) st.splice(i, 1); }
   S.hist.push(h); redraw(h.id); touchPage(h.id); navState();
 }
+
+/* ============================================================
+   ピンチで拡大・縮小（2本指）／拡大中は1本指で動かす ★v1.3
+   ============================================================ */
+S.zoom = 1;
+var Z = { pts: {}, active: false, endAt: 0, pan: [0, 0], z0: 1, d0: 0, m0: null, p0: null, o: null, moved: false };
+function applyZoom(){
+  $('spread').style.transform = S.zoom > 1.01 ? 'translate(' + Z.pan[0] + 'px,' + Z.pan[1] + 'px) scale(' + S.zoom + ')' : '';
+  $('zoom100').hidden = S.zoom <= 1.01;
+}
+function resetZoom(){ S.zoom = 1; Z.pan = [0, 0]; applyZoom(); }
+function zpts(){ return Object.keys(Z.pts).map(function(k){ return Z.pts[k]; }); }
+function zbegin(){
+  var a = zpts(), r = $('spread').getBoundingClientRect();
+  Z.z0 = S.zoom; Z.p0 = Z.pan.slice(); Z.o = [r.left - Z.pan[0], r.top - Z.pan[1]];
+  Z.m0 = a.length >= 2 ? [(a[0][0] + a[1][0]) / 2, (a[0][1] + a[1][1]) / 2] : a[0].slice();
+  Z.d0 = a.length >= 2 ? Math.hypot(a[0][0] - a[1][0], a[0][1] - a[1][1]) : 0;
+}
+var stageEl = $('stage');
+stageEl.style.touchAction = 'none';
+stageEl.addEventListener('pointerdown', function(e){
+  if(e.pointerType !== 'touch' || (S.finger && !Object.keys(Z.pts).length && S.zoom <= 1.01)) return;
+  Z.pts[e.pointerId] = [e.clientX, e.clientY];
+  var n = Object.keys(Z.pts).length;
+  if(n === 2 || (n === 1 && S.zoom > 1.01)){ Z.active = true; Z.moved = false; zbegin(); }
+}, true);
+stageEl.addEventListener('pointermove', function(e){
+  if(!Z.pts[e.pointerId]) return;
+  Z.pts[e.pointerId] = [e.clientX, e.clientY];
+  if(!Z.active) return;
+  var a = zpts(), m = a.length >= 2 ? [(a[0][0] + a[1][0]) / 2, (a[0][1] + a[1][1]) / 2] : a[0];
+  var z = Z.z0;
+  if(a.length >= 2 && Z.d0 > 0) z = Math.max(1, Math.min(4, Z.z0 * Math.hypot(a[0][0] - a[1][0], a[0][1] - a[1][1]) / Z.d0));
+  if(Math.abs(z - Z.z0) > .02 || Math.hypot(m[0] - Z.m0[0], m[1] - Z.m0[1]) > 8) Z.moved = true;
+  S.zoom = z;
+  Z.pan = z <= 1.01 ? [0, 0] : [m[0] - Z.o[0] - z * (Z.m0[0] - Z.o[0] - Z.p0[0]) / Z.z0, m[1] - Z.o[1] - z * (Z.m0[1] - Z.o[1] - Z.p0[1]) / Z.z0];
+  applyZoom();
+}, true);
+function zend(e){
+  if(!Z.pts[e.pointerId]) return;
+  delete Z.pts[e.pointerId];
+  if(!Z.active) return;
+  if(Z.moved) Z.endAt = Date.now();
+  if(Object.keys(Z.pts).length){ zbegin(); return; }          // 1本離しただけ＝残りの指で続ける
+  Z.active = false;
+  if(Z.moved){ if(S.zoom <= 1.01) resetZoom(); clearTimeout(Z.rt); Z.rt = setTimeout(build, 200); }   // 拡大後にくっきり描き直す
+}
+stageEl.addEventListener('pointerup', zend, true);
+stageEl.addEventListener('pointercancel', zend, true);
+$('zoom100').onclick = function(){ resetZoom(); build(); };
 
 /* ============================================================
    ページ移動
