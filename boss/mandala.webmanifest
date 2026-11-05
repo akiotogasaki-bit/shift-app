@@ -1,0 +1,13 @@
+{
+  "name": "社長のマンダラ",
+  "short_name": "マンダラ",
+  "start_url": "./mandala.html",
+  "scope": "./mandala.html",
+  "display": "standalone",
+  "background_color": "#F2F2EE",
+  "theme_color": "#1A3C5E",
+  "icons": [
+    { "src": "./mandala-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
+    { "src": "./mandala-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

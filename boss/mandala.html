@@ -4,7 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>社長のマンダラ</title>
-<!-- boss/mandala v1.2 (2026-11-02) ★v1.2 机の名前を「Cockpit」に。 ★v1.1 右上に「今日の机」（現 Cockpit）へのリンク。
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="マンダラ">
+<link rel="apple-touch-icon" href="mandala-icon.png">
+<link rel="icon" href="mandala-icon.png">
+<link rel="manifest" href="mandala.webmanifest">
+<!-- boss/mandala v1.3 (2026-11-05) ★v1.3 ホーム画面のアイコン＝正方形9つ・真ん中だけ赤（社長決定 A案）。manifest を足した。
+     v1.2 (2026-11-02) ★v1.2 机の名前を「Cockpit」に。 ★v1.1 右上に「今日の机」（現 Cockpit）へのリンク。
      v1.0 (2026-11-01) 【社長専用の目標マンダラ＋Claudeに聞く】社長決定（Firebase・アプリは別々・裏は共通）。
      営業アプリ（sales-report の④目標）の 9×9・複数枚・メモ・AI提案 をそのまま持ってきて、「💬 Claude に聞く」を足した。
      ★サーバーは GAS ではなく Firebase の boss 関数（/exec の実行枠を使わない）。入れるのは社長本人だけ（関数側の BOSS_UIDS）。
