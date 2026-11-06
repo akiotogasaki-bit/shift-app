@@ -9,7 +9,10 @@
 <link rel="apple-touch-icon" href="journal-icon.png">
 <link rel="icon" href="journal-icon.png">
 <link rel="manifest" href="journal.webmanifest">
-<!-- boss/journal v1.5 (2026-11-05) ★v1.5 ホーム画面のアイコンを手帳のピクトグラムに（茶の地に白抜き・他のアプリと同じ作り／journal-icon.png・-512）。
+<!-- boss/journal v1.6 (2026-11-07) ★v1.6 社長「ジャーナルに販売個数とかが出てない」＝段階2の数字を足した（A案＝作成数は基本数マスタG列）。
+     デイリー左ページの日付の右に「作成 ◯／販売 ◯」（販売＝1次＋2次・自社の弁当）、終わった日はその上に「12時 ◯℃ 風 ◯m/s」。
+     まだの日は作成の予定だけ。数字をタップすると内訳。Mac の daily-numbers.py（00:10・07:40）が関数 boss の jnums に置き、jget の dates で読む。端末にも控える。
+     boss/journal v1.5 (2026-11-05) ★v1.5 ホーム画面のアイコンを手帳のピクトグラムに（茶の地に白抜き・他のアプリと同じ作り／journal-icon.png・-512）。
      v1.4 (2026-11-05) ★v1.4 社長「ペンを離して次の画を書く時の反応が遅い」＝①iPadのダブルタップ判定の待ちを止める（ページ上の touch を preventDefault）②1画ごとの全描き直し・全保存をやめる（足した1画だけ描く・端末保存は0.6秒まとめ）③送信（ページ画像づくり）は手を10秒止めてから。
      v1.3 (2026-11-05) ★v1.3 2本指でピンチイン／アウト（1〜4倍）。拡大中は1本指で動かす・「100%に戻す」。拡大後はくっきり描き直す。
      boss/journal v1.2 (2026-11-05) ★v1.2 アプリ名を「手帳」→「ジャーナル」（社長指示）。
@@ -64,6 +67,9 @@ button:disabled{opacity:.35;cursor:default}
 .gate input{font-size:16px;padding:8px 10px;border:1px solid #bbb;width:220px;-webkit-user-select:text;user-select:text}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(52px + env(safe-area-inset-bottom,0px));background:#22252B;color:#fff;font-size:12px;padding:8px 12px;border-radius:6px;z-index:60;opacity:0;transition:opacity .2s;pointer-events:none}
 .toast.show{opacity:1}
+.nump{position:fixed;left:50%;transform:translateX(-50%);top:calc(70px + env(safe-area-inset-top,0px));background:#fff;border:1px solid #111;padding:12px 16px;z-index:55;font-size:13px;line-height:1.75;min-width:240px;max-width:calc(100vw - 32px)}
+.nump[hidden]{display:none}
+.nump b{font-weight:700}.nump .s{color:var(--sub);font-size:12px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -102,6 +108,7 @@ button:disabled{opacity:.35;cursor:default}
   <span id="where"></span>
 </div>
 <div class="toast" id="toast"></div>
+<div class="nump" id="nump" hidden role="dialog" aria-label="数字の内訳"></div>
 <div class="gate" id="gate" hidden></div>
 
 <script>
@@ -170,7 +177,7 @@ function drawPage(g, id){
   if(id === 'INDEX') drawIndex(g, links);
   else if(id.indexOf('M-') === 0) drawMonth(g, id, links);
   else if(id.indexOf('W-') === 0) drawWeek(g, id, links);
-  else drawDay(g, id);
+  else drawDay(g, id, links);
   return links;
 }
 
@@ -182,10 +189,49 @@ function dateHeader(g, s, y){
   if(HOL[s]) txt(g, HOL[s], M + tw + 50, y + 36, 11, RED, F_BODY, 'left', 500);
 }
 
-function drawDay(g, id){
+/* ★v1.6 日付の横の数字（作成／販売・12時の気温と風速）。タップで内訳 */
+function cnt(v){ return Math.round(Number(v) || 0).toLocaleString('ja-JP'); }
+function drawNums(g, s, links){
+  var n = S.nums[s]; if(!n) return;
+  var x = W - M, has = n.made != null || n.sold != null;
+  if(has){
+    if(n.temp12 != null || n.wind12 != null)
+      txt(g, '12時　' + (n.temp12 != null ? n.temp12 + '℃' : '') + (n.wind12 != null ? '　風 ' + n.wind12 + 'm/s' : ''), x, 66, 10.5, SUB, F_BODY, 'right', 500);
+    txt(g, '作成 ' + cnt(n.made) + '／販売 ' + cnt(n.sold), x, 88, 15, INK, F_BODY, 'right', 700);
+  } else if(n.plan){
+    txt(g, '作成予定 ' + cnt(n.plan), x, 88, 13, SUB, F_BODY, 'right', 700);
+  } else return;
+  links.push({ x: W/2, y: 50, w: W/2 - M, h: 50, fn: function(){ numPop(s); } });
+}
+function numPop(s){
+  var n = S.nums[s], d = (n && n.detail) || {}, el = $('nump'), L = [], cats = ['海苔弁系', '全六', '満腹系'];
+  var split = function(o){ return o ? cats.filter(function(k){ return o[k]; }).map(function(k){ return k + ' ' + cnt(o[k]); }).join('・') : ''; };
+  L.push('<b>' + md(s) + '（' + WD[wday(s)] + '）</b>');
+  if(n.made != null || n.sold != null){
+    L.push('作成 <b>' + cnt(n.made) + '</b>個　<span class="s">' + split(d.made) + (d.madeExt ? '（他社製品 ' + cnt(d.madeExt) + ' は別）' : '') + '</span>');
+    L.push('販売 <b>' + cnt(n.sold) + '</b>個 ＝ 1次 ' + cnt(d.sold1) + '（' + cnt(d.n1) + '拠点）＋ 2次 ' + cnt(d.sold2) + '（' + cnt(d.n2) + '拠点）');
+    if(d.sold1Cat) L.push('<span class="s">1次の内訳 ' + split(d.sold1Cat) + (d.sold1Ext ? '・他社製品 ' + cnt(d.sold1Ext) + '（販売に入れていません）' : '') + '</span>');
+    if(d.toSecond != null) L.push('2次へ回った ' + cnt(d.toSecond) + '個 → 最終の残り 約' + cnt(d.left) + '個');
+    if(n.temp12 != null || n.wind12 != null) L.push('12時の天気　' + (n.temp12 != null ? n.temp12 + '℃' : '—') + '・風 ' + (n.wind12 != null ? n.wind12 + 'm/s' : '—'));
+  } else {
+    L.push('作成予定 <b>' + cnt(n.plan) + '</b>個（行商・初回納品）　<span class="s">' + split(d.planCat) + '</span>');
+    if(d.deliv) L.push('<span class="s">ほかに配達 ' + cnt(d.deliv) + '食</span>');
+  }
+  L.push('<span class="s">毎日 0:10 と 7:40 に Mac が置きます（Cockpit の「毎日の数字」と同じ数）</span>');
+  L.push('<button id="nump-x" style="margin-top:6px">閉じる</button>');
+  el.innerHTML = L.join('<br>'); el.hidden = false;
+  $('nump-x').onclick = function(){ el.hidden = true; };
+}
+async function loadNums(s){
+  if(S.nums[s]) return;
+  var row = await idbGet('meta', 'nums:' + s); if(row && row.v) S.nums[s] = row.v;
+}
+
+function drawDay(g, id, links){
   var s = id.slice(2, 12), side = id.slice(13);
   if(side === 'L'){
     dateHeader(g, s, 46);
+    drawNums(g, s, links || []);
     hline(g, M, W - M, 128, INK, .8);
     var x0 = M, x1 = W - M, y1 = 144, y0 = H - M - 10, gap = 12, cw = (x1 - x0 - 2*gap) / 3, cx = [x0, x0 + cw + gap, x0 + 2*(cw + gap)];
     var mid = y1 + (y0 - (y1 + 22)) / 2 + 22;
@@ -311,6 +357,7 @@ var S = {
   view: '', color: '#222222', width: 1.6, mode: 'pen', finger: false,
   pages: {},       // id → {strokes:[], clientAt, dirty, loaded}
   extras: {},      // 'D-2026-11-05' → 右ページの枚数（1＝R だけ）
+  nums: {},        // '2026-11-05' → {made, sold, plan, temp12, wind12, detail}（Mac が置く日付の横の数字）★v1.6
   hist: [], redo: [], cur: 0, user: null, syncing: false, lastSent: 0
 };
 try{ S.finger = localStorage.getItem('journal-finger') === '1'; }catch(e){}
@@ -372,7 +419,9 @@ async function show(view){
   S.view = view; S.cur = 0; resetZoom();
   try{ history.replaceState(null, '', '#' + view); }catch(e){}
   var ids = viewPages(view);
+  $('nump').hidden = true;
   await Promise.all(ids.map(loadPage));
+  if(view.indexOf('D-') === 0) await loadNums(view.slice(2));
   build(); pullFromServer(ids);
 }
 function build(){
@@ -416,7 +465,7 @@ function makePage(id, w){
     var b = document.createElement('button'); b.className = 'lk'; b.setAttribute('aria-label', L.to);
     b.style.left = (L.x/W*100) + '%'; b.style.top = (L.y/H*100) + '%'; b.style.width = (L.w/W*100) + '%'; b.style.height = (L.h/H*100) + '%';
     b.addEventListener('pointerdown', function(e){ e.stopPropagation(); });
-    b.onclick = function(){ show(L.to); };
+    b.onclick = function(){ if(L.fn) L.fn(); else show(L.to); };
     page.appendChild(b);
   });
   wrap.appendChild(page);
@@ -659,7 +708,13 @@ async function pullFromServer(ids){
   if(!S.user || !navigator.onLine) return;
   var want = ids.slice(); if(S.view.indexOf('D-') === 0) for(var i = (S.extras[S.view] || 1) + 1; i <= 9; i++) want.push(S.view + '-R' + i);
   try{
-    var r = await api('jget', { ids: want }), changed = false;
+    var isD = S.view.indexOf('D-') === 0, ds = isD ? S.view.slice(2) : '';
+    var r = await api('jget', { ids: want, dates: isD ? [ds] : [] }), changed = false;
+    (r.nums || []).forEach(function(n){   // ★v1.6 数字が変わっていたら描き直す
+      var v = { made: n.made, sold: n.sold, plan: n.plan, temp12: n.temp12, wind12: n.wind12, detail: n.detail || {} };
+      if(JSON.stringify(S.nums[n.date] || null) === JSON.stringify(v)) return;
+      S.nums[n.date] = v; idbPut('meta', { k: 'nums:' + n.date, v: v }); if(n.date === ds) changed = true;
+    });
     for(var j = 0; j < (r.pages || []).length; j++){
       var sp = r.pages[j], p = pageState(sp.id); p.loaded = true;
       var m = /^(D-\d{4}-\d{2}-\d{2})-R(\d+)$/.exec(sp.id);
