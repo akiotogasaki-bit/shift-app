@@ -9,7 +9,9 @@
 <link rel="apple-touch-icon" href="journal-icon.png">
 <link rel="icon" href="journal-icon.png">
 <link rel="manifest" href="journal.webmanifest">
-<!-- boss/journal v1.6 (2026-11-07) ★v1.6 社長「ジャーナルに販売個数とかが出てない」＝段階2の数字を足した（A案＝作成数は基本数マスタG列）。
+<!-- boss/journal v1.7 (2026-11-07) ★v1.7 Todoist（社長 A案＝関数が直接読み書き）。デイリー左のタスク欄の上に、Todoist でその日が期日のタスクを活字で出す。
+     □を押すと Todoist で完了、☒をもう一度押すと未完了に戻す。関数 boss の jtodo／jdone（鍵は関数の .env だけ）。端末にも控える（電波が無い時は見るだけ）。
+     boss/journal v1.6 (2026-11-07) ★v1.6 社長「ジャーナルに販売個数とかが出てない」＝段階2の数字を足した（A案＝作成数は基本数マスタG列）。
      デイリー左ページの日付の右に「作成 ◯／販売 ◯」（販売＝1次＋2次・自社の弁当）、終わった日はその上に「12時 ◯℃ 風 ◯m/s」。
      まだの日は作成の予定だけ。数字をタップすると内訳。Mac の daily-numbers.py（00:10・07:40）が関数 boss の jnums に置き、jget の dates で読む。端末にも控える。
      boss/journal v1.5 (2026-11-05) ★v1.5 ホーム画面のアイコンを手帳のピクトグラムに（茶の地に白抜き・他のアプリと同じ作り／journal-icon.png・-512）。
@@ -222,9 +224,44 @@ function numPop(s){
   el.innerHTML = L.join('<br>'); el.hidden = false;
   $('nump-x').onclick = function(){ el.hidden = true; };
 }
+/* ★v1.7 Todoist のタスク（タスク欄の罫線に活字で並べる。□＝押すと Todoist で完了） */
+var TODO_MAX = 9;
+function drawTodo(g, s, x, y0, w, step, links){
+  var a = S.todo[s]; if(!a || !a.length) return 0;
+  var n = Math.min(a.length, TODO_MAX), more = a.length - n;
+  for(var i = 0; i < n; i++){
+    var t = a[i], by = y0 + step*(i+1) - 7, col = t.done ? SUB : INK;
+    g.strokeStyle = col; g.lineWidth = .9; g.strokeRect(x + 1, by - 9, 10, 10);
+    if(t.done){ g.beginPath(); g.moveTo(x + 2.5, by - 7.5); g.lineTo(x + 9.5, by - .5); g.moveTo(x + 9.5, by - 7.5); g.lineTo(x + 2.5, by - .5); g.stroke(); }
+    var label = (t.time ? t.time + ' ' : '') + t.content, f = '500 10.5px ' + F_BODY; g.font = f;
+    while(label.length > 1 && g.measureText(label).width > w - 18) label = label.slice(0, -2) + '…';
+    txt(g, label, x + 16, by, 10.5, col, F_BODY, 'left', t.priority >= 4 ? 700 : 500);
+    if(t.done){ g.font = f; var lw = g.measureText(label).width; hline(g, x + 16, x + 16 + lw, by - 3.5, SUB, .7); }
+    (function(t){ links.push({ x: x - 2, y: by - 16, w: w + 2, h: step, fn: function(){ toggleTodo(s, t); } }); })(t);
+  }
+  if(more > 0) txt(g, 'ほか ' + more + '件は Todoist で', x + 16, y0 + step*(n+1) - 7, 9, SUB, F_BODY, 'left', 500);
+  return n + (more > 0 ? 1 : 0);
+}
+async function toggleTodo(s, t){
+  if(!S.user || !navigator.onLine){ toast('電波が無い時は Todoist に送れません'); return; }
+  var to = !t.done; t.done = to; redrawBg();
+  try{ await api('jdone', { id: t.id, done: to }); toast(to ? 'Todoist で完了にしました' : '未完了に戻しました'); idbPut('meta', { k: 'todo:' + s, v: S.todo[s] }); }
+  catch(e){ t.done = !to; redrawBg(); toast('Todoist に送れませんでした：' + e.message); }
+}
+function redrawBg(){ var c = S.cur; build(); S.cur = c; }
+async function pullTodo(s){
+  if(!S.user || !navigator.onLine) return;
+  try{
+    var r = await api('jtodo', { date: s }), v = r.tasks || [];
+    if(JSON.stringify(S.todo[s] || []) === JSON.stringify(v)) return;
+    S.todo[s] = v; idbPut('meta', { k: 'todo:' + s, v: v });
+    if(S.view === 'D-' + s) build();
+  }catch(e){ console.warn('todo', e); if(/鍵/.test(e.message)) toast(e.message); }
+}
 async function loadNums(s){
   if(S.nums[s]) return;
   var row = await idbGet('meta', 'nums:' + s); if(row && row.v) S.nums[s] = row.v;
+  if(!S.todo[s]){ var tr = await idbGet('meta', 'todo:' + s); if(tr && tr.v) S.todo[s] = tr.v; }
 }
 
 function drawDay(g, id, links){
@@ -244,6 +281,7 @@ function drawDay(g, id, links){
     }
     sec(g, 'TASKS', 'タスク', cx[1], y1 + 14);
     ruled(g, cx[1], y1 + 28, cx[1] + cw, mid + hh*.6, 24);
+    drawTodo(g, s, cx[1], y1 + 28, cw, 24, links || []);
     sec(g, 'NOTES', 'メモ', cx[0], mid + hh*.6 + 24); dots(g, cx[0], mid + hh*.6 + 30, cx[1] + cw, y0);
     sec(g, 'NOTES', 'メモ', cx[2], y1 + 14); dots(g, cx[2], y1 + 22, cx[2] + cw, y0);
     g.strokeStyle = DASH; g.lineWidth = .6; g.beginPath(); g.moveTo(cx[2] - gap/2, y1); g.lineTo(cx[2] - gap/2, y0); g.stroke();
@@ -358,6 +396,7 @@ var S = {
   pages: {},       // id → {strokes:[], clientAt, dirty, loaded}
   extras: {},      // 'D-2026-11-05' → 右ページの枚数（1＝R だけ）
   nums: {},        // '2026-11-05' → {made, sold, plan, temp12, wind12, detail}（Mac が置く日付の横の数字）★v1.6
+  todo: {},        // '2026-11-05' → [{id, content, done, priority, time}]（Todoist でその日が期日）★v1.7
   hist: [], redo: [], cur: 0, user: null, syncing: false, lastSent: 0
 };
 try{ S.finger = localStorage.getItem('journal-finger') === '1'; }catch(e){}
@@ -726,6 +765,7 @@ async function pullFromServer(ids){
     }
     if(changed) build();
   }catch(e){ console.warn('pull', e); }
+  if(S.view.indexOf('D-') === 0) pullTodo(S.view.slice(2));
 }
 window.addEventListener('online', function(){ showSync(); syncNow(); });
 window.addEventListener('offline', showSync);
