@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- kanri.html v4.20 (2026-11-06) 【🚚 エリア担当ドライバー】社長決定A案「エリアの内容の変更はなくて、担当エリアが変わることがある。エリアの色は固定でエリア担当ドライバーだけまとめて変更できるようにしたい」。★⚙️ 設定の最上部に「🚚 エリア担当ドライバー」。エリアごとにドライバーを選んで保存（doPost `saveAreaDrivers`）すると、そのエリアの全拠点＋車載の主担当（拠点マスタ J・K列）がまとめて替わる。読み込みは `getAreaDrivers`。★色は拠点マスタ エリア列の塗り（2026-11-06 に5エリアとも塗って固定）で、担当を替えても動かない。その日だけの代理・応援は従来どおり担当例外。要メインGAS 2026-11-06 以降。 -->
 <!-- kanri.html v4.19 (2026-11-01) 【配分調整を速く】社長決定 C。メインGASが配分表のキャッシュを3分→15分、進捗（bmstat）を10分持つようにしたので、🔄 再取得だけ &fresh=1 を付けてサーバーにも作り直させる（シフトの割り当て変更など、版が上がらない変化を即反映するため）。保存・決定・取込の後の取り直しはサーバー側で版が上がるので付けない。 -->
 <!-- kanri.html v4.18 (2026-10-29) 【📦 配達ラベル・🧾 帳票の印刷】★追記：社長「日付の指定ができた方がいい」「必要な帳票もここで」「必要な枚数も」「表裏になってる」→ ボタンの横に専用の配達日（初めは明日）。押すと先に「ラベル用紙◯枚」「請求書◯・納品書◯ → 普通紙◯枚」を出して確認。帳票は print-server.py の POST /docs が delivery-docs.py で freee の中身を描く（PDFの口が無いため。番号・金額は freee と同じ）。どちらも片面。　【元の内容】社長「もっと簡単に納品管理のアプリに印刷ボタン作れる？」。★拠点配分タブに茶色のボタン。押すと Mac の印刷係（print-server.py の新しい窓口 POST /labels）が、選んでいる日の配達分を押した時点の注文で作り直し（delivery-label.py と同じ中身）、拡大縮小なしで lp。この Mac からのみ。GAS変更なし。 -->
 <!-- kanri.html v4.17 (2026-10-22) 【🚚 月曜は販売カレンダーも同梱】社長「これも毎週月曜日にドライバーに渡したいから振り返りと合わせてエリア別でプリントしようか」。★月曜はエリアごとに 予定表→振り返り→カレンダー→拠点別 の順（印刷係 print-server.py 側）。ここは確認の文言と「カレンダー：10枚」の表示だけ。 -->
@@ -8516,7 +8517,11 @@ async function wpRenderSettingsTab() {
   await sbLoadRules();  // v3.26: 完売増量ルール取得
   await waLoadWeights();  // v3.27: 加重平均の重み取得
   await exLoadDates();  // v3.35: 除外日取得
+  await adLoad();       // v4.20: エリア担当ドライバー
   let html = '<div class="wp-page">';
+  // v4.20: 🚚 エリア担当ドライバー（最上部）
+  html += adSectionHtml();
+  html += '<div style="height:18px;"></div>';
   // v3.27: 📊 加重平均セクション（最上部）
   html += waSectionHtml();
   html += '<div style="height:18px;"></div>';
@@ -8947,6 +8952,70 @@ async function exSaveDates() {
   if (typeof bmCurrentDate !== 'undefined' && bmCurrentDate && typeof bmLoadDate === 'function') {
     try { await bmLoadDate(bmCurrentDate); } catch (e) {}
   }
+}
+
+// ============================================================
+// v4.20 🚚 エリア担当ドライバー（2026-11-06 社長決定・A案）
+//   読込 = getAreaDrivers(GET) / 保存 = saveAreaDrivers(POST)
+//   エリアの色は固定（拠点マスタ エリア列の塗り）。変えるのは担当ドライバーだけ。
+//   保存するとそのエリアの全拠点＋車載の主担当（拠点マスタ J・K列）がまとめて替わる。
+// ============================================================
+let adData = null;
+
+async function adLoad() {
+  const r = await wpFetch('getAreaDrivers', { _cb: Date.now() });
+  adData = (r && r.ok) ? r : null;
+}
+
+function adSectionHtml() {
+  let h = '';
+  h += '<div class="wp-section-title">🚚 エリア担当ドライバー</div>';
+  h += '<div class="wp-section-desc">エリアごとに担当ドライバーを選んで保存すると、<b>そのエリアの全拠点と車載の主担当がまとめて替わります</b>（保存した時から有効）。エリアの色は固定で変わりません。その日だけの代理・応援はドライバーアプリの「翌日のルート」から入れます。ドライバーはアプリを開き直すと、自分の担当エリアが実況マトリクスの一番上に出ます。</div>';
+  if (!adData) {
+    h += '<div style="color:#c62828;padding:8px 0;">エリア担当の取得に失敗しました。タブを開き直してください。</div>';
+    return h;
+  }
+  h += '<table class="sb-table" style="max-width:640px;"><thead><tr><th>エリア</th><th>担当ドライバー</th><th>拠点</th></tr></thead><tbody>';
+  adData.areas.forEach(function (a, i) {
+    const bg = a.color || '#E9ECEF';
+    h += '<tr>';
+    h += '<td style="background:' + bg + ';font-weight:bold;white-space:nowrap;">' + wpEsc(a.area) + '</td>';
+    h += '<td><select class="ad-sel" data-area="' + wpEsc(a.area) + '" data-cur="' + wpEsc(a.userId || '') + '" style="padding:5px 4px;font-size:10.5pt;">';
+    if (!a.userId) h += '<option value="">' + (a.mixed ? '（拠点ごとに違う）' : '（未設定）') + '</option>';
+    adData.drivers.forEach(function (d) {
+      h += '<option value="' + wpEsc(d.userId) + '"' + (d.userId === a.userId ? ' selected' : '') + '>' + wpEsc(d.name) + '</option>';
+    });
+    h += '</select></td>';
+    const names = a.locs.map(function (l) { return l.name; }).join('・');
+    h += '<td style="text-align:left;font-size:9pt;color:#555;">' + wpEsc(names) + '</td>';
+    h += '</tr>';
+  });
+  h += '</tbody></table>';
+  h += '<div class="sb-actions" style="max-width:640px;"><button class="sb-save-btn" id="ad-save-btn" onclick="adSave()">💾 担当を保存</button></div>';
+  return h;
+}
+
+async function adSave() {
+  const items = [];
+  const lines = [];
+  document.querySelectorAll('#tab-settings .ad-sel').forEach(function (s) {
+    if (!s.value || s.value === s.dataset.cur) return;
+    items.push({ area: s.dataset.area, userId: s.value });
+    lines.push(s.dataset.area + ' → ' + s.options[s.selectedIndex].text);
+  });
+  if (!items.length) { wpToast('変更はありません', 'info'); return; }
+  if (!confirm('エリア担当を切り替えます（今から有効）。\n\n' + lines.join('\n'))) return;
+  const btn = document.getElementById('ad-save-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '保存中…'; }
+  const res = await bmPostAction('saveAreaDrivers', { items: items });
+  if (btn) { btn.disabled = false; btn.textContent = '💾 担当を保存'; }
+  if (!res || !res.ok) {
+    wpToast('保存失敗: ' + ((res && res.error) || '不明'), 'error');
+    return;
+  }
+  wpToast('担当を切り替えました（' + (res.changed || 0) + '拠点）', 'success');
+  if (typeof invalidateDriverColorCache === 'function') invalidateDriverColorCache();
+  await wpRenderSettingsTab();
 }
 
 // ============================================================
