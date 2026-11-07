@@ -13,6 +13,7 @@
      週＝左「先週の振り返り（作成・販売・先週比・残り＝自動／やり残したタスク＝Todoist）＋今週の目標」・右「7日の行（その日の Todoist）＋目標ごとのタスク」。
      月＝左「先月の振り返り（作成・販売・売上・人件費率と前月比＝自動／やり残し）＋今月の目標→週の目標の表」・右「カレンダー（各日の販売）＋今月のタスク（Todoist）」。
      数字は jget の range、Todoist は jtodo の from/to で期間ごとに読む。週の目標の自動転記（23時の読み取り）と週・月のレポートはまだ。
+     v1.8 追記：週の左ページに「週のレポートを開く ›」（Cockpit へ）。
      boss/journal v1.7 (2026-11-07) ★v1.7 Todoist（社長 A案＝関数が直接読み書き）。デイリー左のタスク欄の上に、Todoist でその日が期日のタスクを活字で出す。
      □を押すと Todoist で完了、☒をもう一度押すと未完了に戻す。関数 boss の jtodo／jdone（鍵は関数の .env だけ）。端末にも控える（電波が無い時は見るだけ）。
      boss/journal v1.6 (2026-11-07) ★v1.6 社長「ジャーナルに販売個数とかが出てない」＝段階2の数字を足した（A案＝作成数は基本数マスタG列）。
@@ -355,6 +356,8 @@ function drawWeek(g, id, links){
   if(side === 'L'){
     // ① 先週の振り返り（数字は Mac が毎日置く分を足す）
     sec(g, 'LAST WEEK', '先週（W' + ('0' + isoWeek(sp.prev[0])).slice(-2) + '）の振り返り', M, 128);
+    txt(g, '週のレポートを開く ›', W - M, 128, 10, INK, F_BODY, 'right', 700);   // Cockpit のレポート（日曜9時・weekly-report.py）
+    links.push({ x: W - M - 120, y: 112, w: 120, h: 22, fn: function(){ location.href = 'desk.html'; } });
     var a = sumNums(sp.prev), b = sumNums(sp.prev2), cw = (W - 2*M - 24) / 4, has = a.days > 0;
     card(g, M, 138, cw, 62, '作成', has ? cnt(a.made) : '—', has ? '前の週 ' + pct(a.made, b.made) : '');
     card(g, M + (cw + 8), 138, cw, 62, '販売', has ? cnt(a.sold) : '—', has ? '前の週 ' + pct(a.sold, b.sold) : '');
