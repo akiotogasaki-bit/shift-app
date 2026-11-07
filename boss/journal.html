@@ -9,7 +9,11 @@
 <link rel="apple-touch-icon" href="journal-icon.png">
 <link rel="icon" href="journal-icon.png">
 <link rel="manifest" href="journal.webmanifest">
-<!-- boss/journal v1.7 (2026-11-07) ★v1.7 Todoist（社長 A案＝関数が直接読み書き）。デイリー左のタスク欄の上に、Todoist でその日が期日のタスクを活字で出す。
+<!-- boss/journal v1.8 (2026-11-07) ★v1.8 週・月を見開き2ページに（社長決定 → 設計書 §6-3・§6-4）。
+     週＝左「先週の振り返り（作成・販売・先週比・残り＝自動／やり残したタスク＝Todoist）＋今週の目標」・右「7日の行（その日の Todoist）＋目標ごとのタスク」。
+     月＝左「先月の振り返り（作成・販売・売上・人件費率と前月比＝自動／やり残し）＋今月の目標→週の目標の表」・右「カレンダー（各日の販売）＋今月のタスク（Todoist）」。
+     数字は jget の range、Todoist は jtodo の from/to で期間ごとに読む。週の目標の自動転記（23時の読み取り）と週・月のレポートはまだ。
+     boss/journal v1.7 (2026-11-07) ★v1.7 Todoist（社長 A案＝関数が直接読み書き）。デイリー左のタスク欄の上に、Todoist でその日が期日のタスクを活字で出す。
      □を押すと Todoist で完了、☒をもう一度押すと未完了に戻す。関数 boss の jtodo／jdone（鍵は関数の .env だけ）。端末にも控える（電波が無い時は見るだけ）。
      boss/journal v1.6 (2026-11-07) ★v1.6 社長「ジャーナルに販売個数とかが出てない」＝段階2の数字を足した（A案＝作成数は基本数マスタG列）。
      デイリー左ページの日付の右に「作成 ◯／販売 ◯」（販売＝1次＋2次・自社の弁当）、終わった日はその上に「12時 ◯℃ 風 ◯m/s」。
@@ -153,6 +157,7 @@ function WEEKS(){ var a = [], w = monday(START); while(w <= END){ a.push(w); w =
 /* ビュー＝ INDEX / M-2026-11 / W-2026-11-02 / D-2026-11-05 */
 function viewPages(v){
   if(v.indexOf('D-') === 0){ var ids = [v + '-L', v + '-R']; for(var i = 2; i <= (S.extras[v] || 1); i++) ids.push(v + '-R' + i); return ids; }
+  if(v.indexOf('W-') === 0 || v.indexOf('M-') === 0) return [v + '-L', v + '-R'];   // ★v1.8 週・月も見開き
   return [v];
 }
 
@@ -226,42 +231,86 @@ function numPop(s){
 }
 /* ★v1.7 Todoist のタスク（タスク欄の罫線に活字で並べる。□＝押すと Todoist で完了） */
 var TODO_MAX = 9;
+/* Todoist の1行（□＋活字）。key＝S.todo の置き場所（日付 or 'R:from:to'） */
+function taskLine(g, t, key, x, by, w, size, links, h){
+  var col = t.done ? SUB : INK, b = size - .5;
+  g.strokeStyle = col; g.lineWidth = .9; g.strokeRect(x + 1, by - b + 1, b - 1, b - 1);
+  if(t.done){ g.beginPath(); g.moveTo(x + 2.5, by - b + 2.5); g.lineTo(x + b - 1.5, by - .5); g.moveTo(x + b - 1.5, by - b + 2.5); g.lineTo(x + 2.5, by - .5); g.stroke(); }
+  var label = (t.time ? t.time + ' ' : '') + t.content, f = '500 ' + size + 'px ' + F_BODY; g.font = f;
+  while(label.length > 1 && g.measureText(label).width > w - b - 8) label = label.slice(0, -2) + '…';
+  txt(g, label, x + b + 6, by, size, col, F_BODY, 'left', t.priority >= 4 ? 700 : 500);
+  if(t.done){ g.font = f; var lw = g.measureText(label).width; hline(g, x + b + 6, x + b + 6 + lw, by - size/3, SUB, .7); }
+  links.push({ x: x - 2, y: by - (h || size + 6) + 4, w: w + 2, h: h || size + 6, fn: function(){ toggleTodo(key, t); } });
+}
 function drawTodo(g, s, x, y0, w, step, links){
   var a = S.todo[s]; if(!a || !a.length) return 0;
   var n = Math.min(a.length, TODO_MAX), more = a.length - n;
-  for(var i = 0; i < n; i++){
-    var t = a[i], by = y0 + step*(i+1) - 7, col = t.done ? SUB : INK;
-    g.strokeStyle = col; g.lineWidth = .9; g.strokeRect(x + 1, by - 9, 10, 10);
-    if(t.done){ g.beginPath(); g.moveTo(x + 2.5, by - 7.5); g.lineTo(x + 9.5, by - .5); g.moveTo(x + 9.5, by - 7.5); g.lineTo(x + 2.5, by - .5); g.stroke(); }
-    var label = (t.time ? t.time + ' ' : '') + t.content, f = '500 10.5px ' + F_BODY; g.font = f;
-    while(label.length > 1 && g.measureText(label).width > w - 18) label = label.slice(0, -2) + '…';
-    txt(g, label, x + 16, by, 10.5, col, F_BODY, 'left', t.priority >= 4 ? 700 : 500);
-    if(t.done){ g.font = f; var lw = g.measureText(label).width; hline(g, x + 16, x + 16 + lw, by - 3.5, SUB, .7); }
-    (function(t){ links.push({ x: x - 2, y: by - 16, w: w + 2, h: step, fn: function(){ toggleTodo(s, t); } }); })(t);
-  }
+  for(var i = 0; i < n; i++) taskLine(g, a[i], s, x, y0 + step*(i+1) - 7, w, 10.5, links, step);
   if(more > 0) txt(g, 'ほか ' + more + '件は Todoist で', x + 16, y0 + step*(n+1) - 7, 9, SUB, F_BODY, 'left', 500);
   return n + (more > 0 ? 1 : 0);
 }
-async function toggleTodo(s, t){
+async function toggleTodo(key, t){
   if(!S.user || !navigator.onLine){ toast('電波が無い時は Todoist に送れません'); return; }
   var to = !t.done; t.done = to; redrawBg();
-  try{ await api('jdone', { id: t.id, done: to }); toast(to ? 'Todoist で完了にしました' : '未完了に戻しました'); idbPut('meta', { k: 'todo:' + s, v: S.todo[s] }); }
+  try{ await api('jdone', { id: t.id, done: to }); toast(to ? 'Todoist で完了にしました' : '未完了に戻しました'); idbPut('meta', { k: 'todo:' + key, v: S.todo[key] }); }
   catch(e){ t.done = !to; redrawBg(); toast('Todoist に送れませんでした：' + e.message); }
 }
 function redrawBg(){ var c = S.cur; build(); S.cur = c; }
-async function pullTodo(s){
+/* その日（日付キー）か期間（'R:from:to'）の Todoist を取りに行く */
+async function pullTodo(key){
   if(!S.user || !navigator.onLine) return;
   try{
-    var r = await api('jtodo', { date: s }), v = r.tasks || [];
-    if(JSON.stringify(S.todo[s] || []) === JSON.stringify(v)) return;
-    S.todo[s] = v; idbPut('meta', { k: 'todo:' + s, v: v });
-    if(S.view === 'D-' + s) build();
+    var q = key.indexOf('R:') === 0 ? { from: key.slice(2, 12), to: key.slice(13) } : { date: key };
+    var r = await api('jtodo', q), v = r.tasks || [], view = S.view;
+    if(JSON.stringify(S.todo[key] || []) === JSON.stringify(v)) return;
+    S.todo[key] = v; idbPut('meta', { k: 'todo:' + key, v: v });
+    if(S.view === view) build();
   }catch(e){ console.warn('todo', e); if(/鍵/.test(e.message)) toast(e.message); }
 }
 async function loadNums(s){
   if(S.nums[s]) return;
   var row = await idbGet('meta', 'nums:' + s); if(row && row.v) S.nums[s] = row.v;
   if(!S.todo[s]){ var tr = await idbGet('meta', 'todo:' + s); if(tr && tr.v) S.todo[s] = tr.v; }
+}
+/* ★v1.8 週・月が使う期間（数字は過去2期間ぶんから、Todoist は前の期間の頭から今の期間の終わりまで） */
+function monthFirst(y, m){ return ymd(y, m, 1); }
+function monthLast(y, m){ return addDays(m === 12 ? ymd(y + 1, 1, 1) : ymd(y, m + 1, 1), -1); }
+function prevYM(y, m){ return m === 1 ? [y - 1, 12] : [y, m - 1]; }
+function spanOf(v){
+  if(v.indexOf('W-') === 0){ var wk = v.slice(2, 12); return { cur: [wk, addDays(wk, 6)], prev: [addDays(wk, -7), addDays(wk, -1)], prev2: [addDays(wk, -14), addDays(wk, -8)] }; }
+  var y = +v.slice(2, 6), m = +v.slice(7, 9), p = prevYM(y, m), p2 = prevYM(p[0], p[1]);
+  return { cur: [monthFirst(y, m), monthLast(y, m)], prev: [monthFirst(p[0], p[1]), monthLast(p[0], p[1])], prev2: [monthFirst(p2[0], p2[1]), monthLast(p2[0], p2[1])] };
+}
+function todoKey(v){ var sp = spanOf(v); return 'R:' + sp.prev[0] + ':' + sp.cur[1]; }
+async function loadSpan(v){
+  var sp = spanOf(v), d = sp.prev2[0];
+  for(; d <= sp.cur[1]; d = addDays(d, 1)) if(!S.nums[d]){ var row = await idbGet('meta', 'nums:' + d); if(row && row.v) S.nums[d] = row.v; }
+  var k = todoKey(v); if(!S.todo[k]){ var tr = await idbGet('meta', 'todo:' + k); if(tr && tr.v) S.todo[k] = tr.v; }
+}
+function sumNums(r){
+  var o = { made: 0, sold: 0, left: 0, sales: 0, labor: 0, days: 0, laborDays: 0 };
+  for(var d = r[0]; d <= r[1]; d = addDays(d, 1)){
+    var n = S.nums[d]; if(!n || n.sold == null) continue;
+    o.days++; o.made += +n.made || 0; o.sold += +n.sold || 0; o.left += +((n.detail || {}).left) || 0; o.sales += +n.sales || 0;
+    if(n.labor != null){ o.labor += +n.labor || 0; o.laborDays++; }
+  }
+  return o;
+}
+function pct(a, b){ if(!b) return '—'; var x = Math.round((a - b) / b * 100); return (x > 0 ? '+' : '') + x + '%'; }
+function card(g, x, y, w, h, lab, val, sub){
+  g.strokeStyle = LINE; g.lineWidth = .8; g.strokeRect(x, y, w, h);
+  txt(g, lab, x + 8, y + 15, 9, SUB, F_BODY, 'left', 500);
+  txt(g, val, x + 8, y + 40, 19, INK, F_NUM, 'left', 600);
+  if(sub) txt(g, sub, x + 8, y + h - 8, 8.5, SUB, F_BODY, 'left', 500);
+}
+function goalBlocks(g, x, y, w, n, lines, labels){   // 目標1〜n の手書き欄（番号＋罫線）
+  var bh = lines * 24 + 8;
+  for(var i = 0; i < n; i++){
+    var by = y + i * (bh + 6);
+    txt(g, labels ? labels[i] : String(i + 1), x, by + 20, labels ? 10 : 18, INK, labels ? F_BODY : F_NUM, 'left', labels ? 700 : 600);
+    ruled(g, x + (labels ? 46 : 22), by, x + w, by + bh - 8, 24);
+  }
+  return y + n * (bh + 6);
 }
 
 function drawDay(g, id, links){
@@ -297,54 +346,126 @@ function drawDay(g, id, links){
 }
 
 function drawWeek(g, id, links){
-  var wk = id.slice(2), e = addDays(wk, 6), wn = isoWeek(wk);
+  var wk = id.slice(2, 12), side = id.slice(13) || 'R', e = addDays(wk, 6), wn = isoWeek(wk), sp = spanOf('W-' + wk);
   txt(g, 'WEEK ' + ('0' + wn).slice(-2), M, 46, 9, INK, F_BODY, 'left', 500, 4);
+  txt(g, side === 'L' ? 'REVIEW ＆ GOALS' : 'PLAN', W - M, 46, 8.5, INK, F_BODY, 'right', 500, 3);
   txt(g, md(wk) + '（月）〜 ' + md(e) + '（日）', M, 84, 22, INK, F_DATE, 'left', 700);
   hline(g, M, W - M, 100, INK, .8);
-  var top = 108, rh = 74;
-  for(var i = 0; i < 7; i++){
-    var s = addDays(wk, i), y = top + i*rh, ok = inRange(s), col = ok ? dcolor(s) : GREY;
-    txt(g, String(parse(s).getUTCDate()), M + 2, y + 30, 26, col, F_NUM, 'left', 600);
-    txt(g, WD[i], M + 4, y + 48, 10, col, F_BODY, 'left', 500);
-    if(HOL[s]) txt(g, HOL[s], M + 2, y + 62, 7.5, RED);
-    if(ok){
-      links.push({ x: M, y: y + 4, w: 44, h: 50, to: 'D-' + s });
-      hline(g, M + 54, W - M, y + rh/3, '#F0F0F0'); hline(g, M + 54, W - M, y + 2*rh/3, '#F0F0F0');
-    } else txt(g, '（期間外）', M + 54, y + rh/2 + 3, 9, GREY);
-    hline(g, M, W - M, y + rh, LINE, .7);
+  var all = S.todo[todoKey('W-' + wk)] || [], key = todoKey('W-' + wk);
+  if(side === 'L'){
+    // ① 先週の振り返り（数字は Mac が毎日置く分を足す）
+    sec(g, 'LAST WEEK', '先週（W' + ('0' + isoWeek(sp.prev[0])).slice(-2) + '）の振り返り', M, 128);
+    var a = sumNums(sp.prev), b = sumNums(sp.prev2), cw = (W - 2*M - 24) / 4, has = a.days > 0;
+    card(g, M, 138, cw, 62, '作成', has ? cnt(a.made) : '—', has ? '前の週 ' + pct(a.made, b.made) : '');
+    card(g, M + (cw + 8), 138, cw, 62, '販売', has ? cnt(a.sold) : '—', has ? '前の週 ' + pct(a.sold, b.sold) : '');
+    card(g, M + 2*(cw + 8), 138, cw, 62, '1日あたり販売', has ? cnt(a.sold / a.days) : '—', has ? a.days + '営業日' : '');
+    card(g, M + 3*(cw + 8), 138, cw, 62, '最終の残り', has ? '約' + cnt(a.left) : '—', has && a.sold ? '販売の ' + Math.round(a.left / a.sold * 100) + '%' : '');
+    // ② やり残したタスク（先週が期日で未完了）
+    txt(g, 'やり残したタスク（Todoist・先週が期日）', M, 224, 9, SUB, F_BODY, 'left', 500);
+    var left = all.filter(function(t){ return !t.done && t.date >= sp.prev[0] && t.date <= sp.prev[1]; }), ly = 244;
+    if(!left.length) txt(g, S.todo[key] ? 'なし' : '（Todoist を読み込むと出ます）', M + 4, ly, 10, SUB, F_BODY, 'left', 500);
+    left.slice(0, 5).forEach(function(t, i){ taskLine(g, t, key, M, ly + i*20, W - 2*M, 10.5, links, 20); });
+    if(left.length > 5) txt(g, 'ほか ' + (left.length - 5) + '件は Todoist で', M + 16, ly + 100, 9, SUB, F_BODY, 'left', 500);
+    // ③ 振り返り（手書き）
+    sec(g, 'REVIEW', '振り返り', M, 370); ruled(g, M, 376, W - M, 544, 24);
+    // ④ 今週の目標
+    sec(g, 'GOALS', '今週の目標', M, 578);
+    goalBlocks(g, M, 586, W - 2*M, 3, 3);
+    txt(g, '目標の番号を右ページのタスクにも付ける。日付を付けた□は23時に Todoist へ', M, H - 14, 8.5, '#333', F_BODY, 'left', 500);
+  } else {
+    // ① 7日の行（その日の Todoist を活字で・終わった日は販売数）
+    var top = 108, rh = 52;
+    for(var i = 0; i < 7; i++){
+      var s = addDays(wk, i), y = top + i*rh, ok = inRange(s), col = ok ? dcolor(s) : GREY, n = S.nums[s];
+      txt(g, String(parse(s).getUTCDate()), M + 2, y + 26, 24, col, F_NUM, 'left', 600);
+      txt(g, WD[i], M + 4, y + 42, 9.5, col, F_BODY, 'left', 500);
+      if(HOL[s]) txt(g, HOL[s], M + 22, y + 42, 7.5, RED);
+      if(ok) links.push({ x: M, y: y + 2, w: 44, h: 46, to: 'D-' + s });
+      if(n && n.sold != null) txt(g, '販売 ' + cnt(n.sold), W - M, y + 18, 9, SUB, F_BODY, 'right', 500);
+      else if(n && n.plan) txt(g, '作成予定 ' + cnt(n.plan), W - M, y + 18, 9, SUB, F_BODY, 'right', 500);
+      var day = all.filter(function(t){ return t.date === s; });
+      day.slice(0, 2).forEach(function(t, j){ taskLine(g, t, key, M + 54, y + 20 + j*18, W - 2*M - 54 - 74, 10, links, 18); });
+      if(day.length > 2) txt(g, '＋' + (day.length - 2), W - M, y + 40, 9, SUB, F_BODY, 'right', 500);
+      hline(g, M, W - M, y + rh, LINE, .7);
+    }
+    // ② 今週のタスク（目標ごと・手書き）
+    var by = top + 7*rh + 30, half = (W - 2*M - 14) / 2;
+    sec(g, 'TASKS', '今週のタスク（目標ごと）', M, by);
+    goalBlocks(g, M, by + 10, half, 2, 4, ['目標1', '目標2']);
+    goalBlocks(g, M + half + 14, by + 10, half, 2, 4, ['目標3', 'その他']);
   }
-  var by = top + 7*rh + 26, half = (W - 2*M - 14) / 2;
-  sec(g, 'THIS WEEK', '今週のタスク', M, by); sec(g, 'REVIEW', '振り返り', M + half + 14, by);
-  ruled(g, M, by + 4, M + half, H - 34, 24); ruled(g, M + half + 14, by + 4, W - M, H - 34, 24);
   pid(g, id);
 }
 
 function drawMonth(g, id, links){
-  var y = +id.slice(2, 6), m = +id.slice(7, 9);
+  var y = +id.slice(2, 6), m = +id.slice(7, 9), side = id.slice(10) || 'R', v = 'M-' + id.slice(2, 9), sp = spanOf(v), key = todoKey(v), all = S.todo[key] || [];
   txt(g, String(y), M, 46, 10, SUB, F_BODY, 'left', 500, 2);
   txt(g, m + '月', M, 90, 36, INK, F_DATE, 'left', 700);
-  txt(g, '日付を押すとその日へ', W - M, 90, 8.5, SUB, F_BODY, 'right');
-  var first = ymd(y, m, 1), last = addDays(m === 12 ? ymd(y + 1, 1, 1) : ymd(y, m + 1, 1), -1);
-  var rows = []; for(var d = monday(first); d <= last; d = addDays(d, 7)) rows.push(d);
-  var gx0 = M + 30, gw = W - 2*M - 30, cw = gw / 7, gtop = 124, gh = 520, rh = gh / rows.length;
-  for(var i = 0; i < 7; i++) txt(g, WD[i], gx0 + i*cw + cw/2, gtop - 6, 9, i === 6 ? RED : i === 5 ? BLUE : SUB, F_BODY, 'center', 500);
-  rows.forEach(function(wk, r){
-    var ry = gtop + r*rh;
-    txt(g, 'W' + ('0' + isoWeek(wk)).slice(-2), M, ry + 14, 8.5, INK, F_BODY, 'left', 500, 1);
-    links.push({ x: M - 2, y: ry, w: 28, h: 20, to: 'W-' + wk });
-    for(var i = 0; i < 7; i++){
-      var dd = addDays(wk, i), x = gx0 + i*cw, inM = +dd.slice(5, 7) === m;
-      if(!inM){ g.fillStyle = '#F6F6F6'; g.fillRect(x, ry, cw, rh); txt(g, String(+dd.slice(8)), x + 5, ry + 15, 10, GREY, F_NUM, 'left', 500); continue; }
-      txt(g, String(+dd.slice(8)), x + 5, ry + 17, 14, dcolor(dd), F_NUM, 'left', 600);
-      if(HOL[dd]) txt(g, HOL[dd], x + 5, ry + 29, 6.5, RED);
-      links.push({ x: x, y: ry, w: 30, h: 22, to: 'D-' + dd });
+  var first = monthFirst(y, m), last = monthLast(y, m);
+  if(side === 'L'){
+    txt(g, 'REVIEW ＆ GOALS', W - M, 90, 8.5, INK, F_BODY, 'right', 500, 3);
+    hline(g, M, W - M, 104, INK, .8);
+    var pm = +sp.prev[0].slice(5, 7);
+    sec(g, 'LAST MONTH', pm + '月の振り返り', M, 132);
+    var a = sumNums(sp.prev), b = sumNums(sp.prev2), cw = (W - 2*M - 24) / 4, has = a.days > 0;
+    card(g, M, 142, cw, 62, '作成', has ? cnt(a.made) : '—', has ? '前月比 ' + pct(a.made, b.made) : '');
+    card(g, M + (cw + 8), 142, cw, 62, '販売', has ? cnt(a.sold) : '—', has ? '前月比 ' + pct(a.sold, b.sold) : '');
+    card(g, M + 2*(cw + 8), 142, cw, 62, '売上', has && a.sales ? Math.round(a.sales / 10000) + '万' : '—', has && a.sales ? '前月比 ' + pct(a.sales, b.sales) : '');
+    card(g, M + 3*(cw + 8), 142, cw, 62, '人件費率', a.laborDays && a.sales ? Math.round(a.labor / a.sales * 100) + '%' : '—', b.laborDays && b.sales ? '前月 ' + Math.round(b.labor / b.sales * 100) + '%' : '');
+    if(has && a.days < 15) txt(g, '※ 数字がある ' + a.days + '日ぶんだけの合計', W - M, 216, 8, SUB, F_BODY, 'right', 500);
+    var half = (W - 2*M - 14) / 2;
+    txt(g, pm + '月の目標（手で ○ ×）', M, 232, 9, SUB, F_BODY, 'left', 500);
+    for(var i = 0; i < 3; i++){ txt(g, String(i + 1), M, 256 + i*24, 13, INK, F_NUM, 'left', 600); hline(g, M + 14, M + half, 260 + i*24, LINE); }
+    txt(g, 'やり残したタスク（Todoist・' + pm + '月が期日）', M + half + 14, 232, 9, SUB, F_BODY, 'left', 500);
+    var left = all.filter(function(t){ return !t.done && t.date >= sp.prev[0] && t.date <= sp.prev[1]; });
+    if(!left.length) txt(g, S.todo[key] ? 'なし' : '（Todoist を読み込むと出ます）', M + half + 18, 256, 10, SUB, F_BODY, 'left', 500);
+    left.slice(0, 3).forEach(function(t, i){ taskLine(g, t, key, M + half + 14, 256 + i*24, half, 10, links, 24); });
+    if(left.length > 3) txt(g, 'ほか ' + (left.length - 3) + '件', W - M, 236, 8.5, SUB, F_BODY, 'right', 500);
+    sec(g, 'REVIEW', '振り返り', M, 352); ruled(g, M, 358, W - M, 478, 24);
+    // 目標の階段：今月の目標 × 各週
+    sec(g, 'GOALS', '今月の目標 → 週の目標', M, 512);
+    var wks = []; for(var d = monday(first); d <= last; d = addDays(d, 7)) wks.push(d);
+    var gx = M + 18, gw = 150, ex = W - M - 30, wcw = (ex - gx - gw) / wks.length, gt = 522, rh = 92;
+    txt(g, '今月の目標', gx + 4, gt + 14, 8.5, SUB, F_BODY, 'left', 500);
+    wks.forEach(function(wk, j){ txt(g, 'W' + ('0' + isoWeek(wk)).slice(-2), gx + gw + j*wcw + wcw/2, gt + 14, 8.5, SUB, F_BODY, 'center', 500); links.push({ x: gx + gw + j*wcw, y: gt, w: wcw, h: 20, to: 'W-' + wk }); });
+    txt(g, '月末', ex + 15, gt + 14, 8.5, SUB, F_BODY, 'center', 500);
+    hline(g, M, W - M, gt + 22, INK, .8);
+    for(var r = 0; r < 3; r++){
+      var ry = gt + 22 + r*rh;
+      txt(g, String(r + 1), M, ry + 22, 18, INK, F_NUM, 'left', 600);
+      g.setLineDash([2, 2]); g.strokeStyle = LINE; g.lineWidth = .6;
+      for(var j = 0; j <= wks.length; j++){ g.beginPath(); g.moveTo(gx + gw + j*wcw, ry + 4); g.lineTo(gx + gw + j*wcw, ry + rh - 4); g.stroke(); }
+      g.setLineDash([]);
+      hline(g, M, W - M, ry + rh, LINE, .7);
     }
-  });
-  g.strokeStyle = LINE; g.lineWidth = .7;
-  rows.forEach(function(wk, r){ for(var i = 0; i < 7; i++) g.strokeRect(gx0 + i*cw, gtop + r*rh, cw, rh); });
-  var by = gtop + gh + 30, half = (W - 2*M - 14) / 2;
-  sec(g, 'GOALS', '今月の目標', M, by); sec(g, 'TASKS', '今月のタスク', M + half + 14, by);
-  ruled(g, M, by + 4, M + half, H - 34, 24); ruled(g, M + half + 14, by + 4, W - M, H - 34, 24);
+    txt(g, '週の欄＝週ページの「今週の目標」が23時の読み取りで入ります（準備中）。月末の欄に手で ○ ×', M, H - 14, 8.5, '#333', F_BODY, 'left', 500);
+  } else {
+    txt(g, '日付を押すとその日へ・W を押すとその週へ', W - M, 90, 8.5, SUB, F_BODY, 'right');
+    var rows = []; for(var d2 = monday(first); d2 <= last; d2 = addDays(d2, 7)) rows.push(d2);
+    var gx0 = M + 30, gw2 = W - 2*M - 30, cw2 = gw2 / 7, gtop = 124, gh = 440, rh2 = gh / rows.length;
+    for(var i2 = 0; i2 < 7; i2++) txt(g, WD[i2], gx0 + i2*cw2 + cw2/2, gtop - 6, 9, i2 === 6 ? RED : i2 === 5 ? BLUE : SUB, F_BODY, 'center', 500);
+    rows.forEach(function(wk, r){
+      var ry = gtop + r*rh2;
+      txt(g, 'W' + ('0' + isoWeek(wk)).slice(-2), M, ry + 14, 8.5, INK, F_BODY, 'left', 500, 1);
+      links.push({ x: M - 2, y: ry, w: 28, h: 20, to: 'W-' + wk });
+      for(var i = 0; i < 7; i++){
+        var dd = addDays(wk, i), x = gx0 + i*cw2, inM = +dd.slice(5, 7) === m;
+        if(!inM){ g.fillStyle = '#F6F6F6'; g.fillRect(x, ry, cw2, rh2); txt(g, String(+dd.slice(8)), x + 5, ry + 15, 10, GREY, F_NUM, 'left', 500); continue; }
+        txt(g, String(+dd.slice(8)), x + 5, ry + 17, 14, dcolor(dd), F_NUM, 'left', 600);
+        if(HOL[dd]) txt(g, HOL[dd], x + 5, ry + 29, 6.5, RED);
+        var n = S.nums[dd]; if(n && n.sold != null) txt(g, '販売 ' + cnt(n.sold), x + cw2 - 4, ry + rh2 - 6, 7.5, SUB, F_BODY, 'right', 500);
+        if(inRange(dd)) links.push({ x: x, y: ry, w: 30, h: 22, to: 'D-' + dd });
+      }
+    });
+    g.strokeStyle = LINE; g.lineWidth = .7;
+    rows.forEach(function(wk, r){ for(var i = 0; i < 7; i++) g.strokeRect(gx0 + i*cw2, gtop + r*rh2, cw2, rh2); });
+    var by = gtop + gh + 30, half2 = (W - 2*M - 14) / 2;
+    sec(g, 'TASKS', '今月のタスク', M, by); sec(g, 'NOTES', 'メモ・予定', M + half2 + 14, by);
+    ruled(g, M, by + 4, M + half2, H - 34, 24); dots(g, M + half2 + 14, by + 8, W - M, H - 34);
+    var mine = all.filter(function(t){ return t.date >= first && t.date <= last; });
+    mine.slice(0, 8).forEach(function(t, i){ taskLine(g, t, key, M, by + 4 + 24*(i+1) - 7, half2, 10, links, 24); });
+    if(mine.length > 8) txt(g, 'ほか ' + (mine.length - 8) + '件は Todoist で', M + 16, by + 4 + 24*9 - 7, 9, SUB, F_BODY, 'left', 500);
+  }
   pid(g, id);
 }
 
@@ -461,6 +582,7 @@ async function show(view){
   $('nump').hidden = true;
   await Promise.all(ids.map(loadPage));
   if(view.indexOf('D-') === 0) await loadNums(view.slice(2));
+  if(view.indexOf('W-') === 0 || view.indexOf('M-') === 0) await loadSpan(view);
   build(); pullFromServer(ids);
 }
 function build(){
@@ -482,7 +604,7 @@ function build(){
   $('where').textContent = whereText();
   navState();
 }
-function label(id){ if(/-L$/.test(id)) return '左'; if(/-R$/.test(id)) return '右'; var m = /-R(\d+)$/.exec(id); return m ? '追加' + (m[1] - 1) : id; }
+function label(id){ if(/^[WM]-/.test(id)) return /-L$/.test(id) ? '振り返り・目標' : (id[0] === 'W' ? '予定・タスク' : 'カレンダー・タスク'); if(/-L$/.test(id)) return '左'; if(/-R$/.test(id)) return '右'; var m = /-R(\d+)$/.exec(id); return m ? '追加' + (m[1] - 1) : id; }
 function whereText(){
   var v = S.view;
   if(v === 'INDEX') return 'INDEX';
@@ -667,8 +789,10 @@ function step(dir){
     show('D-' + s).then(function(){ if(dir < 0){ S.cur = viewPages(S.view).length - 1; build(); } });
     return;
   }
-  if(v.indexOf('W-') === 0){ var w = WEEKS(), i = w.indexOf(v.slice(2)) + dir; if(i >= 0 && i < w.length) show('W-' + w[i]); return; }
-  if(v.indexOf('M-') === 0){ show(v === 'M-2026-11' ? (dir > 0 ? 'M-2026-12' : 'INDEX') : (dir > 0 ? 'M-2026-12' : 'M-2026-11')); return; }
+  if((v.indexOf('W-') === 0 || v.indexOf('M-') === 0) && S.cur + dir >= 0 && S.cur + dir < 2){ S.cur += dir; build(); return; }   // 左→右
+  var back = function(){ if(dir < 0){ S.cur = 1; build(); } };
+  if(v.indexOf('W-') === 0){ var w = WEEKS(), i = w.indexOf(v.slice(2)) + dir; if(i >= 0 && i < w.length) show('W-' + w[i]).then(back); return; }
+  if(v.indexOf('M-') === 0){ var to = v === 'M-2026-11' ? (dir > 0 ? 'M-2026-12' : 'INDEX') : (dir > 0 ? 'M-2026-12' : 'M-2026-11'); if(to !== v) show(to).then(to === 'INDEX' ? null : back); return; }
   if(dir > 0) show('M-2026-11');
 }
 function navState(){
@@ -678,8 +802,11 @@ function navState(){
   $('n-prev').disabled = isD ? v.slice(2) <= START : isW ? v.slice(2) <= WEEKS()[0] : v === 'INDEX';
   $('n-next').disabled = isD ? v.slice(2) >= END : isW ? v.slice(2) >= WEEKS()[WEEKS().length - 1] : v === 'M-2026-12';
   $('n-prev').textContent = isD ? '◀ 前の日' : '◀'; $('n-next').textContent = isD ? '次の日 ▶' : '▶';
-  $('n-pp').hidden = $('n-np').hidden = !isD;
+  var isM = v.indexOf('M-') === 0;
+  $('n-pp').hidden = $('n-np').hidden = !(isD || isW || isM);
   if(isD){ var n = viewPages(v).length; $('n-pp').disabled = S.cur <= 0 && v.slice(2) <= START; $('n-np').disabled = S.cur >= n - 1 && v.slice(2) >= END; }
+  if(isW){ $('n-pp').disabled = S.cur <= 0 && v.slice(2) <= WEEKS()[0]; $('n-np').disabled = S.cur >= 1 && v.slice(2) >= WEEKS()[WEEKS().length - 1]; }
+  if(isM){ $('n-pp').disabled = false; $('n-np').disabled = S.cur >= 1 && v === 'M-2026-12'; }
   $('undo').disabled = !S.hist.length; $('redo').disabled = !S.redo.length;
 }
 $('n-idx').onclick = function(){ show('INDEX'); };
@@ -747,12 +874,12 @@ async function pullFromServer(ids){
   if(!S.user || !navigator.onLine) return;
   var want = ids.slice(); if(S.view.indexOf('D-') === 0) for(var i = (S.extras[S.view] || 1) + 1; i <= 9; i++) want.push(S.view + '-R' + i);
   try{
-    var isD = S.view.indexOf('D-') === 0, ds = isD ? S.view.slice(2) : '';
-    var r = await api('jget', { ids: want, dates: isD ? [ds] : [] }), changed = false;
+    var isD = S.view.indexOf('D-') === 0, ds = isD ? S.view.slice(2) : '', isWM = /^[WM]-/.test(S.view), spn = isWM ? spanOf(S.view) : null;
+    var r = await api('jget', { ids: want, dates: isD ? [ds] : [], range: spn ? { from: spn.prev2[0], to: spn.cur[1] } : null }), changed = false;
     (r.nums || []).forEach(function(n){   // ★v1.6 数字が変わっていたら描き直す
-      var v = { made: n.made, sold: n.sold, plan: n.plan, temp12: n.temp12, wind12: n.wind12, detail: n.detail || {} };
+      var v = { made: n.made, sold: n.sold, plan: n.plan, temp12: n.temp12, wind12: n.wind12, sales: n.sales, labor: n.labor, detail: n.detail || {} };
       if(JSON.stringify(S.nums[n.date] || null) === JSON.stringify(v)) return;
-      S.nums[n.date] = v; idbPut('meta', { k: 'nums:' + n.date, v: v }); if(n.date === ds) changed = true;
+      S.nums[n.date] = v; idbPut('meta', { k: 'nums:' + n.date, v: v }); if(n.date === ds || isWM) changed = true;
     });
     for(var j = 0; j < (r.pages || []).length; j++){
       var sp = r.pages[j], p = pageState(sp.id); p.loaded = true;
@@ -766,6 +893,7 @@ async function pullFromServer(ids){
     if(changed) build();
   }catch(e){ console.warn('pull', e); }
   if(S.view.indexOf('D-') === 0) pullTodo(S.view.slice(2));
+  else if(/^[WM]-/.test(S.view)) pullTodo(todoKey(S.view));
 }
 window.addEventListener('online', function(){ showSync(); syncNow(); });
 window.addEventListener('offline', showSync);
