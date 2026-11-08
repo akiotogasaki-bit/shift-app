@@ -8,7 +8,8 @@
 <link rel="apple-touch-icon" href="cockpit-icon.png?v=2">
 <link rel="icon" href="cockpit-icon.png?v=2">
 <link rel="manifest" href="desk.webmanifest">
-<!-- boss/desk v1.4 (2026-11-05) ★v1.4 アイコンを臙脂の地に白抜きのメーターに（社長「Cockpitだけ浮く」＝他のアプリと同じ作りに）。
+<!-- boss/desk v1.5 (2026-11-09) ★v1.5 社長「週のレポートの目標がカードからはみ出る」＝カードは短い数字用（折り返しなし）だった。値が13文字以上のカードは、1行ぶんの幅で小さめの文字にして折り返す。
+     boss/desk v1.4 (2026-11-05) ★v1.4 アイコンを臙脂の地に白抜きのメーターに（社長「Cockpitだけ浮く」＝他のアプリと同じ作りに）。
      v1.3 (2026-11-04) ★v1.3 アイコンをお江戸弁当のロゴに（社長「ロゴ入れようか」）。manifest を足した＝デスクトップの Chrome アプリ・ホーム画面に置ける。
      boss/desk v1.2 (2026-11-04) ★v1.2 レポートをカードで（社長決定 B案）。バッチが cards（数字）を載せた物は、大きな数字のカードで出す
      （表は「▼ 詳しい表を見る」に畳む）。画面の幅で広がる＝iPhone 2列／iPad・PC はカードが横に並び、机の項目も2〜3列。
@@ -90,6 +91,9 @@ input,select,textarea{width:100%;font-size:13px;padding:8px;border:.5px solid rg
 .kc .v{font-size:21px;font-weight:600;color:var(--navy);line-height:1.25;margin-top:2px;font-variant-numeric:tabular-nums;white-space:nowrap;}
 .kc .s{font-size:10px;color:var(--muted);line-height:1.4;margin-top:2px;}
 .kc.bad .v{color:var(--red);} .kc.warn .v{color:var(--orange);} .kc.good .v{color:var(--green);}
+.kc.txt{grid-column:1/-1;}
+.kc.txt .v{font-size:15px;line-height:1.45;white-space:normal;}
+.kc.txt .s{font-size:12px;line-height:1.5;}
 #root.grid{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;align-items:start;}
 #root.grid .card{margin-bottom:0;}
 /* iPad・PC：横に広げる */
@@ -352,7 +356,7 @@ function card(x){
 function kpiCards(groups){
   return groups.map(function(g){
     return (g.title ? '<div class="kgt">'+esc(g.title)+'</div>' : '') + '<div class="kg">' + g.items.map(function(c){
-      return '<div class="kc'+(c.tone ? ' '+esc(c.tone) : '')+'"><div class="l">'+esc(c.label)+'</div><div class="v">'+esc(c.value)+'</div>'
+      return '<div class="kc'+(String(c.value == null ? '' : c.value).length > 12 ? ' txt' : '')+(c.tone ? ' '+esc(c.tone) : '')+'"><div class="l">'+esc(c.label)+'</div><div class="v">'+esc(c.value)+'</div>'
         + (c.sub ? '<div class="s">'+esc(c.sub)+'</div>' : '') + '</div>';
     }).join('') + '</div>';
   }).join('');

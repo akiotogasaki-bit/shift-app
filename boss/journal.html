@@ -9,7 +9,9 @@
 <link rel="apple-touch-icon" href="journal-icon.png">
 <link rel="icon" href="journal-icon.png">
 <link rel="manifest" href="journal.webmanifest">
-<!-- boss/journal v1.8 (2026-11-07) ★v1.8 週・月を見開き2ページに（社長決定 → 設計書 §6-3・§6-4）。
+<!-- boss/journal v1.9 (2026-11-09) ★v1.9 社長「レポートを見ながら目標を立てたい」（A案）。週の左ページの「週のレポートを開く ›」で Cockpit へ飛ばず、その場に先週のレポートを重ねる。
+     縦画面＝目標欄（ページ下）を隠さないよう上側に・横画面＝ページの横に出す。読むのは Cockpit と同じ dlist（key=weekly-<先週の月曜>）。ページをめくると閉じる。
+     boss/journal v1.8 (2026-11-07) ★v1.8 週・月を見開き2ページに（社長決定 → 設計書 §6-3・§6-4）。
      週＝左「先週の振り返り（作成・販売・先週比・残り＝自動／やり残したタスク＝Todoist）＋今週の目標」・右「7日の行（その日の Todoist）＋目標ごとのタスク」。
      月＝左「先月の振り返り（作成・販売・売上・人件費率と前月比＝自動／やり残し）＋今月の目標→週の目標の表」・右「カレンダー（各日の販売）＋今月のタスク（Todoist）」。
      数字は jget の range、Todoist は jtodo の from/to で期間ごとに読む。週の目標の自動転記（23時の読み取り）と週・月のレポートはまだ。
@@ -77,6 +79,14 @@ button:disabled{opacity:.35;cursor:default}
 .nump{position:fixed;left:50%;transform:translateX(-50%);top:calc(70px + env(safe-area-inset-top,0px));background:#fff;border:1px solid #111;padding:12px 16px;z-index:55;font-size:13px;line-height:1.75;min-width:240px;max-width:calc(100vw - 32px)}
 .nump[hidden]{display:none}
 .nump b{font-weight:700}.nump .s{color:var(--sub);font-size:12px}
+.rep{position:fixed;z-index:40;background:#fff;border:1px solid #111;box-shadow:0 8px 22px rgba(0,0,0,.18);display:flex;flex-direction:column}
+.rep[hidden]{display:none}
+.rep-h{flex:none;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 6px 5px 12px;border-bottom:1px solid var(--line);font-size:13px;font-weight:700}
+.rep-b{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:8px 12px 16px;font-size:13px;line-height:1.7}
+.rep-b h1{font-size:15px;margin:4px 0 6px}.rep-b h2,.rep-b h3{font-size:13.5px;margin:14px 0 4px}
+.rep-b p{margin:5px 0}.rep-b ul{margin:4px 0;padding-left:18px}.rep-b .s{color:var(--sub)}
+.rep-b table{display:block;max-width:100%;overflow-x:auto;border-collapse:collapse;font-size:11.5px;margin:6px 0}
+.rep-b td,.rep-b th{border:1px solid var(--line);padding:3px 5px;white-space:nowrap}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -116,6 +126,10 @@ button:disabled{opacity:.35;cursor:default}
 </div>
 <div class="toast" id="toast"></div>
 <div class="nump" id="nump" hidden role="dialog" aria-label="数字の内訳"></div>
+<div class="rep" id="rep" hidden role="dialog" aria-label="週のレポート">
+  <div class="rep-h"><span id="rep-t">週のレポート</span><button id="rep-x">閉じる</button></div>
+  <div class="rep-b" id="rep-b"></div>
+</div>
 <div class="gate" id="gate" hidden></div>
 
 <script>
@@ -357,7 +371,7 @@ function drawWeek(g, id, links){
     // ① 先週の振り返り（数字は Mac が毎日置く分を足す）
     sec(g, 'LAST WEEK', '先週（W' + ('0' + isoWeek(sp.prev[0])).slice(-2) + '）の振り返り', M, 128);
     txt(g, '週のレポートを開く ›', W - M, 128, 10, INK, F_BODY, 'right', 700);   // Cockpit のレポート（日曜9時・weekly-report.py）
-    links.push({ x: W - M - 120, y: 112, w: 120, h: 22, fn: function(){ location.href = 'desk.html'; } });
+    links.push({ x: W - M - 120, y: 112, w: 120, h: 22, fn: function(){ repOpen(wk); } });
     var a = sumNums(sp.prev), b = sumNums(sp.prev2), cw = (W - 2*M - 24) / 4, has = a.days > 0;
     card(g, M, 138, cw, 62, '作成', has ? cnt(a.made) : '—', has ? '前の週 ' + pct(a.made, b.made) : '');
     card(g, M + (cw + 8), 138, cw, 62, '販売', has ? cnt(a.sold) : '—', has ? '前の週 ' + pct(a.sold, b.sold) : '');
@@ -606,6 +620,58 @@ function build(){
   }
   $('where').textContent = whereText();
   navState();
+  if(REP.wk){ if(visible[0] === 'W-' + REP.wk + '-L') repPlace(); else repClose(); }
+}
+
+/* ★v1.9 週のレポートをページに重ねて開く（目標を立てながら読む）。key は weekly-report.py が載せる weekly-<その週の月曜> */
+var REP = { wk: '', data: {} }, REP_TOP_H = 560;   // 縦画面で隠してよい高さ（今週の目標の見出しの手前まで）
+function repEsc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+function repInline(s){ return repEsc(s).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>'); }
+function repMd(text){   // Cockpit の mdRender と同じ書式（表・箇条書き・見出し・引用）
+  var L = String(text || '').split('\n'), out = [], i = 0;
+  while(i < L.length){
+    var l = L[i], m;
+    if(/^\s*\|/.test(l)){
+      var h = '<table>', k = 0;
+      for(; i < L.length && /^\s*\|/.test(L[i]); i++, k++){
+        if(/^\s*\|?\s*:?-{2,}/.test(L[i])) continue;
+        var tag = k === 0 ? 'th' : 'td';
+        h += '<tr>' + L[i].trim().replace(/^\||\|$/g, '').split('|').map(function(c){ return '<' + tag + '>' + repInline(c.trim()) + '</' + tag + '>'; }).join('') + '</tr>';
+      }
+      out.push(h + '</table>'); continue;
+    }
+    if(/^\s*[-*] /.test(l)){
+      var it = '';
+      for(; i < L.length && /^\s*[-*] /.test(L[i]); i++) it += '<li>' + repInline(L[i].replace(/^\s*[-*] /, '')) + '</li>';
+      out.push('<ul>' + it + '</ul>'); continue;
+    }
+    if((m = l.match(/^(#{1,4}) (.*)$/))) out.push('<h' + m[1].length + '>' + repInline(m[2]) + '</h' + m[1].length + '>');
+    else if(l.trim() && !/^---+$/.test(l.trim())) out.push('<p>' + repInline(l.replace(/^>\s?/, '')) + '</p>');
+    i++;
+  }
+  return out.join('');
+}
+function repClose(){ REP.wk = ''; $('rep').hidden = true; }
+function repPlace(){
+  var p = document.querySelector('#spread .page'); if(!p) return;
+  var r = p.getBoundingClientRect(), b = $('rep').style, side = window.innerWidth - r.right - 20;
+  if(side >= 300){ b.left = (r.right + 10) + 'px'; b.width = Math.min(side, 560) + 'px'; b.height = r.height + 'px'; }   // 横画面＝ページの横
+  else { b.left = r.left + 'px'; b.width = r.width + 'px'; b.height = Math.round(r.height * REP_TOP_H / H) + 'px'; }     // 縦画面＝目標欄の上まで
+  b.top = r.top + 'px';
+}
+async function repOpen(wk){
+  if(REP.wk === wk){ repClose(); return; }
+  var from = addDays(wk, -7), key = 'weekly-' + from, body = $('rep-b');
+  resetZoom();
+  REP.wk = wk; $('rep').hidden = false; repPlace();
+  $('rep-t').textContent = '週のレポート（' + md(from) + '〜' + md(addDays(from, 6)) + '）';
+  if(REP.data[key]){ body.innerHTML = repMd(REP.data[key]); body.scrollTop = 0; return; }
+  body.innerHTML = '<p class="s">読み込み中…</p>';
+  try{
+    var hit = ((await api('dlist', { all: true })).items || []).filter(function(x){ return x.key === key; })[0];
+    if(hit) REP.data[key] = hit.body;
+    if(REP.wk === wk) body.innerHTML = hit ? repMd(hit.body) : '<p class="s">この週のレポートはありません（毎週日曜9時に届きます）。</p>';
+  }catch(e){ if(REP.wk === wk) body.innerHTML = '<p class="s">読み込めませんでした。電波とログインを確かめて、開き直してください。</p>'; }
 }
 function label(id){ if(/^[WM]-/.test(id)) return /-L$/.test(id) ? '振り返り・目標' : (id[0] === 'W' ? '予定・タスク' : 'カレンダー・タスク'); if(/-L$/.test(id)) return '左'; if(/-R$/.test(id)) return '右'; var m = /-R(\d+)$/.exec(id); return m ? '追加' + (m[1] - 1) : id; }
 function whereText(){
@@ -953,6 +1019,7 @@ async function login(){
 /* ============================================================
    起動
    ============================================================ */
+$('rep-x').onclick = repClose;
 window.addEventListener('resize', function(){ clearTimeout(window.__rz); window.__rz = setTimeout(function(){ if(S.view) build(); }, 150); });
 window.addEventListener('hashchange', function(){ var h = decodeURIComponent(location.hash.slice(1)); if(h && h !== S.view) show(h); });
 function validView(v){ return v === 'INDEX' || /^M-2026-1[12]$/.test(v) || (/^W-\d{4}-\d{2}-\d{2}$/.test(v) && WEEKS().indexOf(v.slice(2)) >= 0) || (/^D-\d{4}-\d{2}-\d{2}$/.test(v) && inRange(v.slice(2))); }
