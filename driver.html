@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v8.19 (2026-11-10) 【レジの2次販売切り替えに対応（register v3.38）】社長決定。★その場の2次（拠点ID＋_2）は拠点マスタに無いので、報告が来たら元の拠点から回収カードを作る。★二次販売の回収に「追加ギャラ」欄を足した（2次のギャラは基本0。追加がある時に担当エリアのドライバーが入力）。要: メインGAS 2026-11-10。 -->
 <!-- driver v8.18 (2026-11-06) 【12:20の再分配に行き先を出す】社長決定（A案）。11/5 の「推奨の勝ち」の大半は閉店前に置いて売れなかった弁当で、47個中23個はエリアに回す先が無かった＝メインへ寄せるのが正解だった。★理由欄に、下げる拠点は「🚚 持って行く先：2個 → 茶2／寄せ 1個 → 神保町（メイン）」、置く拠点は「🚚 来る元：車 2個 / 茶3 1個」、メインは「📥 寄せ：◯◯ ◯個」を出す。出どころはサーバーの `tail.dest` / `tail.src`（再分配計画の11列目）。11/5以前の計画には無いので出さない。要: メインGAS 2026-11-06（`_rt_tailPairs_`）。 -->
 <!-- driver v8.17 (2026-11-01) 【回収タブも Firebase から読む】社長決定 A。回収タブの自動の取り直しを /exec の getCollectionBundle（10/26〜10/30 で1日約75件・中央値19秒＝遅い呼び出しの首位）から、実況タブと同じ Firebase（報告・営業中）＋公開スナップショット（回収済み・休止）に切り替えた。🔄 は従来どおり /exec。スナップショットの「報告済み・営業中」が Firebase に揃っていない時も /exec に落ちる（fetchCollectionFromFb_）。 -->
 <!-- driver v8.16 (2026-10-30) 【12:05までのエリア内の融通】社長決定（②案）。10/29 12:04 お茶の水の銀鮭白が5/5で完売、同じエリアの神保町は0/8なのに指示が出なかった。★12:05まで、エリアの残りを12:20までの予定の比率で平らにする（C案）。サーバーの `xfer`（ここから下げて◯◯へ）を「下げる」に入れ、理由欄に行き先を出す。受け手には `xferIn`（◯◯から◯個来る）を出す。12:05〜12:20は従来どおり下げるは出さない。要: メインGAS 2026-10-30（`_rt_earlyXfer_`）。 -->
@@ -3951,7 +3952,18 @@ async function submitSpotStart() {
 // ═══════════════════════════════════════════════════════════════
 // 回収チェック表示
 // ═══════════════════════════════════════════════════════════════
+// ★v8.19 その場の2次（L012_2）は拠点マスタに無いので、報告が来たら元の拠点から回収カードを作る
+function addSwitch2ndLocs_() {
+  Object.keys(state.reportsByLoc || {}).forEach(id => {
+    if (!/^L\d{3}_2$/.test(id) || state.locations.some(l => l.id === id)) return;
+    const parent = state.locations.find(l => l.id === id.replace(/_2$/, ''));
+    if (!parent) return;
+    state.locations.push(Object.assign({}, parent, { id, name: state.reportsByLoc[id].locationName || (parent.name + '（2次）'), area: SECOND_SALE_AREA }));
+  });
+}
+
 function renderCollectionList() {
+  addSwitch2ndLocs_();
   // 休止中とそれ以外で分割
   const activeLocations   = state.locations.filter(l => !state.inactiveIds.has(l.id));
   const inactiveLocations = state.locations.filter(l =>  state.inactiveIds.has(l.id));
@@ -4213,6 +4225,7 @@ let ccStep = 1;
 //   二次販売拠点（拠点マスタの「エリア」列＝二次販売）でだけ②の画面に出す。
 const SECOND_SALE_AREA = '二次販売';
 let ccTransport = '';     // 円（文字列）
+let ccExtraGig  = '';     // ★v8.19 2次の追加ギャラ（円・文字列）
 let ccIs2nd     = false;  // 二次販売拠点か
 function is2ndLoc_(locId) {
   const l = (state.locations || []).find(x => String(x.id) === String(locId));
@@ -4258,6 +4271,7 @@ async function openCashModal(id) {
   ccField = 'cash';
   ccStep  = 1;             // ★2026-08-13 必ず①残数から始める
   ccTransport = '';        // ★2026-08-13 交通費は毎回空から（拠点ごとに違う）
+  ccExtraGig  = '';        // ★v8.19
   ccIs2nd     = is2ndLoc_(id);
   ccHandover  = null;      // ★2026-08-20 拠点振替（サーバーの応答で入る）
 
@@ -4495,6 +4509,7 @@ function closeCashModal() {
   ccRoBusy = false;   // ★2026-09-09 v7.0
   ccStep = 1;         // ★2026-08-13 次に開く拠点も①残数から
   ccTransport = ''; ccIs2nd = false;   // ★2026-08-13 交通費を次の拠点へ持ち越さない
+  ccExtraGig  = '';
   ccHandover = null;  // ★2026-08-20 振替の案内を次の拠点へ持ち越さない
 }
 
@@ -4523,6 +4538,7 @@ function ccGet_()      {
   const p = ccPid_();
   if (p) return ccVals[p] || '';
   if (ccField === 'transport') return ccTransport;        // ★2026-08-13 二次販売の交通費
+  if (ccField === 'extraGig')  return ccExtraGig;         // ★v8.19
   return (ccField === 'coupon') ? ccCoupon : cashInput;   // ★2026-08-06 スポットのクーポン欄
 }
 function ccSet_(v) {
@@ -4536,11 +4552,13 @@ function ccSet_(v) {
     if (ccIsSpot) ccSpot = null;
   } else if (ccField === 'transport') {
     ccTransport = v;                                      // ★2026-08-13
+  } else if (ccField === 'extraGig') {
+    ccExtraGig = v;                                       // ★v8.19
   } else {
     cashInput = v;
   }
 }
-function ccMaxLen_()   { return ccPid_() ? 3 : (ccField === 'coupon' ? 3 : (ccField === 'transport' ? 6 : 9)); }
+function ccMaxLen_()   { return ccPid_() ? 3 : (ccField === 'coupon' ? 3 : ((ccField === 'transport' || ccField === 'extraGig') ? 6 : 9)); }
 
 function cashKey(d) {
   let cur = ccGet_();
@@ -4709,6 +4727,12 @@ function renderCashModal_(net) {
     tf.classList.toggle('active', ccField === 'transport');
     const tv2 = document.getElementById('cc-val-transport');
     if (tv2) tv2.textContent = ccTransport === '' ? '0' : (parseInt(ccTransport, 10) || 0).toLocaleString();
+    const eg = document.getElementById('cc-field-extragig');   // ★v8.19
+    if (eg) {
+      eg.style.display = showTransport ? '' : 'none';
+      eg.classList.toggle('active', ccField === 'extraGig');
+      document.getElementById('cc-val-extragig').textContent = ccExtraGig === '' ? '0' : (parseInt(ccExtraGig, 10) || 0).toLocaleString();
+    }
   }
 
   // ── テンキーの表示（選択中の欄の値）──
@@ -4718,6 +4742,7 @@ function renderCashModal_(net) {
   document.getElementById('cash-modal-display').textContent =
     (ccField === 'cash')      ? '¥' + val.toLocaleString()
   : (ccField === 'transport') ? '¥' + val.toLocaleString() + '（交通費）'   // ★2026-08-13
+  : (ccField === 'extraGig')  ? '¥' + val.toLocaleString() + '（追加ギャラ）' // ★v8.19
   : (ccField === 'coupon')    ? val.toLocaleString() + '枚（−¥' + (val * ccCouponYen).toLocaleString() + '）'
   :                             val.toLocaleString() + '個';
 
@@ -4738,7 +4763,8 @@ function renderCashModal_(net) {
     //   差額 ＝ (実現金 − レジ開始金) − あるべき現金
     // ★2026-08-13 二次販売は交通費もレジから抜かれているので、想定額から引いて突き合わせる
     //   （引かないと必ず「交通費のぶん足りない」と出る）。
-    const fee  = (ccIs2nd && ccTransport !== '') ? (parseInt(ccTransport, 10) || 0) : 0;
+    const fee  = (ccIs2nd && ccTransport !== '' ? (parseInt(ccTransport, 10) || 0) : 0)
+               + (ccIs2nd && ccExtraGig  !== '' ? (parseInt(ccExtraGig,  10) || 0) : 0);   // ★v8.19 追加ギャラも抜かれている
     const diff = (ccIsSpot && ccSpot)
       ? ((val - (Number(ccSpot.startCash) || 0)) - (Number(ccSpot.expectCash) || 0))
       : (val - (net - fee));
@@ -4874,6 +4900,7 @@ async function confirmCash(kind) {
           //   サーバー側は「想定額 = レジ最終金額 − ギャラ − 交通費」で突き合わせ、
           //   現金売上（実現金＋ギャラ＋交通費−開始金）にも足す。
           ...(ccIs2nd ? { transportFee: (ccTransport === '' ? 0 : (parseInt(ccTransport, 10) || 0)) } : {}),
+          ...((ccIs2nd && ccExtraGig !== '') ? { extraGig: parseInt(ccExtraGig, 10) || 0 } : {}),   // ★v8.19
         }),
         redirect: 'follow',
       });
@@ -10303,6 +10330,12 @@ function rtEscapeHtml(s) {
     <div class="cc-field" id="cc-field-transport" style="display:none;" onclick="ccFocus('transport')">
       <span class="cc-label">渡した交通費</span>
       <span class="cc-value" id="cc-val-transport">0</span>
+      <span class="cc-unit">円</span>
+    </div>
+    <!-- ★v8.19 2次の追加ギャラ（基本0。追加がある時だけ入れる） -->
+    <div class="cc-field" id="cc-field-extragig" style="display:none;" onclick="ccFocus('extraGig')">
+      <span class="cc-label">追加ギャラ</span>
+      <span class="cc-value" id="cc-val-extragig">0</span>
       <span class="cc-unit">円</span>
     </div>
     <div class="cash-modal-display" id="cash-modal-display">¥0</div>

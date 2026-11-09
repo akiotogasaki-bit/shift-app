@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>お江戸弁当 レジ</title>
+<!-- register v3.38 (2026-11-10) 【そのままのレジで2次販売へ切り替える】社長決定（11/2 A案・11/10 仕様）「持っている在庫をそのまま2次販売に移行する。レジの金額の確認は最後に1回」。★販売画面の「🛒 2次販売へ切り替え」で、その時点の販売数と計算した残りを1次の報告として送る（現金は数えない）。★同じ画面のまま値段だけ2次価格（海苔弁系・他社商品500円／お茶100円／それ以外300円）になり、弁当の種類つきで打てる。★売る場所は「その場（拠点ID＋_2 の2次専用ID）」か移る先の二次販売拠点を切り替え時に選ぶ。★締めは最後の1回だけ。1次のギャラはこの締めで確定してメインGASが1次の行へ書き直す。2次のギャラは基本0（追加はドライバーが回収時に入力）。今の二次販売レジ（?mode=2nd）はそのまま併用。要: メインGAS switchTo2nd。 -->
 <!-- register v3.37 (2026-10-26) 【普通のレジ⇔二次販売レジの入口】社長確認「調理との兼業スタッフ・社員は2次販売レジが開けないのかな？」＝社員用メニューと兼任の調理面に二次販売ボタンが無い（社長決定B）。★拠点選択画面の下に「🛒 二次販売のレジはこちら」（二次販売レジでは「← 普通のレジに戻る」）。リッチメニューと同じ LIFF URL（?mode=2nd）を開き直すだけ＝保存キーも別なので途中データを壊さない。★締めた後に普通のレジを開くと「報告を修正しますか？」→キャンセルで自動復帰して販売画面に戻り、入口まで行けない。→ キャンセルの後に「二次販売のレジを開きますか？」を出す。GAS変更なし。 -->
 <!-- register v3.36 (2026-10-21) 【シフトの担当拠点を最初から選んでおき、違う拠点を選んだら確認を出す】10/20 に販売員が担当と違う拠点に入って混乱した件（社長決定A）。v3.35 の確認は「今日すでに別の拠点を開始している人」にしか出ず、**その日最初に違う拠点を選ぶ間違いは素通り**していた。★getMaster が今日のシフト（`todayShift`＝拠点ID→販売員名）を返すので、スタッフ設定の名前（空白を無視）と突き合わせて担当拠点を出す。拠点の一覧で担当拠点を最初から選んでおき、名前に「（シフトの担当）」を付け、下に「📅 今日のシフト：◯◯」と出す。担当以外を選ぶと「シフトでは◯◯の担当です。本当に△△で売りますか？」と確認（キャンセルで選び直し）。ここでOKした拠点には v3.35 の確認を重ねて出さない。★シフトに名前が無い人・シフト表が無い日・スポット名乗り・二次販売レジ（`?mode=2nd`）は何も変わらない。古いGAS（todayShift が無い）でも何も起きないだけ。要: メインGAS 2026-10-21（getMasterData の todayShift）。 -->
 <!-- register v3.35 (2026-10-20) 【別の拠点への引き継ぎに確認を出す】10/20 神保町の販売員が11:11に神保町を開始したあと、開き直した時に**すでに別の人が開始していた神谷町**を選んで引き継ぎで入り、11:22〜11:48の売上15個が神谷町に記録された（実況の神保町が0。神保町と神谷町は名前が似ている）。社長決定A。★**レジ画面の拠点名をタップすると拠点を選び直せる**（同日・社長「神保町に入り直せない」）。それまでは同じ人がアプリを開き直すと保存中の拠点（神谷町）へ確認なしで戻り、拠点を変える手段が1つも無かった。**「売上ごと移す」を選ぶと、今日この人が元の拠点で打った売上・取消をサーバー側で新しい拠点へ付け替え（メインGAS moveMySales）、Firebase の実況も元の拠点を0・新しい拠点に累計を置き直す**＝端末の累計とサーバーが揃い、締めも新しい拠点で出る。「残す」は交代などで元の拠点の売上をそのまま残し、端末を空にして選択へ戻る。神保町のように自分が開始済みの拠点を選べば「そのまま使う」で納品数と開始金が戻る。★**今日この端末で別の拠点を開始している人**が、他の人の開始済みの拠点に引き継ぎで入ろうとした時だけ「あなたは今日 ◯◯ でレジを開始しています。本当に △△ で売りますか？」と確認を出す。キャンセルで拠点の選択に戻る。★今日開始した拠点は `oedo_started_today`（日付・userId つき）に開始報告の時点で残す。あわせて保存中のレジ状態（自分が開始済みの拠点）も見る＝この版を入れる前に開始していた人にも効く。★普通の交代（今日まだどこも開始していない人の引き継ぎ）と、2拠点目を自分で開始する時は何も変わらない。GAS変更なし。 -->
@@ -1222,6 +1223,9 @@ html, body { overscroll-behavior-y: contain; }
        押されるまで消えない（社長選択の逃げ道＝締めでも引き留める）。 -->
   <div id="handover-banner" style="display:none;"></div>
 
+  <!-- ★v3.38 2次販売への切り替え（切り替えた後は「2次販売中」の表示になる） -->
+  <div id="sw2nd-bar" style="display:none;"></div>
+
   <!-- カテゴリータブ -->
   <div class="cat-tab-bar" id="cat-tab-bar"></div>
 
@@ -1666,6 +1670,21 @@ html, body { overscroll-behavior-y: contain; }
   </div>
 </div>
 
+<!-- ★v3.38 2次販売への切り替え -->
+<div class="modal-overlay" id="sw2nd-modal" onclick="if(event.target===this)closeSw2ndModal()">
+  <div class="modal-sheet" data-swipe-close="closeSw2ndModal">
+    <button class="modal-close-x" onclick="closeSw2ndModal()" aria-label="閉じる">✕</button>
+    <div class="modal-handle"></div>
+    <div class="modal-title" style="padding-right:48px;">🛒 2次販売へ切り替え</div>
+    <div style="color:rgba(255,255,255,.65);font-size:12px;line-height:1.6;margin-bottom:10px;">今の販売数と残りを1次の結果として送ります。現金は最後の締めで1回だけ数えます。</div>
+    <div style="font-weight:700;margin-bottom:6px;">どこで売りますか？</div>
+    <div id="sw2nd-places"></div>
+    <div style="font-weight:700;margin:12px 0 6px;">2次販売に回す数（計算）</div>
+    <div id="sw2nd-stock" style="font-size:13px;line-height:1.7;max-height:30vh;overflow-y:auto;"></div>
+    <button class="modal-confirm-btn" id="sw2nd-ok" onclick="confirmSw2nd_()" style="margin-top:14px;">この内容で切り替える</button>
+  </div>
+</div>
+
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
@@ -1703,6 +1722,19 @@ const SECOND_TAG    = '二次販売';   // 拠点マスタ「エリア」／単�
 const STATE_KEY     = IS_2ND ? 'oedo_register_state_2nd' : 'oedo_register_state';
 function is2ndLoc_(l)  { return String((l && l.area)     || '').trim() === SECOND_TAG; }
 function is2ndProd_(p) { return String((p && p.category) || '').trim() === SECOND_TAG; }
+
+/* ★v3.38 そのままのレジで2次販売へ切り替える（2026-11-10 社長決定）。
+   切り替えた後は「拠点だけ2次の拠点に替わった普通のレジ」として動く＝販売・在庫・締めの作りはそのまま。
+   state.sw2nd が入っている間だけ、値段・出す商品・ギャラの計算が変わる。 */
+function isSwitched_() { return !!state.sw2nd; }
+function sw2ndPrice_(p) {
+  if (String(p.name || '').indexOf('お茶') >= 0) return 100;
+  const c = String(p.category || '').trim();
+  return (c === '海苔弁系' || c === '他社商品') ? 500 : 300;
+}
+function applySw2ndPrices_() {
+  [state.allProducts, state.products].forEach(list => (list || []).forEach(p => { p.price = sw2ndPrice_(p); }));
+}
 
 // ★2026-08-13 レジの拠点一覧に出してはいけない拠点（エリア列で見分ける）。
 //   車載 … 8/13 に足した仮想拠点（芝エリアの巡回補充テスト用）。**レジは置いていない**のに
@@ -1903,6 +1935,11 @@ async function init() {
       console.log('[報告] 別レジの拠点の報告なので無視:', todayReport.locationName);
       todayReport = null;
     }
+    // ★v3.38 切り替えた後に開き直すと1次の報告が見つかる。2次の販売中なのでそのまま続ける
+    try {
+      const _sv = JSON.parse(localStorage.getItem(STATE_KEY) || 'null');
+      if (todayReport && _sv && _sv.sw2nd && _sv.sw2nd.fromId === todayReport.locationId) todayReport = null;
+    } catch (e) {}
     if (todayReport) {
       const msg = `本日すでに報告が提出されています。\n\n拠点：${todayReport.locationName}\n販売数：${todayReport.soldCount}個\n完売率：${todayReport.sellRate}%\n\n報告内容を修正しますか？`;
       if (confirm(msg)) {
@@ -2096,6 +2133,7 @@ function applyMasterToState(data) {
   //   あわせて、レジを置いていない仮想拠点（車載）は通常レジからも外す。
   state.locations     = (data.locations || []).filter(l =>
     IS_2ND ? is2ndLoc_(l) : (!is2ndLoc_(l) && !isRegisterHiddenLoc_(l)));
+  state.secondLocs    = (data.locations || []).filter(is2ndLoc_);   // ★v3.38 切り替えの移る先
   state.incentiveUnit = data.incentiveUnit || 10;
   state.incentiveRate = data.incentiveRate || 100;
   state.couponDefault = data.couponDefault || 300;
@@ -3205,7 +3243,9 @@ function getProductsForActiveTab() {
      ⚠ ここだけで絞る。`state.products` 自体は削らない
        （削ると納品数入力＝納品確認からも消え、納品数を打つ手段が無くなる）。 */
   const npOff = noPlanHiddenIds_();
-  const src = npOff.size ? state.products.filter(p => !npOff.has(String(p.id))) : state.products;
+  let src = npOff.size ? state.products.filter(p => !npOff.has(String(p.id))) : state.products;
+  // ★v3.38 2次販売中は持っている商品とお茶だけ
+  if (isSwitched_()) src = src.filter(p => Number(state.deliveryCount[p.id]) > 0 || String(p.name || '').indexOf('お茶') >= 0);
   const cat = state.activeCategory;
   if (!cat) return src;
   // 該当カテゴリーの商品 + 「全」のお茶を末尾に
@@ -3266,6 +3306,7 @@ function renderProducts() {
     `;
   }).join('');
   renderOffMenuBar();   // ★2026-08-18 v3.26 献立で隠している数と「出す」ボタン
+  renderSw2ndBar_();    // ★v3.38
 }
 
 function toggleSoldOut(productId) {
@@ -3539,7 +3580,7 @@ let hoLastFetch = 0;
 
 async function loadHandover_(force) {
   try {
-    if (IS_2ND) return;                                  // 二次販売レジは対象外
+    if (IS_2ND || isSwitched_()) return;                 // 二次販売レジ・切り替え後は対象外
     const locId = state.location && state.location.id;
     if (!locId) return;
     const now = Date.now();
@@ -4105,7 +4146,7 @@ async function checkTodayReport() {
 }
 
 function loadEditFromReport(report) {
-  const loc = state.locations.find(l => l.id === report.locationId);
+  const loc = state.locations.find(l => l.id === report.locationId) || (state.sw2nd && state.sw2nd.loc);   // ★v3.38
   if (!loc) { showScreen('location'); return; }
   state.location      = loc;
   state.baseGigSalary = loc.baseGigSalary || 0;
@@ -4182,6 +4223,7 @@ function saveState() {
       residualDetail:  state.residualDetail  || {},
       residualTouched: state.residualTouched || {},
       ext2nd:          state.ext2nd          || {},   // ★v3.34 二次販売の他社弁当の残り
+      sw2nd:           state.sw2nd           || null, // ★v3.38
       makanaiDetail:   state.makanaiDetail   || {},
       moveAdj:         state.moveAdj         || {},
       movePending:     state.movePending     || {},
@@ -4199,8 +4241,10 @@ function restoreState() {
     const savedDate = new Date(save.savedAt).toLocaleDateString('ja-JP');
     const today     = new Date().toLocaleDateString('ja-JP');
     if (savedDate !== today) { localStorage.removeItem(STATE_KEY); return null; }
-    const loc = state.locations.find(l => l.id === save.locationId);
+    // ★v3.38 切り替え後の拠点は通常レジの拠点一覧に無い
+    const loc = state.locations.find(l => l.id === save.locationId) || (save.sw2nd && save.sw2nd.loc);
     if (!loc) return null;
+    state.sw2nd          = save.sw2nd || null;
     state.location       = loc;
     state.baseGigSalary  = save.baseGigSalary;
     state.registerStart  = save.registerStart;
@@ -4233,6 +4277,7 @@ function restoreState() {
     // ★2026-08-18 v3.26 復元した納品数・販売数を見てから絞り込みをやり直す。
     //   「実際に届いた／既に売った商品」は献立に無くても必ず出す（offMenuProductIds_ が判定）。
     try { filterStoppedProducts(); } catch (e) {}
+    if (state.sw2nd) applySw2ndPrices_();   // ★v3.38
     return {
       savedUserId:   save.userId || '',
       savedUserName: save.userName || '',
@@ -4246,6 +4291,7 @@ function clearSavedState() { localStorage.removeItem(STATE_KEY); }
    10/20 神保町の人が神谷町に入ってしまい、開き直しても保存中の神谷町へ戻るだけで抜けられなかった。
    打った売上はサーバー側で今の拠点に残る（取り消すならこの前に履歴から）。端末の売上・納品数を空にして選択へ戻る。 */
 function switchLocation_() {
+  if (isSwitched_()) { showToast('2次販売中は拠点を選び直せません'); return; }   // ★v3.38
   const cur = (state.location && state.location.name) || '';
   if (!confirm(`拠点を選び直しますか？\n\nいまの拠点：${cur}\n\nOK : 拠点の選び直しへ\nキャンセル : このまま続ける`)) return;
   if ((state.cart || []).length && !confirm('カートに入っている商品は消えます。よろしいですか？')) return;
@@ -4414,6 +4460,164 @@ function fbLogin_() {
   setTimeout(tick, 3000);
 })();
 
+// ═══════════════════════════════════════════════════════
+// ★v3.38 そのままのレジで2次販売へ切り替える
+// ═══════════════════════════════════════════════════════
+let sw2ndPick = null;      // {mode:'here'} または {mode:'move', id}
+let sw2ndBusy = false;
+
+function renderSw2ndBar_() {
+  const bar = document.getElementById('sw2nd-bar');
+  if (!bar) return;
+  if (IS_2ND) { bar.style.display = 'none'; return; }
+  bar.style.display = 'block';
+  bar.innerHTML = isSwitched_()
+    ? `<div style="background:#E67E22;color:#FFF;font-weight:700;font-size:13px;text-align:center;padding:7px;">🛒 2次販売中（1次：${state.sw2nd.fromName}）</div>`
+    : `<button onclick="openSw2ndModal()" style="width:100%;border:none;background:#E67E22;color:#FFF;font-weight:700;font-size:13px;padding:7px;cursor:pointer;">🛒 2次販売へ切り替え</button>`;
+}
+
+// 残りの計算（納品＋移動−販売−賄い）。お茶も持っていくので含める
+function sw2ndStock_() {
+  const out = {};
+  (state.products || []).forEach(p => {
+    const n = rcExpectedResidualRaw_(p.id);
+    if (n > 0) out[p.id] = n;
+  });
+  return out;
+}
+
+async function openSw2ndModal() {
+  if (IS_2ND || isSwitched_()) return;
+  if ((state.cart || []).length) { showToast('カートを空にしてから切り替えてください'); return; }
+  if (!state.startReported) { showToast('スタート報告が送れていません。少し待ってからお試しください'); return; }
+  if (hoPending.length) { enterFinalScreen(); return; }   // 受け取り待ちの案内はここに任せる
+  sw2ndPick = { mode: 'here' };
+  document.getElementById('sw2nd-stock').textContent = '読み込み中…';
+  renderSw2ndPlaces_();
+  document.getElementById('sw2nd-modal').classList.add('show');
+  await refreshMoveAdj_();
+  renderSw2ndStock_();
+}
+function closeSw2ndModal() { document.getElementById('sw2nd-modal').classList.remove('show'); }
+
+function renderSw2ndPlaces_() {
+  const row = (label, on, click) =>
+    `<button onclick="${click}" style="display:block;width:100%;text-align:left;margin-bottom:6px;padding:10px 12px;border-radius:8px;border:2px solid ${on ? '#E67E22' : '#444'};background:${on ? 'rgba(230,126,34,.2)' : 'transparent'};color:#FFF;font-size:14px;font-weight:700;cursor:pointer;">${on ? '●' : '○'} ${label}</button>`;
+  document.getElementById('sw2nd-places').innerHTML =
+    row(`その場で続ける（${state.location.name}）`, sw2ndPick.mode === 'here', `pickSw2nd_('here','')`)
+    + (state.secondLocs || []).map(l => row(`${l.name} へ移る`, sw2ndPick.id === l.id, `pickSw2nd_('move','${l.id}')`)).join('');
+}
+function pickSw2nd_(mode, id) { sw2ndPick = mode === 'here' ? { mode } : { mode, id }; renderSw2ndPlaces_(); }
+
+function renderSw2ndStock_() {
+  const stock = sw2ndStock_();
+  const items = (state.products || []).filter(p => stock[p.id]);
+  const box = document.getElementById('sw2nd-stock');
+  box.innerHTML = items.length
+    ? items.map(p => `${p.name}　<b>${stock[p.id]}個</b>（2次 ¥${sw2ndPrice_(p)}）`).join('<br>')
+    : '残りがありません。';
+}
+
+// 1次のギャラ（締めの計算と同じ式。基本ギャラと販売数は切り替えた時点のもの）
+function sw2ndPay1_(f, makanaiBonus, latePenalty) {
+  const role = state.staffRole || '販売員';
+  if (state.isSpot || role === '社員' || role === 'ドライバー') return { incentive: 0, total: 0 };
+  if (state.fixedSalary > 0) return { incentive: 0, total: state.fixedSalary + makanaiBonus - latePenalty };
+  const incentive = f.nonTeaSold >= 20 ? Math.floor(f.nonTeaSold / state.incentiveUnit) * state.incentiveRate : 0;
+  return { incentive, total: f.baseGig + incentive + makanaiBonus - latePenalty };
+}
+
+async function confirmSw2nd_() {
+  if (sw2ndBusy) return;
+  const stock = sw2ndStock_();
+  if (!Object.keys(stock).length) { showToast('残りがないので切り替えられません'); return; }
+  const from = state.location;
+  let to;
+  if (sw2ndPick.mode === 'here') {
+    to = { id: from.id + '_2', name: from.name + '（2次）', area: SECOND_TAG, baseGigSalary: 0 };
+  } else {
+    const l = (state.secondLocs || []).find(x => x.id === sw2ndPick.id);
+    if (!l) return;
+    to = Object.assign({}, l, { baseGigSalary: 0 });
+  }
+  const refund  = Math.max(0, (state.paypayReceivedTotal || 0) - state.paypayAmount);
+  const start2  = state.registerStart + state.cashSales - refund;
+  const nonTea  = state.soldCount - (state.teaSoldCount || 0);
+  const firstF  = { baseGig: state.baseGigSalary, nonTeaSold: nonTea };
+  const mkBonus = state['makanaiあり'] ? 0 : 300;
+  const pay     = sw2ndPay1_(firstF, mkBonus, 0);
+  const residualDetail = {};
+  rcBentoProducts().forEach(p => { if (stock[p.id]) residualDetail[p.id] = stock[p.id]; });
+  const payload = {
+    action: 'switchTo2nd',
+    first: {
+      switch1st: true,
+      switchTo: { id: to.id, name: to.name, mode: sw2ndPick.mode },
+      userId: state.userId, userName: state.userName,
+      locationId: from.id, locationName: from.name,
+      date: new Date().toLocaleDateString('ja-JP'),
+      deliveryCount: state.deliveryCount,
+      registerStart: state.registerStart, registerEnd: start2,
+      cashSales: state.cashSales, paypayAmount: state.paypayAmount,
+      paypayReceivedTotal: state.paypayReceivedTotal || 0, cashRefundFromPayPay: refund,
+      paypayCount: state.paypayCount, soldCount: state.soldCount, teaSoldCount: state.teaSoldCount || 0,
+      soldOutMap: state.soldOutMap, soldOutTimesJson: JSON.stringify(state.soldOutMap || {}),
+      productSales: state.productSales, baseGigSalary: state.baseGigSalary,
+      diffComment: '', memo: '',
+      makanai: state['makanaiあり'] ? '有り' : '無し', lateMinutes: 0, latePenalty: 0,
+      totalSalary: pay.total, incentive: pay.incentive, makanaiBonus: mkBonus,
+      okibenGigPaid: [],
+      couponTotal: (state.history || []).filter(h => h.status === 'active').reduce((s, h) => s + (Number(h.couponAmount) || 0), 0),
+      residual: {
+        residualCount: Object.keys(residualDetail).reduce((s, k) => s + residualDetail[k], 0),
+        residualDetail,
+        makanaiCount: 0, makanaiDetail: {},
+      },
+    },
+    second: {
+      action: 'submitStart', userId: state.userId, userName: state.userName,
+      locationId: to.id, locationName: to.name,
+      registerStart: start2, deliveryCount: stock, timestamp: new Date().toISOString(),
+    },
+  };
+  sw2ndBusy = true;
+  const okBtn = document.getElementById('sw2nd-ok');
+  okBtn.disabled = true; okBtn.textContent = '切り替え中…';
+  const r = await postJson(payload);
+  sw2ndBusy = false;
+  okBtn.disabled = false; okBtn.textContent = 'この内容で切り替える';
+  // 届いた確認が取れない時は切り替えない（もう一度押しても二重にならない）
+  if (!r.ok || !r.data || r.data.success !== true) {
+    showToast((r.data && r.data.error) || '切り替えを送れませんでした。もう一度お試しください', 5000);
+    return;
+  }
+  shadowSend_(payload.second);
+  state.sw2nd = { fromId: from.id, fromName: from.name, mode: sw2ndPick.mode, loc: to, first: firstF };
+  state.location      = to;
+  state.baseGigSalary = 0;
+  state.registerStart = start2;
+  state.deliveryCount = stock;
+  state.cart = [];
+  state.cashSales = 0; state.paypayCount = 0; state.paypayAmount = 0; state.paypayReceivedTotal = 0;
+  state.soldCount = 0; state.teaSoldCount = 0; state.productSales = {}; state.soldOutMap = {}; state.history = [];
+  state.residualDetail = {}; state.residualTouched = {}; state.makanaiDetail = {};
+  state.moveAdj = {}; state.movePending = {};
+  state.activeCategory = null;
+  hoPending = [];
+  try { renderHandoverBanner_(); } catch (e) {}
+  applySw2ndPrices_();
+  ['start-location-name', 'reg-location-name', 'final-location-name'].forEach(id => {
+    document.getElementById(id).textContent = to.name;
+  });
+  document.getElementById('reg-sales-count').textContent = '0個';
+  saveState();
+  renderCart();
+  renderCategoryTabs();
+  renderProducts();
+  closeSw2ndModal();
+  showToast('🛒 2次販売に切り替えました', 3000);
+}
+
 function sendIntermediateSale(method, amount, items, paypayReceived) {
   const payload = {
     action:       'submitIntermediateSale',
@@ -4519,7 +4723,12 @@ async function calcFinal() {
   const role         = state.staffRole || '販売員';
   let incentive      = 0;
   let totalSalary    = 0;
-  if (IS_2ND) {
+  if (isSwitched_()) {
+    // ★v3.38 切り替え後の締め＝1次のギャラをここで確定する（賄い・遅刻はこの画面で入る）。2次のギャラは基本0。
+    const _p1 = sw2ndPay1_(state.sw2nd.first, makanaiBonus, latePenalty);
+    incentive   = _p1.incentive;
+    totalSalary = _p1.total;
+  } else if (IS_2ND) {
     // ★2026-08-13 二次販売のギャラ（社長決定「2次販売は1500円のギャラ。別途交通費も渡している」）。
     //   金額は拠点マスタの「基本ギャラ」に入れた1500円をそのまま使う＝単価が変わってもここは直さない。
     //   インセンティブ（完売率連動）は付けない。交通費はドライバーが回収時に入力する（このアプリでは扱わない）。
@@ -4562,7 +4771,8 @@ async function calcFinal() {
   document.getElementById('res-incentive').textContent = IS_2ND
     ? '¥0（二次販売はギャラのみ）'
     : `¥${incentive.toLocaleString()}（${nonTeaSold}個）`;
-  document.getElementById('res-base').textContent     = `¥${state.baseGigSalary.toLocaleString()}`;
+  document.getElementById('res-base').textContent     = `¥${(isSwitched_() ? state.sw2nd.first.baseGig : state.baseGigSalary).toLocaleString()}`;
+  if (isSwitched_()) document.getElementById('res-incentive').textContent = `¥${incentive.toLocaleString()}（1次 ${state.sw2nd.first.nonTeaSold}個）`;
   document.getElementById('res-total').textContent    = `¥${totalSalary.toLocaleString()}`;
 
   // ★2026-08-06 置き弁（アスエネ等）のインセンティブを別枠で表示。
@@ -4711,7 +4921,8 @@ function toggleMakanai() {
 
 // 残数・賄いの対象はお弁当のみ（お茶は数えない＝サーバの理論残と数え方を揃える）
 function rcBentoProducts() {
-  return (state.products || []).filter(p => String(p.name || '').indexOf('お茶') === -1);
+  const list = (state.products || []).filter(p => String(p.name || '').indexOf('お茶') === -1);
+  return isSwitched_() ? list.filter(p => Number(state.deliveryCount[p.id]) > 0) : list;   // ★v3.38
 }
 
 // ★2026-08-03 商品ごとの計算上の残り数（在庫画面の「残」と同じ式。賄いぶんも引く）
@@ -4790,6 +5001,13 @@ function ext2ndMissing_() {
   return (state.extProducts || []).filter(p => v[p.id] === undefined || v[p.id] === '').map(p => p.displayName || p.name);
 }
 function ext2ndPayload_() {
+  if (isSwitched_()) {   // ★v3.38 切り替え後は残数の入力がそのまま他社弁当の残り
+    const list = (state.extProducts || []).filter(p => Number(state.deliveryCount[p.id]) > 0);
+    if (!list.length) return null;
+    const o2 = {};
+    list.forEach(p => { o2[p.id] = Number((state.residualDetail || {})[p.id]) || 0; });
+    return o2;
+  }
   if (!IS_2ND || !(state.extProducts || []).length) return null;
   const o = {};
   (state.extProducts || []).forEach(p => { o[p.id] = Number((state.ext2nd || {})[p.id]) || 0; });
@@ -5159,6 +5377,16 @@ async function submitFinal() {
       makanaiDetail:  state['makanaiあり'] ? (state.makanaiDetail || {}) : {},
     },
   };
+  // ★v3.38 切り替え後の締め。ギャラは1次の行に載せる。1次のギャラは抜いた扱いで2次の行の金額を揃える
+  //   （実現金＋ギャラ−開始金＝現金売上 が1次・2次それぞれの行で成り立つように）
+  if (isSwitched_()) {
+    const _pay1 = state.calcTotalSalary;
+    payload.registerStart -= _pay1;
+    payload.registerEnd   -= _pay1;
+    payload.sw2nd = { fromId: state.sw2nd.fromId, mode: state.sw2nd.mode, totalSalary: _pay1,
+                      incentive: state.calcIncentive, makanaiBonus: state.calcMakanaiBonus, latePenalty: state.calcLatePenalty };
+    payload.baseGigSalary = 0; payload.totalSalary = 0; payload.incentive = 0; payload.makanaiBonus = 0; payload.latePenalty = 0;
+  }
   // ★2026-07-31 報告の送信を待ってから残数を送る。
   //   submitClosingResidual は報告ログの販売数を読むので、書かれる前に送ると理論残が狂う。
   fetch(state.GAS_URL, { method: 'POST', body: JSON.stringify(payload), redirect: 'follow' })
