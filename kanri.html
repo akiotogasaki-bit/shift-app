@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- kanri.html v4.21 (2026-11-11) 【配分調整の「決定」を Firebase 経由に】社長「配分調整をして１から2の計算に進むときに計算できませんでした。って出る」→「根本的な解決をしたい」→ C を先に → A。★原因＝決定（GAS bmDecide）は夜 69〜127秒かかり、サーバーは計算し終えているのに画面だけが結果を受け取れず失敗表示＋押し直しで計算が重なっていた（11/11 0時台の4回とも doGet遅延ログでは完了）。★決定ボタンは Firebase の decide に受付だけ頼み、4秒おきに結果を聞く。GAS を叩いて粘るのは Firebase（JSON が返らない時だけ最大9分まで叩き直す・同じ日の重ね押しは1本に寄せる・失敗の中身を残す）。ボタンに「計算中… ◯秒」。Firebase に届かない時・90秒たっても始まらない時だけ従来どおり /exec を直接叩く。確認ダイアログ・シフトの一覧・トーストは変えていない。GAS変更なし（Firebase 関数 decide／decideRun を追加）。 -->
 <!-- kanri.html v4.20 (2026-11-06) 【🚚 エリア担当ドライバー】社長決定A案「エリアの内容の変更はなくて、担当エリアが変わることがある。エリアの色は固定でエリア担当ドライバーだけまとめて変更できるようにしたい」。★⚙️ 設定の最上部に「🚚 エリア担当ドライバー」。エリアごとにドライバーを選んで保存（doPost `saveAreaDrivers`）すると、そのエリアの全拠点＋車載の主担当（拠点マスタ J・K列）がまとめて替わる。読み込みは `getAreaDrivers`。★色は拠点マスタ エリア列の塗り（2026-11-06 に5エリアとも塗って固定）で、担当を替えても動かない。その日だけの代理・応援は従来どおり担当例外。要メインGAS 2026-11-06 以降。 -->
 <!-- kanri.html v4.19 (2026-11-01) 【配分調整を速く】社長決定 C。メインGASが配分表のキャッシュを3分→15分、進捗（bmstat）を10分持つようにしたので、🔄 再取得だけ &fresh=1 を付けてサーバーにも作り直させる（シフトの割り当て変更など、版が上がらない変化を即反映するため）。保存・決定・取込の後の取り直しはサーバー側で版が上がるので付けない。 -->
 <!-- kanri.html v4.18 (2026-10-29) 【📦 配達ラベル・🧾 帳票の印刷】★追記：社長「日付の指定ができた方がいい」「必要な帳票もここで」「必要な枚数も」「表裏になってる」→ ボタンの横に専用の配達日（初めは明日）。押すと先に「ラベル用紙◯枚」「請求書◯・納品書◯ → 普通紙◯枚」を出して確認。帳票は print-server.py の POST /docs が delivery-docs.py で freee の中身を描く（PDFの口が無いため。番号・金額は freee と同じ）。どちらも片面。　【元の内容】社長「もっと簡単に納品管理のアプリに印刷ボタン作れる？」。★拠点配分タブに茶色のボタン。押すと Mac の印刷係（print-server.py の新しい窓口 POST /labels）が、選んでいる日の配達分を押した時点の注文で作り直し（delivery-label.py と同じ中身）、拡大縮小なしで lp。この Mac からのみ。GAS変更なし。 -->
@@ -6433,6 +6434,60 @@ function bmUpdateDecideBtn() {
   b.style.display = (bmViewMode === 'shelf') ? 'none' : '';
   b.classList.toggle('bm-need', !!bmPendingDecide[bmCurrentDate]);
 }
+/* 🔴 ★2026-11-11 v4.21【社長決定 C】**決定は Firebase に頼んで、結果を聞きに行く。**
+   【何が起きていたか】決定（GAS bmDecide）は夜 69〜127秒かかる。画面が /exec を直接待つと、
+     **サーバーは計算し終えているのに画面だけ「計算できませんでした」**になり、押し直すたびに同じ計算が重なっていた
+     （2026-11-11 0時台の4回とも doGet遅延ログでは「完了はした」）。
+   【どうしたか】Firebase の `decide` に受付だけ頼む → 4秒おきに「終わった？」を聞く。GAS を叩いて粘るのは Firebase 側
+     （JSON が返らない時だけ最大9分まで叩き直す・同じ日の重ね押しは同じ受付番号に寄せる）。
+   ⚠ **Firebase に届かない時だけ、今までどおり /exec を直接叩く**（逃げ道）。受付から90秒たっても始まらない時も同じ。
+   ⚠ 計算の中身は GAS のまま。→ 15_ソース/firebase/functions/decide.js */
+const FB_DECIDE_URL = 'https://asia-northeast1-oedo-bento.cloudfunctions.net/decide';
+async function bmDecideDirect_(ds, keep) {
+  const res = await fetch(GAS_URL + '?action=bmDecide&date=' + encodeURIComponent(ds)
+                          + (keep.length ? '&keep=' + encodeURIComponent(keep.join(',')) : '')
+                          + '&_cb=' + Date.now());
+  const txt = await res.text();
+  try { return JSON.parse(txt); }
+  catch (e) {
+    throw new Error('サーバーの返事が読めませんでした（HTTP ' + res.status + '）。\n'
+                  + 'サーバーでは計算が終わっていることがあります。1〜2分待って 🔄 再取得で②を確かめてください。');
+  }
+}
+async function bmDecideCall_(ds, keep, btn) {
+  let jobId = null;
+  try {
+    // text/plain＝事前確認（CORS の preflight）なしで1往復で届く。関数側は文字列を JSON として読む
+    const sr = await fetch(FB_DECIDE_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' },
+                                            body: JSON.stringify({ mode: 'submit', date: ds, keep: keep }) });
+    const sj = await sr.json();
+    if (sj && sj.ok && sj.jobId) jobId = sj.jobId;
+  } catch (e) { console.warn('decide submit', e); }
+  if (!jobId) return bmDecideDirect_(ds, keep);
+  const t0 = Date.now();
+  let fails = 0;
+  while (Date.now() - t0 < 11 * 60 * 1000) {
+    await new Promise(function (ok) { setTimeout(ok, 4000); });
+    let st = null;
+    try {
+      st = await (await fetch(FB_DECIDE_URL + '?job=' + encodeURIComponent(jobId) + '&_cb=' + Date.now())).json();
+      fails = 0;
+    } catch (e) { fails++; }
+    const sec = Math.round((Date.now() - t0) / 1000);
+    if (btn) btn.textContent = '計算中… ' + sec + '秒' + (st && st.attempts > 1 ? '（' + st.attempts + '回目）' : '');
+    if (!st || !st.ok) {
+      if (fails >= 8) throw new Error('計算の様子を聞けなくなりました。サーバーでは計算が続いていることがあります。\n2〜3分待って 🔄 再取得で②を確かめてください。');
+      continue;
+    }
+    if (st.status === 'done') return st.result || { ok: true };
+    if (st.status === 'failed') {
+      if (st.result && st.result.error) return st.result;
+      return { ok: false, error: (st.error || '不明なエラー') + (st.lastRaw ? '\n（最後の返事: ' + st.lastRaw + '）' : '') };
+    }
+    if (st.status === 'queued' && sec > 90) return bmDecideDirect_(ds, keep);   // Firebase 側が動き出さない＝従来の道へ
+  }
+  throw new Error('11分たっても終わりませんでした。🔄 再取得で②を確かめてください。');
+}
 async function bmDecide() {
   if (!bmCurrentDate) return;
   /* 🔴 ★2026-09-16 v3.88 **未保存のまま「決定」を押させない。**
@@ -6462,10 +6517,7 @@ async function bmDecide() {
   const label = b ? b.textContent : '';
   if (b) { b.disabled = true; b.textContent = '計算中…'; }
   try {
-    const res = await fetch(GAS_URL + '?action=bmDecide&date=' + encodeURIComponent(bmCurrentDate)
-                            + (_pick.keep.length ? '&keep=' + encodeURIComponent(_pick.keep.join(',')) : '')
-                            + '&_cb=' + Date.now());
-    const r = await res.json();
+    const r = await bmDecideCall_(bmCurrentDate, _pick.keep, b);
     if (!r || !r.ok) { alert('計算できませんでした: ' + ((r && r.error) || '不明なエラー')); return; }
     bmSetPendingDecide(bmCurrentDate, false);
     bmStatCache[bmCurrentDate] = null;          // 進捗バッジを取り直す
