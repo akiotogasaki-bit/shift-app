@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>お江戸弁当 レジ</title>
+<!-- register v3.39 (2026-11-12) 【締めの直前に受け取り待ちを必ず取り直す】11/11 芝パークが芝パーク②の残り26個を受け取らずに締められ、残数が44個ずれた。締めボタン（enterFinalScreen）は販売画面を開いた時に取った受け取り待ち（hoPending）を見るだけで、②が後から締めても取り直していなかった（GASは正しく pending を返していた）。★締め・2次販売への切り替えの直前に getPendingHandover を必ず取り直してから判定する（hoGateBeforeClose_・25秒は時間で粘る・_cb付き）。★取れなかったら締めを止めて「もう一度押してください」。2回続けて取れない時だけ「受け取っていなければ OK で締める」を選べる（/exec 停止で締めが永久にできなくなるのを避ける）。GAS変更なし。社長決定 11/12「Aだけ直す」。 -->
 <!-- register v3.38 (2026-11-10) 【そのままのレジで2次販売へ切り替える】社長決定（11/2 A案・11/10 仕様）「持っている在庫をそのまま2次販売に移行する。レジの金額の確認は最後に1回」。★販売画面の「🛒 2次販売へ切り替え」で、その時点の販売数と計算した残りを1次の報告として送る（現金は数えない）。★同じ画面のまま値段だけ2次価格（海苔弁系・他社商品500円／お茶100円／それ以外300円）になり、弁当の種類つきで打てる。★売る場所は「その場（拠点ID＋_2 の2次専用ID）」か移る先の二次販売拠点を切り替え時に選ぶ。★締めは最後の1回だけ。1次のギャラはこの締めで確定してメインGASが1次の行へ書き直す。2次のギャラは基本0（追加はドライバーが回収時に入力）。今の二次販売レジ（?mode=2nd）はそのまま併用。要: メインGAS switchTo2nd。 -->
 <!-- register v3.37 (2026-10-26) 【普通のレジ⇔二次販売レジの入口】社長確認「調理との兼業スタッフ・社員は2次販売レジが開けないのかな？」＝社員用メニューと兼任の調理面に二次販売ボタンが無い（社長決定B）。★拠点選択画面の下に「🛒 二次販売のレジはこちら」（二次販売レジでは「← 普通のレジに戻る」）。リッチメニューと同じ LIFF URL（?mode=2nd）を開き直すだけ＝保存キーも別なので途中データを壊さない。★締めた後に普通のレジを開くと「報告を修正しますか？」→キャンセルで自動復帰して販売画面に戻り、入口まで行けない。→ キャンセルの後に「二次販売のレジを開きますか？」を出す。GAS変更なし。 -->
 <!-- register v3.36 (2026-10-21) 【シフトの担当拠点を最初から選んでおき、違う拠点を選んだら確認を出す】10/20 に販売員が担当と違う拠点に入って混乱した件（社長決定A）。v3.35 の確認は「今日すでに別の拠点を開始している人」にしか出ず、**その日最初に違う拠点を選ぶ間違いは素通り**していた。★getMaster が今日のシフト（`todayShift`＝拠点ID→販売員名）を返すので、スタッフ設定の名前（空白を無視）と突き合わせて担当拠点を出す。拠点の一覧で担当拠点を最初から選んでおき、名前に「（シフトの担当）」を付け、下に「📅 今日のシフト：◯◯」と出す。担当以外を選ぶと「シフトでは◯◯の担当です。本当に△△で売りますか？」と確認（キャンセルで選び直し）。ここでOKした拠点には v3.35 の確認を重ねて出さない。★シフトに名前が無い人・シフト表が無い日・スポット名乗り・二次販売レジ（`?mode=2nd`）は何も変わらない。古いGAS（todayShift が無い）でも何も起きないだけ。要: メインGAS 2026-10-21（getMasterData の todayShift）。 -->
@@ -3578,23 +3579,60 @@ let hoVals      = {};      // {productId: 個数（文字列）}
 let hoBusy      = false;
 let hoLastFetch = 0;
 
+/* 戻り値＝true: 取れた（または対象外）／false: 取れなかった。★v3.39 締めの関所が使う */
 async function loadHandover_(force) {
   try {
-    if (IS_2ND || isSwitched_()) return;                 // 二次販売レジ・切り替え後は対象外
+    if (IS_2ND || isSwitched_()) return true;            // 二次販売レジ・切り替え後は対象外
     const locId = state.location && state.location.id;
-    if (!locId) return;
+    if (!locId) return true;
     const now = Date.now();
-    if (!force && (now - hoLastFetch) < 60000) return;    // 60秒スロットル
+    if (!force && (now - hoLastFetch) < 60000) return true;   // 60秒スロットル
     hoLastFetch = now;
     const url = `${state.GAS_URL}?action=getPendingHandover`
-              + `&date=${encodeURIComponent(menuToday_())}&loc=${encodeURIComponent(locId)}`;
-    const j = await (await fetch(url, { method: 'GET', redirect: 'follow' })).json();
-    if (!j || !j.ok) return;
+              + `&date=${encodeURIComponent(menuToday_())}&loc=${encodeURIComponent(locId)}`
+              + `&_cb=${Date.now()}`;                           // HTTPキャッシュに当てない
+    const j = await (await fetch(url, { method: 'GET', redirect: 'follow', cache: 'no-store' })).json();
+    if (!j || !j.ok) return false;
     hoPending = Array.isArray(j.pending) ? j.pending : [];
     renderHandoverBanner_();
+    return true;
   } catch (e) {
-    console.warn('拠点振替の取得に失敗:', e);   // 取れなくてもレジは止めない
+    console.warn('拠点振替の取得に失敗:', e);   // 販売中は止めない（締めの関所だけが止める）
+    return false;
   }
+}
+
+/* ★2026-11-12 v3.39【締めの直前に受け取り待ちを必ず取り直す】
+   11/11 芝パークが、芝パーク②の残り26個を受け取らないまま締められた。
+   原因＝締めボタンは手元の hoPending（販売画面を開いた時に取った結果）を見るだけで、取り直していなかった。
+   ②が締める前（12:39 より前）に販売画面を開き、そのまま売り続けると「受け取り待ち0件」のまま締めが通る。
+   GAS は正しく pending を返していた（11/12 に再現）。
+   → 締め・2次販売への切り替えの直前に、必ず取り直してから判定する。
+   取れなかった時は止める。/exec が混んでいる日に締めが永久にできなくならないよう、
+   2回続けて取れなかった時だけ「確認せずに締める」を選べる（社長決定 11/12「A だけ直す」）。 */
+let hoGateBusy = false, hoGateFails = 0;
+async function hoGateBeforeClose_() {
+  if (IS_2ND || isSwitched_()) return true;
+  if (hoGateBusy) return false;
+  hoGateBusy = true;
+  showToast('受け取りの確認中…', 2500);
+  let ok = false;
+  try {
+    const until = Date.now() + 25000;                 // 回数でなく時間で粘る（/exec の確率的な失敗対策）
+    while (!ok && Date.now() < until) {
+      ok = await loadHandover_(true);
+      if (!ok) await new Promise(r => setTimeout(r, 3000));
+    }
+  } finally { hoGateBusy = false; }
+  if (ok) { hoGateFails = 0; return true; }
+  hoGateFails++;
+  if (hoGateFails < 2) {
+    alert('受け取り（他の拠点から回ってくる弁当）の確認ができませんでした。\n\n電波を確かめて、もう一度「締め」を押してください。');
+    return false;
+  }
+  return confirm('受け取りの確認が2回続けてできませんでした。\n\n'
+    + '他の拠点から弁当を受け取っていない場合だけ、OK で締めに進んでください。\n'
+    + '受け取っている場合はキャンセルして、少し待ってからもう一度押してください。');
 }
 
 function renderHandoverBanner_() {
@@ -4491,6 +4529,9 @@ async function openSw2ndModal() {
   if ((state.cart || []).length) { showToast('カートを空にしてから切り替えてください'); return; }
   if (!state.startReported) { showToast('スタート報告が送れていません。少し待ってからお試しください'); return; }
   if (hoPending.length) { enterFinalScreen(); return; }   // 受け取り待ちの案内はここに任せる
+  // ★v3.39 手元の結果が古いことがあるので、切り替えの前にも取り直す（締めと同じ関所）
+  if (!(await hoGateBeforeClose_())) return;
+  if (hoPending.length) { enterFinalScreen(); return; }
   sw2ndPick = { mode: 'here' };
   document.getElementById('sw2nd-stock').textContent = '読み込み中…';
   renderSw2ndPlaces_();
@@ -5558,7 +5599,8 @@ function resumeForAdditionalSales() {
 //   - 入場時：localStorage（state._finalRegisterEnd等）からDOMに復元
 //   - 退場（レジに戻る）：値を保持しつつregister画面へ
 // ═══════════════════════════════════════════════════════════════
-function enterFinalScreen() {
+async function enterFinalScreen() {
+  if (!(await hoGateBeforeClose_())) return;   // ★v3.39 必ず取り直してから下の判定をする
   /* ★2026-08-20 v3.27【拠点振替】受け取っていない振替があれば締めさせない。
      社長選択の逃げ道＝「すぐ確認できない時があるから後からでもできるように」。
      ここで引き留めれば、残数を申告する前に必ず目に入る。
