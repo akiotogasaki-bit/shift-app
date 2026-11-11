@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v8.20 (2026-11-12) 【💬 相談で数字を聞く・スクショを付ける】社長決定 B（個数＋売上金額）＋ A（スクショは Firestore に縮めて残す）。★種類に「📊 数字を聞く」を足した（販売数・売上・人気の商品・時間帯の売れ方。相談役は Firebase の記録を道具 query_sales で集計してから答える。記録は 10/13 以降）。★📷 でスクショを2枚まで付けられる。端末で長い辺1280px・JPEG に縮めてから送る（1枚およそ200KB）。「この下げる3は違うと思う」のように画面ごと見せて相談できる。★FB_PROBE_VER_ を 8.20 に。要: Firebase consult 2026-11-12（salesQuery.js）。 -->
 <!-- driver v8.19 (2026-11-10) 【レジの2次販売切り替えに対応（register v3.38）】社長決定。★その場の2次（拠点ID＋_2）は拠点マスタに無いので、報告が来たら元の拠点から回収カードを作る。★二次販売の回収に「追加ギャラ」欄を足した（2次のギャラは基本0。追加がある時に担当エリアのドライバーが入力）。要: メインGAS 2026-11-10。 -->
 <!-- driver v8.18 (2026-11-06) 【12:20の再分配に行き先を出す】社長決定（A案）。11/5 の「推奨の勝ち」の大半は閉店前に置いて売れなかった弁当で、47個中23個はエリアに回す先が無かった＝メインへ寄せるのが正解だった。★理由欄に、下げる拠点は「🚚 持って行く先：2個 → 茶2／寄せ 1個 → 神保町（メイン）」、置く拠点は「🚚 来る元：車 2個 / 茶3 1個」、メインは「📥 寄せ：◯◯ ◯個」を出す。出どころはサーバーの `tail.dest` / `tail.src`（再分配計画の11列目）。11/5以前の計画には無いので出さない。要: メインGAS 2026-11-06（`_rt_tailPairs_`）。 -->
 <!-- driver v8.17 (2026-11-01) 【回収タブも Firebase から読む】社長決定 A。回収タブの自動の取り直しを /exec の getCollectionBundle（10/26〜10/30 で1日約75件・中央値19秒＝遅い呼び出しの首位）から、実況タブと同じ Firebase（報告・営業中）＋公開スナップショット（回収済み・休止）に切り替えた。🔄 は従来どおり /exec。スナップショットの「報告済み・営業中」が Firebase に揃っていない時も /exec に落ちる（fetchCollectionFromFb_）。 -->
@@ -176,6 +177,12 @@ body {
 .cst-kinds { display:flex; gap:8px; margin-bottom:8px; }
 .cst-kind { flex:1; padding:9px 4px; font-size:13px; font-weight:700; border-radius:10px; border:1px solid var(--border); background:#fff; color:var(--ink-soft); font-family:inherit; }
 .cst-kind.on { background:var(--blue-light); border-color:var(--blue); color:var(--blue); }
+.cst-kind { white-space:nowrap; }
+.cst-imgs { display:flex; gap:8px; align-items:center; margin:6px 0; flex-wrap:wrap; }
+.cst-imgs img { width:56px; height:56px; object-fit:cover; border-radius:8px; border:1px solid var(--border); }
+.cst-imgs .cst-th { position:relative; }
+.cst-imgs .cst-th button { position:absolute; top:-6px; right:-6px; width:22px; height:22px; border-radius:11px; border:none; background:#333; color:#fff; font-size:12px; line-height:22px; padding:0; }
+.cst-cam { padding:8px 12px; font-size:13px; font-weight:700; border-radius:10px; border:1px dashed var(--blue); background:#fff; color:var(--blue); font-family:inherit; }
 #cst-text { width:100%; box-sizing:border-box; font-size:16px; padding:8px; border:1px solid #bbb; border-radius:8px; font-family:inherit; }
 
 #screen-loading { align-items: center; justify-content: center; background: var(--blue); }
@@ -1908,10 +1915,16 @@ body {
       <div class="drr-title">💬 相談 <span style="font-size:11px;font-weight:500;color:#666;">Claude が答えます・急ぎは社長に届きます</span></div>
       <div id="cst-log" class="cst-log"><div class="cst-empty">読み込み中…</div></div>
       <div class="cst-kinds">
-        <button type="button" class="cst-kind on" data-kind="push" onclick="cstKind_('push')">🔄 押し引きの相談</button>
-        <button type="button" class="cst-kind" data-kind="bug" onclick="cstKind_('bug')">⚠️ 不具合の報告</button>
+        <button type="button" class="cst-kind on" data-kind="push" onclick="cstKind_('push')">🔄 押し引き</button>
+        <button type="button" class="cst-kind" data-kind="data" onclick="cstKind_('data')">📊 数字を聞く</button>
+        <button type="button" class="cst-kind" data-kind="bug" onclick="cstKind_('bug')">⚠️ 不具合</button>
       </div>
       <textarea id="cst-text" rows="3" placeholder="例：芝パークで「下げる3」と出たけど、まだ12時前で棚が薄い"></textarea>
+      <!-- ★v8.20 スクショ（2枚まで・端末で縮めてから送る） -->
+      <div class="cst-imgs" id="cst-imgs">
+        <button type="button" class="cst-cam" onclick="document.getElementById('cst-file').click()">📷 スクショを付ける</button>
+      </div>
+      <input type="file" id="cst-file" accept="image/*" multiple style="display:none" onchange="cstPickImgs_(this)">
       <div class="drr-actions">
         <button type="button" class="drr-cancel" onclick="cstClose()">閉じる</button>
         <button type="button" class="drr-send" id="cst-send" onclick="cstSend()">送信</button>
@@ -2464,7 +2477,7 @@ function fbLoadScript_(src) {
 function fbJstYmd_() { return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10); }
 /* ★2026-10-22 v8.9.1 誰の端末か（名前・画面の版・入口）も載せる。Firebase に入れていない人を特定するため（社長決定 A）。
    state / drvViaPassword は後ろで宣言しているので、まだ無い時（TDZ）は try で空にする。 */
-var FB_PROBE_VER_ = '8.18';
+var FB_PROBE_VER_ = '8.20';
 function fbProbe_(o) {
   var who = '', via = '';
   try { who = (state && state.userName) || ''; } catch (e) {}
@@ -2869,7 +2882,58 @@ function cstKind_(k) {
   document.querySelectorAll('#cst-bg .cst-kind').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-kind') === k); });
   document.getElementById('cst-text').placeholder = k === 'bug'
     ? '例：11:40 回収タブが真っ白になって開けない（神保町に着いた時）'
-    : '例：芝パークで「下げる3」と出たけど、まだ12時前で棚が薄い';
+    : k === 'data'
+      ? '例：先週水曜の芝エリア 11:40〜12:00 の販売数は？／神保町で人気の弁当は？'
+      : '例：芝パークで「下げる3」と出たけど、まだ12時前で棚が薄い（スクショを付けると伝わりやすい）';
+}
+/* ★v8.20 スクショ。長い辺1280px の JPEG に縮める（Firestore の1文書1MB に収めるため・1枚およそ200KB）。
+   それでも大きい時は画質を下げて作り直す。サーバー側の上限は base64 で 700KB。 */
+var cstImgs_ = [];
+var CST_IMG_MAX_ = 2;
+function cstShrink_(file) {
+  return new Promise(function (ok, ng) {
+    var url = URL.createObjectURL(file);
+    var img = new Image();
+    img.onload = function () {
+      try {
+        var side = 1280, w = img.naturalWidth, h = img.naturalHeight;
+        var k = Math.min(1, side / Math.max(w, h));
+        var c = document.createElement('canvas');
+        c.width = Math.round(w * k); c.height = Math.round(h * k);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        var q = 0.8, d = c.toDataURL('image/jpeg', q);
+        while (d.length > 650 * 1024 && q > 0.35) { q -= 0.15; d = c.toDataURL('image/jpeg', q); }
+        URL.revokeObjectURL(url);
+        if (d.length > 650 * 1024) ng(new Error('画像が大きすぎます')); else ok(d);
+      } catch (e) { ng(e); }
+    };
+    img.onerror = function () { URL.revokeObjectURL(url); ng(new Error('画像を読めませんでした')); };
+    img.src = url;
+  });
+}
+async function cstPickImgs_(inp) {
+  var files = Array.prototype.slice.call(inp.files || []);
+  inp.value = '';
+  for (var i = 0; i < files.length; i++) {
+    if (cstImgs_.length >= CST_IMG_MAX_) { showToast('スクショは' + CST_IMG_MAX_ + '枚までです', 'error'); break; }
+    try { cstImgs_.push(await cstShrink_(files[i])); }
+    catch (e) { showToast(e.message, 'error'); }
+  }
+  cstRenderImgs_();
+}
+function cstRenderImgs_() {
+  var box = document.getElementById('cst-imgs');
+  box.querySelectorAll('.cst-th').forEach(function (x) { x.remove(); });
+  var cam = box.querySelector('.cst-cam');
+  cstImgs_.forEach(function (d, i) {
+    var t = document.createElement('div'); t.className = 'cst-th';
+    var im = document.createElement('img'); im.src = d; t.appendChild(im);
+    var b = document.createElement('button'); b.type = 'button'; b.textContent = '✕';
+    b.onclick = function () { cstImgs_.splice(i, 1); cstRenderImgs_(); };
+    t.appendChild(b);
+    box.insertBefore(t, cam);
+  });
+  cam.style.display = cstImgs_.length >= CST_IMG_MAX_ ? 'none' : '';
 }
 function cstOpen() {
   document.getElementById('cst-bg').classList.add('show');
@@ -2897,12 +2961,14 @@ function cstRender_(rows) {
       var t = document.createElement('div'); t.className = 'cst-tag'; t.textContent = '🚨 社長に届けました';
       m.appendChild(t);
     }
-    m.appendChild(document.createTextNode((r.role !== 'ai' && r.kind === 'bug' ? '⚠️ ' : '') + r.text));
+    m.appendChild(document.createTextNode((r.role !== 'ai' && r.kind === 'bug' ? '⚠️ ' : r.role !== 'ai' && r.kind === 'data' ? '📊 ' : '')
+                                          + r.text + (r.imgs ? '\n📷 スクショ' + r.imgs + '枚' : '')));
     box.appendChild(m);
   });
   box.scrollTop = box.scrollHeight;
 }
 var cstRows_ = [];
+function imgs0_() { return cstImgs_.length; }
 async function cstLoad_() {
   try { var j = await cstPost_({ mode: 'list' }); cstRows_ = j.rows || []; cstRender_(cstRows_); }
   catch (e) { document.getElementById('cst-log').innerHTML = '<div class="cst-empty">読み込めませんでした</div>'; }
@@ -2912,14 +2978,16 @@ async function cstSend() {
   var text = ta.value.trim();
   if (!text) { showToast('内容を書いてください', 'error'); return; }
   var btn = document.getElementById('cst-send');
-  btn.disabled = true; btn.textContent = '考え中…';
+  btn.disabled = true; btn.textContent = imgs0_() ? '画像を見ています…' : '考え中…';
   var day = fbJstYmd_();
-  cstRows_.push({ day: day, role: 'user', kind: cstKindSel_, text: text });
+  var imgs = cstImgs_.slice();
+  cstRows_.push({ day: day, role: 'user', kind: cstKindSel_, text: text, imgs: imgs.length });
   cstRender_(cstRows_);
   try {
     var act = document.querySelector('.tab-panel.active');
-    var j = await cstPost_({ mode: 'send', kind: cstKindSel_, text: text,
+    var j = await cstPost_({ mode: 'send', kind: cstKindSel_, text: text, images: imgs,
                              ctx: { tab: act ? act.id.replace('tab-', '') : '', ver: FB_PROBE_VER_ } });
+    cstImgs_ = []; cstRenderImgs_();
     cstRows_.push({ day: day, role: 'ai', kind: cstKindSel_, text: j.reply, urgency: j.urgency });
     cstRender_(cstRows_);
     ta.value = '';
