@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <!--
   お江戸弁当 shift-admin.html
+  v2026-11-16 「🔄 自動割振」を「空き枠だけ埋める」に差し替え（シフト全自動化 段階2・社長決定A案）。全消しはしない。希望①→希望②③→過去8週に入った拠点、各段とも週の割当が少ない人から。明日以降の【未割当】だけ。下見→OKで書く。埋まらない枠は休ませ候補（当日配分の少ない順）。依存: メインGAS fillShifts（@992〜）。
   v2026-10-30 「🆘 急募」タブ：未割当の枠を選んでその日シフトに入っていない販売員全員へ急募（先着1名で決定）。募集中の取り消し。変更通知の「承認／不可」の回答一覧。依存: メインGAS createShiftBoshu / cancelShiftBoshu / getShiftBoshuStatus。
   v2026-10-20 拠点マスタの「販売曜日」の外の日は、未割当のマスをグレーの「休み（販売曜日外）」で出す。未割当だけ表示の絞り込みからも外す。手で入れる時は確認を出す（臨時で売る日用）。依存: メインGAS getShiftMatrix の bases[].salesDows。
   v2026-10-13c 休ませ候補の数を当日配分(L列)に（それまでG列＝初回納品）。同じ週に同じ拠点は1回まで。割り当て済みの拠点にも「配分N」を出す（社長「あとから配達が入った時に削ることがある為」）。
@@ -2875,100 +2876,72 @@ async function assignStaffToBase(baseName) {
   }
 }
 
-// ★v2026-07-30 自動割振は「実行前に必ずプレビューを出す」
-//   assignShifts() はシフト表を全消しして希望拠点だけで組み直すため、
-//   手で入れた割当が黙って消える。何が変わるか・誰が動くかを先に見せる。
+// ★v2026-11-16 自動割振＝「空き枠だけ埋める」（シフト全自動化 段階2・社長決定A案）
+//   以前の全消し版（action=admin&task=assign）は画面から呼ばない。
+//   順番＝希望① → 希望②③ → 過去8週に入った拠点。各段とも週の割当が少ない人から。明日以降の【未割当】だけ。
+//   先に書き込みなしの下見（fillShifts）→ OKの時だけ go=1。LINE通知はしない（差分送信で送る）。
 async function confirmAssign() {
-  showLoading('自動割振の影響を確認中...');
-  setStatus('busy', '自動割振のプレビュー取得中...');
+  const wt = state.weekTarget || '';
+  showLoading('空き枠の埋め方を計算中...');
+  setStatus('busy', '自動割振の下見を取得中...');
   let pv;
   try {
-    pv = await apiGet('previewAutoAssign');
-    if (!pv.success) throw new Error(pv.error || 'プレビュー取得失敗');
+    pv = await apiGet('fillShifts', { weekTarget: wt, _cb: Date.now() });
+    if (!pv.success) throw new Error(pv.error || '下見の取得に失敗');
   } catch (e) {
     hideLoading();
-    setStatus('err', `プレビュー失敗: ${e.message}`);
-    // プレビューが取れないときは実行させない（黙って全消しさせないため）
-    alert(`自動割振の影響を確認できませんでした：\n${e.message}\n\n` +
-          `安全のため実行を中止しました。時間をおいて再試行してください。`);
+    setStatus('err', `下見に失敗: ${e.message}`);
+    alert(`自動割振の下見が取れませんでした：\n${e.message}\n\n何も書いていません。時間をおいてもう一度押してください。`);
     return;
   }
   hideLoading();
-  setStatus('ok', 'プレビュー取得完了');
+  setStatus('ok', '下見を取得しました');
 
+  const fills = pv.fills || [];
   const s = pv.summary || {};
-  const changes = pv.changes || [];
-  const dropped = pv.dropped || [];
+  const by = s.byStep || {};
+  // 埋まらなかった枠＝休ませ候補。当日配分の少ない拠点から
+  const unf = {};
+  (pv.unfilled || []).forEach(u => { (unf[u.date] = unf[u.date] || []).push(u.base); });
+  const restLines = Object.keys(unf).map(d => {
+    const list = unf[d].map(b => ({ b, q: capaDailyFor(d, b) })).sort((x, y) => x.q - y.q);
+    return `  ・${d}（${list.length}拠点）：` + list.map(x => x.q ? `${x.b} 配分${x.q}` : x.b).join('、');
+  });
 
-  if (changes.length === 0 && dropped.length === 0) {
-    toast('自動割振しても変わる枠はありません', 'ok');
-    setStatus('ok', '自動割振：変更なし');
-    return;
+  let msg = `🔄 自動割振（空いている枠だけ埋めます。入っている人は動かしません）\n`
+          + `対象：${(pv.dates || []).join('・') || 'なし'}（明日以降の日だけ）\n\n`;
+  if (fills.length === 0) {
+    msg += `埋められる枠はありませんでした。\n`;
+  } else {
+    msg += `埋める枠：${fills.length}件（希望① ${by[1] || 0}／希望②③ ${by[2] || 0}／過去8週 ${by[3] || 0}）\n`
+         + fills.slice(0, 25).map(f => `  ・${f.date} ${f.base} ← ${f.name}（${f.stepLabel}）`).join('\n')
+         + (fills.length > 25 ? `\n  …ほか ${fills.length - 25}件` : '') + '\n';
   }
-
-  const fmt = c => {
-    const now  = c.now  || '【未割当】';
-    const next = c.next || '【未割当】';
-    return `  ・${c.date} ${c.base}：${now} → ${next}${c.notified ? '  ⚠️通知済' : ''}`;
-  };
-  const head = changes.filter(c => c.now).concat(changes.filter(c => !c.now));  // 人が消える枠を先に
-  const lines = head.slice(0, 15).map(fmt).join('\n');
-  const more  = head.length > 15 ? `\n  …ほか ${head.length - 15}件` : '';
-
-  let msg = `⚠️ 自動割振を実行すると、シフト表は全消しされ、希望拠点だけで組み直されます。\n`
-          + `手で入れた割当は保持されません。\n\n`
-          + `変わる枠：${s.changeCount || 0}件\n`
-          + `消える手動割当：${s.lostManualCount || 0}件\n`;
-  if ((s.notifiedMoving || []).length > 0) {
-    msg += `\n🚨 既にLINE通知済みの ${s.notifiedMoving.length}名 が動きます：\n`
-         + `  ${s.notifiedMoving.join('、')}\n`
-         + `  → 実行後は必ず差分送信してください（しないと古い拠点のまま伝わります）\n`;
+  if (restLines.length) {
+    msg += `\n⚠️ 人が足りず埋まらない枠（休ませ候補・配分の少ない順）：\n` + restLines.join('\n') + '\n'
+         + `  → 休みにするかは配分調整で決めてください（自動では休みにしません）\n`;
   }
-  if (dropped.length > 0) {
-    msg += `\n消える行（割振対象日に無い日付）：${dropped.length}件\n`
-         + dropped.slice(0, 5).map(d => `  ・${d.date} ${d.base}：${d.now || '【未割当】'}`).join('\n')
-         + (dropped.length > 5 ? `\n  …ほか ${dropped.length - 5}件` : '') + '\n';
+  if ((s.idleCount || 0) > 0) {
+    msg += `\n出勤できるのに入る拠点が無い人：のべ${s.idleCount}人日（希望①〜③も過去8週の実績も合わない）\n`;
   }
-  msg += `\n【変更内容】\n${lines}${more}\n\n実行してよろしいですか？`;
-
+  if (fills.length === 0) { alert(msg); setStatus('ok', '自動割振：埋める枠なし'); return; }
+  msg += `\nこの内容でシフト表に書きますか？（LINEはまだ送りません）`;
   if (!confirm(msg)) { setStatus('ok', '自動割振を中止しました'); return; }
 
-  // 通知済みの人が動く場合は二段確認
-  if ((s.notifiedMoving || []).length > 0) {
-    const ok2 = confirm(
-      `最終確認です。\n\n` +
-      `通知済みの ${s.notifiedMoving.length}名 の担当が変わります。\n` +
-      `実行後に差分送信を忘れると、その人たちは古い拠点に向かいます。\n\n` +
-      `本当に実行しますか？`
-    );
-    if (!ok2) { setStatus('ok', '自動割振を中止しました'); return; }
-  }
-
-  showLoading('自動割振中（10〜30秒）...');
+  showLoading('空き枠に書き込み中...');
   setStatus('busy', '自動割振中...');
   try {
-    const data = await apiGet('admin', { task: 'assign' });
-    if (data.status !== 'ok') throw new Error(data.message || '失敗');
-    toast('自動割振完了', 'ok');
-    setStatus('ok', '自動割振完了');
+    const data = await apiGet('fillShifts', { weekTarget: wt, go: '1', _cb: Date.now() });
+    if (!data.success) throw new Error(data.error || '失敗');
+    const sk = data.skipped ? `（${data.skipped}件は先に手で入っていたので飛ばしました）` : '';
+    toast(`自動割振：${data.written || 0}件を埋めました${sk}`, 'ok');
+    setStatus('ok', `自動割振完了 ${data.written || 0}件${sk}`);
     await loadAll();
-
-    // ★v2026-07-30 割振で通知済みの人が動いた分をそのまま送れるように促す
     hideLoading();
     const unsent = getUnsentNotifiable();
-    if (unsent.length > 0) {
-      const lines = unsent.slice(0, 10).map(d =>
-        `  ・${d.date} ${d.base}：${d.notifiedName || '【未割当】'} → ${d.currentName || '【未割当】'}`
-      ).join('\n');
-      const more = unsent.length > 10 ? `\n  …ほか ${unsent.length - 10}件` : '';
-      const okSend = confirm(
-        `自動割振が完了しました。\n\n` +
-        `⚠️ まだLINE通知していない変更が ${unsent.length}件 あります：\n${lines}${more}\n\n` +
-        `差分送信を今すぐ実行しますか？\n` +
-        `（キャンセルすると未送信のまま残ります。スタッフには古い拠点が通知されたままです）`
-      );
-      if (okSend) await confirmDiffSend();
-    }
+    if (unsent.length > 0 && confirm(
+      `自動割振が完了しました。\n\nまだLINE通知していない変更が ${unsent.length}件 あります。\n差分送信を今すぐ実行しますか？\n（キャンセルすると未送信のまま残ります）`
+    )) await confirmDiffSend();
   } catch (e) {
     toast(`失敗: ${e.message}`, 'err');
     setStatus('err', `自動割振失敗: ${e.message}`);
