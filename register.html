@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>お江戸弁当 レジ</title>
+<!-- register v3.40 (2026-11-16) 【PayPay会計の画面にその拠点のPayPay QRを出す】社長決定（11/13 A案・11/16 実装）。お客様がラベルを探さなくても、レジの画面をそのまま読み取って払える。★「📱 PayPay」で開くPayPay会計の画面の、お会計の下にQRを大きく描く。中身は拠点マスタ「PayPay QR」列のURL（getMaster の locations[].paypayQr）。描画は端末で（qrcode-generator 1.4.4・cdnjs）。★2次販売へ切り替えた後（state.sw2nd）と「拠点ID_2」は1次の拠点のQRを出す（社長決定 11/16）。★URLが空の拠点（竹早・芝新規・森②・二次販売レジ ?mode=2nd のセカンド拠点）・`https://qr.paypay.ne.jp/` 以外の値・描画の部品が読めない時は、QRを出さず「ラベルのQRを使ってください」と出す＝今までどおり。古いGAS（paypayQr が無い）でも同じ。会計の処理は何も変えていない。要: メインGAS @990（getLocations_Compute_ の paypayQr）。 -->
 <!-- register v3.39 (2026-11-12) 【締めの直前に受け取り待ちを必ず取り直す】11/11 芝パークが芝パーク②の残り26個を受け取らずに締められ、残数が44個ずれた。締めボタン（enterFinalScreen）は販売画面を開いた時に取った受け取り待ち（hoPending）を見るだけで、②が後から締めても取り直していなかった（GASは正しく pending を返していた）。★締め・2次販売への切り替えの直前に getPendingHandover を必ず取り直してから判定する（hoGateBeforeClose_・25秒は時間で粘る・_cb付き）。★取れなかったら締めを止めて「もう一度押してください」。2回続けて取れない時だけ「受け取っていなければ OK で締める」を選べる（/exec 停止で締めが永久にできなくなるのを避ける）。GAS変更なし。社長決定 11/12「Aだけ直す」。 -->
 <!-- register v3.38 (2026-11-10) 【そのままのレジで2次販売へ切り替える】社長決定（11/2 A案・11/10 仕様）「持っている在庫をそのまま2次販売に移行する。レジの金額の確認は最後に1回」。★販売画面の「🛒 2次販売へ切り替え」で、その時点の販売数と計算した残りを1次の報告として送る（現金は数えない）。★同じ画面のまま値段だけ2次価格（海苔弁系・他社商品500円／お茶100円／それ以外300円）になり、弁当の種類つきで打てる。★売る場所は「その場（拠点ID＋_2 の2次専用ID）」か移る先の二次販売拠点を切り替え時に選ぶ。★締めは最後の1回だけ。1次のギャラはこの締めで確定してメインGASが1次の行へ書き直す。2次のギャラは基本0（追加はドライバーが回収時に入力）。今の二次販売レジ（?mode=2nd）はそのまま併用。要: メインGAS switchTo2nd。 -->
 <!-- register v3.37 (2026-10-26) 【普通のレジ⇔二次販売レジの入口】社長確認「調理との兼業スタッフ・社員は2次販売レジが開けないのかな？」＝社員用メニューと兼任の調理面に二次販売ボタンが無い（社長決定B）。★拠点選択画面の下に「🛒 二次販売のレジはこちら」（二次販売レジでは「← 普通のレジに戻る」）。リッチメニューと同じ LIFF URL（?mode=2nd）を開き直すだけ＝保存キーも別なので途中データを壊さない。★締めた後に普通のレジを開くと「報告を修正しますか？」→キャンセルで自動復帰して販売画面に戻り、入口まで行けない。→ キャンセルの後に「二次販売のレジを開きますか？」を出す。GAS変更なし。 -->
@@ -42,6 +43,8 @@
 <!-- register v3.7 (2026-07-31) 【Phase A＋B＋C】《B》スタート画面に配分表の個数を既定表示（getPlannedDelivery）。違う数で開始すると担当ドライバーへ承認依頼が飛ぶ（GAS handleStart）。承認はゲートではない。《C》締め画面に「レジに残った数」と「賄いの個数」を追加。★理論残は入力前に一切表示しない。報告の送信完了を待ってから submitClosingResidual を送り、判定を完了画面に出す。賄いは1人1日1個まで（getMakanaiLimit）。《A》PayPay即時照合：締め送信後、完了画面でPayPay社の記録との照合結果を表示する。① enterFinalScreen() で ppClient&mode=prefetch を1回投げ、販売員が入力している間にPayPayの取得・取込を済ませる ② submitFinal() 後に mode=status を3秒間隔でポーリング（★金額は返らない。readyの真偽のみ）③ ready になったら mode=reveal を1回だけ叩き、そこで初めて数字を受け取って表示 ④ 結果を見せたら「報告内容を確認・修正する」を隠す（誤差を見てから書き換えさせない＝設計の「確認画面から戻れない」）。照合できなくても締めは完了扱い（「確認中」表示のまま／修正ボタンは残す）。要: メインGAS action=ppClient と PayPay突合キュー＝同時反映。設計書: 40_ドキュメント/設計_再発防止_納品確定とPayPay即時突合_2026-07-31.md -->
 <!-- register v3.5 (2026-07-29) 【現金誤差±300の修正・v3.4の残り穴】「集計する」を押した後も賄いトグル／遅刻分は操作できるのに calcFinal() が再実行されず、送信される totalSalary / makanaiBonus が集計時点の古い値のまま凍結されていた。「無し→有り」に戻して提出＝+300、「有り→無し」に変えて提出＝-300、遅刻を後入力＝控除されず+300単位の誤差。①A案: トグル・遅刻入力の変更時に結果表示中なら即再集計（refreshFinalIfShown） ②B案: submitFinal 冒頭で calcFinal() を再実行してから送信。GAS側の変更は不要。 -->
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js" defer></script><!-- ★v3.40 PayPay QR の描画 -->
+
 <style>
 :root {
   --red: #C0392B;
@@ -1600,6 +1603,12 @@ html, body { overscroll-behavior-y: contain; }
       <span class="modal-label">お会計</span>
       <span class="modal-value accent" id="paypay-modal-total">¥0</span>
     </div>
+    <!-- ★v3.40 その拠点のPayPay QR（無い拠点は案内の1行だけ） -->
+    <div id="paypay-qr-box" style="display:none;text-align:center;margin:8px 0 2px;">
+      <div id="paypay-qr-img" style="display:inline-block;background:#FFF;padding:10px;border-radius:10px;width:220px;height:220px;box-sizing:content-box;"></div>
+      <div id="paypay-qr-name" style="font-size:12px;color:#aaa;margin-top:4px;"></div>
+    </div>
+    <div id="paypay-qr-none" style="display:none;text-align:center;font-size:12px;color:#aaa;margin:8px 0 0;">この拠点はラベルのQRを使ってください</div>
     <p style="text-align:center;color:#aaa;margin:10px 0 4px;font-size:12px;line-height:1.5;">
       お客様にPayPayで決済してもらってください。<br>
       <span style="color:#F4C430;font-weight:700;">決済完了を確認してから</span>下のボタンを押してください。
@@ -2135,6 +2144,9 @@ function applyMasterToState(data) {
   state.locations     = (data.locations || []).filter(l =>
     IS_2ND ? is2ndLoc_(l) : (!is2ndLoc_(l) && !isRegisterHiddenLoc_(l)));
   state.secondLocs    = (data.locations || []).filter(is2ndLoc_);   // ★v3.38 切り替えの移る先
+  // ★v3.40 拠点ID → PayPay QR のURL（全拠点から作る＝2次販売中でも1次の拠点を引ける）
+  state.paypayQrById  = {};
+  (data.locations || []).forEach(l => { if (l && l.id && l.paypayQr) state.paypayQrById[String(l.id).trim()] = String(l.paypayQr).trim(); });
   state.incentiveUnit = data.incentiveUnit || 10;
   state.incentiveRate = data.incentiveRate || 100;
   state.couponDefault = data.couponDefault || 300;
@@ -3458,7 +3470,42 @@ function openPayPayModal() {
   document.getElementById('paypay-modal-total').textContent = `¥${cartTotal().toLocaleString()}`;
   document.getElementById('paypay-received-amount').value = '';
   document.getElementById('paypay-diff-display').style.display = 'none';
+  renderPayPayQr_();   // ★v3.40
   document.getElementById('paypay-modal').classList.add('show');
+}
+
+// ★v3.40 いまの拠点のPayPay QRのURL。2次販売中（切り替え後・拠点ID_2）は1次の拠点のQR。無ければ ''
+function paypayQrUrl_() {
+  const map = state.paypayQrById || {};
+  let id = (state.sw2nd && state.sw2nd.fromId) || (state.location && state.location.id) || '';
+  id = String(id).trim().replace(/_2$/, '');
+  const u = String(map[id] || '').trim();
+  return /^https:\/\/qr\.paypay\.ne\.jp\/[A-Za-z0-9]+$/.test(u) ? u : '';
+}
+// ★v3.40 PayPay会計の画面にQRを描く。描けない時は「ラベルのQRを使ってください」＝今までどおり
+function renderPayPayQr_() {
+  const box  = document.getElementById('paypay-qr-box');
+  const none = document.getElementById('paypay-qr-none');
+  const img  = document.getElementById('paypay-qr-img');
+  const url  = paypayQrUrl_();
+  box.style.display = 'none'; none.style.display = 'none'; img.innerHTML = '';
+  if (!url) { none.style.display = 'block'; return; }
+  try {
+    if (typeof qrcode !== 'function') throw new Error('qrcode が読めていない');
+    const qr = qrcode(0, 'M');
+    qr.addData(url);
+    qr.make();
+    img.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
+    const svg = img.querySelector('svg');
+    if (svg) { svg.style.width = '100%'; svg.style.height = '100%'; svg.style.display = 'block'; }
+    const nm = (state.sw2nd && state.sw2nd.fromName) || (state.location && state.location.name) || '';
+    document.getElementById('paypay-qr-name').textContent = `${String(nm).replace(/（2次）$/, '')} のPayPay`;
+    box.style.display = 'block';
+  } catch (e) {
+    console.warn('PayPay QR を描けませんでした', e);
+    img.innerHTML = '';
+    none.style.display = 'block';
+  }
 }
 
 function calcPayPayDiff() {
