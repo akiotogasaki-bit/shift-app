@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>お江戸弁当 レジ</title>
+<!-- register v3.41 (2026-11-16) 【PayPay QRはボタンを押した時だけ出す】社長「QRは毎回出さなくて良い。出せるようになっていれば良い」→ ボタンで出す案に決定。★PayPay会計を開いた時はQRを隠し、「📱 QRを出す」ボタンだけを置く。押すとその拠点のQRが出る（ボタンは「QRを隠す」に変わる）。会計を閉じると次はまた隠れた状態から始まる。★QRが無い拠点はボタンを出さず「この拠点はラベルのQRを使ってください」のまま。描けなかった時も同じ案内に戻る。GAS変更なし。 -->
 <!-- register v3.40 (2026-11-16) 【PayPay会計の画面にその拠点のPayPay QRを出す】社長決定（11/13 A案・11/16 実装）。お客様がラベルを探さなくても、レジの画面をそのまま読み取って払える。★「📱 PayPay」で開くPayPay会計の画面の、お会計の下にQRを大きく描く。中身は拠点マスタ「PayPay QR」列のURL（getMaster の locations[].paypayQr）。描画は端末で（qrcode-generator 1.4.4・cdnjs）。★2次販売へ切り替えた後（state.sw2nd）と「拠点ID_2」は1次の拠点のQRを出す（社長決定 11/16）。★URLが空の拠点（竹早・芝新規・森②・二次販売レジ ?mode=2nd のセカンド拠点）・`https://qr.paypay.ne.jp/` 以外の値・描画の部品が読めない時は、QRを出さず「ラベルのQRを使ってください」と出す＝今までどおり。古いGAS（paypayQr が無い）でも同じ。会計の処理は何も変えていない。要: メインGAS @990（getLocations_Compute_ の paypayQr）。 -->
 <!-- register v3.39 (2026-11-12) 【締めの直前に受け取り待ちを必ず取り直す】11/11 芝パークが芝パーク②の残り26個を受け取らずに締められ、残数が44個ずれた。締めボタン（enterFinalScreen）は販売画面を開いた時に取った受け取り待ち（hoPending）を見るだけで、②が後から締めても取り直していなかった（GASは正しく pending を返していた）。★締め・2次販売への切り替えの直前に getPendingHandover を必ず取り直してから判定する（hoGateBeforeClose_・25秒は時間で粘る・_cb付き）。★取れなかったら締めを止めて「もう一度押してください」。2回続けて取れない時だけ「受け取っていなければ OK で締める」を選べる（/exec 停止で締めが永久にできなくなるのを避ける）。GAS変更なし。社長決定 11/12「Aだけ直す」。 -->
 <!-- register v3.38 (2026-11-10) 【そのままのレジで2次販売へ切り替える】社長決定（11/2 A案・11/10 仕様）「持っている在庫をそのまま2次販売に移行する。レジの金額の確認は最後に1回」。★販売画面の「🛒 2次販売へ切り替え」で、その時点の販売数と計算した残りを1次の報告として送る（現金は数えない）。★同じ画面のまま値段だけ2次価格（海苔弁系・他社商品500円／お茶100円／それ以外300円）になり、弁当の種類つきで打てる。★売る場所は「その場（拠点ID＋_2 の2次専用ID）」か移る先の二次販売拠点を切り替え時に選ぶ。★締めは最後の1回だけ。1次のギャラはこの締めで確定してメインGASが1次の行へ書き直す。2次のギャラは基本0（追加はドライバーが回収時に入力）。今の二次販売レジ（?mode=2nd）はそのまま併用。要: メインGAS switchTo2nd。 -->
@@ -1604,6 +1605,10 @@ html, body { overscroll-behavior-y: contain; }
       <span class="modal-value accent" id="paypay-modal-total">¥0</span>
     </div>
     <!-- ★v3.40 その拠点のPayPay QR（無い拠点は案内の1行だけ） -->
+    <!-- ★v3.41 ふだんは隠しておき、ボタンを押した時だけ出す -->
+    <div id="paypay-qr-toggle-wrap" style="display:none;text-align:center;margin:8px 0 2px;">
+      <button type="button" id="paypay-qr-toggle" onclick="togglePayPayQr_()" style="background:#2A2A2A;color:#FFF;border:1px solid #555;border-radius:10px;padding:9px 18px;font-size:14px;font-weight:700;">📱 QRを出す</button>
+    </div>
     <div id="paypay-qr-box" style="display:none;text-align:center;margin:8px 0 2px;">
       <div id="paypay-qr-img" style="display:inline-block;background:#FFF;padding:10px;border-radius:10px;width:220px;height:220px;box-sizing:content-box;"></div>
       <div id="paypay-qr-name" style="font-size:12px;color:#aaa;margin-top:4px;"></div>
@@ -3482,14 +3487,32 @@ function paypayQrUrl_() {
   const u = String(map[id] || '').trim();
   return /^https:\/\/qr\.paypay\.ne\.jp\/[A-Za-z0-9]+$/.test(u) ? u : '';
 }
-// ★v3.40 PayPay会計の画面にQRを描く。描けない時は「ラベルのQRを使ってください」＝今までどおり
+// ★v3.41 PayPay会計を開いた時の状態：QRは隠し、出せる拠点にだけ「📱 QRを出す」ボタンを置く
 function renderPayPayQr_() {
+  const wrap = document.getElementById('paypay-qr-toggle-wrap');
+  const box  = document.getElementById('paypay-qr-box');
+  const none = document.getElementById('paypay-qr-none');
+  box.style.display = 'none'; none.style.display = 'none'; wrap.style.display = 'none';
+  document.getElementById('paypay-qr-img').innerHTML = '';
+  document.getElementById('paypay-qr-toggle').textContent = '📱 QRを出す';
+  if (!paypayQrUrl_()) { none.style.display = 'block'; return; }
+  wrap.style.display = 'block';
+}
+// ★v3.41 ボタンでQRを出す／隠す
+function togglePayPayQr_() {
+  const box = document.getElementById('paypay-qr-box');
+  const btn = document.getElementById('paypay-qr-toggle');
+  if (box.style.display === 'block') { box.style.display = 'none'; btn.textContent = '📱 QRを出す'; return; }
+  if (drawPayPayQr_()) btn.textContent = 'QRを隠す';
+}
+// ★v3.40 PayPay会計の画面にQRを描く。描けない時は「ラベルのQRを使ってください」＝今までどおり
+function drawPayPayQr_() {
   const box  = document.getElementById('paypay-qr-box');
   const none = document.getElementById('paypay-qr-none');
   const img  = document.getElementById('paypay-qr-img');
   const url  = paypayQrUrl_();
   box.style.display = 'none'; none.style.display = 'none'; img.innerHTML = '';
-  if (!url) { none.style.display = 'block'; return; }
+  if (!url) { none.style.display = 'block'; return false; }
   try {
     if (typeof qrcode !== 'function') throw new Error('qrcode が読めていない');
     const qr = qrcode(0, 'M');
@@ -3501,10 +3524,13 @@ function renderPayPayQr_() {
     const nm = (state.sw2nd && state.sw2nd.fromName) || (state.location && state.location.name) || '';
     document.getElementById('paypay-qr-name').textContent = `${String(nm).replace(/（2次）$/, '')} のPayPay`;
     box.style.display = 'block';
+    return true;
   } catch (e) {
     console.warn('PayPay QR を描けませんでした', e);
     img.innerHTML = '';
     none.style.display = 'block';
+    document.getElementById('paypay-qr-toggle-wrap').style.display = 'none';
+    return false;
   }
 }
 
