@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v8.21 (2026-11-17) 【2次販売の行き先を選んで納品に足す／車載を全部下ろす】社長決定 A案。★回収の「🛒 2次販売」は先に行き先（二次販売拠点か、その日の「◯◯（2次）」を1か所）を選ぶ。選んだ先の納品数に、数えた残りがそのまま足される（その場の2次＝移動を立てて到着まで済ませる／セカンド神谷など＝300円・500円に換えて二次販売納品へ追記）。それまでは印だけで、受け取った側に記録が残らず毎日「販売＞納品」になっていた。一覧に無い時は「行き先なし」で従来どおり。★巡回の拠点画面に「🚚 車載を全部下ろす」＝車載の全商品を「置く」に入れる（確認つき・送信前に直せる）。要: メインGAS 2026-11-17（_ccAddToSecond_）。 -->
 <!-- driver v8.20 (2026-11-12) 【💬 相談で数字を聞く・スクショを付ける】社長決定 B（個数＋売上金額）＋ A（スクショは Firestore に縮めて残す）。★種類に「📊 数字を聞く」を足した（販売数・売上・人気の商品・時間帯の売れ方。相談役は Firebase の記録を道具 query_sales で集計してから答える。記録は 10/13 以降）。★📷 でスクショを2枚まで付けられる。端末で長い辺1280px・JPEG に縮めてから送る（1枚およそ200KB）。「この下げる3は違うと思う」のように画面ごと見せて相談できる。★FB_PROBE_VER_ を 8.20 に。要: Firebase consult 2026-11-12（salesQuery.js）。 -->
 <!-- driver v8.19 (2026-11-10) 【レジの2次販売切り替えに対応（register v3.38）】社長決定。★その場の2次（拠点ID＋_2）は拠点マスタに無いので、報告が来たら元の拠点から回収カードを作る。★二次販売の回収に「追加ギャラ」欄を足した（2次のギャラは基本0。追加がある時に担当エリアのドライバーが入力）。要: メインGAS 2026-11-10。 -->
 <!-- driver v8.18 (2026-11-06) 【12:20の再分配に行き先を出す】社長決定（A案）。11/5 の「推奨の勝ち」の大半は閉店前に置いて売れなかった弁当で、47個中23個はエリアに回す先が無かった＝メインへ寄せるのが正解だった。★理由欄に、下げる拠点は「🚚 持って行く先：2個 → 茶2／寄せ 1個 → 神保町（メイン）」、置く拠点は「🚚 来る元：車 2個 / 茶3 1個」、メインは「📥 寄せ：◯◯ ◯個」を出す。出どころはサーバーの `tail.dest` / `tail.src`（再分配計画の11列目）。11/5以前の計画には無いので出さない。要: メインGAS 2026-11-06（`_rt_tailPairs_`）。 -->
@@ -1152,7 +1153,8 @@ body {
 .pt-row  .d.z{color:#C9CDD2;font-weight:400;}
 /* ★2026-08-19 v4.7【テスト期間だけ】推奨と違う数を渡す時の入力を軽くする2ボタン。
    やめる時はこの2行と #pt-editbar の div、ptClearAll_/ptRestoreRec_ を消せば元に戻る。 */
-.pt-editbar{display:flex;gap:8px;margin:2px 0 8px;}
+.pt-editbar{display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 8px;}
+.pt-editbar button.all{flex-basis:100%;background:#eef6ff;border-color:#9cc3ef;color:#1d4f91;font-size:13px;}  /* ★v8.21 車載を全部下ろす */
 .pt-editbar button{flex:1;font-size:12px;font-weight:700;padding:9px 6px;border-radius:9px;
   border:1px solid #dfe4ea;background:#f7f9fb;color:#4b5563;}
 .pt-row{display:flex;align-items:center;padding:7px 2px;border-bottom:1px solid #eceff2;}
@@ -2237,6 +2239,8 @@ body {
         <div class="pt-editbar" id="pt-editbar">
           <button type="button" onclick="ptClearAll_()">全部クリア</button>
           <button type="button" onclick="ptRestoreRec_()">推奨に戻す</button>
+          <!-- ★v8.21 (2026-11-17) 社長要望「車載を全部下ろすボタン」 -->
+          <button type="button" class="all" onclick="ptPutAllVeh_()">🚚 車載を全部下ろす</button>
         </div>
         <!-- ★2026-08-19 v4.8【テスト期間だけ】「ピーク」＝12:00〜12:20に売れる予定（残りを引く前）。
              社長「推奨の個数の左に 12:00〜12:20(ピーク時必要)な個数を出しておいて」。 -->
@@ -4916,12 +4920,27 @@ function openCollectDestPicker_() {
     function (sel) { ccPlannedTo = sel; confirmCash('移動'); }
   );
 }
+/* ★v8.21 (2026-11-17)「🛒 2次販売」は先に行き先（2次販売の拠点1か所）を選ぶ。社長決定 A案。
+   選んだ行き先の納品数に、ここで数えた残りがそのまま足される（メインGAS _ccAddToSecond_）。
+   候補＝エリア＝二次販売の拠点（セカンド神谷など）＋その日レジ切替で立った「◯◯（2次）」。
+   一覧に無い時だけ「行き先なし」で従来どおり印だけ残す。 */
+function openCollectSecondPicker_() {
+  if (!cashModalLocId) return;
+  try { addSwitch2ndLocs_(); } catch (e) {}
+  const loc = state.locations.find(l => l.id === cashModalLocId);
+  _destSecondOnly_ = true;
+  openDestPicker_(
+    (loc ? loc.name : '') + ' の残りを持って行く2次販売の場所（1か所）',
+    cashModalLocId, [],
+    function (sel) { ccPlannedTo = sel; confirmCash('2次販売'); }
+  );
+}
 async function confirmCash(kind) {
   kind = kind || '';
   if (!cashModalLocId) return;
   // ★2026-08-07 行き先はここで控えを取る。この関数の途中で closeCashModal() が走り
   //   ccPlannedTo が空に戻るため、後段の案内文が参照できなくなる。
-  const planned = (kind === '移動') ? ccPlannedTo.slice() : [];
+  const planned = (kind === '移動' || kind === '2次販売') ? ccPlannedTo.slice() : [];   // ★v8.21 2次販売も行き先を送る
   // ★2026-08-18 当日欠勤（レジ未開始）。closeCashModal() で ccNoRegister が戻るので控えを取る。
   const noReg = ccNoRegister;
   // ★2026-08-18 当日欠勤は「まだ売っていない弁当を丸ごと動かす」操作なので、必ず一度止めて確認する。
@@ -5012,6 +5031,7 @@ async function confirmCash(kind) {
     //   不一致の内容（residualMsg）も同じ理由で消えていた。最後の1回に集約する。
     let residualSaved = false;
     let residualMsg   = '';
+    let secondAddedX  = null;   // ★v8.21 2次販売の行き先に足した結果
     // ★2026-08-18 当日欠勤（レジ未開始）は残数照合ログに行が無い＝送っても必ず空振りする。
     //   投げると「残数を記録できませんでした」の警告だけが出て現場が不安になるので送らない。
     //   持ち出しは下の startMove（保険経路）が立てる。
@@ -5042,6 +5062,7 @@ async function confirmCash(kind) {
         if (j3 && j3.ok) {
           residualSaved = true;
           if (j3.moveId) movedOk = true;
+          if (j3.secondAdded) secondAddedX = j3.secondAdded;   // ★v8.21
           if (ccIsSpot && j3.spot) {
             // ★2026-08-06 スポットは残数の一致判定をしない（申告残数＝定数納品なので必ずズレる）。
             //   見せるのは社長が欲しがっている1行＝レジが合っているか。
@@ -5141,7 +5162,14 @@ async function confirmCash(kind) {
     } else if (residualMsg) {
       showToast(residualMsg, 'error', 6000);
     } else if (kind === '2次販売') {
-      showToast('2次販売として記録し回収済みにしました', 'success');
+      // ★v8.21 行き先に足せた時はその数を出す
+      if (secondAddedX && secondAddedX.added) {
+        showToast(secondAddedX.toName + ' の納品に ' + secondAddedX.added + '個 足しました（回収済み）', 'success', 5000);
+      } else if (planned.length) {
+        showToast('⚠️ 回収済みにしましたが、' + planned[0].name + ' の納品に足せませんでした。社長に連絡してください', 'error', 7000);
+      } else {
+        showToast('2次販売として記録し回収済みにしました', 'success');
+      }
     } else {
       showToast('現金有高を記録し回収済みにしました', 'success');
     }
@@ -6863,6 +6891,7 @@ function _moveProdName_(pid) {
 let _destSel_       = [];    // 選択中の [{id,name}]
 let _destCb_        = null;  // 決定時に呼ぶ関数
 let _destExcludeId_ = '';    // 出発拠点は行き先に出さない
+let _destSecondOnly_ = false; // ★v8.21 2次販売の行き先を選ぶ時だけ true（二次販売拠点だけ・1か所）
 
 function openDestPicker_(subText, excludeLocId, preset, cb) {
   _destSel_       = (preset || []).slice();
@@ -6880,11 +6909,16 @@ function renderDestGrid_() {
   _destSel_.forEach(x => { on[String(x.id)] = true; });
   box.innerHTML = (state.locations || [])
     .filter(l => l && l.id && l.name && String(l.id) !== _destExcludeId_
-              && !mvIsSecondArea_(l))   // ★2026-08-18 二次販売拠点は行き先に出さない
+              && (_destSecondOnly_ ? mvIsSecondArea_(l) : !mvIsSecondArea_(l)))   // ★2026-08-18 二次販売拠点は行き先に出さない／★v8.21 2次販売の時はそれだけ出す
     .map(l => '<button class="dest-btn' + (on[String(l.id)] ? ' on' : '') + '"'
             + ' data-id="' + _esc(l.id) + '" onclick="toggleDest_(\'' + _esc(l.id) + '\')">'
             + _esc(l.name) + '</button>')
     .join('');
+  if (_destSecondOnly_ && !box.innerHTML) box.innerHTML = '<div style="color:#888;font-size:13px;padding:8px;">今日の2次販売の場所がまだありません。「行き先なし」で記録だけ残せます。</div>';
+  const hint = document.querySelector('#mv-dest-modal .dest-hint');
+  if (hint) hint.style.display = _destSecondOnly_ ? 'none' : '';
+  const oth = document.querySelector('#mv-dest-modal .dest-other');
+  if (oth) oth.textContent = _destSecondOnly_ ? '行き先なし（2次販売の印だけ残す）' : '行き先はあとで決める';
   const c = document.getElementById('mv-dest-count');
   if (c) c.textContent = _destSel_.length === 0
     ? '行き先を選んでください'
@@ -6897,6 +6931,7 @@ function toggleDest_(id) {
     _destSel_.splice(i, 1);
   } else {
     const l = (state.locations || []).find(x => String(x.id) === sid);
+    if (_destSecondOnly_) _destSel_ = [];   // ★v8.21 2次販売は1か所だけ
     if (l) _destSel_.push({ id: String(l.id), name: String(l.name) });
   }
   renderDestGrid_();
@@ -6904,6 +6939,7 @@ function toggleDest_(id) {
 function closeDestPicker_() {
   document.getElementById('mv-dest-modal').classList.remove('show');
   _destCb_ = null;
+  _destSecondOnly_ = false;
 }
 function submitDestPick_() {
   if (_destSel_.length === 0) {
@@ -6913,6 +6949,7 @@ function submitDestPick_() {
   const cb = _destCb_, sel = _destSel_.slice();
   document.getElementById('mv-dest-modal').classList.remove('show');
   _destCb_ = null;
+  _destSecondOnly_ = false;
   if (cb) cb(sel);
 }
 // 決まっていない時は空で進む＝従来どおり到着登録で行き先を選ぶ
@@ -6920,6 +6957,7 @@ function submitDestPickUndecided_() {
   const cb = _destCb_;
   document.getElementById('mv-dest-modal').classList.remove('show');
   _destCb_ = null;
+  _destSecondOnly_ = false;
   if (cb) cb([]);
 }
 
@@ -8219,6 +8257,35 @@ function ptClearAll_() {
     tag.classList.remove('p', 'm', 'n');
     tag.classList.add('n');
     tag.textContent = '—';
+  });
+  ptRecalc_();
+}
+
+/* ★v8.21 (2026-11-17)【車載を全部下ろす】社長要望。
+   車に積んでいる全商品について「置く」に車載の数をそのまま入れる（下げるは消す）。送信は今までどおり
+   「この内容で反映する」で、押す前に数は直せる。ptSnap（推奨）は触らないので巡回ログの採点は壊れない。
+   お茶はこの画面に出ていないので対象外。 */
+function ptPutAllVeh_() {
+  const rem = (state.move.vehicle && state.move.vehicle.remaining) || {};
+  const veh = rem.items || {};
+  let tot = 0;
+  document.querySelectorAll('#pt-rows .pt-num').forEach(inp => { tot += Math.max(0, Number(veh[inp.getAttribute('data-pid')]) || 0); });
+  if (tot <= 0) { showToast('車載の残りがありません（または取れていません）', 'error'); return; }
+  if (!confirm('車載の ' + tot + '個 を全部 ' + _moveLocName_(ptPicked) + ' に置きます。よろしいですか？\n（送信前に数は直せます）')) return;
+  document.querySelectorAll('#pt-rows .pt-num').forEach(inp => {
+    const pid = inp.getAttribute('data-pid');
+    const q   = Math.max(0, Number(veh[pid]) || 0);
+    const dir = q > 0 ? 'p' : 'n';
+    inp.value = q > 0 ? q : '';
+    inp.setAttribute('data-dir', dir);
+    inp.classList.remove('p', 'm');
+    if (dir !== 'n') inp.classList.add(dir);
+    const tag = document.querySelector('#pt-rows .pt-tag[data-pid="' + pid + '"]');
+    if (tag) {
+      tag.classList.remove('p', 'm', 'n');
+      tag.classList.add(dir);
+      tag.textContent = dir === 'p' ? '置く' : '—';
+    }
   });
   ptRecalc_();
 }
@@ -10444,7 +10511,7 @@ function rtEscapeHtml(s) {
          2次販売 … 種別だけ記録する（売上の付け方は後決め） -->
     <div class="cash-modal-btns" id="cc-kind-btns" style="display:none;">
       <button class="cash-modal-btn move"   id="cc-btn-move"   onclick="openCollectDestPicker_()" disabled>🔄 移動</button>
-      <button class="cash-modal-btn second" id="cc-btn-second" onclick="confirmCash('2次販売')" disabled>🛒 2次販売</button>
+      <button class="cash-modal-btn second" id="cc-btn-second" onclick="openCollectSecondPicker_()" disabled>🛒 2次販売</button>
     </div>
     <div class="cc-kind-hint" id="cc-kind-hint" style="display:none;">
       移動＝残った弁当を積んで運ぶ（下ろす拠点は移動タブで登録）<br>2次販売＝この場から別の売り方をする
