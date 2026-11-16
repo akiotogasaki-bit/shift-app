@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ja">
+<!-- register v3.40 (2026-11-17) 【二次販売レジ：開店後の持ち込みを締めの前に納品数へ足す】社長決定 A案。ドライバーが回収で「🛒 2次販売」→行き先を選ぶと、メインGASが「二次販売納品」に300円・500円で追記する。開店前の分は開始時の既定値に入る。開店後の分は締め画面に入る時に読み直し、今の納品数より多い区分だけ確認を出して上げる（下げない）。通常レジ・その場の2次（移動で入る）は変わらない。要: メインGAS 2026-11-17・driver v8.21。 -->
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -5672,8 +5673,41 @@ function resumeForAdditionalSales() {
 //   - 入場時：localStorage（state._finalRegisterEnd等）からDOMに復元
 //   - 退場（レジに戻る）：値を保持しつつregister画面へ
 // ═══════════════════════════════════════════════════════════════
+/* ★v3.40 (2026-11-17) 二次販売レジ：開店後にドライバーが持ち込んだ分を締めの前に納品数へ足す（社長決定 A案）。
+   ドライバーが回収で「🛒 2次販売」→行き先を選ぶと、メインGASが「二次販売納品」に追記する。
+   開店前の分は開始時の既定値に入るが、開店後の分はそのままだと締めの納品数に入らない。
+   今の納品数より持ち込みの合計が多い区分だけ、確認を出してから上げる（下げはしない＝手で数えた分を消さない）。
+   取れない時は何もせず締めへ進む。 */
+async function sd2ndTopUp_() {
+  if (!IS_2ND || !state.location || !state.location.id) return;
+  try {
+    const url = `${state.GAS_URL}?action=getPlannedDelivery&date=${encodeURIComponent(ppToday())}`
+              + `&loc=${encodeURIComponent(state.location.id)}&_cb=${Date.now()}${Math.random().toString(36).slice(2, 7)}`;
+    const j = await Promise.race([
+      fetch(url, { redirect: 'follow' }).then(r => r.json()),
+      new Promise(res => setTimeout(() => res(null), 15000)),
+    ]);
+    if (!j || !j.ok) return;
+    const plan = j.deliveryCount || {};
+    const up = [];
+    Object.keys(plan).forEach(pid => {
+      const want = Number(plan[pid]) || 0, cur = Number((state.deliveryCount || {})[pid]) || 0;
+      if (want > cur) up.push({ pid, want, cur });
+    });
+    if (!up.length) return;
+    const nm = pid => { const p = (state.products || []).find(x => String(x.id) === String(pid)); return p ? p.name : pid; };
+    const lines = up.map(u => nm(u.pid) + '：' + u.cur + '個 → ' + u.want + '個（+' + (u.want - u.cur) + '）');
+    if (!confirm('ドライバーが開店後に持ち込んだ分があります。\n納品数を次のように直しますか？\n\n' + lines.join('\n'))) return;
+    up.forEach(u => { state.deliveryCount[u.pid] = u.want; sendDeliveryUpdate(u.pid, u.want); });
+    saveState();
+    try { renderStockList(); renderProducts(); } catch (e) {}
+    showToast('納品数を直しました（' + lines.length + '品）');
+  } catch (e) { console.warn('sd2ndTopUp_', e); }
+}
+
 async function enterFinalScreen() {
   if (!(await hoGateBeforeClose_())) return;   // ★v3.39 必ず取り直してから下の判定をする
+  await sd2ndTopUp_();   // ★v3.40 二次販売レジだけ：開店後の持ち込みを納品数へ
   /* ★2026-08-20 v3.27【拠点振替】受け取っていない振替があれば締めさせない。
      社長選択の逃げ道＝「すぐ確認できない時があるから後からでもできるように」。
      ここで引き留めれば、残数を申告する前に必ず目に入る。
