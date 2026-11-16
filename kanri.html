@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- kanri.html v4.23 (2026-11-17) 【拠点配分：下の段を「入れる弁当の数」に／種類別の合計は右へ】社長「販売員名の下に種類毎の合計を表示（拠点毎のはいらない）」「拠点の下には入れる弁当の数を知りたいから１つ目が海苔弁とかつ重の合計、その下に全六の合計」→モック確認後「この形で入れて」。★拠点合計の下＝「海苔弁＋カツ重」「全六」（全六あり・なし・エビ・ハン。カツ重は除く）の2行。拠点ごとのカテゴリー別合計（海苔弁系／満腹系／全六／他社商品）はやめた（S1_CAT_ROWS_ON=false）。★右の販売員名の下に「種類別の合計」（データの仲間分けのまま総数だけ＝全六にはカツ重が入る）＋総合計。GAS変更なし。 -->
 <!-- kanri.html v4.22 (2026-11-17) 【拠点配分：満腹の車載列の緑（エリア合計）を消した】社長「満腹唐揚げがセパレートとして出されている」→「満腹の緑は消して」。11/13 に単価マスタのセパレート○を他社3品だけにしたが、v4.00 の「車載の満腹欄＝エリアの満腹合計（緑太字）」が残っていた。★S1_MAN_AREA_ON=false で、満腹の行の車載列は実際の積み数だけ・車載計／カテゴリー別「満腹系」の車載計にもエリア合計と置き弁ぶんを足さない。白米・玄米のセパレート行（他社3品）と拠点合計は変わらない。★同版で、中計より右の拠点の太線を「その日に出ている拠点を中計の次から4つずつ」に変えた（社長「やる・やらないは日によって違うけど、中計の次から4拠点ずつで太線」）。中計より左（3拠点ずつ・車載の終わり）はそのまま。GAS変更なし。 -->
 <!-- kanri.html v4.21 (2026-11-11) 【配分調整の「決定」を Firebase 経由に】社長「配分調整をして１から2の計算に進むときに計算できませんでした。って出る」→「根本的な解決をしたい」→ C を先に → A。★原因＝決定（GAS bmDecide）は夜 69〜127秒かかり、サーバーは計算し終えているのに画面だけが結果を受け取れず失敗表示＋押し直しで計算が重なっていた（11/11 0時台の4回とも doGet遅延ログでは完了）。★決定ボタンは Firebase の decide に受付だけ頼み、4秒おきに結果を聞く。GAS を叩いて粘るのは Firebase（JSON が返らない時だけ最大9分まで叩き直す・同じ日の重ね押しは1本に寄せる・失敗の中身を残す）。ボタンに「計算中… ◯秒」。Firebase に届かない時・90秒たっても始まらない時だけ従来どおり /exec を直接叩く。確認ダイアログ・シフトの一覧・トーストは変えていない。GAS変更なし（Firebase 関数 decide／decideRun を追加）。 -->
 <!-- kanri.html v4.20 (2026-11-06) 【🚚 エリア担当ドライバー】社長決定A案「エリアの内容の変更はなくて、担当エリアが変わることがある。エリアの色は固定でエリア担当ドライバーだけまとめて変更できるようにしたい」。★⚙️ 設定の最上部に「🚚 エリア担当ドライバー」。エリアごとにドライバーを選んで保存（doPost `saveAreaDrivers`）すると、そのエリアの全拠点＋車載の主担当（拠点マスタ J・K列）がまとめて替わる。読み込みは `getAreaDrivers`。★色は拠点マスタ エリア列の塗り（2026-11-06 に5エリアとも塗って固定）で、担当を替えても動かない。その日だけの代理・応援は従来どおり担当例外。要メインGAS 2026-11-06 以降。 -->
@@ -4569,6 +4570,37 @@ function renderSheet1(data) {
     return html;
   }
 
+  /* ★2026-11-17 v4.23【社長指示】拠点の下は「入れる弁当の数」＝①海苔弁＋カツ重 ②全六（カツ重を除く）の2行。
+     拠点ごとのカテゴリー別合計はやめ、種類別の合計は右の販売員名の下に総数だけ出す（s1CatTotals）。
+     社長「販売員名の下に種類毎の合計を表示（拠点毎のはいらない）」「拠点の下には入れる弁当の数を知りたいから
+     １つ目が海苔弁とかつ重の合計、その下に全六の合計」。戻すなら S1_CAT_ROWS_ON=true。 */
+  const S1_CAT_ROWS_ON = false;
+  const s1CatTotals = [];
+  let s1GrandAll = 0;
+  const s1IsKatsuju = r => /カツ重/.test(String((r && r.baseName) || ''));
+  function s1PackRowHTML(label, color, pred) {
+    const rs = allRows.filter(r => r && !isTea(r) && !r.isExternal && pred(r));
+    const byLoc = {}; let sub = 0, veh = 0, tot = 0;
+    locIds.forEach((lid, idx) => {
+      let v = 0; rs.forEach(r => { v += Number((r.byLocation || {})[lid]) || 0; });
+      byLoc[lid] = v; tot += v;
+      if (idx < subtotalSplit) sub += v;
+      if (VEH_RE_S1.test(lid)) veh += v;
+    });
+    if (!tot) return '';
+    let h = `<tr class="cat-row g-${color}" style="font-weight:800;">`;
+    h += `<td class="cell-name cat-label">${label}</td>`;
+    visLocIds.forEach((lid, vIdx) => {
+      if (vIdx === subtotalInsertAt) {
+        h += `<td class="cell-veh">${veh || ''}</td>`;
+        h += `<td class="cell-sub">${sub || ''}</td>`;
+      }
+      h += `<td class="cell-data${visBoundaryCls(vIdx)}">${byLoc[lid] || ''}</td>`;
+    });
+    h += `<td class="cell-tot">${tot}</td></tr>`;
+    return h;
+  }
+
   // カテゴリー別合計行（白米+玄米合算、お茶除外）
   function buildCategoryRowsHTML() {
     const colspan = 1 + visLocIds.length + 1 + 1;
@@ -4610,7 +4642,10 @@ function renderSheet1(data) {
     html += `<td class="cell-tot">${grandTotal}</td>`;
     html += '</tr>';
 
-    html += `<tr><td colspan="${colspan}" class="cell-section-cat">▼ カテゴリー別合計</td></tr>`;
+    // ★v4.23 拠点の下に入れる弁当の数（海苔弁＋カツ重／全六）
+    html += s1PackRowHTML('海苔弁＋カツ重', 'blue', r => r.category === '海苔弁系' || s1IsKatsuju(r));
+    html += s1PackRowHTML('全六', 'yellow', r => r.category === '全六' && !s1IsKatsuju(r));
+    if (S1_CAT_ROWS_ON) html += `<tr><td colspan="${colspan}" class="cell-section-cat">▼ カテゴリー別合計</td></tr>`;
 
     SHEET1_CATEGORIES.forEach(cat => {
       const catRows = allRows.filter(r => cat.matches.indexOf(r.category) >= 0);
@@ -4638,6 +4673,8 @@ function renderSheet1(data) {
       catLocRows.forEach(r => { catVeh += s1ManVehExtra(r); });   // ★v4.00 満腹のエリア合計（車載計だけ）
       total += extTotal;                       // ★総数管理ぶんを合計に加える
       if (total === 0) return;  // 全拠点ゼロなら行ごと省略
+      s1CatTotals.push({ label: cat.label, color: cat.color, total: total });   // ★v4.23 右の種類別の合計へ
+      if (!S1_CAT_ROWS_ON) return;
 
       // 他社商品だけのカテゴリー（拠点内訳がまったく無い）は横断1マスで見せる
       const catIsAllExternal = (catLocRows.length === 0) && extTotal > 0;   // ★v3.99 車載の内訳が無い時だけ1マス
@@ -4680,6 +4717,7 @@ function renderSheet1(data) {
     //   同じ内容の行を重ねず、総合計だけを足す（v3.60 は他社の行が2回出て読みにくかった）。
     // ★v3.99 車載の内訳がある他社は拠点合計に入ったので、ここで足すのは内訳の無い日のぶんだけ
     const extGrand = allRows.reduce((a, r) => a + ((r.isExternal && !s1ExtHasVeh(r)) ? (Number(r.total) || 0) : 0), 0);
+    s1GrandAll = grandTotal + extGrand;
     if (extGrand > 0) {
       const spanG = visLocIds.length + (subtotalInsertAt <= visLocIds.length ? 2 : 0);
       html += '<tr class="cat-row cat-grand">';
@@ -4713,6 +4751,19 @@ function renderSheet1(data) {
       + `</tr>`;
   });
   refHTML += '</table>';
+  // ★v4.23 販売員名の下に種類別の合計（総数だけ・拠点ごとは出さない）
+  if (s1CatTotals.length) {
+    refHTML += '<table class="ref-table" style="margin-top:10px;">'
+      + '<tr><th class="col-name" colspan="2">種類別の合計</th></tr>';
+    s1CatTotals.forEach(c => {
+      const bg = ({ blue: '#e3f2fd', green: '#e8f5e9', yellow: '#fff9c4' })[c.color] || '#fff';
+      refHTML += `<tr style="background:${bg};"><td class="col-name" style="background:${bg};">${escHtml(c.label)}</td>`
+        + `<td class="col-sp" style="text-align:right;font-weight:800;">${c.total}</td></tr>`;
+    });
+    refHTML += `<tr class="cat-grand"><td class="col-name" style="font-weight:800;">総合計</td>`
+      + `<td class="col-sp" style="text-align:right;font-weight:800;">${s1GrandAll}</td></tr>`;
+    refHTML += '</table>';
+  }
 
   body.innerHTML = `
     <div class="page-title">📋 ${escHtml(dateLabel)}　拠点配分表</div>
