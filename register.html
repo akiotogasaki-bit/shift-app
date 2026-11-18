@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ja">
+<!-- register v3.42 (2026-11-18) 【在庫の一覧に「売ったのに納品0」の商品を出し、赤く知らせる】社長決定 B案。11/18 銀座で南蛮・油淋鶏を納品数0のまま売り、在庫の一覧（ふつうの表示）が「納品>0 か移動あり」しか出さないため、直そうとしても出てこなかった。★ふつうの表示に「売った数が1以上」の商品も出す。★納品＋移動より多く売れている商品は行を赤枠にして「⚠ 納品数を入れてください」（押すと編集モード）。★該当がある時だけ一覧の上に赤い帯で商品名を並べる。納品数を自動で書き換えはしない。販売画面・締め・2次販売・編集モードの中身は変えていない。GAS変更なし。 -->
 <!-- register v3.40 (2026-11-17) 【二次販売レジ：開店後の持ち込みを締めの前に納品数へ足す】社長決定 A案。ドライバーが回収で「🛒 2次販売」→行き先を選ぶと、メインGASが「二次販売納品」に300円・500円で追記する。開店前の分は開始時の既定値に入る。開店後の分は締め画面に入る時に読み直し、今の納品数より多い区分だけ確認を出して上げる（下げない）。通常レジ・その場の2次（移動で入る）は変わらない。要: メインGAS 2026-11-17・driver v8.21。 -->
 <head>
 <meta charset="UTF-8">
@@ -4047,16 +4048,27 @@ function renderStockList() {
 
   // 編集モードでは納品済みじゃない商品も全て表示（追加できるように）
   // ★v3.2 通常表示は「納品>0 または 移動±あり」を対象（他拠点から移動して来た商品も表示）
+  // ★v3.42 売った数が1以上の商品も必ず出す（納品0のまま売った他社弁当が一覧に出ず、直せなかった・11/18 銀座）
   const products = stockEditMode
     ? state.products
-    : state.products.filter(p => (state.deliveryCount[p.id] || 0) > 0 || (Number(moveAdj[p.id]) || 0) !== 0);
+    : state.products.filter(p => (state.deliveryCount[p.id] || 0) > 0 || (Number(moveAdj[p.id]) || 0) !== 0
+                              || (state.productSales[p.id] || 0) > 0);
 
   if (products.length === 0) {
     list.innerHTML = '<div class="history-empty">納品データがありません</div>';
     return;
   }
 
-  list.innerHTML = products.map(p => {
+  // ★v3.42 納品（＋移動）より多く売れている商品＝納品数の入れ忘れ。上に赤い帯でまとめて出す
+  const shortOf = (p) => (state.productSales[p.id] || 0) > effDelivery(p.id);
+  const shortList = products.filter(shortOf);
+  const shortBanner = shortList.length === 0 ? '' : `
+      <div ${stockEditMode ? '' : 'onclick="toggleStockEdit()"'} style="background:#B71C1C;color:#FFF;border-radius:10px;padding:10px 12px;margin-bottom:8px;font-size:13px;font-weight:700;line-height:1.5;${stockEditMode ? '' : 'cursor:pointer;'}">
+        ⚠ ${shortList.map(p => parseProductName(p.name, p.displayName).mainName).join('・')} の納品数が足りません<br>
+        <span style="font-weight:400;font-size:12px;">${stockEditMode ? '下の欄で、実際に届いた数を入れてください' : 'ここを押して、実際に届いた数を入れてください'}</span>
+      </div>`;
+
+  list.innerHTML = shortBanner + products.map(p => {
     const delivery  = state.deliveryCount[p.id] || 0;
     const mv        = Number(moveAdj[p.id]) || 0;   // ★v3.2 拠点間移動±
     const sold      = state.productSales[p.id] || 0;
@@ -4085,10 +4097,12 @@ function renderStockList() {
       `;
     }
 
+    const isShort = shortOf(p);   // ★v3.42
     return `
-      <div style="background:#1A1A1A;border:1px solid #333;border-radius:10px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;gap:8px;">
+      <div style="background:#1A1A1A;border:${isShort ? '2px solid #EF5350' : '1px solid #333'};border-radius:10px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;gap:8px;">
         <div style="flex:1;min-width:0;">
           <div style="color:#FFF;font-size:13px;font-weight:600;">${p.name}${isTea ? ' <small style="color:#888;">(お茶)</small>' : ''}${isSoldOut ? ' <span style="background:var(--red);color:#FFF;font-size:10px;padding:1px 5px;border-radius:4px;margin-left:4px;">完売</span>' : ''}${mvChip}</div>
+          ${isShort ? `<div onclick="toggleStockEdit()" style="display:inline-block;margin-top:4px;background:#EF5350;color:#FFF;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;cursor:pointer;">⚠ 納品数を入れてください</div>` : ''}
         </div>
         <div style="display:flex;gap:10px;font-size:12px;flex-shrink:0;">
           <div style="text-align:center;"><div style="color:#888;font-size:10px;">納品</div><div style="color:#CCC;font-weight:700;">${delivery}</div></div>
