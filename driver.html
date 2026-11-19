@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v8.22 (2026-11-20) 【2次販売と回収の穴3つ】社長決定「2次販売と回収が先」（FC0次準備）。★①回収の「🛒 2次販売」で2次販売の場所が1つでもある日は「行き先なし」を出さない（submitDestPickUndecided_ でも弾く）。印だけ残って受け取った側の納品に乗らなかった。場所が無い日だけ従来どおり。★②二次販売拠点カード・入力画面・確認文に「回収で行き先を選んだ分は自動で足されている。ここは回収を通さない分だけ」を明記（v8.21 の自動足し込みと手入力の二重計上防止。サーバーが内訳を返さないので表示は合計のまま）。★③confirmCash の順番を ①現金→③残数→②回収済み に変更。残数を送るべき拠点で送れなかったら回収済みにせず止める（もう一度押せば送り直せる。サーバーは判定列・移動ID列で二重防止）。GAS変更なし。 -->
 <!-- driver v8.21 (2026-11-17) 【2次販売の行き先を選んで納品に足す／車載を全部下ろす】社長決定 A案。★回収の「🛒 2次販売」は先に行き先（二次販売拠点か、その日の「◯◯（2次）」を1か所）を選ぶ。選んだ先の納品数に、数えた残りがそのまま足される（その場の2次＝移動を立てて到着まで済ませる／セカンド神谷など＝300円・500円に換えて二次販売納品へ追記）。それまでは印だけで、受け取った側に記録が残らず毎日「販売＞納品」になっていた。一覧に無い時は「行き先なし」で従来どおり。★巡回の拠点画面に「🚚 車載を全部下ろす」＝車載の全商品を「置く」に入れる（確認つき・送信前に直せる）。要: メインGAS 2026-11-17（_ccAddToSecond_）。 -->
 <!-- driver v8.20 (2026-11-12) 【💬 相談で数字を聞く・スクショを付ける】社長決定 B（個数＋売上金額）＋ A（スクショは Firestore に縮めて残す）。★種類に「📊 数字を聞く」を足した（販売数・売上・人気の商品・時間帯の売れ方。相談役は Firebase の記録を道具 query_sales で集計してから答える。記録は 10/13 以降）。★📷 でスクショを2枚まで付けられる。端末で長い辺1280px・JPEG に縮めてから送る（1枚およそ200KB）。「この下げる3は違うと思う」のように画面ごと見せて相談できる。★FB_PROBE_VER_ を 8.20 に。要: Firebase consult 2026-11-12（salesQuery.js）。 -->
 <!-- driver v8.19 (2026-11-10) 【レジの2次販売切り替えに対応（register v3.38）】社長決定。★その場の2次（拠点ID＋_2）は拠点マスタに無いので、報告が来たら元の拠点から回収カードを作る。★二次販売の回収に「追加ギャラ」欄を足した（2次のギャラは基本0。追加がある時に担当エリアのドライバーが入力）。要: メインGAS 2026-11-10。 -->
@@ -3746,8 +3747,8 @@ function renderSecondSection_() {
        + `<span style="background:#7D3C98;color:#FFF;font-size:11px;font-weight:700;padding:1px 8px;border-radius:10px;">${locs.length}</span></div>`
        + `<div class="list-wrap sp-sec">${cards}`
        + `<div style="font-size:11px;color:var(--ink-mute);padding:4px 4px 2px;line-height:1.5;">`
-       +   `ここで<b>持って行った数</b>を入れると、販売員のレジに納品数として出ます。<br>`
-       +   `<b>あとから追加で持って行った分も、同じカードをタップして足せます。</b><br>`
+       +   `<b style="color:#C0392B;">⚠ 回収で「🛒 2次販売」を押して行き先を選んだ分は、自動で納品に足されています。ここで入れると二重になります。</b><br>`
+       +   `ここに入れるのは<b>回収を通さずに持って行った分</b>（車載・厨房から直接など）だけです。<br>`
        +   `<b>残数・現金の回収は、下の「未回収」から同じ拠点をタップ</b>してください。</div>`
        + `</div>`;
 }
@@ -3820,8 +3821,8 @@ function sdRender_() {
   if (hint) {
     hint.innerHTML = isSet
       ? '<b>その日の合計</b>を入れ直します。押し間違えて増えてしまった時に使ってください。'
-      : 'ここで入れた数が、販売員のレジに<b>納品数</b>として出ます。<br>'
-        + '<b>今回持って行った数だけ</b>を入れてください（前の分に足されます）。';
+      : '<b style="color:#C0392B;">⚠ 回収の「🛒 2次販売」で行き先を選んだ分は、もう足されています。</b><br>'
+        + '<b>回収を通さずに持って行った分だけ</b>を入れてください（前の分に足されます）。';
   }
   const send = document.getElementById('sd-send');
   if (send) send.textContent = isSet ? 'この数に訂正する' : '追加で登録する';
@@ -3856,7 +3857,9 @@ async function submitSecondDeliv() {
   const before = sdCurrentTotal_();
   const msg = isSet
     ? name + ' の合計を訂正します。\n\n' + detail + '\n合計 ' + before + '個 → ' + sum + '個\n\n訂正しますか？'
-    : name + ' に追加します。\n\n' + detail + '\n合計 ' + before + '個 → ' + (before + sum) + '個\n\nこの数で入力しますか？';
+    : name + ' に追加します。\n\n' + detail + '\n合計 ' + before + '個 → ' + (before + sum) + '個\n\n'
+      + '⚠ 回収の「🛒 2次販売」で行き先を選んだ分は、もう足されています（' + before + '個に含まれています）。\n'
+      + 'これは回収を通さずに持って行った分ですか？';   // ★v8.22 二重入力の防止
   if (!confirm(msg)) return;
 
   const btn = document.getElementById('sd-send');
@@ -4994,21 +4997,9 @@ async function confirmCash(kind) {
       const j1 = await res1.json();
       if (!j1 || j1.success === false) throw new Error((j1 && j1.error) || '現金有高の保存に失敗');
     }
-    // ② 回収済みにする
-    const res2 = await fetch(GAS_URL, {
-      method: 'POST',
-      body: JSON.stringify({
-        action:       'setCollected',
-        locationId:   id,
-        locationName: loc ? loc.name : '',
-        userId:       state.userId,
-        userName:     state.userName,
-      }),
-      redirect: 'follow',
-    });
-    const j2 = await res2.json();
-    if (!j2 || j2.success === false) throw new Error((j2 && j2.error) || '回収状態の更新に失敗');
-    shadowSend_({ action: 'setCollected', locationId: id });
+    // ★v8.22 (2026-11-20) 順番を ①現金 → ③残数 → ②回収済み に変えた（社長決定）。
+    //   従来は②を先に通していたので、③が落ちても画面は「回収済み」になり残数だけ空のまま残った。
+    //   サーバーの残数記録は回収状態を見ていない（判定列と移動ID列で二重防止）ので、入れ替えても再送しても安全。
 
     // ③ ★2026-08-01 残数の照合（販売員の申告と突き合わせる）
     //    残数を取得できていない拠点（締め前など）はスキップ。ここで失敗しても回収は成立させる。
@@ -5091,6 +5082,28 @@ async function confirmCash(kind) {
       console.warn('残数の既定値を取得できておらず、記録をスキップしました');
     }
 
+    // ★v8.22 残数を送るべき拠点で送れなかった時は、ここで止める（回収済みにしない）。
+    //   ボタンは catch で戻るので、そのままもう一度押せば①から送り直せる（①は上書き・③は二重にならない）。
+    if (ccSend !== null && !noReg && !residualSaved) {
+      throw new Error('⚠️ 残数を記録できませんでした。回収済みにはしていません。電波を確かめて、もう一度押してください');
+    }
+
+    // ② 回収済みにする（★v8.22 残数を記録できてから）
+    const res2 = await fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        action:       'setCollected',
+        locationId:   id,
+        locationName: loc ? loc.name : '',
+        userId:       state.userId,
+        userName:     state.userName,
+      }),
+      redirect: 'follow',
+    });
+    const j2 = await res2.json();
+    if (!j2 || j2.success === false) throw new Error((j2 && j2.error) || '回収状態の更新に失敗');
+    shadowSend_({ action: 'setCollected', locationId: id });
+
     // ★2026-08-05 「移動」を選んだのに移動が立たなかった時の保険。
     //   置き弁など残数照合ログに行が無い拠点では submitCollectionCheck が空振りするため、
     //   ここで直接 startMove を投げる（残数がそのまま持ち出しになる）。
@@ -5150,7 +5163,8 @@ async function confirmCash(kind) {
       : '';
     // ★2026-08-18 当日欠勤（レジ未開始）は残数照合ログに行が無いのが正常なので警告を出さない。
     if (!residualSaved && !noReg) {
-      showToast('⚠️ 回収済みにしましたが、残数を記録できませんでした。社長に連絡してください', 'error', 7000);
+      // ★v8.22 ここに来るのは残数の既定値が取れず送れなかった時だけ（送って落ちた時は上で止めている）
+      showToast('⚠️ 回収済みにしましたが、残数は未確認です（読み込みに失敗）。社長に連絡してください', 'error', 7000);
       if (moveMsg) {
         // showToast は前のトーストを置き換えるので、移動の案内は少し遅らせて必ず見せる
         setTimeout(function () { showToast(moveMsg, 'success', 6000); }, 3000);
@@ -6919,6 +6933,9 @@ function renderDestGrid_() {
   if (hint) hint.style.display = _destSecondOnly_ ? 'none' : '';
   const oth = document.querySelector('#mv-dest-modal .dest-other');
   if (oth) oth.textContent = _destSecondOnly_ ? '行き先なし（2次販売の印だけ残す）' : '行き先はあとで決める';
+  // ★v8.22 2次販売の場所が1つでもある日は「行き先なし」を出さない（社長決定 2026-11-20）。
+  //   選ぶと印だけ残って受け取った側の納品に乗らず、毎日「販売＞納品」になっていた。場所が無い日だけ出す。
+  if (oth) oth.style.display = (_destSecondOnly_ && box.querySelector('.dest-btn')) ? 'none' : '';
   const c = document.getElementById('mv-dest-count');
   if (c) c.textContent = _destSel_.length === 0
     ? '行き先を選んでください'
@@ -6954,6 +6971,11 @@ function submitDestPick_() {
 }
 // 決まっていない時は空で進む＝従来どおり到着登録で行き先を選ぶ
 function submitDestPickUndecided_() {
+  // ★v8.22 念のため：2次販売で場所が選べる時は通さない（ボタンは隠しているが二重の守り）
+  if (_destSecondOnly_ && document.querySelector('#mv-dest-grid .dest-btn')) {
+    showToast('2次販売の場所を1か所選んでください', 'error', 4000);
+    return;
+  }
   const cb = _destCb_;
   document.getElementById('mv-dest-modal').classList.remove('show');
   _destCb_ = null;
