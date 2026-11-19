@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v8.23 (2026-11-20) 【押し引きの元データの穴4〜7】社長決定「画面だけで全部進めて」（FC0次準備）。★④積み込みの確定を確かめられない時（通信失敗・古い応答）は黄色の帯で知らせる（ゲートはしない）。★⑤積み込みを確定した直後に1回だけ「開店前に先に下ろす拠点はありますか？」→OKで「車載を減らす」を開く。★⑥出発から30分過ぎた自分の搬送中を回収タブの一番上に赤カードで出す（タップで移動タブ。loadTodayMoves_ のたびに出し直す）。★⑦巡回で推奨の数を1つも触らずに送る時だけ確認（入力欄に data-rec で推奨を覚えさせ、置く/下げると数の両方で比べる）。GAS変更なし。 -->
 <!-- driver v8.22 (2026-11-20) 【2次販売と回収の穴3つ】社長決定「2次販売と回収が先」（FC0次準備）。★①回収の「🛒 2次販売」で2次販売の場所が1つでもある日は「行き先なし」を出さない（submitDestPickUndecided_ でも弾く）。印だけ残って受け取った側の納品に乗らなかった。場所が無い日だけ従来どおり。★②二次販売拠点カード・入力画面・確認文に「回収で行き先を選んだ分は自動で足されている。ここは回収を通さない分だけ」を明記（v8.21 の自動足し込みと手入力の二重計上防止。サーバーが内訳を返さないので表示は合計のまま）。★③confirmCash の順番を ①現金→③残数→②回収済み に変更。残数を送るべき拠点で送れなかったら回収済みにせず止める（もう一度押せば送り直せる。サーバーは判定列・移動ID列で二重防止）。GAS変更なし。 -->
 <!-- driver v8.21 (2026-11-17) 【2次販売の行き先を選んで納品に足す／車載を全部下ろす】社長決定 A案。★回収の「🛒 2次販売」は先に行き先（二次販売拠点か、その日の「◯◯（2次）」を1か所）を選ぶ。選んだ先の納品数に、数えた残りがそのまま足される（その場の2次＝移動を立てて到着まで済ませる／セカンド神谷など＝300円・500円に換えて二次販売納品へ追記）。それまでは印だけで、受け取った側に記録が残らず毎日「販売＞納品」になっていた。一覧に無い時は「行き先なし」で従来どおり。★巡回の拠点画面に「🚚 車載を全部下ろす」＝車載の全商品を「置く」に入れる（確認つき・送信前に直せる）。要: メインGAS 2026-11-17（_ccAddToSecond_）。 -->
 <!-- driver v8.20 (2026-11-12) 【💬 相談で数字を聞く・スクショを付ける】社長決定 B（個数＋売上金額）＋ A（スクショは Firestore に縮めて残す）。★種類に「📊 数字を聞く」を足した（販売数・売上・人気の商品・時間帯の売れ方。相談役は Firebase の記録を道具 query_sales で集計してから答える。記録は 10/13 以降）。★📷 でスクショを2枚まで付けられる。端末で長い辺1280px・JPEG に縮めてから送る（1枚およそ200KB）。「この下げる3は違うと思う」のように画面ごと見せて相談できる。★FB_PROBE_VER_ を 8.20 に。要: Firebase consult 2026-11-12（salesQuery.js）。 -->
@@ -4037,6 +4038,37 @@ function addSwitch2ndLocs_() {
   });
 }
 
+/* ★v8.23 (2026-11-20) 穴6：到着登録の忘れ。出発から30分を過ぎた自分の搬送中を、回収タブの一番上に赤で出す。
+   搬送中のままだと出発元からは引かれるのに、どの拠点にも乗らない（残数も棚の数も足りなく見える）。 */
+const MV_STALE_MIN_ = 30;
+function mvDepartMs_(s) {
+  s = String(s || '');
+  let t = new Date(s).getTime();                       // "2026/11/20 12:05:00" や Date の文字列
+  if (!isNaN(t)) return t;
+  const m = s.match(/(\d{1,2}):(\d{2})/);              // 時刻だけ拾えたら今日のその時刻
+  if (!m) return NaN;
+  const d = new Date(); d.setHours(+m[1], +m[2], 0, 0);
+  return d.getTime();
+}
+function renderStaleMovesAlert_() {
+  const moves = (state.move && state.move.openMoves) || [];
+  const now = Date.now();
+  const stale = moves.map(m => ({ m: m, min: Math.floor((now - mvDepartMs_(m.departTime)) / 60000) }))
+                     .filter(x => !isNaN(x.min) && x.min >= MV_STALE_MIN_);
+  if (!stale.length) return '';
+  const rows = stale.map(x => {
+    const dest = (x.m.plannedTo && x.m.plannedTo.length) ? x.m.plannedTo.map(p => _esc(p.name)).join(' → ') : '？';
+    return '<div style="padding:4px 0;border-top:1px dashed #F1A9A0;">'
+         + _esc(x.m.fromLocationName || '') + ' → ' + dest + '　' + _esc(_fmtQtyObj_(x.m.qty))
+         + '　<b>' + x.min + '分前に出発</b></div>';
+  }).join('');
+  return '<div onclick="switchTab(\'move\')" style="background:#FDEDEC;border:2px solid #C0392B;color:#922B21;'
+       + 'border-radius:12px;padding:10px 12px;margin:8px 0;font-size:13px;line-height:1.5;cursor:pointer;">'
+       + '<div style="font-weight:700;font-size:14px;">🚨 到着登録がまだの移動が ' + stale.length + '件あります</div>'
+       + rows
+       + '<div style="margin-top:6px;font-weight:700;">タップして移動タブで「到着登録」（余ったら「持ち帰り」）をしてください</div></div>';
+}
+
 function renderCollectionList() {
   addSwitch2ndLocs_();
   // 休止中とそれ以外で分割
@@ -4048,7 +4080,7 @@ function renderCollectionList() {
 
   // ★2026-08-06 スポット拠点は先頭に別枠で出す（朝のレジ開始金入力の導線）
   // ★2026-08-15 二次販売の納品数入力をスポットの下に並べる（社長指示「回収タブより拠点を選んで入力」）
-  let html = renderSpotSection_() + renderSecondSection_();
+  let html = renderStaleMovesAlert_() + renderSpotSection_() + renderSecondSection_();
 
   // 未回収セクション（休止中も末尾に含める）
   const sectionCount = uncollected.length;
@@ -7433,6 +7465,13 @@ async function vlSubmit_() {
     vlDraft = {}; vlOpen = false; vlMore = false;
     showToast(veh.name + ' の積み込みを ' + total + '個 で確定しました', 'success', 3500);
     await refreshSupplyButton_();          // ＝ ptRefresh_（残数と推奨を取り直す）
+    // ★v8.23 穴5：開店前に下ろした分の記録漏れを防ぐ。確定の直後に1回だけ聞き、「はい」ならその場で開く。
+    if (total > 0 && confirm('開店前に、先に下ろす拠点はありますか？\n\n「OK」＝いま「🚚 車載を減らす」を開きます\n「キャンセル」＝下ろす拠点はありません')) {
+      const rp = document.getElementById('rv-panel');
+      if (rp && rp.style.display === 'none') rvToggle_();
+      const rb = document.getElementById('rv-box');
+      if (rb) rb.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   } catch (e) {
     showToast('エラー：' + (e.message || e), 'error', 6000);
   } finally {
@@ -7570,6 +7609,16 @@ async function ptRefresh_() {
   const vlUnconfirmed = !!(st && st.load && st.load.found === false);
   if ((vlUnconfirmed || vlOpen) && !vlPlanned) await vlLoadPlanned_();
   vlRender_();
+  // ★v8.23 (2026-11-20) 確定したか分からない時（通信失敗・古い応答）はゲートしない代わりに黄色で知らせる。
+  //   黙って通すと、未確定のまま配分表の数で代用され、置く数がずれる（穴4）。
+  if (!st || !st.load) {
+    const vb = document.getElementById('vl-box');
+    if (vb) vb.insertAdjacentHTML('afterbegin',
+      '<div style="background:#FFF8D6;border:1px solid #E5C100;color:#6B5400;border-radius:10px;'
+      + 'padding:8px 10px;margin:6px 0;font-size:13px;line-height:1.5;">'
+      + '⚠️ 積み込みを確定できているか確認できませんでした（通信）。<br>'
+      + '<b>まだ確定していなければ、積んだ数を入れて確定してください。</b>少ししてから開き直すと確認できます。</div>');
+  }
   if (vlUnconfirmed) {
     ['rv-box', 'pt-step1', 'pt-step2'].forEach(id => {
       const el = document.getElementById(id);
@@ -8044,7 +8093,7 @@ function ptRenderRows_() {
         <span class="c">
           <button class="pt-tag ${dir}" data-pid="${_esc(pid)}" onclick="ptToggleDir('${_esc(pid)}')">${lab}</button>
           <input type="number" inputmode="numeric" min="0" class="pt-num${dir === 'n' ? '' : ' ' + dir}"
-                 data-pid="${_esc(pid)}" data-dir="${dir}" value="${q > 0 ? q : ''}" oninput="ptRecalc_()">
+                 data-pid="${_esc(pid)}" data-dir="${dir}" data-rec="${dir}:${q > 0 ? q : 0}" value="${q > 0 ? q : ''}" oninput="ptRecalc_()">
         </span></div>`;
     }).join('');
   }
@@ -8482,6 +8531,14 @@ async function ptSubmit() {
   if (!Object.keys(put).length && !Object.keys(back).length) {
     showToast('置く数か下げる数を入れてください', 'error'); return;
   }
+  // ★v8.23 (2026-11-20) 穴7：推奨の数を1つも触らずに送る時だけ確認する（1つでも直していれば出さない）。
+  //   推奨のまま送ると、実際に置いた数と記録がずれて、棚の数も巡回の正解率も両方くるう。
+  let ptUntouched = true;
+  document.querySelectorAll('#pt-rows .pt-num').forEach(inp => {
+    const now = (inp.getAttribute('data-dir') || '') + ':' + (parseInt(inp.value, 10) || 0);
+    if (now !== (inp.getAttribute('data-rec') || now)) ptUntouched = false;
+  });
+  if (ptUntouched && !confirm('推奨の数のまま送ります。\n\n実際に置いた・下げた数と同じですか？\n（違う時は「キャンセル」を押して数を直してください）')) return;
 
   const btn = document.getElementById('pt-send-btn');
   if (btn) { btn.disabled = true; btn.textContent = '送信中…'; }
@@ -8744,6 +8801,7 @@ async function loadTodayMoves_() {
     renderOpenMoves_();
     renderTodayMoves_();
     updateCalculatedResidualTotal();
+    try { renderCollectionList(); } catch (e) {}   // ★v8.23 回収タブの「到着登録がまだ」の赤カードを出し直す
   } catch (e) { /* noop */ }
 }
 function renderOpenMoves_() {
