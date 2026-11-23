@@ -8,7 +8,7 @@
 <link rel="apple-touch-icon" href="cockpit-icon.png?v=2">
 <link rel="icon" href="cockpit-icon.png?v=2">
 <link rel="manifest" href="hq.webmanifest">
-<!-- boss/hq v1.1 (2026-11-24) ★v1.1 一覧をカテゴリーで絞れるように（社長「メニューをカテゴリー別で絞れるようにしたい」）。検索欄の下にカテゴリーのチップ（件数つき・スマホは横スクロール）。「全部／無効／販売中」と重ねて効く。カテゴリーが空の商品は「（未設定）」。
+<!-- boss/hq v1.1 (2026-11-24) ★v1.1 一覧をカテゴリーで絞れるように（社長「メニューをカテゴリー別で絞れるようにしたい」）。検索欄の下にカテゴリーのチップ（件数つき・スマホは横スクロール）。「全部／無効／販売中」と重ねて効く。カテゴリーが空の商品は「（未設定）」。0件のチップは薄く、選んだチップはスマホでも見える位置まで横に送る。
      boss/hq v1.0 (2026-11-24) 【本部アプリ・新メニュー登録】社長「新メニューを色々入れる予定。仕込み・発注・金額などメニューに関するものを一括で入力できるものが欲しい」
      「本部機能として別に用意した方が良くない？」→ 本部アプリを新設（FC全体設計書の「本部区画＝単価・食材・レシピ・仕込みは本部だけが書く」）。
      ★1画面で ①基本 ②金額 ③食材 ④仕込み ⑤配分の出し方 → 確認（どのシートの何行目に何を書くか）→ 保存。
@@ -75,6 +75,7 @@ details{margin-top:8px;} summary{font-size:12px;color:var(--navy);cursor:pointer
 .cat span{font-size:10px;color:var(--muted);}
 .cat.on{background:var(--navy);border-color:var(--navy);color:#fff;}
 .cat.on span{color:rgba(255,255,255,.75);}
+.cat.zero{opacity:.5;}
 @media (min-width:700px){ .cats{flex-wrap:wrap;overflow:visible;margin:0 0 10px;padding:0;} }
 .item{background:#fff;border:.5px solid var(--line);border-radius:9px;padding:10px 12px;margin-bottom:7px;display:flex;gap:10px;align-items:center;cursor:pointer;}
 .item .id{font-size:11px;color:var(--muted);width:40px;flex:none;}
@@ -286,8 +287,9 @@ function renderList(){
   $('new-btn').addEventListener('click', function(){ openEdit(null); });
   $('cats').addEventListener('click', function(e){
     var b = e.target.closest('.cat'); if(!b) return;
-    S.cat = b.getAttribute('data-c'); $('cats').innerHTML = catChips_(); renderItems_();
+    S.cat = b.getAttribute('data-c'); $('cats').innerHTML = catChips_(); renderItems_(); showCat_();
   });
+  showCat_();
   renderItems_();
 }
 /* ★v1.1 カテゴリーで絞る（社長「メニューをカテゴリー別で絞れるようにしたい」）。件数は今の状態の絞り込みを通した数 */
@@ -299,8 +301,14 @@ function catChips_(){
   var cats = (S.data.choices['カテゴリー'] || []).slice();
   if(cnt[NO_CAT_]) cats.push(NO_CAT_);
   if(S.cat && cats.indexOf(S.cat) < 0) S.cat = '';
-  var chip = function(c, label, n){ return '<button type="button" class="cat'+(S.cat === c ? ' on' : '')+'" data-c="'+esc(c)+'">'+esc(label)+'<span>'+n+'</span></button>'; };
+  var chip = function(c, label, n){ return '<button type="button" class="cat'+(S.cat === c ? ' on' : '')+(n ? '' : ' zero')+'" data-c="'+esc(c)+'">'+esc(label)+'<span>'+n+'</span></button>'; };
   return chip('', 'すべて', total) + cats.map(function(c){ return chip(c, c, cnt[c] || 0); }).join('');
+}
+/* 選んだチップが横スクロールの外に隠れないように（スマホ） */
+function showCat_(){
+  var box = $('cats'), on = box && box.querySelector('.cat.on');
+  if(!on || box.scrollWidth <= box.clientWidth) return;
+  box.scrollLeft = Math.max(0, on.offsetLeft - box.offsetLeft - (box.clientWidth - on.offsetWidth) / 2);
 }
 function passFlag_(p){
   if(S.filter === 'draft') return p.flag === '無効';
