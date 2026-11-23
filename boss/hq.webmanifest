@@ -1,0 +1,13 @@
+{
+  "name": "本部",
+  "short_name": "本部",
+  "start_url": "./hq.html",
+  "scope": "./hq.html",
+  "display": "standalone",
+  "background_color": "#1A3C5E",
+  "theme_color": "#1A3C5E",
+  "icons": [
+    { "src": "./cockpit-icon.png?v=2", "sizes": "180x180", "type": "image/png", "purpose": "any" },
+    { "src": "./cockpit-icon-512.png?v=2", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>本部</title>
+<meta name="apple-mobile-web-app-title" content="本部">
+<link rel="apple-touch-icon" href="cockpit-icon.png?v=2">
+<link rel="icon" href="cockpit-icon.png?v=2">
+<link rel="manifest" href="hq.webmanifest">
+<!-- boss/hq v1.0 (2026-11-24) 【本部アプリ・新メニュー登録】社長「新メニューを色々入れる予定。仕込み・発注・金額などメニューに関するものを一括で入力できるものが欲しい」
+     「本部機能として別に用意した方が良くない？」→ 本部アプリを新設（FC全体設計書の「本部区画＝単価・食材・レシピ・仕込みは本部だけが書く」）。
+     ★1画面で ①基本 ②金額 ③食材 ④仕込み ⑤配分の出し方 → 確認（どのシートの何行目に何を書くか）→ 保存。
+     ★無い食材・仕込みはその場で作れる（食材マスタ・仕込みマスタに同時に書く）。
+     ★新規は「下書き」＝有効フラグ「無効」で入る。レジにも配分にも出ない。「有効にする」で初めて全拠点に乗る（定番は newprod まで通す）。
+     ★書き込みは Firebase の boss 関数 → Sheets API 直（/exec の枠を使わない）。GAS を叩くのはキャッシュ消しと newprod だけ。→ functions/hq.js
+     ★ログインは Cockpit と同じ（BOSS_UIDS＝社長だけ）。台帳: 10_システム/本部アプリ.md -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.3.0/dist/tabler-icons.min.css">
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<style>
+:root{
+  --navy:#1A3C5E; --bg:#F2F2EE; --panel:#F6F6F3; --card:#fff;
+  --line:rgba(0,0,0,.10); --line2:rgba(0,0,0,.14); --muted:#7a7a74; --text:#222;
+  --green:#3B6D11; --orange:#854F0B; --red:#A32D2D; --new:#FFF8EC; --newline:#E7C98F;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP",Meiryo,sans-serif;color:var(--text);-webkit-text-size-adjust:100%;}
+.app{max-width:760px;margin:0 auto;min-height:100vh;background:var(--panel);display:flex;flex-direction:column;}
+.hdr{background:var(--navy);color:#fff;padding:13px 16px;display:flex;align-items:center;gap:8px;font-size:15px;font-weight:600;}
+.hdr i{font-size:18px;} .hdr .sp{flex:1;}
+.hdr a,.hdr button{color:#fff;background:none;border:none;font-size:18px;cursor:pointer;text-decoration:none;display:flex;}
+.tabs{display:flex;background:#fff;border-bottom:.5px solid var(--line2);}
+.tab{flex:1;padding:10px 2px;text-align:center;font-size:13px;color:var(--muted);background:none;border:none;cursor:pointer;border-bottom:2px solid transparent;font-family:inherit;}
+.tab.on{color:var(--navy);border-bottom-color:var(--navy);font-weight:600;}
+.tab:disabled{opacity:.45;cursor:default;}
+.body{padding:12px 16px 120px;flex:1;}
+input,select,textarea{width:100%;font-size:14px;padding:8px;border:.5px solid rgba(0,0,0,.18);border-radius:8px;font-family:inherit;color:var(--text);background:#fff;}
+input[type=checkbox],input[type=radio]{width:auto;}
+label.f{display:block;font-size:11px;color:var(--muted);margin:8px 0 3px;}
+label.f b{color:var(--red);font-weight:600;}
+.hint{font-size:11px;color:var(--muted);line-height:1.5;margin-top:3px;}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 10px;}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 10px;}
+.btn{background:var(--navy);color:#fff;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:500;width:100%;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px;}
+.btn:disabled{opacity:.5;cursor:default;}
+.btn.sub{background:#fff;color:var(--navy);border:.5px solid var(--navy);}
+.btn.go{background:var(--green);}
+.btn.sm{width:auto;padding:6px 10px;font-size:12px;}
+.btn.x{width:auto;background:none;color:var(--muted);padding:4px 6px;font-size:16px;}
+.card{background:#fff;border:.5px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:12px;}
+.card h3{font-size:14px;font-weight:600;color:var(--navy);display:flex;align-items:center;gap:6px;margin-bottom:2px;}
+.card h3 .n{display:inline-flex;width:20px;height:20px;border-radius:50%;background:var(--navy);color:#fff;font-size:11px;align-items:center;justify-content:center;}
+.newbox{background:var(--new);border:.5px solid var(--newline);border-radius:9px;padding:10px;margin-top:10px;}
+.newbox .t{font-size:12px;font-weight:600;color:var(--orange);display:flex;align-items:center;gap:6px;}
+.newbox .t .sp{flex:1;}
+.slot{display:grid;grid-template-columns:1fr 92px 30px;gap:6px;align-items:center;margin-top:6px;}
+.slot .u{font-size:10px;color:var(--muted);grid-column:1/-1;margin-top:-3px;}
+.adders{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
+.seg{display:flex;gap:6px;margin-top:4px;}
+.seg label{flex:1;border:.5px solid var(--line2);border-radius:8px;padding:9px 8px;font-size:13px;display:flex;gap:6px;align-items:flex-start;cursor:pointer;background:#fff;line-height:1.4;}
+.seg label.on{border-color:var(--navy);background:#EEF3F8;}
+.seg small{display:block;font-size:11px;color:var(--muted);}
+.chk{display:flex;gap:6px;align-items:center;font-size:13px;margin-top:10px;}
+details{margin-top:8px;} summary{font-size:12px;color:var(--navy);cursor:pointer;padding:4px 0;}
+.bar{position:fixed;left:0;right:0;bottom:0;background:rgba(246,246,243,.96);border-top:.5px solid var(--line2);padding:10px 16px calc(10px + env(safe-area-inset-bottom));z-index:20;}
+.bar .in{max-width:728px;margin:0 auto;display:flex;gap:8px;}
+/* 一覧 */
+.tools{display:flex;gap:6px;margin-bottom:10px;}
+.tools input{flex:1;}
+.tools select{width:auto;}
+.item{background:#fff;border:.5px solid var(--line);border-radius:9px;padding:10px 12px;margin-bottom:7px;display:flex;gap:10px;align-items:center;cursor:pointer;}
+.item .id{font-size:11px;color:var(--muted);width:40px;flex:none;}
+.item .nm{flex:1;font-size:13px;line-height:1.4;min-width:0;}
+.item .nm small{display:block;font-size:11px;color:var(--muted);}
+.item .pr{font-size:13px;font-variant-numeric:tabular-nums;text-align:right;flex:none;}
+.item .pr small{display:block;font-size:10px;color:var(--muted);}
+.badge{font-size:10px;padding:1px 6px;border-radius:6px;border:.5px solid currentColor;white-space:nowrap;}
+.b-draft{color:var(--orange);} .b-on{color:var(--green);} .b-off{color:var(--muted);} .b-trial{color:#6A3FA0;}
+.sec{font-size:11px;color:var(--muted);font-weight:600;margin:14px 0 6px;}
+.empty{background:#fff;border:.5px dashed var(--line2);border-radius:10px;padding:18px;text-align:center;color:#9a9a93;font-size:12px;line-height:1.6;}
+.draftnote{background:var(--new);border:.5px solid var(--newline);border-radius:9px;padding:10px 12px;font-size:12px;line-height:1.6;margin-bottom:12px;}
+/* 確認 */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:flex-end;justify-content:center;z-index:50;}
+.modal.show{display:flex;}
+.sheet{background:#fff;width:100%;max-width:760px;max-height:88vh;overflow:auto;border-radius:14px 14px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom));}
+.sheet h2{font-size:15px;margin-bottom:8px;}
+.sheet pre{white-space:pre-wrap;font-family:inherit;font-size:12px;line-height:1.65;background:var(--panel);border-radius:8px;padding:10px;margin:8px 0;}
+.sheet .warn{color:var(--orange);font-size:12px;line-height:1.6;}
+.sheet .err{color:var(--red);font-size:13px;line-height:1.7;white-space:pre-wrap;}
+.sheet .acts{display:flex;gap:8px;margin-top:12px;}
+.overlay{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:28px;gap:12px;color:var(--muted);z-index:60;font-size:13px;line-height:1.6;}
+.overlay i{font-size:34px;color:var(--navy);}
+.overlay input{max-width:260px;text-align:center;}
+.overlay .btn{max-width:260px;}
+.spinner{width:28px;height:28px;border:3px solid rgba(0,0,0,.12);border-top-color:var(--navy);border-radius:50%;animation:spin .8s linear infinite;display:inline-block;}
+.spinner.w{width:16px;height:16px;border-width:2px;border-color:rgba(255,255,255,.4);border-top-color:#fff;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.inline-loading{display:flex;align-items:center;justify-content:center;gap:8px;color:#9a9a93;font-size:12px;padding:18px;}
+.toast{position:fixed;left:50%;bottom:86px;transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;border-radius:9px;font-size:13px;z-index:70;opacity:0;transition:opacity .25s;pointer-events:none;max-width:88%;}
+.toast.show{opacity:.96;} .toast.err{background:var(--red);}
+.ver{font-size:9px;color:#c4c4bd;text-align:center;padding:6px 0 2px;}
+@media (min-width:700px){
+  .body{padding:16px 22px 120px;}
+  .grid2.w3{grid-template-columns:1fr 1fr 1fr;}
+  .card{padding:16px 18px;}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="hdr"><i class="ti ti-building-skyscraper" aria-hidden="true"></i>本部<span class="sp"></span>
+    <button id="reload" aria-label="読み直す"><i class="ti ti-refresh"></i></button>
+    <a href="desk.html" aria-label="Cockpit"><i class="ti ti-gauge"></i></a></div>
+  <div class="tabs">
+    <button class="tab on" data-t="list">メニュー一覧</button>
+    <button class="tab" data-t="edit">新メニュー登録</button>
+    <button class="tab" data-t="loc" disabled>拠点（準備中）</button>
+  </div>
+  <div class="body"><div id="root"><div class="inline-loading"><span class="spinner"></span>読み込み中…</div></div></div>
+  <div class="ver">boss/hq v1.0</div>
+</div>
+<div class="bar" id="bar" style="display:none"><div class="in" id="bar-in"></div></div>
+<div class="modal" id="modal"><div class="sheet" id="sheet"></div></div>
+<div class="overlay" id="gate"><span class="spinner"></span><div>ログインしています…</div></div>
+<div class="toast" id="toast"></div>
+<datalist id="dl-ing"></datalist>
+<datalist id="dl-shk"></datalist>
+<datalist id="dl-cat"></datalist>
+<datalist id="dl-rice"></datalist>
+<datalist id="dl-agg"></datalist>
+
+<script>
+/* 設定（Cockpit と同じ） */
+var BOSS_LIFF_ID = '';
+var FB_CFG_ = { apiKey: 'AIzaSyA_BcnCo7yjc1KXVhCEOgFikNkKW3WmKcc', authDomain: 'oedo-bento.firebaseapp.com',
+                projectId: 'oedo-bento', appId: '1:99139459025:web:13ec30058b25705fef32f0' };
+var FB_AUTH_URL_ = 'https://asia-northeast1-oedo-bento.cloudfunctions.net/auth';
+var BOSS_URL_ = 'https://asia-northeast1-oedo-bento.cloudfunctions.net/boss';
+var FB_SDK_ = 'https://www.gstatic.com/firebasejs/10.14.1/';
+var NEW_ = '（新）';
+
+var S = { tab:'list', data:null, q:'', filter:'all', E:null, busy:false };
+
+function $(id){ return document.getElementById(id); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+var toastTimer = null;
+function toast(msg, err){
+  var t = $('toast'); t.textContent = msg; t.className = 'toast show' + (err ? ' err' : '');
+  clearTimeout(toastTimer); toastTimer = setTimeout(function(){ t.className = 'toast' + (err ? ' err' : ''); }, 3000);
+}
+function yen(v){ return (v === '' || v == null) ? '—' : '¥' + Number(v).toLocaleString('ja-JP'); }
+
+/* ── ログイン（Cockpit と同じ） ── */
+function fbLoadScript_(src){
+  return new Promise(function(ok, ng){ var s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = ng; document.head.appendChild(s); });
+}
+async function fbSdk_(){
+  if(!window.firebase){
+    await fbLoadScript_(FB_SDK_ + 'firebase-app-compat.js');
+    await fbLoadScript_(FB_SDK_ + 'firebase-auth-compat.js');
+  }
+  if(!firebase.apps.length) firebase.initializeApp(FB_CFG_);
+}
+function fbPersistedUser_(){
+  return new Promise(function(res){
+    var done = false, un = null;
+    var fin = function(u){ if(done) return; done = true; try{ if(un) un(); }catch(e){} res(u || null); };
+    try{ un = firebase.auth().onAuthStateChanged(fin); }catch(e){ fin(null); }
+    setTimeout(function(){ fin(null); }, 5000);
+  });
+}
+async function signInWith_(body){
+  var r = await fetch(FB_AUTH_URL_, { method:'POST', body:JSON.stringify(body) }).then(function(x){ return x.json(); });
+  if(!r || !r.ok || !r.token) throw new Error((r && r.error) || 'ログインできませんでした');
+  await firebase.auth().signInWithCustomToken(r.token);
+}
+async function login_(){
+  await fbSdk_();
+  if(await fbPersistedUser_()) return true;
+  if(BOSS_LIFF_ID && window.liff){
+    try{
+      await liff.init({ liffId: BOSS_LIFF_ID });
+      if(!liff.isLoggedIn()){ liff.login({ redirectUri: location.href }); return false; }
+      var idt = liff.getIDToken && liff.getIDToken();
+      var act = !idt && liff.getAccessToken ? liff.getAccessToken() : null;
+      if(idt || act){ await signInWith_(idt ? { idToken: idt } : { accessToken: act }); return true; }
+    }catch(e){ console.warn('LIFF', e); }
+  }
+  return null;
+}
+function showPwGate_(msg){
+  $('gate').innerHTML = '<i class="ti ti-lock"></i><div>'+esc(msg || '入口パスワードを入れてください')+'</div>'
+    + '<input id="gate-pw" type="password" autocomplete="current-password" placeholder="パスワード">'
+    + '<button class="btn" id="gate-go">入る</button>';
+  var go = function(){
+    var pw = $('gate-pw').value.trim(); if(!pw) return;
+    $('gate-go').disabled = true;
+    signInWith_({ mode:'pw', password: pw }).then(afterLogin_).catch(function(){ showPwGate_('パスワードが違います'); });
+  };
+  $('gate-go').addEventListener('click', go);
+  $('gate-pw').addEventListener('keydown', function(e){ if(e.key === 'Enter') go(); });
+}
+function denyGate_(){
+  $('gate').innerHTML = '<i class="ti ti-ban"></i><div>このアプリは本部（社長）専用です。</div>'
+    + '<button class="btn sub" id="gate-out">別のアカウントで入り直す</button>';
+  $('gate-out').addEventListener('click', function(){ firebase.auth().signOut().then(function(){ location.reload(); }); });
+}
+async function afterLogin_(){
+  var me = await api('me').catch(function(){ return null; });
+  if(!me || !me.allowed){ denyGate_(); return; }
+  $('gate').style.display = 'none';
+  load();
+}
+async function api(mode, body){
+  var u = firebase.auth().currentUser;
+  if(!u) throw new Error('ログインできていません。開き直してください');
+  var tok = await u.getIdToken();
+  var r = await fetch(BOSS_URL_, { method:'POST', body:JSON.stringify(Object.assign({ mode: mode, fbIdToken: tok }, body || {})) });
+  var j = await r.json().catch(function(){ return null; });
+  if(!j) throw new Error('通信エラー ' + r.status);
+  if(j.ok === false && mode !== 'me'){ var e = new Error(j.error || '失敗しました'); e.data = j; throw e; }
+  return j;
+}
+
+/* ── 読み込み ── */
+async function load(keepTab){
+  $('root').innerHTML = '<div class="inline-loading"><span class="spinner"></span>読み込み中…</div>';
+  try{
+    S.data = await api('hqload');
+    fillLists_();
+    render();
+  }catch(e){
+    $('root').innerHTML = '<div class="empty">読み込めませんでした<br>' + esc(e.message) + '</div>';
+  }
+}
+function fillLists_(){
+  var d = S.data;
+  var opt = function(arr){ return arr.map(function(v){ return '<option value="'+esc(v)+'">'; }).join(''); };
+  $('dl-cat').innerHTML = opt(d.choices['カテゴリー'] || []);
+  $('dl-rice').innerHTML = opt(d.choices['米種'] || []);
+  $('dl-agg').innerHTML = opt(d.choices['集約グループ'] || []);
+  refreshRefLists_();
+}
+/* 食材・仕込みの候補（新しく作っている物も「（新）名前」で並べる） */
+function refreshRefLists_(){
+  var d = S.data, E = S.E;
+  var ing = d.ingredients.map(function(x){ return '<option value="'+esc(x.label)+'">'+esc(x.vendor + (x.unit ? '・' + x.unit : ''))+'</option>'; });
+  var shk = d.shikomi.map(function(x){ return '<option value="'+esc(x.label)+'">'; });
+  if(E){
+    E.newIngs.forEach(function(g){ if(g.name) ing.unshift('<option value="'+esc(NEW_ + g.name)+'">'); });
+    E.newShks.forEach(function(g){ if(g.name) shk.unshift('<option value="'+esc(NEW_ + g.name)+'">'); });
+  }
+  $('dl-ing').innerHTML = ing.join('');
+  $('dl-shk').innerHTML = shk.join('');
+}
+
+/* ── 表示 ── */
+function render(){
+  document.querySelectorAll('.tab').forEach(function(t){ t.classList.toggle('on', t.getAttribute('data-t') === S.tab); });
+  if(S.tab === 'list') renderList(); else renderEdit();
+}
+function flagBadge(p){
+  if(p.flag === '無効') return '<span class="badge b-draft">下書き</span>';
+  if(p.flag === '配達') return '<span class="badge b-off">配達</span>';
+  if(p.flag === '有効' || p.flag === '') return String(p.f['配分外']||'') === '○' ? '<span class="badge b-trial">試作</span>' : '<span class="badge b-on">販売中</span>';
+  return '<span class="badge b-off">'+esc(p.flag)+'</span>';
+}
+function renderList(){
+  $('bar').style.display = 'none';
+  $('root').innerHTML = '<div class="tools"><input id="q" placeholder="名前・ID・カテゴリーで探す" value="'+esc(S.q)+'">'
+    + '<select id="flt"><option value="all">全部</option><option value="draft">下書きだけ</option><option value="on">販売中だけ</option></select></div>'
+    + '<button class="btn" id="new-btn"><i class="ti ti-plus"></i>新メニューを登録する</button><div id="lst"></div>';
+  $('flt').value = S.filter;
+  // 検索欄は描き直さない（日本語入力の変換が途切れるため）。一覧だけ描き直す
+  $('q').addEventListener('input', function(e){ S.q = e.target.value; renderItems_(); });
+  $('flt').addEventListener('change', function(e){ S.filter = e.target.value; renderItems_(); });
+  $('new-btn').addEventListener('click', function(){ openEdit(null); });
+  renderItems_();
+}
+function renderItems_(){
+  var d = S.data, q = S.q.trim();
+  var list = d.products.filter(function(p){
+    if(S.filter === 'draft' && p.flag !== '無効') return false;
+    if(S.filter === 'on' && !(p.flag === '有効' || p.flag === '')) return false;
+    if(!q) return true;
+    return (p.id + ' ' + p.f['商品名'] + ' ' + p.f['表示名'] + ' ' + p.f['カテゴリー']).indexOf(q) >= 0;
+  });
+  var drafts = list.filter(function(p){ return p.flag === '無効'; });
+  var rest = list.filter(function(p){ return p.flag !== '無効'; }).sort(function(a, b){ return b.row - a.row; });
+  var row = function(p){
+    return '<div class="item" data-pid="'+esc(p.id)+'"><div class="id">'+esc(p.id)+'</div>'
+      + '<div class="nm">'+esc(p.f['商品名'])+' '+flagBadge(p)+'<small>'+esc([p.f['カテゴリー'], p.f['表示名']].filter(Boolean).join('・'))+'</small></div>'
+      + '<div class="pr">'+yen(p.f['単価（円）'])+'<small>原価 '+yen(p.f['原価'])+'</small></div></div>';
+  };
+  var h = '';
+  if(drafts.length) h += '<div class="sec">下書き（まだレジにも配分にも出ていません）</div>' + drafts.map(row).join('');
+  h += '<div class="sec">登録済み（新しい順）</div>' + (rest.length ? rest.map(row).join('') : '<div class="empty">ありません</div>');
+  $('lst').innerHTML = h;
+  document.querySelectorAll('.item').forEach(function(el){ el.addEventListener('click', function(){ openEdit(el.getAttribute('data-pid')); }); });
+}
+
+/* ── 入力の中身 ── */
+var TEXT_F = ['商品名','表示名','配達名','カテゴリー','米種','集約グループ','備考','写真URL'];
+var NUM_F = ['単価（円）','原価','表示順','運用表示順','初期数メイン','初期数サテライト','車載固定数'];
+function blankE(){
+  var f = {}; TEXT_F.concat(NUM_F).forEach(function(k){ f[k] = ''; });
+  f['発売日'] = ''; f['天井区分'] = ''; f['配分外'] = ''; f['セパレート'] = '';
+  return { pid:'', flag:'', f:f, kind:'shisaku', ings:[{v:'',qty:''}], shks:[], newIngs:[], newShks:[] };
+}
+function openEdit(pid){
+  var E = blankE();
+  if(pid){
+    var p = S.data.products.filter(function(x){ return x.id === pid; })[0];
+    if(!p) return;
+    E.pid = p.id; E.flag = p.flag;
+    Object.keys(E.f).forEach(function(k){ if(p.f[k] !== undefined) E.f[k] = p.f[k] === null ? '' : String(p.f[k]); });
+    E.kind = String(p.f['配分外']||'') === '○' ? 'shisaku' : 'teiban';
+    E.ings = p.ings.map(function(x){ return { v:x.id, qty:String(x.qty) }; });
+    E.shks = p.shks.map(function(x){ return { v:x.id, qty:String(x.qty) }; });
+    if(!E.ings.length) E.ings = [{v:'',qty:''}];
+  }
+  S.E = E; S.tab = 'edit'; refreshRefLists_(); render(); window.scrollTo(0, 0);
+}
+/* 画面 → S.E（再描画の前に必ず呼ぶ） */
+function collect(){
+  var E = S.E; if(!E) return;
+  document.querySelectorAll('[data-f]').forEach(function(el){
+    var k = el.getAttribute('data-f');
+    E.f[k] = el.type === 'checkbox' ? (el.checked ? '○' : '') : el.value;
+  });
+  var kind = document.querySelector('input[name=kind]:checked'); if(kind) E.kind = kind.value;
+  var slots = function(sel){ return Array.prototype.map.call(document.querySelectorAll(sel), function(r){
+    return { v: r.querySelector('.v').value.trim(), qty: r.querySelector('.q').value.trim() }; }); };
+  E.ings = slots('#ings .slot');
+  E.shks = slots('#shks .slot');
+  E.newIngs = Array.prototype.map.call(document.querySelectorAll('.ni'), function(b){
+    var o = {}; b.querySelectorAll('[data-g]').forEach(function(el){ o[el.getAttribute('data-g')] = el.value.trim(); }); return o; });
+  E.newShks = Array.prototype.map.call(document.querySelectorAll('.ns'), function(b){
+    var o = {}; b.querySelectorAll('[data-g]').forEach(function(el){ o[el.getAttribute('data-g')] = el.value.trim(); });
+    o.items = Array.prototype.map.call(b.querySelectorAll('.slot'), function(r){ return { v: r.querySelector('.v').value.trim(), qty: r.querySelector('.q').value.trim() }; });
+    return o; });
+}
+function inp(k, ph, type, list){
+  return '<input data-f="'+esc(k)+'" value="'+esc(S.E.f[k])+'"'+(ph ? ' placeholder="'+esc(ph)+'"' : '')
+    + (type ? ' type="'+type+'"' : '') + (type === 'number' ? ' inputmode="decimal"' : '') + (list ? ' list="'+list+'"' : '') + '>';
+}
+function slotHtml(x, list, unit){
+  return '<div class="slot"><input class="v" list="'+list+'" value="'+esc(x.v)+'" placeholder="選ぶ（文字で探せる）">'
+    + '<input class="q" type="number" inputmode="decimal" step="any" value="'+esc(x.qty)+'" placeholder="'+unit+'">'
+    + '<button class="btn x rm" type="button" aria-label="外す"><i class="ti ti-x"></i></button></div>';
+}
+function ingUnitOf(v){
+  var g = S.data.ingredients.filter(function(x){ return x.label === v; })[0];
+  return g ? g.unit : '';
+}
+function renderEdit(){
+  if(!S.E) S.E = blankE();
+  var E = S.E, d = S.data, isNew = !E.pid;
+  var h = '';
+  if(isNew) h += '<div class="draftnote"><b>下書きで保存されます。</b>保存してもレジにも配分にもまだ出ません。発売の前に一覧から「有効にする」を押すと、全拠点に乗ります。</div>';
+  else h += '<div class="draftnote">'+esc(E.pid)+'「'+esc(E.f['商品名'])+'」を直しています　'+flagBadge({flag:E.flag, f:E.f})
+    + (E.flag === '無効' ? '' : '<br>⚠ 販売中の商品です。保存した内容はすぐにレジ・仕込み・発注に効きます。') + '</div>';
+
+  h += '<div class="card"><h3><span class="n">1</span>基本</h3>'
+    + '<label class="f">商品名 <b>必須</b></label>' + inp('商品名', '例：お江戸からあげ弁当「白米」')
+    + '<div class="hint">レジ・帳票に出る正式な名前。白米/玄米で分ける時は名前に入れる。他の商品と同じ名前は使えません。</div>'
+    + '<div class="grid2"><div><label class="f">表示名（短い名前）</label>' + inp('表示名', '例：からあげ') + '</div>'
+    + '<div><label class="f">カテゴリー</label>' + inp('カテゴリー', '選ぶ', '', 'dl-cat') + '</div>'
+    + '<div><label class="f">米種</label>' + inp('米種', '白米／玄米', '', 'dl-rice') + '</div>'
+    + '<div><label class="f">集約グループ</label>' + inp('集約グループ', '日替わりのり弁 など', '', 'dl-agg') + '</div></div>'
+    + '<details><summary>そのほか（配達名・写真・表示順・備考）</summary>'
+    + '<label class="f">配達名（配達の注文で使う名前）</label>' + inp('配達名')
+    + '<label class="f">写真URL</label>' + inp('写真URL', 'https://…')
+    + '<div class="grid2"><div><label class="f">表示順（レジ）</label>' + inp('表示順', '', 'number') + '</div>'
+    + '<div><label class="f">運用表示順（配分表など）</label>' + inp('運用表示順', '', 'number') + '</div></div>'
+    + '<label class="f">備考</label>' + inp('備考') + '</details></div>';
+
+  h += '<div class="card"><h3><span class="n">2</span>金額</h3><div class="grid2">'
+    + '<div><label class="f">単価（円・税込の売値） <b>必須</b></label>' + inp('単価（円）', '例：900', 'number') + '</div>'
+    + '<div><label class="f">原価（円）</label>' + inp('原価', '例：380', 'number') + '</div></div>'
+    + '<div class="hint" id="margin"></div></div>';
+
+  h += '<div class="card"><h3><span class="n">3</span>食材（この弁当1個に直接使う物・10個まで）</h3>'
+    + '<div class="hint">ご飯（白米・玄米）や、仕込みを通さずに入れる物。量は1個あたり（単位は食材マスタの単位）。仕込みで作る物は④へ。</div>'
+    + '<div id="ings">' + E.ings.map(function(x){ return slotHtml(x, 'dl-ing', ingUnitOf(x.v) || '量'); }).join('') + '</div>'
+    + '<div class="adders"><button class="btn sub sm" id="add-ing" type="button"><i class="ti ti-plus"></i>食材を足す</button>'
+    + '<button class="btn sub sm" id="new-ing" type="button"><i class="ti ti-sparkles"></i>食材マスタに無い食材を作る</button></div>'
+    + E.newIngs.map(function(g, i){ return newIngHtml(g, i); }).join('') + '</div>';
+
+  h += '<div class="card"><h3><span class="n">4</span>仕込み（5個まで）</h3>'
+    + '<div class="hint">厨房で前日に仕込む物。人前＝この弁当1個で何人前使うか（ふつうは1）。仕込みの中身の食材は仕込みマスタ側で決まっています。</div>'
+    + '<div id="shks">' + E.shks.map(function(x){ return slotHtml(x, 'dl-shk', '人前'); }).join('') + '</div>'
+    + '<div class="adders"><button class="btn sub sm" id="add-shk" type="button"><i class="ti ti-plus"></i>仕込みを足す</button>'
+    + '<button class="btn sub sm" id="new-shk" type="button"><i class="ti ti-sparkles"></i>仕込みマスタに無い仕込みを作る</button></div>'
+    + E.newShks.map(function(g, i){ return newShkHtml(g, i); }).join('') + '</div>';
+
+  var teiban = E.kind === 'teiban';
+  h += '<div class="card"><h3><span class="n">5</span>配分の出し方</h3>'
+    + '<div class="seg"><label class="'+(teiban?'':'on')+'"><input type="radio" name="kind" value="shisaku"'+(teiban?'':' checked')+'><span>試作・限定<small>配分外○。配分・推奨には乗らない。納品数を入れた拠点のレジにだけ出る</small></span></label>'
+    + '<label class="'+(teiban?'on':'')+'"><input type="radio" name="kind" value="teiban"'+(teiban?' checked':'')+'><span>定番として出す<small>有効にした時に配分へ乗せる（推奨→当日配分→初回納品）</small></span></label></div>'
+    + (teiban ? '<div class="grid2 w3"><div><label class="f">発売日</label>' + inp('発売日', '', 'date') + '</div>'
+      + '<div><label class="f">初期数 メイン</label>' + inp('初期数メイン', '例：5', 'number') + '</div>'
+      + '<div><label class="f">初期数 サテライト</label>' + inp('初期数サテライト', '例：2', 'number') + '</div></div>'
+      + '<label class="f">天井区分（初回納品の上限の決め方）</label><select data-f="天井区分"><option value="">なし（全六などと同じ＝天井なし）</option>'
+      + (d.choices['天井区分'] || []).map(function(v){ return '<option'+(E.f['天井区分']===v?' selected':'')+'>'+esc(v)+'</option>'; }).join('') + '</select>'
+      + '<div class="hint">発売日・初期数を入れないと、推奨が過去4週の平均なので正しい数になるまで約1か月かかります（1週目は実売の約4割）。初期数「0」と空欄は別物（0＝下限も当てない）。</div>' : '')
+    + '<details><summary>車載固定数・セパレート</summary>'
+    + '<label class="f">車載固定数（車載へエリア比率で固定の数を積む）</label>' + inp('車載固定数', '空欄＝使わない', 'number')
+    + '<label class="chk"><input type="checkbox" data-f="セパレート"'+(E.f['セパレート']==='○'?' checked':'')+'>セパレート（おかずとご飯を別に出す＝配分表の白米・玄米行に数える）</label></details></div>';
+
+  $('root').innerHTML = h;
+  // 隠れている欄（定番を選んでいない時の発売日など）は値だけ持っておく
+  if(!teiban){ ['発売日','初期数メイン','初期数サテライト','天井区分'].forEach(function(k){ /* 送る時に消す */ }); }
+  margin_();
+  bindEdit_();
+  renderBar_();
+}
+function newIngHtml(g, i){
+  var d = S.data, v = function(k){ return esc(g[k] || ''); };
+  return '<div class="newbox ni"><div class="t"><i class="ti ti-sparkles"></i>新しい食材 '+(i+1)+'<span class="sp"></span>'
+    + '<button class="btn x rm-ni" data-i="'+i+'" type="button" aria-label="やめる"><i class="ti ti-x"></i></button></div>'
+    + '<div class="grid2"><div><label class="f">食材名 <b>必須</b></label><input data-g="name" value="'+v('name')+'"></div>'
+    + '<div><label class="f">単位 <b>必須</b></label><input data-g="unit" value="'+v('unit')+'" placeholder="kg・枚・個"></div>'
+    + '<div><label class="f">業者 <b>必須</b></label><select data-g="vendor"><option value="">選ぶ</option>'
+    + d.vendors.map(function(x){ return '<option'+(g.vendor===x?' selected':'')+'>'+esc(x)+'</option>'; }).join('') + '</select></div>'
+    + '<div><label class="f">1パック分量</label><input data-g="pack" type="number" inputmode="decimal" step="any" value="'+v('pack')+'"></div>'
+    + '<div><label class="f">発注単位区分</label><select data-g="unitKind">'
+    + ['kg','pack','both'].map(function(x){ return '<option'+((g.unitKind||'kg')===x?' selected':'')+'>'+x+'</option>'; }).join('') + '</select></div>'
+    + '<div><label class="f">解凍グループ</label><select data-g="thaw"><option value="">なし</option>'
+    + ['カット','正肉'].map(function(x){ return '<option'+(g.thaw===x?' selected':'')+'>'+x+'</option>'; }).join('') + '</select></div></div>'
+    + '<details><summary>発注タイミング・曜日別業者・備考</summary>'
+    + '<label class="f">発注タイミング（先行発注する時だけ）</label><input data-g="timing" value="'+v('timing')+'" placeholder="例：月:木/土, 火:金/月">'
+    + '<label class="f">曜日別業者（ふだんと違う業者に出す曜日）</label><input data-g="vendorByDow" value="'+v('vendorByDow')+'" placeholder="例：水:ゲットソース">'
+    + '<label class="f">備考</label><input data-g="note" value="'+v('note')+'"></details></div>';
+}
+function newShkHtml(g, i){
+  var d = S.data, v = function(k){ return esc(g[k] || ''); };
+  var items = (g.items && g.items.length) ? g.items : [{v:'',qty:''}];
+  return '<div class="newbox ns"><div class="t"><i class="ti ti-sparkles"></i>新しい仕込み '+(i+1)+'<span class="sp"></span>'
+    + '<button class="btn x rm-ns" data-i="'+i+'" type="button" aria-label="やめる"><i class="ti ti-x"></i></button></div>'
+    + '<div class="grid2"><div><label class="f">仕込み名 <b>必須</b></label><input data-g="name" value="'+v('name')+'"></div>'
+    + '<div><label class="f">主菜候補区分</label><select data-g="shusai"><option value="">なし</option>'
+    + ['全六あり','全六なし','両方'].map(function(x){ return '<option'+(g.shusai===x?' selected':'')+'>'+x+'</option>'; }).join('') + '</select></div></div>'
+    + '<label class="f">中身の食材（1人前あたりの量・5個まで）<b>必須</b></label>'
+    + '<div class="ns-items">' + items.map(function(x){ return slotHtml(x, 'dl-ing', ingUnitOf(x.v) || '量'); }).join('') + '</div>'
+    + '<div class="adders"><button class="btn sub sm add-nsi" data-i="'+i+'" type="button"><i class="ti ti-plus"></i>食材を足す</button></div>'
+    + '<div class="hint">代表食材は1つ目の食材になります。</div></div>';
+}
+function margin_(){
+  var p = Number(S.E.f['単価（円）']), c = Number(S.E.f['原価']);
+  $('margin').textContent = (p > 0 && c > 0) ? '原価率 ' + Math.round(c / p * 1000) / 10 + '%　／　粗利 ¥' + (p - c).toLocaleString('ja-JP') : '';
+}
+function bindEdit_(){
+  var re = function(fn){ return function(e){ collect(); fn(e); refreshRefLists_(); renderEdit(); }; };
+  $('add-ing').addEventListener('click', re(function(){ S.E.ings.push({v:'',qty:''}); }));
+  $('add-shk').addEventListener('click', re(function(){ S.E.shks.push({v:'',qty:'1'}); }));
+  $('new-ing').addEventListener('click', re(function(){ S.E.newIngs.push({ unitKind:'kg' }); }));
+  $('new-shk').addEventListener('click', re(function(){ S.E.newShks.push({ items:[{v:'',qty:''}] }); }));
+  document.querySelectorAll('#ings .rm').forEach(function(b, i){ b.addEventListener('click', re(function(){ S.E.ings.splice(i, 1); })); });
+  document.querySelectorAll('#shks .rm').forEach(function(b, i){ b.addEventListener('click', re(function(){ S.E.shks.splice(i, 1); })); });
+  document.querySelectorAll('.rm-ni').forEach(function(b){ b.addEventListener('click', re(function(){ S.E.newIngs.splice(Number(b.getAttribute('data-i')), 1); })); });
+  document.querySelectorAll('.rm-ns').forEach(function(b){ b.addEventListener('click', re(function(){ S.E.newShks.splice(Number(b.getAttribute('data-i')), 1); })); });
+  document.querySelectorAll('.add-nsi').forEach(function(b){ b.addEventListener('click', re(function(){ S.E.newShks[Number(b.getAttribute('data-i'))].items.push({v:'',qty:''}); })); });
+  document.querySelectorAll('.ns').forEach(function(box, i){
+    box.querySelectorAll('.ns-items .rm').forEach(function(b, k){ b.addEventListener('click', re(function(){ S.E.newShks[i].items.splice(k, 1); })); });
+  });
+  document.querySelectorAll('input[name=kind]').forEach(function(r){ r.addEventListener('change', re(function(){})); });
+  // 新しい食材・仕込みの名前を入れたら候補に「（新）名前」を出す
+  document.querySelectorAll('.ni [data-g=name], .ns [data-g=name]').forEach(function(el){ el.addEventListener('change', function(){ collect(); refreshRefLists_(); }); });
+  document.querySelectorAll('[data-f="単価（円）"], [data-f="原価"]').forEach(function(el){ el.addEventListener('input', function(){ collect(); margin_(); }); });
+  document.querySelectorAll('.slot .v').forEach(function(el){ el.addEventListener('change', function(){
+    if(el.getAttribute('list') !== 'dl-ing') return;
+    var u = ingUnitOf(el.value.trim()); if(u) el.parentNode.querySelector('.q').placeholder = u; }); });
+}
+function renderBar_(){
+  $('bar').style.display = '';
+  var E = S.E;
+  $('bar-in').innerHTML = '<button class="btn sub" id="b-cancel" style="flex:0 0 30%">一覧に戻る</button>'
+    + '<button class="btn" id="b-check"><i class="ti ti-list-check"></i>書く内容を確認する</button>'
+    + (E.pid && E.flag === '無効' ? '<button class="btn go" id="b-act" style="flex:0 0 32%"><i class="ti ti-player-play"></i>有効にする</button>' : '');
+  $('b-cancel').addEventListener('click', function(){ S.E = null; S.tab = 'list'; render(); });
+  $('b-check').addEventListener('click', check);
+  if($('b-act')) $('b-act').addEventListener('click', function(){ activate(E.pid); });
+}
+
+/* ── 送る形に直す ── */
+function refOf(v, newList){
+  if(v.indexOf(NEW_) === 0){
+    var nm = v.slice(NEW_.length), i = -1;
+    newList.forEach(function(g, k){ if(g.name === nm) i = k; });
+    return i >= 0 ? { new: i } : { id: v };
+  }
+  return { id: v };
+}
+function payload(){
+  collect();
+  var E = S.E, f = Object.assign({}, E.f);
+  f['配分外'] = E.kind === 'shisaku' ? '○' : '';
+  if(E.kind === 'shisaku' && !E.pid){ f['発売日'] = ''; f['初期数メイン'] = ''; f['初期数サテライト'] = ''; f['天井区分'] = ''; }
+  var ni = E.newIngs, ns = E.newShks;
+  var slots = function(arr, list){ return arr.filter(function(x){ return x.v; }).map(function(x){ return Object.assign(refOf(x.v, list), { qty: x.qty }); }); };
+  return {
+    pid: E.pid, fields: f,
+    ings: slots(E.ings, ni), shks: slots(E.shks, ns),
+    newIngs: ni.map(function(g){ return { name:g.name, unit:g.unit, vendor:g.vendor, pack:g.pack, unitKind:g.unitKind, thaw:g.thaw, timing:g.timing, vendorByDow:g.vendorByDow, note:g.note }; }),
+    newShks: ns.map(function(g){ return { name:g.name, shusai:g.shusai, items: slots(g.items || [], ni) }; }),
+  };
+}
+
+/* ── 確認 → 保存 ── */
+function modal(html){ $('sheet').innerHTML = html; $('modal').classList.add('show'); }
+function closeModal(){ $('modal').classList.remove('show'); }
+$('modal').addEventListener('click', function(e){ if(e.target === $('modal') && !S.busy) closeModal(); });
+async function check(){
+  var body = payload();
+  $('b-check').disabled = true;
+  try{
+    var r = await api('hqsave', Object.assign({ dry: true }, body));
+    if(r.nothing){ toast('変更はありません'); return; }
+    modal('<h2>この内容で書きます</h2><pre>' + esc(r.summary.join('\n\n')) + '</pre>'
+      + (r.isNew ? '<div class="warn">下書きで入ります（有効フラグ「無効」）。レジにも配分にもまだ出ません。</div>'
+                 : (S.E.flag === '無効' ? '' : '<div class="warn">⚠ 販売中の商品です。保存するとすぐにレジ・仕込み・発注に効きます。</div>'))
+      + '<div class="acts"><button class="btn sub" id="m-no">戻って直す</button><button class="btn" id="m-go"><i class="ti ti-device-floppy"></i>保存する</button></div>');
+    $('m-no').addEventListener('click', closeModal);
+    $('m-go').addEventListener('click', function(){ save(body); });
+  }catch(e){
+    modal('<h2>直してほしい所があります</h2><div class="err">' + esc(e.message) + '</div><div class="acts"><button class="btn" id="m-no">戻って直す</button></div>');
+    $('m-no').addEventListener('click', closeModal);
+  }finally{ if($('b-check')) $('b-check').disabled = false; }
+}
+async function save(body){
+  S.busy = true;
+  $('m-go').disabled = true; $('m-go').innerHTML = '<span class="spinner w"></span>保存しています…';
+  try{
+    var r = await api('hqsave', body);
+    closeModal();
+    toast(r.isNew ? r.pid + ' を下書きで保存しました' : r.pid + ' を保存しました');
+    S.busy = false;
+    await load();
+    openEdit(r.pid);
+  }catch(e){
+    S.busy = false;
+    $('sheet').innerHTML = '<h2>保存できませんでした</h2><div class="err">' + esc(e.message) + '</div><div class="acts"><button class="btn" id="m-no">閉じる</button></div>';
+    $('m-no').addEventListener('click', closeModal);
+  }
+}
+async function activate(pid){
+  try{
+    var d = await api('hqactivate', { pid: pid, dry: true });
+    modal('<h2>' + esc(pid + '「' + d.name + '」を有効にします') + '</h2>'
+      + '<pre>' + esc(d.steps.map(function(s, i){ return (i+1) + '. ' + s; }).join('\n')) + '</pre>'
+      + (d.warn && d.warn.length ? '<div class="warn">' + d.warn.map(esc).join('<br>') + '</div>' : '')
+      + '<div class="warn">有効にすると全拠点のレジに並びます。配分に乗せる処理は1〜2分かかります。</div>'
+      + '<div class="acts"><button class="btn sub" id="m-no">やめる</button><button class="btn go" id="m-go"><i class="ti ti-player-play"></i>有効にする</button></div>');
+    $('m-no').addEventListener('click', closeModal);
+    $('m-go').addEventListener('click', async function(){
+      S.busy = true;
+      $('m-go').disabled = true; $('m-no').disabled = true; $('m-go').innerHTML = '<span class="spinner w"></span>配分に乗せています…';
+      try{
+        var r = await api('hqactivate', { pid: pid });
+        $('sheet').innerHTML = '<h2>有効にしました</h2><pre>' + esc(r.result) + '</pre><div class="acts"><button class="btn" id="m-no">閉じる</button></div>';
+      }catch(e){
+        $('sheet').innerHTML = '<h2>途中で失敗しました</h2><div class="err">' + esc(e.message) + '</div><div class="acts"><button class="btn" id="m-no">閉じる</button></div>';
+      }
+      S.busy = false;
+      $('m-no').addEventListener('click', function(){ closeModal(); load().then(function(){ openEdit(pid); }); });
+    });
+  }catch(e){ toast(e.message, true); }
+}
+
+/* ── 起動 ── */
+document.querySelectorAll('.tab').forEach(function(t){
+  t.addEventListener('click', function(){
+    if(t.disabled) return;
+    var to = t.getAttribute('data-t');
+    if(to === 'edit' && S.tab !== 'edit') { openEdit(null); return; }
+    if(S.tab === 'edit') collect();
+    S.tab = to; render();
+  });
+});
+$('reload').addEventListener('click', function(){ if(S.tab === 'edit' && !confirm('入力中の内容は消えます。読み直しますか？')) return; S.E = null; S.tab = 'list'; load(); });
+window.addEventListener('beforeunload', function(e){ if(S.tab === 'edit' && S.E){ e.preventDefault(); e.returnValue = ''; } });
+login_().then(function(ok){
+  if(ok === true) afterLogin_();
+  else if(ok === null) showPwGate_();
+}).catch(function(e){ showPwGate_('ログインに失敗しました（' + e.message + '）'); });
+</script>
+</body>
+</html>
