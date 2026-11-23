@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v8.24 (2026-11-24) 【💬 相談に社長の決定が返る】社長決定 A案「社長の決定待ちの相談は、Claude に相談して、変更・維持も含めて最終どうしたかを相談者に戻したい」。★相談タブに「🧭 社長の決定（○/○ ○:○○ の相談）【変更する／今のまま／保留】」の吹き出しを出す（Cockpit の「相談」タブで社長が決めると Firebase boss 関数 creply が書く。同時に本人へ LINE も届く）。要: Firebase consult/boss 2026-11-24。 -->
 <!-- driver v8.23 (2026-11-20) 【押し引きの元データの穴4〜7】社長決定「画面だけで全部進めて」（FC0次準備）。★④積み込みの確定を確かめられない時（通信失敗・古い応答）は黄色の帯で知らせる（ゲートはしない）。★⑤積み込みを確定した直後に1回だけ「開店前に先に下ろす拠点はありますか？」→OKで「車載を減らす」を開く。★⑥出発から30分過ぎた自分の搬送中を回収タブの一番上に赤カードで出す（タップで移動タブ。loadTodayMoves_ のたびに出し直す）。★⑦巡回で推奨の数を1つも触らずに送る時だけ確認（入力欄に data-rec で推奨を覚えさせ、置く/下げると数の両方で比べる）。GAS変更なし。 -->
 <!-- driver v8.22 (2026-11-20) 【2次販売と回収の穴3つ】社長決定「2次販売と回収が先」（FC0次準備）。★①回収の「🛒 2次販売」で2次販売の場所が1つでもある日は「行き先なし」を出さない（submitDestPickUndecided_ でも弾く）。印だけ残って受け取った側の納品に乗らなかった。場所が無い日だけ従来どおり。★②二次販売拠点カード・入力画面・確認文に「回収で行き先を選んだ分は自動で足されている。ここは回収を通さない分だけ」を明記（v8.21 の自動足し込みと手入力の二重計上防止。サーバーが内訳を返さないので表示は合計のまま）。★③confirmCash の順番を ①現金→③残数→②回収済み に変更。残数を送るべき拠点で送れなかったら回収済みにせず止める（もう一度押せば送り直せる。サーバーは判定列・移動ID列で二重防止）。GAS変更なし。 -->
 <!-- driver v8.21 (2026-11-17) 【2次販売の行き先を選んで納品に足す／車載を全部下ろす】社長決定 A案。★回収の「🛒 2次販売」は先に行き先（二次販売拠点か、その日の「◯◯（2次）」を1か所）を選ぶ。選んだ先の納品数に、数えた残りがそのまま足される（その場の2次＝移動を立てて到着まで済ませる／セカンド神谷など＝300円・500円に換えて二次販売納品へ追記）。それまでは印だけで、受け取った側に記録が残らず毎日「販売＞納品」になっていた。一覧に無い時は「行き先なし」で従来どおり。★巡回の拠点画面に「🚚 車載を全部下ろす」＝車載の全商品を「置く」に入れる（確認つき・送信前に直せる）。要: メインGAS 2026-11-17（_ccAddToSecond_）。 -->
@@ -176,6 +177,8 @@ body {
 .cst-msg.user { background:var(--blue); color:#fff; margin-left:auto; }
 .cst-msg.ai { background:#fff; border:1px solid var(--border); }
 .cst-msg.urgent { border:2px solid var(--red); }
+.cst-msg.boss { background:#FFF8EC; border:2px solid #C9A24B; max-width:94%; }   /* ★v8.24 社長の決定 */
+.cst-msg.boss .cst-tag { color:#854F0B; }
 .cst-tag { font-size:11px; font-weight:700; color:var(--red); margin-bottom:2px; }
 .cst-kinds { display:flex; gap:8px; margin-bottom:8px; }
 .cst-kind { flex:1; padding:9px 4px; font-size:13px; font-weight:700; border-radius:10px; border:1px solid var(--border); background:#fff; color:var(--ink-soft); font-family:inherit; }
@@ -2962,6 +2965,17 @@ function cstRender_(rows) {
       box.appendChild(d);
     }
     var m = document.createElement('div');
+    if (r.role === 'boss') {   // ★v8.24 社長の決定
+      var DEC = { change: '変更する', keep: '今のまま', hold: '保留（いったん様子見）' };
+      m.className = 'cst-msg boss';
+      var bt = document.createElement('div'); bt.className = 'cst-tag';
+      bt.textContent = '🧭 社長の決定' + (r.ref && r.ref.day ? '（' + r.ref.day.slice(5).replace('-', '/') + ' ' + (r.ref.time || '') + ' の相談）' : '')
+                     + (DEC[r.decision] ? '【' + DEC[r.decision] + '】' : '');
+      m.appendChild(bt);
+      m.appendChild(document.createTextNode(r.text));
+      box.appendChild(m);
+      return;
+    }
     m.className = 'cst-msg ' + (r.role === 'ai' ? 'ai' : 'user') + (r.role === 'ai' && r.urgency === 'urgent' ? ' urgent' : '');
     if (r.role === 'ai' && r.urgency === 'urgent') {
       var t = document.createElement('div'); t.className = 'cst-tag'; t.textContent = '🚨 社長に届けました';
