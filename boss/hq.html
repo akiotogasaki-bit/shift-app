@@ -260,7 +260,7 @@ function render(){
   if(S.tab === 'list') renderList(); else renderEdit();
 }
 function flagBadge(p){
-  if(p.flag === '無効') return '<span class="badge b-draft">下書き</span>';
+  if(p.flag === '無効') return '<span class="badge b-draft">無効・下書き</span>';
   if(p.flag === '配達') return '<span class="badge b-off">配達</span>';
   if(p.flag === '有効' || p.flag === '') return String(p.f['配分外']||'') === '○' ? '<span class="badge b-trial">試作</span>' : '<span class="badge b-on">販売中</span>';
   return '<span class="badge b-off">'+esc(p.flag)+'</span>';
@@ -268,7 +268,7 @@ function flagBadge(p){
 function renderList(){
   $('bar').style.display = 'none';
   $('root').innerHTML = '<div class="tools"><input id="q" placeholder="名前・ID・カテゴリーで探す" value="'+esc(S.q)+'">'
-    + '<select id="flt"><option value="all">全部</option><option value="draft">下書きだけ</option><option value="on">販売中だけ</option></select></div>'
+    + '<select id="flt"><option value="all">全部</option><option value="draft">無効・下書きだけ</option><option value="on">販売中だけ</option></select></div>'
     + '<button class="btn" id="new-btn"><i class="ti ti-plus"></i>新メニューを登録する</button><div id="lst"></div>';
   $('flt').value = S.filter;
   // 検索欄は描き直さない（日本語入力の変換が途切れるため）。一覧だけ描き直す
@@ -293,7 +293,7 @@ function renderItems_(){
       + '<div class="pr">'+yen(p.f['単価（円）'])+'<small>原価 '+yen(p.f['原価'])+'</small></div></div>';
   };
   var h = '';
-  if(drafts.length) h += '<div class="sec">下書き（まだレジにも配分にも出ていません）</div>' + drafts.map(row).join('');
+  if(drafts.length) h += '<div class="sec">無効（下書き・販売をやめた物＝レジにも配分にも出ていません）</div>' + drafts.sort(function(a, b){ return b.row - a.row; }).map(row).join('');
   h += '<div class="sec">登録済み（新しい順）</div>' + (rest.length ? rest.map(row).join('') : '<div class="empty">ありません</div>');
   $('lst').innerHTML = h;
   document.querySelectorAll('.item').forEach(function(el){ el.addEventListener('click', function(){ openEdit(el.getAttribute('data-pid')); }); });
@@ -359,7 +359,7 @@ function renderEdit(){
   var h = '';
   if(isNew) h += '<div class="draftnote"><b>下書きで保存されます。</b>保存してもレジにも配分にもまだ出ません。発売の前に一覧から「有効にする」を押すと、全拠点に乗ります。</div>';
   else h += '<div class="draftnote">'+esc(E.pid)+'「'+esc(E.f['商品名'])+'」を直しています　'+flagBadge({flag:E.flag, f:E.f})
-    + (E.flag === '無効' ? '' : '<br>⚠ 販売中の商品です。保存した内容はすぐにレジ・仕込み・発注に効きます。') + '</div>';
+    + (E.flag === '無効' ? '<br>無効の商品です（レジにも配分にも出ていません）。「有効にする」で全拠点に乗ります。' : '<br>⚠ 販売中の商品です。保存した内容はすぐにレジ・仕込み・発注に効きます。') + '</div>';
 
   h += '<div class="card"><h3><span class="n">1</span>基本</h3>'
     + '<label class="f">商品名 <b>必須</b></label>' + inp('商品名', '例：お江戸からあげ弁当「白米」')
