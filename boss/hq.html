@@ -8,7 +8,8 @@
 <link rel="apple-touch-icon" href="cockpit-icon.png?v=2">
 <link rel="icon" href="cockpit-icon.png?v=2">
 <link rel="manifest" href="hq.webmanifest">
-<!-- boss/hq v1.2 (2026-11-24) ★v1.2 配達用の商品（有効フラグ「配達」＝海苔弁系に96品・お茶1品）を「配達」チップに分けた（社長「海苔弁の配達は別で」）。「すべて」とカテゴリーのチップは拠点で売る物だけ。「販売中だけ」は配達用も含む（配達が販売中の印）。
+<!-- boss/hq v1.3 (2026-11-24) ★v1.3 一覧の「無効（下書き・販売をやめた物）」を一番下へ（社長「無効の物は一番下に出そうか」）。「無効だけ」で絞った時は無効の見出しだけ出す。
+     boss/hq v1.2 (2026-11-24) ★v1.2 配達用の商品（有効フラグ「配達」＝海苔弁系に96品・お茶1品）を「配達」チップに分けた（社長「海苔弁の配達は別で」）。「すべて」とカテゴリーのチップは拠点で売る物だけ。「販売中だけ」は配達用も含む（配達が販売中の印）。
      boss/hq v1.1 (2026-11-24) ★v1.1 一覧をカテゴリーで絞れるように（社長「メニューをカテゴリー別で絞れるようにしたい」）。検索欄の下にカテゴリーのチップ（件数つき・スマホは横スクロール）。「全部／無効／販売中」と重ねて効く。カテゴリーが空の商品は「（未設定）」。0件のチップは薄く、選んだチップはスマホでも見える位置まで横に送る。
      boss/hq v1.0 (2026-11-24) 【本部アプリ・新メニュー登録】社長「新メニューを色々入れる予定。仕込み・発注・金額などメニューに関するものを一括で入力できるものが欲しい」
      「本部機能として別に用意した方が良くない？」→ 本部アプリを新設（FC全体設計書の「本部区画＝単価・食材・レシピ・仕込みは本部だけが書く」）。
@@ -129,7 +130,7 @@ details{margin-top:8px;} summary{font-size:12px;color:var(--navy);cursor:pointer
     <button class="tab" data-t="loc" disabled>拠点（準備中）</button>
   </div>
   <div class="body"><div id="root"><div class="inline-loading"><span class="spinner"></span>読み込み中…</div></div></div>
-  <div class="ver">boss/hq v1.2</div>
+  <div class="ver">boss/hq v1.3</div>
 </div>
 <div class="bar" id="bar" style="display:none"><div class="in" id="bar-in"></div></div>
 <div class="modal" id="modal"><div class="sheet" id="sheet"></div></div>
@@ -338,8 +339,9 @@ function renderItems_(){
       + '<div class="pr">'+yen(p.f['単価（円）'])+'<small>原価 '+yen(p.f['原価'])+'</small></div></div>';
   };
   var h = '';
+  // ★v1.3 無効は一番下（社長「無効の物は一番下に出そうか」）
+  if(rest.length || !drafts.length) h += '<div class="sec">登録済み（新しい順）</div>' + (rest.length ? rest.map(row).join('') : '<div class="empty">ありません</div>');
   if(drafts.length) h += '<div class="sec">無効（下書き・販売をやめた物＝レジにも配分にも出ていません）</div>' + drafts.sort(function(a, b){ return b.row - a.row; }).map(row).join('');
-  h += '<div class="sec">登録済み（新しい順）</div>' + (rest.length ? rest.map(row).join('') : '<div class="empty">ありません</div>');
   $('lst').innerHTML = h;
   document.querySelectorAll('.item').forEach(function(el){ el.addEventListener('click', function(){ openEdit(el.getAttribute('data-pid')); }); });
 }
