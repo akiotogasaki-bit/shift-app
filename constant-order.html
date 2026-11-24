@@ -148,7 +148,7 @@
   </header>
   <div class="tabbar" id="tabbar"></div>
   <div id="panels"></div>
-  <div class="foot">在庫入力=自動保存→発注アプリ／買い物=コピー／報告=社長に通知／仕入記録=日報の原価に反映</div>
+  <div class="foot">在庫入力=自動保存→発注アプリ／臨時の買い物=ドライバーへ／報告=社長に通知／仕入記録=日報の原価に反映</div>
 </div>
 
 <div class="copied-toast" id="toast"></div>
@@ -158,6 +158,10 @@
 
 <script>
 // ════════════════════════════════════════════
+//  ★v5.2 (2026-11-25) 社長決定「買い物はドライバーが水曜と日曜に行く」。「買い物」タブ（数を入れてコピー）→「臨時の買い物」に作り変えた。
+//       業者「買い物」の13品目は在庫入力で数えると自動でドライバーの買い物リストに入るので、ここは**それ以外**を書く所。
+//       「🚚 ドライバーに頼む」で GAS addExtraShopping → 次の買い物の日（今日が水・日なら今日）のリストに入る。
+//       ドライバーアプリ（driver.html）の回収タブ上に「🛒 買い物あり」が出て、タップでチェックリスト。
 //  ★v5.1 (2026-11-25) 社長「在庫入力でタカギのタブはいらない」→ タカギ産業タブを外した（GASの口はそのまま）。
 //  ★v5 (2026-11-25) 「定数入力」→「在庫入力」。社長指示「包材や消耗品もチェック／曜日を入れたものは
 //       その曜日だけ表示／入力のくくりは業者別でなく場所別」。
@@ -180,7 +184,7 @@ const GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5A
 //     / 'purchase'（仕入記録・日報の食材原価／※name はマスタ照合に使わない）
 const TABS = [
   { key: 'stock',     name: '在庫入力',     type: 'order'  },   // ★v5 場所別・全業者
-  { key: 'shopping',  name: '買い物',       type: 'shop'   },
+  { key: 'shopping',  name: '臨時の買い物', type: 'shop', freeInput: true },   // ★v5.2
   { key: 'noshi',     name: 'のし発注',     type: 'report' },
   { key: 'other',     name: 'その他',       type: 'report', freeInput: true },
   { key: 'purchase',  name: '仕入記録',     type: 'purchase' }
@@ -228,15 +232,21 @@ function panelInner(t) {
       <div class="p-total"><span class="lbl" id="pTotalLabel">本日の仕入合計</span><span class="amt" id="pTotal">¥0</span></div>
       <div class="listwrap" id="pList"></div>`;
   }
-  if (t.type === 'shop') {
+  if (t.type === 'shop') {   // ★v5.2 臨時の買い物 → ドライバーの買い物リストへ
     return `
-      <div class="hint">欲しい数量を入力 → <b class="c-shop">コピー</b>してLINEに貼り付け（<span id="${dId}"></span>）</div>
+      <div class="hint">在庫入力の<b>買い物の品目</b>（つくね・ツナ・マヨネーズ など）は、数えると<b class="c-shop">自動で</b>ドライバーに届きます。<br>
+        ここは<b>それ以外に買ってきてほしい物</b>を書く所です。「ドライバーに頼む」を押すと、次の買い物の日（水・日）のリストに入ります。</div>
       <div class="status" id="${sId}"></div>
       <div class="listwrap" id="${iId}"></div>
+      <div class="free-wrap">
+        <div class="free-head">買ってきてほしい物</div>
+        <div id="free-${t.key}"></div>
+        <button class="add-row" onclick="addFreeRow('${t.key}')">＋ 行を追加</button>
+      </div>
       <div class="act-foot">
-        <div class="plabel c-shop">買い物リスト（プレビュー）</div>
-        <textarea id="${pId}" readonly placeholder="数量を入力するとここに表示されます"></textarea>
-        <button class="act-btn shop" id="${bId}" onclick="copyList('${t.key}')" disabled>📋 コピーする</button>
+        <div class="plabel c-shop">頼む内容（プレビュー）</div>
+        <textarea id="${pId}" readonly placeholder="品目と数量を入れるとここに表示されます"></textarea>
+        <button class="act-btn shop" id="${bId}" onclick="sendExtraShop('${t.key}')" disabled>🚚 ドライバーに頼む</button>
       </div>`;
   }
   // report
@@ -505,7 +515,7 @@ function gatherItems(key) {
 // ── プレビュー更新 ──
 function buildText(t, items) {
   const lines = items.map(it => '・' + it.name + ' ×' + it.qty + (it.unit || ''));
-  if (t.type === 'shop') return '🛒 買い物リスト ' + todayLabel() + '\n' + lines.join('\n');
+  if (t.type === 'shop') return '🛒 臨時の買い物\n' + lines.join('\n');
   return '【報告】' + todayLabel() + ' ' + t.name + '\n' + lines.join('\n') + (DISPLAY_NAME ? ('\n報告者：' + DISPLAY_NAME) : '');
 }
 function updatePreview(key) {
@@ -527,6 +537,35 @@ async function copyList(key) {
   if (items.length === 0) return;
   const ok = await copyText(key, buildText(t, items));
   showToast(ok ? 'コピーしました' : '長押しで選択してコピーしてください');
+}
+
+// ── ★v5.2 臨時の買い物 → ドライバーの買い物リスト ──
+async function sendExtraShop(key) {
+  const items = gatherItems(key);
+  if (items.length === 0) return;
+  if (!confirm('この内容をドライバーに頼みますか？\n（次の買い物の日のリストに入ります）')) return;
+  const btn = document.getElementById('btn-' + key);
+  btn.disabled = true; const orig = btn.textContent; btn.textContent = '送信中…';
+  let json = null;
+  for (let k = 0; k < 3 && !(json && json.success); k++) {
+    try {
+      const params = new URLSearchParams();
+      params.append('action', 'addExtraShopping'); params.append('items', JSON.stringify(items));
+      params.append('displayName', DISPLAY_NAME); params.append('userId', USER_ID);
+      const res = await fetch(GAS_URL, { method: 'POST', body: params });
+      json = await res.json();
+    } catch (e) { json = { success: false, error: '通信エラー' }; await new Promise(r => setTimeout(r, 2000)); }
+  }
+  if (json && json.success) {
+    showToast(json.dateLabel + ' の買い物に入れました');
+    const panel = document.getElementById('panel-' + key);
+    panel.querySelectorAll('.free-qty').forEach(i => i.value = '');
+    panel.querySelectorAll('.free-name').forEach(i => i.value = '');
+    btn.textContent = orig; updatePreview(key);
+  } else {
+    showToast('頼めませんでした: ' + ((json && json.error) || '不明'));
+    btn.textContent = orig; btn.disabled = false;
+  }
 }
 
 // ── 報告（報告型）→ 社長へLINE通知 ──
