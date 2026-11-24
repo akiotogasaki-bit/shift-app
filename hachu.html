@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- hachu.html v1.1 (2026-11-25) 【定数管理に「毎回買う（在庫チェックなし）」】社長「つくね・青がっぱは臨時で頼むから在庫チェックには出さなくていい／買い物リストにはそれぞれ3ケースと出したい」。○の品目は在庫入力に出ず、買い物の日（水・日）に必要数のままドライバーの買い物に出る。定数発注マスタL列。要: メインGAS @1009 以降。 -->
 <!-- hachu.html v1.0 (2026-11-25) 【発注アプリを配分アプリ（kanri）から独立】社長指示「配分アプリにタブとして乗ってる発注を別アプリに」「発注アプリのタブで定数管理のタブをつけて 商品名・必要数・単位・在庫チェック曜日・業者 を入力して食材マスタとリンク」。
      ★📋 発注タブ＝kanri.html v4.xx の発注タブをそのまま移植（getOrderData・先行発注・コピー文・発注済みフラグ・定数発注の入力）。localStorage のキーも同じなので発注済みのチェックは引き継がれる（同じドメイン）。
      ★📐 定数管理タブ＝定数発注マスタ（A〜K列）を1行ずつ編集。商品名は食材マスタから選び、無い名前は保存時に食材マスタへ自動で足して C列に紐付け。在庫チェック曜日（空＝毎日）・場所（在庫入力のまとめ方）・区分（食材/包材/消耗品）。場所の並びは ScriptProperties「CONST_PLACES」。
@@ -1235,6 +1236,7 @@ function caRowHtml(r){
     </div>
     <div class="ca-l3">
       <span class="ca-lbl">在庫チェック曜日</span><span class="ca-dows">${chips}</span><span class="ca-dowhint">${dows ? '' : '（空＝毎日）'}</span>
+      <label class="ca-fixed" style="display:inline-flex;align-items:center;gap:4px;margin-left:8px;font-size:12px;font-weight:700;white-space:nowrap" title="在庫入力に出さず、買い物の日に必要数をそのままドライバーの買い物に出す"><input type="checkbox" class="ca-fixedbuy"${r.fixedBuy ? ' checked' : ''} onchange="caDirty(this)">毎回買う（在庫チェックなし）</label>
     </div>
     <div class="ca-l4">
       <input class="ca-note" value="${caEsc(r.note)}" placeholder="備考" oninput="caDirty(this)">
@@ -1313,7 +1315,8 @@ async function caSave(btn){
     vendor: row.querySelector('.ca-vendor').value, place: row.querySelector('.ca-place').value,
     kind: row.querySelector('.ca-kind').value, order: row.querySelector('.ca-order').value,
     note: row.querySelector('.ca-note').value.trim(),
-    checkDows: Array.from(row.querySelectorAll('.ca-dow.on')).map(b => b.dataset.w).join('・')
+    checkDows: Array.from(row.querySelectorAll('.ca-dow.on')).map(b => b.dataset.w).join('・'),
+    fixedBuy: row.querySelector('.ca-fixedbuy') && row.querySelector('.ca-fixedbuy').checked ? '1' : '0'
   };
   btn.disabled = true; msg.textContent = '保存中…'; msg.className = 'ca-msg';
   try {
@@ -1321,7 +1324,7 @@ async function caSave(btn){
     const j = await res.json();
     if (!j || !j.ok) throw new Error((j && j.error) || '保存に失敗しました');
     const rec = { id: j.id, name: body.name, ingredientId: j.ingredientId, vendor: body.vendor, unit: body.unit, qty: Number(body.qty) || 0,
-                  order: body.order, note: body.note, checkDows: body.checkDows, kind: body.kind, place: body.place };
+                  order: body.order, note: body.note, checkDows: body.checkDows, kind: body.kind, place: body.place, fixedBuy: body.fixedBuy === '1' };
     const k = CA.list.findIndex(x => x.id === j.id);
     if (k >= 0) CA.list[k] = rec; else CA.list.push(rec);
     if (j.ingredientAdded) CA.ings.push({ id: j.ingredientId, name: body.name, unit: body.unit, vendor: body.vendor });
