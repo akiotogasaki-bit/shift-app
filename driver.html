@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v8.25 (2026-11-25) 【🛒 買い物リスト】社長決定「発注の買い物はドライバーが行く。Aで。買い物は水曜と日曜に行く」「回収タブの上に買い物ありとだして、タップでチェックリストが出る」。★回収タブの一番上に「🛒 買い物あり ◯品（残り◯）」のカードを出し、タップで下から一覧が開く。1品ずつタップで「買った✓」＝メインGAS「買い物チェック」シートに残る（もう一度タップで取り消し）。★中身＝在庫入力で業者「買い物」の品目を**その日に**数えた発注数（必要数−在庫）＋在庫入力「臨時の買い物」タブで頼まれた物。データ源は GET `getShoppingForDriver`、✓は POST `markShoppingBought`。★買い物の日（水・日）で在庫入力がまだの時は「在庫入力待ち」と薄く出す。それ以外の日で何も無ければカードは出さない。★⚠ 新しいタイマーは足していない。`reloadCollectionData_` が呼ばれる時（回収タブを開く／🔄更新／前面復帰／巡回）に3分に1回だけ取り直す。要: メインGAS @1007 以降。 -->
 <!-- driver v8.24 (2026-11-24) 【💬 相談に社長の決定が返る】社長決定 A案「社長の決定待ちの相談は、Claude に相談して、変更・維持も含めて最終どうしたかを相談者に戻したい」。★相談タブに「🧭 社長の決定（○/○ ○:○○ の相談）【変更する／今のまま／保留】」の吹き出しを出す（Cockpit の「相談」タブで社長が決めると Firebase boss 関数 creply が書く。同時に本人へ LINE も届く）。要: Firebase consult/boss 2026-11-24。 -->
 <!-- driver v8.23 (2026-11-20) 【押し引きの元データの穴4〜7】社長決定「画面だけで全部進めて」（FC0次準備）。★④積み込みの確定を確かめられない時（通信失敗・古い応答）は黄色の帯で知らせる（ゲートはしない）。★⑤積み込みを確定した直後に1回だけ「開店前に先に下ろす拠点はありますか？」→OKで「車載を減らす」を開く。★⑥出発から30分過ぎた自分の搬送中を回収タブの一番上に赤カードで出す（タップで移動タブ。loadTodayMoves_ のたびに出し直す）。★⑦巡回で推奨の数を1つも触らずに送る時だけ確認（入力欄に data-rec で推奨を覚えさせ、置く/下げると数の両方で比べる）。GAS変更なし。 -->
 <!-- driver v8.22 (2026-11-20) 【2次販売と回収の穴3つ】社長決定「2次販売と回収が先」（FC0次準備）。★①回収の「🛒 2次販売」で2次販売の場所が1つでもある日は「行き先なし」を出さない（submitDestPickUndecided_ でも弾く）。印だけ残って受け取った側の納品に乗らなかった。場所が無い日だけ従来どおり。★②二次販売拠点カード・入力画面・確認文に「回収で行き先を選んだ分は自動で足されている。ここは回収を通さない分だけ」を明記（v8.21 の自動足し込みと手入力の二重計上防止。サーバーが内訳を返さないので表示は合計のまま）。★③confirmCash の順番を ①現金→③残数→②回収済み に変更。残数を送るべき拠点で送れなかったら回収済みにせず止める（もう一度押せば送り直せる。サーバーは判定列・移動ID列で二重防止）。GAS変更なし。 -->
@@ -158,6 +159,17 @@ body {
 .header-user { font-size: 12px; opacity: .8; }
 /* ★v8.1 ドライバー日報 */
 .drr-btn { background:#fff; color:var(--blue); border:none; border-radius:14px; padding:5px 10px; font-size:12px; font-weight:700; }
+.shop-card { display:flex; align-items:center; gap:10px; background:#FFF4E5; border:2px solid #E67E22; color:#8a4b0b; border-radius:12px; padding:12px 14px; margin-bottom:10px; font-weight:800; font-size:15px; cursor:pointer; }
+.shop-card.done { background:#EAF7EE; border-color:#27AE60; color:#1E7A43; }
+.shop-card.wait { background:#F4F6F7; border:1.5px dashed #AAB7B8; color:#5D6D7E; font-weight:700; font-size:13px; cursor:default; }
+.shop-card .sc-sub { margin-left:auto; font-size:12px; font-weight:700; opacity:.85; }
+.shop-row { display:flex; align-items:center; gap:10px; padding:12px 4px; border-bottom:1px solid #eee; cursor:pointer; }
+.shop-row .sr-box { width:28px; height:28px; border-radius:8px; border:2px solid #E67E22; display:flex; align-items:center; justify-content:center; font-weight:900; color:#fff; flex:none; }
+.shop-row.bought .sr-box { background:#27AE60; border-color:#27AE60; }
+.shop-row .sr-name { font-size:16px; font-weight:800; }
+.shop-row.bought .sr-name { text-decoration:line-through; color:#999; }
+.shop-row .sr-qty { margin-left:auto; font-size:17px; font-weight:900; white-space:nowrap; }
+.shop-row .sr-note { font-size:11px; color:#888; font-weight:600; }
 .drr-bg { position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:3000; display:none; align-items:flex-end; justify-content:center; }
 .drr-bg.show { display:flex; }
 .drr-sheet { background:#fff; width:100%; max-width:560px; border-radius:16px 16px 0 0; padding:16px 16px 22px; max-height:92vh; overflow:auto; }
@@ -1996,6 +2008,8 @@ body {
          11px/padding 4px12px（タップ範囲 約24px）→ 14px/padding 9px 20px（約40px）。
          走行の合間に片手で押す前提なので、Appleの推奨44ptに近い 40px を下限にしている。
          `min-height` を置いているのは「更新中…」に化けた時に高さが動かないようにするため。 -->
+    <!-- ★v8.25 買い物リスト（水・日） -->
+    <div id="shop-card-wrap"></div>
     <div style="display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-bottom:8px;">
       <span style="font-size:12px;color:var(--ink-mute);" id="collection-updated-at">--:-- 更新</span>
       <button id="collection-refresh-btn" onclick="reloadCollectionData_(true)"
@@ -2008,6 +2022,17 @@ body {
        販売員が配分表と違う個数で開始したとき、ここに出る。
        承認はゲートではない（承認前でもレジは動く）。事実の確認と記録のための画面。
        ★2026-07-31 Phase C：回収時の実査（残数・現金）もこのタブに同居させる。 -->
+  <!-- ★v8.25 買い物チェックリスト -->
+  <div class="drr-bg" id="shop-bg" onclick="if(event.target===this)shopClose_()">
+    <div class="drr-sheet">
+      <div class="drr-title" id="shop-title">🛒 買い物</div>
+      <div id="shop-list"></div>
+      <div class="drr-hint">買ったものをタップすると✓が付きます（もう一度タップで取り消し）</div>
+      <div class="drr-actions"><button class="drr-cancel" onclick="shopClose_()">閉じる</button>
+        <button class="drr-send" onclick="shopRefresh_(true)">🔄 更新</button></div>
+    </div>
+  </div>
+
   <div id="tab-approval" class="tab-panel">
     <div id="approval-list"></div>
   </div>
@@ -3583,7 +3608,81 @@ function _collSig_(live, st) {
   } catch (e) { return null; }
 }
 
+/* ★v8.25 買い物リスト（水・日）。回収タブの取り直しに相乗りし、3分に1回だけ取る。 */
+let shopData_ = null, shopAt_ = 0, shopBusy_ = false;
+const SHOP_MIN_MS_ = 3 * 60 * 1000;
+async function shopRefresh_(force) {
+  if (shopBusy_) return;
+  if (!force && Date.now() - shopAt_ < SHOP_MIN_MS_) return;
+  shopBusy_ = true;
+  try {
+    let j = null;
+    for (let i = 0; i < 3 && !(j && j.ok); i++) {
+      try {
+        const r = await fetch(GAS_URL + '?action=getShoppingForDriver&date=' + drrToday_() + '&_cb=' + Date.now(), { redirect: 'follow' });
+        j = await r.json();
+      } catch (e) { j = null; await new Promise(r => setTimeout(r, 2000)); }
+    }
+    if (j && j.ok) { shopData_ = j; shopAt_ = Date.now(); shopRender_(); }   // 取れなかった時は前の表示を消さない
+  } finally { shopBusy_ = false; }
+}
+function shopEsc_(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+function shopRender_() {
+  const wrap = document.getElementById('shop-card-wrap');
+  if (!wrap || !shopData_) return;
+  const d = shopData_, items = d.items || [];
+  if (!items.length) {
+    wrap.innerHTML = d.isShopDay ? '<div class="shop-card wait">🛒 今日は買い物の日（在庫入力待ち）</div>' : '';
+  } else {
+    const rem = items.filter(x => !x.bought).length;
+    wrap.innerHTML = '<div class="shop-card' + (rem ? '' : ' done') + '" onclick="shopOpen_()">'
+      + (rem ? '🛒 買い物あり ' + items.length + '品' : '✅ 買い物 全部買いました')
+      + '<span class="sc-sub">' + (rem ? '残り' + rem + ' ・タップで一覧' : 'タップで一覧') + '</span></div>';
+  }
+  const bg = document.getElementById('shop-bg');
+  if (bg && bg.classList.contains('show')) shopRenderList_();
+}
+function shopRenderList_() {
+  const d = shopData_ || { items: [] };
+  document.getElementById('shop-title').textContent = '🛒 買い物 ' + (d.dateLabel || '')
+    + (d.countedAt ? '（在庫入力 ' + d.countedAt + '）' : '');
+  const el = document.getElementById('shop-list');
+  if (!(d.items || []).length) { el.innerHTML = '<div class="cst-empty">今日の買い物はありません</div>'; return; }
+  el.innerHTML = d.items.map((x, i) =>
+    '<div class="shop-row' + (x.bought ? ' bought' : '') + '" onclick="shopToggle_(' + i + ')">'
+    + '<div class="sr-box">' + (x.bought ? '✓' : '') + '</div>'
+    + '<div><div class="sr-name">' + shopEsc_(x.name) + '</div>'
+    + ((x.kind === '臨時' || x.boughtBy) ? '<div class="sr-note">'
+        + (x.kind === '臨時' ? '臨時' + (x.requestedBy ? '（' + shopEsc_(x.requestedBy) + '）' : '') : '')
+        + (x.boughtBy ? ' ✓' + shopEsc_(x.boughtBy) : '') + '</div>' : '')
+    + '</div><div class="sr-qty">' + shopEsc_(x.qty) + shopEsc_(x.unit || '') + '</div></div>').join('');
+}
+function shopOpen_() { shopRenderList_(); document.getElementById('shop-bg').classList.add('show'); shopRefresh_(true); }
+function shopClose_() { document.getElementById('shop-bg').classList.remove('show'); }
+async function shopToggle_(i) {
+  const x = shopData_ && shopData_.items[i];
+  if (!x) return;
+  const want = !x.bought;
+  x.bought = want; x.boughtBy = want ? (state.userName || '') : '';
+  shopRender_();
+  let j = null;
+  for (let k = 0; k < 3 && !(j && j.ok); k++) {
+    try {
+      const r = await fetch(GAS_URL, { method: 'POST', redirect: 'follow',
+        body: JSON.stringify({ action: 'markShoppingBought', date: shopData_.date, key: x.key, kind: x.kind,
+          name: x.name, qty: x.qty, unit: x.unit, bought: want, userName: state.userName || '' }) });
+      j = await r.json();
+    } catch (e) { j = null; await new Promise(r => setTimeout(r, 2000)); }
+  }
+  if (!(j && j.ok)) {
+    x.bought = !want; x.boughtBy = ''; shopRender_();
+    showToast('✓を保存できませんでした。もう一度押してください', 'error', 4000);
+  }
+}
+window.addEventListener('load', function () { setTimeout(function () { shopRefresh_(true); }, 4000); });
+
 async function reloadCollectionData_(force) {
+  shopRefresh_(force);   // ★v8.25 3分に1回だけ（中で間引く）
   if (collectionReloading) return false;
   if (!force && Date.now() - collectionReloadAt < COLLECTION_RELOAD_MIN_MS) return false;
   let live = null, st = null;
