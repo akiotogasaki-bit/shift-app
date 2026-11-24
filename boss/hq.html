@@ -739,7 +739,7 @@ function renderLocEdit(){
   document.querySelectorAll('input[name=ldow]').forEach(function(cb){ cb.addEventListener('change', function(){ cb.parentNode.classList.toggle('on', cb.checked); }); });
   // エリアを変えたら主担当は「エリアの主担当」に戻す（サーバーがそのエリアの主担当を入れる）
   document.querySelector('[data-l="エリア"]').addEventListener('change', function(){ lcollect(); S.LE.f['主担当ドライバー名'] = ''; renderLocEdit(); });
-  var bar = '<button class="btn sub" id="lb-cancel" style="flex:0 0 26%">一覧に戻る</button><button class="btn" id="lb-check"><i class="ti ti-list-check"></i>確認する</button>';
+  var bar = '<button class="btn sub" id="lb-cancel" style="flex:0 0 20%">戻る</button><button class="btn" id="lb-check"><i class="ti ti-list-check"></i>確認する</button>';
   if(LE.id && LE.flag !== '有効') bar += '<button class="btn go" id="lb-start" style="flex:0 0 30%"><i class="ti ti-player-play"></i>販売を始める</button>';
   if(LE.id && LE.flag === '有効') bar += '<button class="btn sub" id="lb-end" style="flex:0 0 30%;color:var(--red);border-color:var(--red)"><i class="ti ti-player-stop"></i>販売を終える</button>';
   $('bar').style.display = ''; $('bar-in').innerHTML = bar;
