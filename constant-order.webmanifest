@@ -1,0 +1,23 @@
+{
+  "name": "お江戸弁当 在庫入力",
+  "short_name": "在庫入力",
+  "start_url": "./constant-order.html",
+  "scope": "./constant-order.html",
+  "display": "standalone",
+  "background_color": "#5B6678",
+  "theme_color": "#5B6678",
+  "icons": [
+    {
+      "src": "./stock-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./stock-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

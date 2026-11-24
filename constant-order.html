@@ -4,6 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>お江戸弁当 在庫入力・買い物・報告</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="在庫入力">
+<meta name="theme-color" content="#5B6678">
+<link rel="apple-touch-icon" href="stock-icon.png">
+<link rel="manifest" href="constant-order.webmanifest">
 <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
   :root {
@@ -158,6 +165,9 @@
 
 <script>
 // ════════════════════════════════════════════
+//  ★v5.7 (2026-11-25) 社長「発注アプリ・在庫チェックのアプリもホーム画面に追加したい」→ PWA化（constant-order.webmanifest・stock-icon.png）。
+//       ⚠ ホーム画面（LINEの外）からは LINE ログインが通らない（driver v3.6 で iOS 実機検証済み＝Safari に投げ出され戻れない）。
+//       なので LINE の外で開いた時はログインせず、名前を1回だけ聞いて端末に覚える（記録の「誰が」用）。LINE 内は今までどおり。
 //  ★v5.6 (2026-11-25) 社長「黒米は10日で1袋。残りが0.4を切ったくらいで1袋頼みたい」→ B 発注点。
 //       定数管理で「発注点」を入れた品目は、在庫を小数で入れられ、在庫＜発注点 なら「頼む数」を発注（それ以外は0）。
 //       発注点が空欄の品目は従来どおり 必要数−在庫（整数）。
@@ -837,10 +847,23 @@ function showToast(msg) { const el = document.getElementById('toast'); el.textCo
 window.addEventListener('load', async function() {
   try {
     buildShell();
-    await liff.init({ liffId: LIFF_ID });
-    if (!liff.isLoggedIn()) { liff.login({ redirectUri: window.location.href }); return; }
-    const profile = await liff.getProfile();
-    USER_ID = profile.userId || ''; DISPLAY_NAME = profile.displayName || '';
+    // ★v5.7 LINE 内＝今までどおり LIFF。ホーム画面・ブラウザ＝ログインせず名前だけ（iOS の PWA では LINE ログインが戻ってこない）
+    let inLine = false;
+    try { await liff.init({ liffId: LIFF_ID }); inLine = liff.isInClient(); } catch (e) { inLine = false; }
+    if (inLine) {
+      if (!liff.isLoggedIn()) { liff.login({ redirectUri: window.location.href }); return; }
+      const profile = await liff.getProfile();
+      USER_ID = profile.userId || ''; DISPLAY_NAME = profile.displayName || '';
+    } else {
+      let nm = '';
+      try { nm = localStorage.getItem('oedo_stock_name') || ''; } catch (e) {}
+      if (!nm) {
+        document.getElementById('loading').classList.add('hide');
+        nm = (prompt('お名前を入れてください（在庫入力の記録に残ります。次からは聞きません）') || '').trim();
+        try { if (nm) localStorage.setItem('oedo_stock_name', nm); } catch (e) {}
+      }
+      USER_ID = ''; DISPLAY_NAME = nm;
+    }
     document.getElementById('whoTag').textContent = DISPLAY_NAME ? ('担当：' + DISPLAY_NAME) : '';
 
     buildDateOptions();

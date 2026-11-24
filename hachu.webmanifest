@@ -1,0 +1,23 @@
+{
+  "name": "お江戸弁当 発注",
+  "short_name": "発注",
+  "start_url": "./hachu.html",
+  "scope": "./hachu.html",
+  "display": "standalone",
+  "background_color": "#1A3C5E",
+  "theme_color": "#1A3C5E",
+  "icons": [
+    {
+      "src": "./hachu-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./hachu-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
