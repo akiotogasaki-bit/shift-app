@@ -94,6 +94,9 @@
   .add-row:active { background: var(--blue-l); }
 
   /* アクション（コピー/報告） */
+  .save-bar { position: sticky; bottom: 0; z-index: 4; background: #fff; border-top: 1px solid var(--line); padding: 10px 12px 14px; margin: 8px -12px 0; box-shadow: 0 -2px 8px rgba(0,0,0,0.06); }
+  .act-btn.order { background: var(--green); }
+  #panel-shopping .act-foot { position: static; box-shadow: none; }   /* ★v5.8 */
   .act-foot { position: sticky; bottom: 0; background: #fff; border-top: 1px solid var(--line); padding: 12px 14px 16px; box-shadow: 0 -2px 8px rgba(0,0,0,0.05); }
   .plabel { font-size: 12px; font-weight: 700; margin-bottom: 6px; }
   .act-foot textarea { width: 100%; min-height: 92px; resize: vertical; font-size: 14px; line-height: 1.6; padding: 10px 12px; border: 1.5px solid var(--line); border-radius: 10px; background: #fafbfc; color: #1c2733; font-family: inherit; }
@@ -165,6 +168,10 @@
 
 <script>
 // ════════════════════════════════════════════
+//  ★v5.8 (2026-11-25) 社長「買い物（タブ）は数字を入れて毎回保存じゃなくて、最後に一回保存で良い」「在庫チェックも毎回保存なら、それも最後の一回に変えて」。
+//       在庫入力タブ・買い物タブ①とも、入れても保存しない（計算だけ）。画面の下に固定の「💾 まとめて保存」。
+//       ①在庫チェックの行は入力しても保存しない（発注数の計算だけ）。下の「💾 まとめて保存」で入れた品目を順に保存する。
+//       保存していない数があるまま画面を閉じようとしたら確認を出す。在庫入力タブ（午後）は今までどおり1品ずつ自動保存。
 //  ★v5.7 (2026-11-25) 社長「発注アプリ・在庫チェックのアプリもホーム画面に追加したい」→ PWA化（constant-order.webmanifest・stock-icon.png）。
 //       ⚠ ホーム画面（LINEの外）からは LINE ログインが通らない（driver v3.6 で iOS 実機検証済み＝Safari に投げ出され戻れない）。
 //       なので LINE の外で開いた時はログインせず、名前を1回だけ聞いて端末に覚える（記録の「誰が」用）。LINE 内は今までどおり。
@@ -388,7 +395,10 @@ function renderStock(t, data) {
     html += `<div class="place-head${p.name === '場所未設定' ? ' unset' : ''}">📍 ${escHtml(p.name)}<span>${p.items.length}品</span></div>`;
     p.items.forEach(it => { html += stockItemHtml_(it, ''); });
   });
+  html += '<div class="save-bar"><button class="act-btn order" id="saveBtn-items-stock" onclick="saveAllIn_(\'items-stock\')">💾 まとめて保存</button>'
+    + '<div class="status" id="saveMsg-items-stock"></div></div>';   // ★v5.8
   el.innerHTML = html;
+  stockDirty_();
 }
 
 // ── 発注型（棚卸し式）描画 ──
@@ -451,7 +461,7 @@ function stockItemHtml_(it, dateOverride) {
           <div class="qbox"><label>在庫</label>
             <input class="num-in stock" type="number" inputmode="${rop ? 'decimal' : 'numeric'}" min="0" step="${rop ? '0.1' : '1'}" placeholder="${rop ? '例 0.5' : '—'}" value="${stockVal}" data-rop="${rop ? escHtml(it.reorderPoint) : ''}" data-ropq="${rop ? escHtml(it.reorderQty) : ''}"
               data-vendor="${escHtml(it.vendor)}" data-const-id="${escHtml(it.id)}" data-target="${target}" data-saved-order="${savedOrder}" data-saved-stock="${stockVal}" data-date="${escHtml(dateOverride)}"
-              oninput="onStockInput(this)" onblur="saveOrder(this)"></div>
+              oninput="onStockInput(this);stockDirty_()"></div>
           <span class="arrow-mid">→</span>
           <div class="order-box${hasSaved?'':' dim'}"><span class="lbl">${dateOverride ? '買う' : '発注'}</span><span class="num js-order">${dispOrder}</span><span class="u">${escHtml(it.unit||'')}</span></div>
           <span class="save-tag js-tag"></span>
@@ -599,8 +609,49 @@ function renderShopCheck_(sc) {
   stores.sort((a, b) => (a === '') - (b === ''));
   el.innerHTML = '<div class="plabel c-shop" style="margin:10px 12px 0">① 在庫チェック（' + escHtml(sc.dateLabel) + '分）数えると自動でドライバーに届きます</div>'
     + stores.map(st => '<div class="place-head">🏪 ' + escHtml(st || '買い物') + '<span>' + items.filter(x => (x.store || '') === st).length + '品</span></div>'
-      + items.filter(x => (x.store || '') === st).map(x => stockItemHtml_(x, sc.date)).join('')).join('');
+      + items.filter(x => (x.store || '') === st).map(x => stockItemHtml_(x, sc.date)).join('')).join('')
+    + '<div class="save-bar"><button class="act-btn shop" id="saveBtn-shopchk-shopping" onclick="saveAllIn_(\'shopchk-shopping\')">💾 まとめて保存</button>'
+    + '<div class="status" id="saveMsg-shopchk-shopping"></div></div>';
+  stockDirty_();
 }
+
+// ★v5.8 まだ保存していない行（入れた数が保存済みと違う）
+function unsavedIn_(rootId) {
+  return Array.from(document.querySelectorAll('#' + rootId + ' input.stock')).filter(inp => {
+    const raw = inp.value.trim();
+    if (raw === '') return false;
+    return inp.dataset.savedStock !== String(parseStock_(inp, raw));
+  });
+}
+const SAVE_ROOTS_ = ['items-stock', 'shopchk-shopping'];
+function stockDirty_() {
+  SAVE_ROOTS_.forEach(id => {
+    const btn = document.getElementById('saveBtn-' + id); if (!btn) return;
+    const n = unsavedIn_(id).length;
+    btn.disabled = n === 0;
+    btn.textContent = n ? '💾 まとめて保存（' + n + '品）' + (id === 'shopchk-shopping' ? '・ドライバーに届く' : '') : '✓ 保存済み';
+  });
+}
+async function saveAllIn_(rootId) {
+  const list = unsavedIn_(rootId);
+  if (!list.length) return;
+  const btn = document.getElementById('saveBtn-' + rootId), msg = document.getElementById('saveMsg-' + rootId);
+  btn.disabled = true;
+  let ng = 0;
+  for (let k = 0; k < list.length; k++) {
+    btn.textContent = '保存中… ' + (k + 1) + ' / ' + list.length;
+    await saveOrder(list[k]);
+    const tag = list[k].closest('.item').querySelector('.js-tag');
+    if (tag && /失敗|エラー/.test(tag.textContent)) ng++;
+  }
+  msg.textContent = ng ? (ng + '品 保存できませんでした。もう一度押してください') : (list.length + '品を保存しました');
+  msg.className = 'status' + (ng ? ' err' : '');
+  if (!ng) showToast(list.length + '品を保存しました');
+  stockDirty_();
+}
+window.addEventListener('beforeunload', function (e) {
+  if (SAVE_ROOTS_.some(id => unsavedIn_(id).length)) { e.preventDefault(); e.returnValue = ''; }
+});
 
 // ── ★v5.3 臨時の買い物タブの上に「毎回買う」品目（買い物先ごと） ──
 function renderPicks_(picks) {

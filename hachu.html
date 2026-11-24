@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- hachu.html v1.5 (2026-11-25) 【チェックリストから買い物先を外す】社長「業務スーパー・ハナマサはチェックリストから外して」。業者「買い物」と業者マスタ備考に「買い物先」の業者（GAS getOrderChecks の shopVendors）は出さない。業者カードはそのまま。要: メインGAS @1014 以降。 -->
 <!-- hachu.html v1.4 (2026-11-25) 【ホーム画面に置ける】社長「発注アプリ・在庫チェックのアプリもホーム画面に追加したい」。hachu.webmanifest・hachu-icon.png（在庫入力と同じクリップボードの絵を紺に）。LIFF を使っていないのでそのまま置ける。 -->
 <!-- hachu.html v1.3 (2026-11-25) 【今日の発注チェック】社長「毎日の発注で発注もれがないように、在庫管理をした後に発注したかのチェックリスト」→ A。発注タブの一番上に「発注が要る業者」だけを並べ、☐→☑で発注済み。チェックはサーバー（シート「発注チェック」）に残り、誰の端末からも同じ。業者カードの「発注済み」と同じもの（どちらで押しても両方に反映）。要: メインGAS @1013 以降。 -->
 <!-- hachu.html v1.2 (2026-11-25) 【定数管理に「発注点」「頼む数」】社長「黒米は10日で1袋。残りが0.4を切ったくらいで1袋頼みたい」→ B。発注点を入れた品目は、在庫入力で在庫＜発注点 の時だけ頼む数を発注（小数可）。空欄＝従来の 必要数−在庫。定数発注マスタM・N列。要: メインGAS @1012 以降。 -->
@@ -1046,11 +1047,13 @@ function toggleOrderBd(bdId) {
 
 // ★v1.3 今日の発注チェック（サーバー）
 let _orderCheckAt = {};
+let _orderShopVendors = ['買い物', '業務スーパー', 'ハナマサ'];   // ★v1.5 サーバーが返す値で上書き
 async function loadOrderChecks_(key) {
   _orderCheckAt = {};
   try {
     const j = await gasGetJson(GAS_URL + '?action=getOrderChecks&key=' + encodeURIComponent(key) + '&_cb=' + Date.now());
     if (j && j.ok) {
+      if (Array.isArray(j.shopVendors) && j.shopVendors.length) _orderShopVendors = j.shopVendors;
       Object.keys(j.checks || {}).forEach(v => { _orderDoneFlags[v] = !!j.checks[v].done; _orderCheckAt[v] = j.checks[v].done ? j.checks[v].at : ''; });
       saveOrderDoneFlags();
     }
@@ -1061,7 +1064,7 @@ function orderNeedsList_(data) {
     const nItems = (v.items || []).length;
     const nConst = (v.constants || []).filter(c => Number(c.currentQty) > 0).length;
     return { name: v.name, nItems, nConst };
-  }).filter(x => x.nItems + x.nConst > 0);
+  }).filter(x => x.nItems + x.nConst > 0 && _orderShopVendors.indexOf(x.name) < 0);   // ★v1.5 買い物先はドライバーが買うので外す
 }
 function renderOrderChecklist_(data) {
   const el = document.getElementById('order-checklist');
