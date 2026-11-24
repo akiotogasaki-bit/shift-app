@@ -158,6 +158,9 @@
 
 <script>
 // ════════════════════════════════════════════
+//  ★v5.3 (2026-11-25) 社長「つくね・青がっぱは臨時で頼むから在庫チェックには出さなくていい／買い物リストにはそれぞれ3ケースと出したい」。
+//       定数管理で「毎回買う」に○を付けた品目は在庫入力に出さず、買い物の日に必要数のままドライバーに出る（GAS側）。
+//       臨時の買い物タブの上に、その品目を買い物先ごとに並べ、数だけ入れて追加を頼めるようにした（extraPicks）。
 //  ★v5.2 (2026-11-25) 社長決定「買い物はドライバーが水曜と日曜に行く」。「買い物」タブ（数を入れてコピー）→「臨時の買い物」に作り変えた。
 //       業者「買い物」の13品目は在庫入力で数えると自動でドライバーの買い物リストに入るので、ここは**それ以外**を書く所。
 //       「🚚 ドライバーに頼む」で GAS addExtraShopping → 次の買い物の日（今日が水・日なら今日）のリストに入る。
@@ -237,9 +240,10 @@ function panelInner(t) {
       <div class="hint">在庫入力の<b>買い物の品目</b>（つくね・ツナ・マヨネーズ など）は、数えると<b class="c-shop">自動で</b>ドライバーに届きます。<br>
         ここは<b>それ以外に買ってきてほしい物</b>を書く所です。「ドライバーに頼む」を押すと、次の買い物の日（水・日）のリストに入ります。</div>
       <div class="status" id="${sId}"></div>
+      <div class="listwrap" id="picks-${t.key}"></div>
       <div class="listwrap" id="${iId}"></div>
       <div class="free-wrap">
-        <div class="free-head">買ってきてほしい物</div>
+        <div class="free-head">ほかに買ってきてほしい物</div>
         <div id="free-${t.key}"></div>
         <button class="add-row" onclick="addFreeRow('${t.key}')">＋ 行を追加</button>
       </div>
@@ -344,6 +348,7 @@ async function loadStock(date, oStatus) {
       if (!data || !data.ok) throw new Error((data && data.error) || '取得エラー');
       if (oStatus) { oStatus.textContent = ''; oStatus.className = 'status'; }
       renderStock(t, data);
+      renderPicks_(data.extraPicks || []);   // ★v5.3
       return;
     } catch (e) {
       if (k === 2) { if (oStatus) { oStatus.textContent = '取得エラー: ' + e.message + '（🔄で再読込）'; oStatus.className = 'status err'; } return; }
@@ -502,7 +507,7 @@ function gatherItems(key) {
   const out = [];
   panel.querySelectorAll('.qty-row').forEach(r => {
     const q = parseInt(r.querySelector('.qty-input').value, 10);
-    if (!isNaN(q) && q > 0) out.push({ name: r.dataset.name, qty: q, unit: r.dataset.unit || '' });
+    if (!isNaN(q) && q > 0) out.push({ name: r.dataset.name, qty: q, unit: r.dataset.unit || '', store: r.dataset.store || '' });
   });
   panel.querySelectorAll('.free-row').forEach(r => {
     const nm = r.querySelector('.free-name').value.trim();
@@ -514,7 +519,7 @@ function gatherItems(key) {
 
 // ── プレビュー更新 ──
 function buildText(t, items) {
-  const lines = items.map(it => '・' + it.name + ' ×' + it.qty + (it.unit || ''));
+  const lines = items.map(it => '・' + (it.store ? '［' + it.store + '］' : '') + it.name + ' ×' + it.qty + (it.unit || ''));
   if (t.type === 'shop') return '🛒 臨時の買い物\n' + lines.join('\n');
   return '【報告】' + todayLabel() + ' ' + t.name + '\n' + lines.join('\n') + (DISPLAY_NAME ? ('\n報告者：' + DISPLAY_NAME) : '');
 }
@@ -539,6 +544,23 @@ async function copyList(key) {
   showToast(ok ? 'コピーしました' : '長押しで選択してコピーしてください');
 }
 
+// ── ★v5.3 臨時の買い物タブの上に「毎回買う」品目（買い物先ごと） ──
+function renderPicks_(picks) {
+  const el = document.getElementById('picks-shopping');
+  if (!el) return;
+  if (!picks.length) { el.innerHTML = ''; return; }
+  const stores = [];
+  picks.forEach(p => { const k = p.store || ''; if (stores.indexOf(k) < 0) stores.push(k); });
+  el.innerHTML = stores.map(st => '<div class="plabel c-shop" style="margin:10px 12px 0">🏪 ' + escHtml(st || 'その他の買い物') + '（毎回 必要数を買う・追加がある時だけ数を入れる）</div>'
+    + picks.filter(p => (p.store || '') === st).map(p => `
+      <div class="item qty-row" data-name="${escHtml(p.name)}" data-unit="${escHtml(p.unit || '')}" data-store="${escHtml(p.store || '')}">
+        <div class="item-top"><span class="item-name">${escHtml(p.name)}</span><span class="item-target qty-unit">毎回 ${escHtml(p.qty)}${escHtml(p.unit || '')}</span></div>
+        <div class="item-calc"><div class="qbox"><label>追加</label>
+          <input class="num-in qty-input" type="number" inputmode="numeric" min="0" step="1" placeholder="—" oninput="updatePreview('shopping')"></div>
+          <span class="qty-unit">${escHtml(p.unit || '')}</span></div>
+      </div>`).join('')).join('');
+}
+
 // ── ★v5.2 臨時の買い物 → ドライバーの買い物リスト ──
 async function sendExtraShop(key) {
   const items = gatherItems(key);
@@ -559,7 +581,7 @@ async function sendExtraShop(key) {
   if (json && json.success) {
     showToast(json.dateLabel + ' の買い物に入れました');
     const panel = document.getElementById('panel-' + key);
-    panel.querySelectorAll('.free-qty').forEach(i => i.value = '');
+    panel.querySelectorAll('.free-qty, .qty-input').forEach(i => i.value = '');
     panel.querySelectorAll('.free-name').forEach(i => i.value = '');
     btn.textContent = orig; updatePreview(key);
   } else {
