@@ -424,7 +424,7 @@ function stockItemHtml_(it, dateOverride) {
               data-vendor="${escHtml(it.vendor)}" data-const-id="${escHtml(it.id)}" data-target="${target}" data-saved-order="${savedOrder}" data-saved-stock="${stockVal}" data-date="${escHtml(dateOverride)}"
               oninput="onStockInput(this)" onblur="saveOrder(this)"></div>
           <span class="arrow-mid">→</span>
-          <div class="order-box${hasSaved?'':' dim'}"><span class="lbl">発注</span><span class="num js-order">${dispOrder}</span><span class="u">${escHtml(it.unit||'')}</span></div>
+          <div class="order-box${hasSaved?'':' dim'}"><span class="lbl">${dateOverride ? '買う' : '発注'}</span><span class="num js-order">${dispOrder}</span><span class="u">${escHtml(it.unit||'')}</span></div>
           <span class="save-tag js-tag"></span>
         </div>
         <div class="note-row js-note"></div>
