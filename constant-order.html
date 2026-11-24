@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>お江戸弁当 発注・買い物・報告</title>
+<title>お江戸弁当 在庫入力・買い物・報告</title>
 <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
   :root {
@@ -132,6 +132,10 @@
   .overlay .msg { font-size: 14px; color: #5a6a7a; }
   .overlay .err-title { font-size: 16px; font-weight: 800; color: #c0392b; }
   .hide { display: none !important; }
+  .place-head { display: flex; justify-content: space-between; align-items: center; margin: 14px 12px 4px; padding: 7px 12px; background: var(--navy); color: #fff; font-size: 14px; font-weight: 800; border-radius: 9px; }
+  .place-head span { font-size: 12px; font-weight: 700; opacity: .85; }
+  .place-head.unset { background: #8a96a3; }
+  .item-meta { display: block; font-size: 11px; font-weight: 600; color: #8a96a3; margin-top: 2px; }
 </style>
 </head>
 <body>
@@ -139,12 +143,12 @@
 <div class="app">
   <header>
     <div class="brand">お江戸弁当</div>
-    <h1>📦 発注・買い物・報告</h1>
+    <h1>📦 在庫入力・買い物・報告</h1>
     <div class="who" id="whoTag"></div>
   </header>
   <div class="tabbar" id="tabbar"></div>
   <div id="panels"></div>
-  <div class="foot">発注=自動保存／買い物=コピー／報告=社長に通知／仕入記録=日報の原価に反映</div>
+  <div class="foot">在庫入力=自動保存→発注アプリ／買い物=コピー／報告=社長に通知／仕入記録=日報の原価に反映</div>
 </div>
 
 <div class="copied-toast" id="toast"></div>
@@ -154,6 +158,12 @@
 
 <script>
 // ════════════════════════════════════════════
+//  ★v5 (2026-11-25) 「定数入力」→「在庫入力」。社長指示「包材や消耗品もチェック／曜日を入れたものは
+//       その曜日だけ表示／入力のくくりは業者別でなく場所別」。
+//       先頭タブを ゲットソース（業者1社だけ）→ 在庫入力（定数発注マスタの全業者・食材/包材/消耗品）に。
+//       データ源は getStockCheckForStaff（場所ごと・I列の在庫チェック曜日が今日に当たる品目だけ）。
+//       保存は従来の saveConstantOrderInput（業者は品目ごとのマスタ値・在庫数も送る）＝発注アプリにそのまま載る。
+//       マスタの編集は発注アプリ（hachu.html）の「定数管理」タブ。
 //  発注・買い物・報告アプリ  v4 (2026-07-12)
 //  発注型=自動保存→kanri / 買い物型=コピー / 報告型=社長へLINE通知
 //  ★v4: 「仕入記録」タブを追加（type='purchase'）。旧・単体アプリ「キッチンポータル」を統合。
@@ -168,7 +178,7 @@ const GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5A
 // type: 'order'（発注・自動保存）/ 'shop'（買い物・コピー）/ 'report'（報告・社長通知）
 //     / 'purchase'（仕入記録・日報の食材原価／※name はマスタ照合に使わない）
 const TABS = [
-  { key: 'getsource', name: 'ゲットソース', type: 'order'  },
+  { key: 'stock',     name: '在庫入力',     type: 'order'  },   // ★v5 場所別・全業者
   { key: 'shopping',  name: '買い物',       type: 'shop'   },
   { key: 'noshi',     name: 'のし発注',     type: 'report' },
   { key: 'takagi',    name: 'タカギ産業',   type: 'report' },
@@ -192,7 +202,7 @@ function panelInner(t) {
       <div class="datebar"><label>対象日（この日の発注分）</label>
         <div class="date-row"><select id="dateSel"></select><button class="reload" id="reloadBtn" title="再読込">🔄</button></div>
       </div>
-      <div class="hint">在庫を数えて <b class="c-order">在庫</b> 欄に入力 → <b class="c-order">発注数（目標−在庫）</b> が自動計算・自動保存されます。</div>
+      <div class="hint">棚の順に在庫を数えて <b class="c-order">在庫</b> 欄に入力 → <b class="c-order">発注数（必要数−在庫）</b> が自動計算・自動保存されます。<br><span id="dowInfo"></span></div>
       <div class="status" id="${sId}"></div>
       <div class="listwrap" id="${iId}"></div>`;
   }
@@ -295,25 +305,77 @@ async function loadData(initial) {
   const date = sel ? sel.value : '';
   const oStatus = ORDER_KEY ? document.getElementById('status-' + ORDER_KEY) : null;
   if (oStatus) { oStatus.textContent = '読み込み中…'; oStatus.className = 'status'; }
+  const stockP = loadStock(date, oStatus);   // ★v5 在庫入力（場所別）は別の口
   try {
+    if (!initial && _subRendered) { await stockP; _loading = false; return; }
     const res = await fetch(GAS_URL + '?action=getConstantOrderForStaff&date=' + encodeURIComponent(date), { redirect: 'follow' });
     const data = await res.json();
-    if (!data || !data.ok) {
-      if (oStatus) { oStatus.textContent = (data && data.error) ? ('取得エラー: ' + data.error) : '取得エラー'; oStatus.className = 'status err'; }
-      _loading = false; return;
-    }
-    if (oStatus) oStatus.textContent = '';
+    if (!data || !data.ok) { await stockP; _loading = false; return; }
     TABS.forEach(t => {
       if (t.type === 'purchase') return;        // 仕入記録タブは別API（loadPurchase）
+      if (t.type === 'order') return;           // ★v5 在庫入力は loadStock（場所別）
       const vendor = findVendor(data, t.name);
-      if (t.type === 'order') renderOrder(t, vendor);
-      else if (initial || !_subRendered) renderQty(t, vendor);
+      if (initial || !_subRendered) renderQty(t, vendor);
     });
     if (initial) _subRendered = true;
-  } catch (e) {
-    if (oStatus) { oStatus.textContent = '通信エラー: ' + e.message; oStatus.className = 'status err'; }
-  }
+  } catch (e) { /* 買い物・報告タブの取得失敗は在庫入力の表示に影響させない */ }
+  await stockP;
   _loading = false;
+}
+
+// ★v5 在庫入力：場所ごと・今日の曜日に当たる品目だけ
+async function loadStock(date, oStatus) {
+  const t = TABS.find(x => x.type === 'order');
+  if (!t) return;
+  for (let k = 0; k < 3; k++) {
+    try {
+      const res = await fetch(GAS_URL + '?action=getStockCheckForStaff&date=' + encodeURIComponent(date) + (k ? '&_r=' + Date.now() : ''), { redirect: 'follow' });
+      const data = await res.json();
+      if (!data || !data.ok) throw new Error((data && data.error) || '取得エラー');
+      if (oStatus) { oStatus.textContent = ''; oStatus.className = 'status'; }
+      renderStock(t, data);
+      return;
+    } catch (e) {
+      if (k === 2) { if (oStatus) { oStatus.textContent = '取得エラー: ' + e.message + '（🔄で再読込）'; oStatus.className = 'status err'; } return; }
+      await new Promise(r => setTimeout(r, 1200 * (k + 1)));
+    }
+  }
+}
+
+function renderStock(t, data) {
+  const el = document.getElementById('items-' + t.key);
+  const info = document.getElementById('dowInfo');
+  const places = data.places || [];
+  const n = places.reduce((a, p) => a + p.items.length, 0);
+  if (info) info.textContent = '今日（' + data.dowLabel + '）チェックする品目：' + n + '品' + (data.hiddenByDow ? '（曜日指定で今日は出ない品目 ' + data.hiddenByDow + '品）' : '');
+  if (!n) { el.innerHTML = '<div class="empty">今日チェックする品目はありません。</div>'; return; }
+  let html = '';
+  places.forEach(p => {
+    html += `<div class="place-head${p.name === '場所未設定' ? ' unset' : ''}">📍 ${escHtml(p.name)}<span>${p.items.length}品</span></div>`;
+    p.items.forEach(it => {
+      const target = Number(it.target) || 0;
+      const hasSaved = (it.currentOrderQty !== null && it.currentOrderQty !== undefined);
+      const savedOrder = hasSaved ? Number(it.currentOrderQty) : '';
+      const stockVal = (it.currentStock !== null && it.currentStock !== undefined) ? Number(it.currentStock) : '';
+      const dispOrder = hasSaved ? Number(it.currentOrderQty) : 0;
+      const meta = [it.kind, it.vendor, it.checkDows ? it.checkDows + 'のみ' : ''].filter(Boolean).join('・');
+      html += `
+      <div class="item">
+        <div class="item-top"><span class="item-name">${escHtml(it.name)}<small class="item-meta">${escHtml(meta)}</small></span><span class="item-target">必要 <b>${target}</b>${escHtml(it.unit||'')}</span></div>
+        <div class="item-calc">
+          <div class="qbox"><label>在庫</label>
+            <input class="num-in stock" type="number" inputmode="numeric" min="0" step="1" placeholder="—" value="${stockVal}"
+              data-vendor="${escHtml(it.vendor)}" data-const-id="${escHtml(it.id)}" data-target="${target}" data-saved-order="${savedOrder}" data-saved-stock="${stockVal}"
+              oninput="onStockInput(this)" onblur="saveOrder(this)"></div>
+          <span class="arrow-mid">→</span>
+          <div class="order-box${hasSaved?'':' dim'}"><span class="lbl">発注</span><span class="num js-order">${dispOrder}</span><span class="u">${escHtml(it.unit||'')}</span></div>
+          <span class="save-tag js-tag"></span>
+        </div>
+        <div class="note-row js-note"></div>
+      </div>`;
+    });
+  });
+  el.innerHTML = html;
 }
 
 // ── 発注型（棚卸し式）描画 ──
@@ -370,7 +432,7 @@ async function saveOrder(inputEl) {
   inputEl.value = String(stock);
   const order = Math.max(0, target - stock);
   const prev = inputEl.dataset.savedOrder;
-  if (prev !== '' && Number(prev) === order) return;
+  if (prev !== '' && Number(prev) === order && inputEl.dataset.savedStock === String(stock)) return;
   const sel = document.getElementById('dateSel'); const date = sel ? sel.value : '';
   inputEl.classList.remove('saved'); inputEl.classList.add('saving');
   tagEl.textContent = '保存中'; tagEl.className = 'save-tag js-tag ing';
@@ -378,13 +440,13 @@ async function saveOrder(inputEl) {
     const params = new URLSearchParams();
     params.append('action', 'saveConstantOrderInput'); params.append('date', date);
     params.append('vendorName', inputEl.dataset.vendor); params.append('constId', inputEl.dataset.constId);
-    params.append('qty', String(order)); params.append('userId', USER_ID);
+    params.append('qty', String(order)); params.append('stock', String(stock)); params.append('userId', USER_ID);
     const res = await fetch(GAS_URL, { method: 'POST', body: params });
     const json = await res.json();
     inputEl.classList.remove('saving');
     if (json && json.success) {
       inputEl.classList.add('saved'); tagEl.textContent = '✓ 保存'; tagEl.className = 'save-tag js-tag ok';
-      inputEl.dataset.savedOrder = String(order);
+      inputEl.dataset.savedOrder = String(order); inputEl.dataset.savedStock = String(stock);
       setTimeout(() => { inputEl.classList.remove('saved'); if (tagEl.textContent === '✓ 保存') { tagEl.textContent = ''; tagEl.className = 'save-tag js-tag'; } }, 1600);
     } else { tagEl.textContent = '保存失敗'; tagEl.className = 'save-tag js-tag err'; }
   } catch (e) { inputEl.classList.remove('saving'); tagEl.textContent = '通信エラー'; tagEl.className = 'save-tag js-tag err'; }
