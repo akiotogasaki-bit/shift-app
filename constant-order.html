@@ -158,6 +158,9 @@
 
 <script>
 // ════════════════════════════════════════════
+//  ★v5.4 (2026-11-25) 社長「朝のチェックは当日分」→ A「🛒 買い物タブにまとめる」。
+//       「臨時の買い物」タブ→「🛒 買い物」：①買い物品目の在庫チェック（**今日の日付**で保存・水日だけ出る）
+//       ②毎回買う品目の追加 ③ほかに頼む物。在庫入力タブ（午後の発注用）からは買い物先の品目を外した（GAS shopCheck）。
 //  ★v5.3 (2026-11-25) 社長「つくね・青がっぱは臨時で頼むから在庫チェックには出さなくていい／買い物リストにはそれぞれ3ケースと出したい」。
 //       定数管理で「毎回買う」に○を付けた品目は在庫入力に出さず、買い物の日に必要数のままドライバーに出る（GAS側）。
 //       臨時の買い物タブの上に、その品目を買い物先ごとに並べ、数だけ入れて追加を頼めるようにした（extraPicks）。
@@ -187,7 +190,7 @@ const GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5A
 //     / 'purchase'（仕入記録・日報の食材原価／※name はマスタ照合に使わない）
 const TABS = [
   { key: 'stock',     name: '在庫入力',     type: 'order'  },   // ★v5 場所別・全業者
-  { key: 'shopping',  name: '臨時の買い物', type: 'shop', freeInput: true },   // ★v5.2
+  { key: 'shopping',  name: '🛒 買い物', type: 'shop', freeInput: true, noVendor: true },   // ★v5.4
   { key: 'noshi',     name: 'のし発注',     type: 'report' },
   { key: 'other',     name: 'その他',       type: 'report', freeInput: true },
   { key: 'purchase',  name: '仕入記録',     type: 'purchase' }
@@ -237,9 +240,11 @@ function panelInner(t) {
   }
   if (t.type === 'shop') {   // ★v5.2 臨時の買い物 → ドライバーの買い物リストへ
     return `
-      <div class="hint">在庫入力の<b>買い物の品目</b>（つくね・ツナ・マヨネーズ など）は、数えると<b class="c-shop">自動で</b>ドライバーに届きます。<br>
-        ここは<b>それ以外に買ってきてほしい物</b>を書く所です。「ドライバーに頼む」を押すと、次の買い物の日（水・日）のリストに入ります。</div>
+      <div class="hint">ドライバーの買い物は<b>水曜と日曜</b>。朝に ①の在庫を数えると、足りない分が<b class="c-shop">自動で</b>ドライバーに届きます。<br>
+        ②③は追加で頼みたい物。「ドライバーに頼む」を押すと、次の買い物の日のリストに入ります。</div>
       <div class="status" id="${sId}"></div>
+      <div class="listwrap" id="shopchk-${t.key}"></div>
+      <div class="plabel c-shop" style="margin:14px 12px 0">② ③ 追加で頼む</div>
       <div class="listwrap" id="picks-${t.key}"></div>
       <div class="listwrap" id="${iId}"></div>
       <div class="free-wrap">
@@ -328,7 +333,7 @@ async function loadData(initial) {
     TABS.forEach(t => {
       if (t.type === 'purchase') return;        // 仕入記録タブは別API（loadPurchase）
       if (t.type === 'order') return;           // ★v5 在庫入力は loadStock（場所別）
-      const vendor = findVendor(data, t.name);
+      const vendor = t.noVendor ? null : findVendor(data, t.name);
       if (initial || !_subRendered) renderQty(t, vendor);
     });
     if (initial) _subRendered = true;
@@ -349,6 +354,7 @@ async function loadStock(date, oStatus) {
       if (oStatus) { oStatus.textContent = ''; oStatus.className = 'status'; }
       renderStock(t, data);
       renderPicks_(data.extraPicks || []);   // ★v5.3
+      renderShopCheck_(data.shopCheck || null);   // ★v5.4
       return;
     } catch (e) {
       if (k === 2) { if (oStatus) { oStatus.textContent = '取得エラー: ' + e.message + '（🔄で再読込）'; oStatus.className = 'status err'; } return; }
@@ -367,28 +373,7 @@ function renderStock(t, data) {
   let html = '';
   places.forEach(p => {
     html += `<div class="place-head${p.name === '場所未設定' ? ' unset' : ''}">📍 ${escHtml(p.name)}<span>${p.items.length}品</span></div>`;
-    p.items.forEach(it => {
-      const target = Number(it.target) || 0;
-      const hasSaved = (it.currentOrderQty !== null && it.currentOrderQty !== undefined);
-      const savedOrder = hasSaved ? Number(it.currentOrderQty) : '';
-      const stockVal = (it.currentStock !== null && it.currentStock !== undefined) ? Number(it.currentStock) : '';
-      const dispOrder = hasSaved ? Number(it.currentOrderQty) : 0;
-      const meta = [it.kind, it.vendor, it.checkDows ? it.checkDows + 'のみ' : ''].filter(Boolean).join('・');
-      html += `
-      <div class="item">
-        <div class="item-top"><span class="item-name">${escHtml(it.name)}<small class="item-meta">${escHtml(meta)}</small></span><span class="item-target">必要 <b>${target}</b>${escHtml(it.unit||'')}</span></div>
-        <div class="item-calc">
-          <div class="qbox"><label>在庫</label>
-            <input class="num-in stock" type="number" inputmode="numeric" min="0" step="1" placeholder="—" value="${stockVal}"
-              data-vendor="${escHtml(it.vendor)}" data-const-id="${escHtml(it.id)}" data-target="${target}" data-saved-order="${savedOrder}" data-saved-stock="${stockVal}"
-              oninput="onStockInput(this)" onblur="saveOrder(this)"></div>
-          <span class="arrow-mid">→</span>
-          <div class="order-box${hasSaved?'':' dim'}"><span class="lbl">発注</span><span class="num js-order">${dispOrder}</span><span class="u">${escHtml(it.unit||'')}</span></div>
-          <span class="save-tag js-tag"></span>
-        </div>
-        <div class="note-row js-note"></div>
-      </div>`;
-    });
+    p.items.forEach(it => { html += stockItemHtml_(it, ''); });
   });
   el.innerHTML = html;
 }
@@ -422,6 +407,30 @@ function renderOrder(t, vendor) {
   el.innerHTML = html;
 }
 
+// ★v5.4 1品の行（在庫入力タブ・買い物タブ共通）。dateOverride＝保存する日付（空＝対象日の選択）
+function stockItemHtml_(it, dateOverride) {
+      const target = Number(it.target) || 0;
+      const hasSaved = (it.currentOrderQty !== null && it.currentOrderQty !== undefined);
+      const savedOrder = hasSaved ? Number(it.currentOrderQty) : '';
+      const stockVal = (it.currentStock !== null && it.currentStock !== undefined) ? Number(it.currentStock) : '';
+      const dispOrder = hasSaved ? Number(it.currentOrderQty) : 0;
+      const meta = [it.kind, it.vendor, it.checkDows ? it.checkDows + 'のみ' : ''].filter(Boolean).join('・');
+  return `
+      <div class="item">
+        <div class="item-top"><span class="item-name">${escHtml(it.name)}<small class="item-meta">${escHtml(meta)}</small></span><span class="item-target">必要 <b>${target}</b>${escHtml(it.unit||'')}</span></div>
+        <div class="item-calc">
+          <div class="qbox"><label>在庫</label>
+            <input class="num-in stock" type="number" inputmode="numeric" min="0" step="1" placeholder="—" value="${stockVal}"
+              data-vendor="${escHtml(it.vendor)}" data-const-id="${escHtml(it.id)}" data-target="${target}" data-saved-order="${savedOrder}" data-saved-stock="${stockVal}" data-date="${escHtml(dateOverride)}"
+              oninput="onStockInput(this)" onblur="saveOrder(this)"></div>
+          <span class="arrow-mid">→</span>
+          <div class="order-box${hasSaved?'':' dim'}"><span class="lbl">発注</span><span class="num js-order">${dispOrder}</span><span class="u">${escHtml(it.unit||'')}</span></div>
+          <span class="save-tag js-tag"></span>
+        </div>
+        <div class="note-row js-note"></div>
+      </div>`;
+}
+
 function onStockInput(inputEl) {
   const item = inputEl.closest('.item');
   const numEl = item.querySelector('.js-order'), orderBox = item.querySelector('.order-box'), noteEl = item.querySelector('.js-note');
@@ -448,7 +457,7 @@ async function saveOrder(inputEl) {
   const order = Math.max(0, target - stock);
   const prev = inputEl.dataset.savedOrder;
   if (prev !== '' && Number(prev) === order && inputEl.dataset.savedStock === String(stock)) return;
-  const sel = document.getElementById('dateSel'); const date = sel ? sel.value : '';
+  const sel = document.getElementById('dateSel'); const date = inputEl.dataset.date || (sel ? sel.value : '');   // ★v5.4 買い物タブは当日
   inputEl.classList.remove('saved'); inputEl.classList.add('saving');
   tagEl.textContent = '保存中'; tagEl.className = 'save-tag js-tag ing';
   try {
@@ -542,6 +551,24 @@ async function copyList(key) {
   if (items.length === 0) return;
   const ok = await copyText(key, buildText(t, items));
   showToast(ok ? 'コピーしました' : '長押しで選択してコピーしてください');
+}
+
+// ── ★v5.4 買い物タブ①：買い物品目の在庫チェック（当日分） ──
+function renderShopCheck_(sc) {
+  const el = document.getElementById('shopchk-shopping');
+  if (!el || !sc) return;
+  const items = sc.items || [];
+  if (!items.length) {
+    el.innerHTML = '<div class="plabel c-shop" style="margin:10px 12px 0">① 在庫チェック（' + escHtml(sc.dateLabel) + '分）</div>'
+      + '<div class="empty">' + (sc.isShopDay ? '今日チェックする買い物の品目はありません。' : '買い物の在庫チェックは水曜と日曜です。') + '</div>';
+    return;
+  }
+  const stores = [];
+  items.forEach(x => { const k = x.store || ''; if (stores.indexOf(k) < 0) stores.push(k); });
+  stores.sort((a, b) => (a === '') - (b === ''));
+  el.innerHTML = '<div class="plabel c-shop" style="margin:10px 12px 0">① 在庫チェック（' + escHtml(sc.dateLabel) + '分）数えると自動でドライバーに届きます</div>'
+    + stores.map(st => '<div class="place-head">🏪 ' + escHtml(st || '買い物') + '<span>' + items.filter(x => (x.store || '') === st).length + '品</span></div>'
+      + items.filter(x => (x.store || '') === st).map(x => stockItemHtml_(x, sc.date)).join('')).join('');
 }
 
 // ── ★v5.3 臨時の買い物タブの上に「毎回買う」品目（買い物先ごと） ──
