@@ -158,6 +158,7 @@
 
 <script>
 // ════════════════════════════════════════════
+//  ★v5.5 (2026-11-25) 社長「タブののし発注はいらない」→ のし発注タブを外した（のしは在庫入力タブの場所「のし」で数える）。
 //  ★v5.4 (2026-11-25) 社長「朝のチェックは当日分」→ A「🛒 買い物タブにまとめる」。
 //       「臨時の買い物」タブ→「🛒 買い物」：①買い物品目の在庫チェック（**今日の日付**で保存・水日だけ出る）
 //       ②毎回買う品目の追加 ③ほかに頼む物。在庫入力タブ（午後の発注用）からは買い物先の品目を外した（GAS shopCheck）。
@@ -191,7 +192,6 @@ const GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5A
 const TABS = [
   { key: 'stock',     name: '在庫入力',     type: 'order'  },   // ★v5 場所別・全業者
   { key: 'shopping',  name: '🛒 買い物', type: 'shop', freeInput: true, noVendor: true },   // ★v5.4
-  { key: 'noshi',     name: 'のし発注',     type: 'report' },
   { key: 'other',     name: 'その他',       type: 'report', freeInput: true },
   { key: 'purchase',  name: '仕入記録',     type: 'purchase' }
 ];
