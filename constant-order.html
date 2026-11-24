@@ -464,7 +464,7 @@ function onStockInput(inputEl) {
   const order = calcOrder_(inputEl, stock);
   numEl.textContent = String(order); orderBox.classList.remove('dim');
   noteEl.textContent = (inputEl.dataset.rop !== '' && inputEl.dataset.rop !== undefined)
-    ? (order > 0 ? '発注点を切ったので ' + order + ' 頼みます' : 'まだ発注点より多いので 0')
+    ? (order > 0 ? '発注点を切ったので ' + order + ' 頼みます' : 'まだ発注点を切っていないので 0')
     : ((stock >= target && target > 0) ? '在庫が目標数に達しています（発注 0）' : '');
 }
 
