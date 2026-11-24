@@ -8,7 +8,10 @@
 <link rel="apple-touch-icon" href="cockpit-icon.png?v=2">
 <link rel="icon" href="cockpit-icon.png?v=2">
 <link rel="manifest" href="hq.webmanifest">
-<!-- boss/hq v1.3 (2026-11-24) ★v1.3 一覧の「無効（下書き・販売をやめた物）」を一番下へ（社長「無効の物は一番下に出そうか」）。「無効だけ」で絞った時は無効の見出しだけ出す。
+<!-- boss/hq v1.4 (2026-11-24) ★v1.4 拠点タブ（社長「新規拠点も簡単に入力できるように、既存の店舗も営業時間・ギャラも変えれるように」）。
+     一覧（エリアのチップ・営業中→無効の順）／新規＝下書き（無効）で L035 の下へ・エリアの色と入力規則は同じエリアの行から写す・主担当はエリアから／
+     既存の営業時間・営業終了時刻・販売曜日・ギャラ・PayPay QR・レベル・箱・自動振替先を直せる／「販売を始める」／「販売を終える」＝①locretire で明日以降を0 → ②回収後に無効。→ functions/hq.js
+     boss/hq v1.3 (2026-11-24) ★v1.3 一覧の「無効（下書き・販売をやめた物）」を一番下へ（社長「無効の物は一番下に出そうか」）。「無効だけ」で絞った時は無効の見出しだけ出す。
      boss/hq v1.2 (2026-11-24) ★v1.2 配達用の商品（有効フラグ「配達」＝海苔弁系に96品・お茶1品）を「配達」チップに分けた（社長「海苔弁の配達は別で」）。「すべて」とカテゴリーのチップは拠点で売る物だけ。「販売中だけ」は配達用も含む（配達が販売中の印）。
      boss/hq v1.1 (2026-11-24) ★v1.1 一覧をカテゴリーで絞れるように（社長「メニューをカテゴリー別で絞れるようにしたい」）。検索欄の下にカテゴリーのチップ（件数つき・スマホは横スクロール）。「全部／無効／販売中」と重ねて効く。カテゴリーが空の商品は「（未設定）」。0件のチップは薄く、選んだチップはスマホでも見える位置まで横に送る。
      boss/hq v1.0 (2026-11-24) 【本部アプリ・新メニュー登録】社長「新メニューを色々入れる予定。仕込み・発注・金額などメニューに関するものを一括で入力できるものが欲しい」
@@ -127,10 +130,10 @@ details{margin-top:8px;} summary{font-size:12px;color:var(--navy);cursor:pointer
   <div class="tabs">
     <button class="tab on" data-t="list">メニュー一覧</button>
     <button class="tab" data-t="edit">新メニュー登録</button>
-    <button class="tab" data-t="loc" disabled>拠点（準備中）</button>
+    <button class="tab" data-t="loc">拠点</button>
   </div>
   <div class="body"><div id="root"><div class="inline-loading"><span class="spinner"></span>読み込み中…</div></div></div>
-  <div class="ver">boss/hq v1.3</div>
+  <div class="ver">boss/hq v1.4</div>
 </div>
 <div class="bar" id="bar" style="display:none"><div class="in" id="bar-in"></div></div>
 <div class="modal" id="modal"><div class="sheet" id="sheet"></div></div>
@@ -269,8 +272,12 @@ function refreshRefLists_(){
 
 /* ── 表示 ── */
 function render(){
-  document.querySelectorAll('.tab').forEach(function(t){ t.classList.toggle('on', t.getAttribute('data-t') === S.tab); });
-  if(S.tab === 'list') renderList(); else renderEdit();
+  var tabOf = S.tab === 'locedit' ? 'loc' : S.tab;
+  document.querySelectorAll('.tab').forEach(function(t){ t.classList.toggle('on', t.getAttribute('data-t') === tabOf); });
+  if(S.tab === 'list') renderList();
+  else if(S.tab === 'loc') renderLocList();
+  else if(S.tab === 'locedit') renderLocEdit();
+  else renderEdit();
 }
 function flagBadge(p){
   if(p.flag === '無効') return '<span class="badge b-draft">無効・下書き</span>';
@@ -615,6 +622,227 @@ async function activate(pid){
   }catch(e){ toast(e.message, true); }
 }
 
+/* ══════════════════════════════════════════════════════════
+   📍 拠点（★v1.4 社長「新規拠点も簡単に入力できるように、既存の店舗も営業時間・ギャラも変えれるように」）
+   新規＝下書き（無効）→「販売を始める」。販売終了＝①明日以降の配る数を0（locretire）→②回収が済んでから「無効にする」。
+   ══════════════════════════════════════════════════════════ */
+var DOWS_ = ['月','火','水','木','金'];
+var LEVEL_ = { '1':'1（メイン・初回納品の上限40）', '2':'2（上限20）', '3':'3（上限15）', '4':'4（スポット・上限なし）' };
+function pad2_(t){ var m = /^(\d{1,2}):(\d{2})$/.exec(String(t||'')); return m ? ('0'+m[1]).slice(-2)+':'+m[2] : ''; }
+function locBadge(l){ return l.flag === '有効' ? '<span class="badge b-on">営業中</span>' : '<span class="badge b-draft">無効・下書き</span>'; }
+function renderLocList(){
+  $('bar').style.display = 'none';
+  $('root').innerHTML = '<div class="tools"><input id="lq" placeholder="拠点名・ID で探す" value="'+esc(S.lq||'')+'">'
+    + '<select id="lflt"><option value="all">全部</option><option value="on">営業中だけ</option><option value="off">無効・下書きだけ</option></select></div>'
+    + '<div class="cats" id="lcats"></div>'
+    + '<button class="btn" id="lnew-btn"><i class="ti ti-plus"></i>新しい拠点を登録する</button><div id="llst"></div>';
+  $('lflt').value = S.lflt || 'all';
+  $('lq').addEventListener('input', function(e){ S.lq = e.target.value; renderLocItems_(); });
+  $('lflt').addEventListener('change', function(e){ S.lflt = e.target.value; renderLocItems_(); });
+  $('lcats').addEventListener('click', function(e){ var b = e.target.closest('.cat'); if(!b) return; S.larea = b.getAttribute('data-c'); renderLocItems_(); });
+  $('lnew-btn').addEventListener('click', function(){ openLoc(null); });
+  renderLocItems_();
+}
+function renderLocItems_(){
+  var locs = S.data.locs || [], q = String(S.lq||'').trim(), flt = S.lflt || 'all';
+  var passF = function(l){ return flt === 'on' ? l.flag === '有効' : flt === 'off' ? l.flag !== '有効' : true; };
+  var cnt = {}, total = 0;
+  locs.forEach(function(l){ if(!passF(l)) return; var a = String(l.f['エリア']||'') || '（未設定）'; cnt[a] = (cnt[a]||0) + 1; total++; });
+  var areas = (S.data.locChoices['エリア'] || []).slice(); if(cnt['（未設定）']) areas.push('（未設定）');
+  if(S.larea && areas.indexOf(S.larea) < 0) S.larea = '';
+  var chip = function(c, label, n){ return '<button type="button" class="cat'+((S.larea||'') === c ? ' on' : '')+(n ? '' : ' zero')+'" data-c="'+esc(c)+'">'+esc(label)+'<span>'+n+'</span></button>'; };
+  $('lcats').innerHTML = chip('', 'すべて', total) + areas.map(function(a){ return chip(a, a, cnt[a]||0); }).join('');
+  var list = locs.filter(function(l){
+    if(!passF(l)) return false;
+    if(S.larea && (String(l.f['エリア']||'') || '（未設定）') !== S.larea) return false;
+    return !q || (l.id + ' ' + l.f['拠点名'] + ' ' + l.f['表示名']).indexOf(q) >= 0;
+  });
+  var byOrder = function(a, b){ return (Number(a.f['表示順'])||999) - (Number(b.f['表示順'])||999); };
+  var on = list.filter(function(l){ return l.flag === '有効'; }).sort(byOrder), off = list.filter(function(l){ return l.flag !== '有効'; }).sort(byOrder);
+  var row = function(l){
+    var sub = [l.f['エリア'], l.f['勤務時間'], l.f['レベル'] ? 'レベル' + l.f['レベル'] : '', l.f['販売曜日'] ? l.f['販売曜日'] + 'だけ' : ''].filter(Boolean).join('・');
+    return '<div class="item" data-loc="'+esc(l.id)+'"><div class="id">'+esc(l.id)+'</div>'
+      + '<div class="nm">'+esc(l.f['拠点名'])+' '+locBadge(l)+'<small>'+esc(sub)+'</small></div>'
+      + '<div class="pr">'+yen(l.f['基本ギャラ（円）'])+'<small>ギャラ</small></div></div>';
+  };
+  var h = '';
+  if(on.length || !off.length) h += '<div class="sec">営業中（表示順）</div>' + (on.length ? on.map(row).join('') : '<div class="empty">ありません</div>');
+  if(off.length) h += '<div class="sec">無効（下書き・販売をやめた拠点）</div>' + off.map(row).join('');
+  $('llst').innerHTML = h;
+  document.querySelectorAll('#llst .item').forEach(function(el){ el.addEventListener('click', function(){ openLoc(el.getAttribute('data-loc')); }); });
+  var box = $('lcats'), sel = box.querySelector('.cat.on');
+  if(sel && box.scrollWidth > box.clientWidth) box.scrollLeft = Math.max(0, sel.offsetLeft - box.offsetLeft - (box.clientWidth - sel.offsetWidth) / 2);
+}
+function openLoc(id){
+  var f = {}, flag = '';
+  if(id){
+    var l = (S.data.locs || []).filter(function(x){ return x.id === id; })[0]; if(!l) return;
+    Object.keys(l.f).forEach(function(k){ f[k] = l.f[k] == null ? '' : String(l.f[k]); }); flag = l.flag;
+  }
+  var w = String(f['勤務時間']||'').split(/[~〜～]/);
+  f['開始時刻'] = pad2_(w[0] && w[0].trim()); f['終了時刻'] = pad2_(w[1] && w[1].trim());
+  f['営業終了時刻'] = pad2_(f['営業終了時刻']);
+  if(!id){ f['天候影響区分'] = '屋内'; }
+  S.LE = { id: id || '', flag: flag, f: f };
+  S.tab = 'locedit'; render(); window.scrollTo(0, 0);
+}
+function lcollect(){
+  var LE = S.LE; if(!LE) return;
+  document.querySelectorAll('[data-l]').forEach(function(el){ LE.f[el.getAttribute('data-l')] = el.value; });
+  var d = Array.prototype.filter.call(document.querySelectorAll('input[name=ldow]'), function(c){ return c.checked; }).map(function(c){ return c.value; });
+  LE.f['販売曜日'] = d.length === 5 ? '' : d.join('');
+}
+function linp(k, ph, type){
+  return '<input data-l="'+esc(k)+'" value="'+esc(S.LE.f[k]||'')+'"'+(ph ? ' placeholder="'+esc(ph)+'"' : '')+(type ? ' type="'+type+'"' : '')+(type === 'number' ? ' inputmode="decimal"' : '')+'>';
+}
+function lsel(k, opts, blankLabel){
+  var v = String(S.LE.f[k]||'');
+  return '<select data-l="'+esc(k)+'">' + (blankLabel !== undefined ? '<option value="">'+esc(blankLabel)+'</option>' : '')
+    + opts.map(function(o){ var val = typeof o === 'string' ? o : o[0], lab = typeof o === 'string' ? o : o[1];
+      return '<option value="'+esc(val)+'"'+(v === val ? ' selected' : '')+'>'+esc(lab)+'</option>'; }).join('') + '</select>';
+}
+function renderLocEdit(){
+  var LE = S.LE, d = S.data, c = d.locChoices, isNew = !LE.id;
+  var dows = String(LE.f['販売曜日']||'');
+  var autoDrv = c['エリアの主担当'][LE.f['エリア']] || '';
+  var h = isNew ? '<div class="draftnote"><b>下書きで保存されます。</b>保存してもシフト・配分・レジにはまだ出ません。始める日の前日に「販売を始める」を押してください。</div>'
+    : '<div class="draftnote">'+esc(LE.id)+'「'+esc(LE.f['拠点名'])+'」を直しています　'+locBadge(LE)
+      + (LE.flag === '有効' ? '<br>⚠ 営業中の拠点です。保存した内容はすぐにシフト・配分・レジに効きます。' : '<br>無効の拠点です。「販売を始める」で有効になります。') + '</div>';
+  h += '<div class="card"><h3><span class="n">1</span>基本</h3><div class="grid2">'
+    + '<div><label class="f">拠点名 <b>必須</b></label>' + linp('拠点名', '例：浜松町ビル') + '</div>'
+    + '<div><label class="f">表示名（短い名前） <b>必須</b></label>' + linp('表示名', '例：浜ビル') + '</div>'
+    + '<div><label class="f">エリア <b>必須</b></label>' + lsel('エリア', c['エリア'], '選ぶ') + '</div>'
+    + '<div><label class="f">主担当ドライバー</label>' + lsel('主担当ドライバー名', c['ドライバー'], 'エリアの主担当' + (autoDrv ? '（' + autoDrv + '）' : '')) + '</div></div>'
+    + '<div class="hint">エリアを選ぶと、エリアの色（拠点マスタD列の塗り）と主担当は、同じエリアの拠点から自動で入ります。</div>'
+    + '<details><summary>マップ・表示順</summary>'
+    + '<label class="f">マップURL</label>' + linp('マップURL', 'https://maps.app.goo.gl/…')
+    + '<label class="f">表示順（小さいほど上）</label>' + linp('表示順', '例：14.1', 'number') + '</details></div>';
+  h += '<div class="card"><h3><span class="n">2</span>営業</h3><div class="grid3">'
+    + '<div><label class="f">勤務 開始</label>' + linp('開始時刻', '', 'time') + '</div>'
+    + '<div><label class="f">勤務 終了</label>' + linp('終了時刻', '', 'time') + '</div>'
+    + '<div><label class="f">営業終了時刻</label>' + linp('営業終了時刻', '', 'time') + '</div></div>'
+    + '<div class="hint">営業終了時刻＝振替のバナーを出し始める時刻（渡す側の締め）。勤務の終了より早いことが多い（例 勤務〜13:00・営業終了12:40）。空欄なら勤務の終了と同じにします。</div>'
+    + '<label class="f">販売する曜日（全部に印＝毎日）</label><div class="seg">'
+    + DOWS_.map(function(w){ var on = !dows || dows.indexOf(w) >= 0; return '<label class="'+(on?'on':'')+'" style="justify-content:center"><input type="checkbox" name="ldow" value="'+w+'"'+(on?' checked':'')+'>'+w+'</label>'; }).join('') + '</div>'
+    + '<label class="f">天候影響区分</label>' + lsel('天候影響区分', ['屋内','屋外'], '空欄') + '</div>';
+  h += '<div class="card"><h3><span class="n">3</span>お金</h3>'
+    + '<label class="f">基本ギャラ（円・販売員1日あたり） <b>必須</b></label>' + linp('基本ギャラ（円）', '例：2500', 'number')
+    + '<div class="hint">直しても過去の分は変わりません（報告のたびに報告ログへ写しているため）。次の報告から新しい額になります。</div>'
+    + '<label class="f">PayPay QR（店舗のQRのURL）</label>' + linp('PayPay QR', 'https://qr.paypay.ne.jp/…') + '</div>';
+  var others = (d.locs || []).filter(function(x){ return x.id !== LE.id && x.flag === '有効'; }).map(function(x){ return x.f['拠点名']; });
+  if(LE.f['自動振替先'] && others.indexOf(LE.f['自動振替先']) < 0) others.unshift(LE.f['自動振替先']);   // 今の値が選べないと保存で消えてしまう
+  h += '<div class="card"><h3><span class="n">4</span>配分</h3><div class="grid2">'
+    + '<div><label class="f">レベル（初回納品の上限）</label>' + lsel('レベル', Object.keys(LEVEL_).map(function(k){ return [k, LEVEL_[k]]; }), '空欄（メイン＝1・他＝2）') + '</div>'
+    + '<div><label class="f">箱（基本の箱の数）</label>' + linp('箱', '空欄＝レベルから（40/20/15）', 'number') + '</div></div>'
+    + '<label class="f">自動振替先（締めた後に残りを渡す拠点）</label>' + lsel('自動振替先', others, 'なし') + '</div>';
+  $('root').innerHTML = h;
+  document.querySelectorAll('input[name=ldow]').forEach(function(cb){ cb.addEventListener('change', function(){ cb.parentNode.classList.toggle('on', cb.checked); }); });
+  // エリアを変えたら主担当は「エリアの主担当」に戻す（サーバーがそのエリアの主担当を入れる）
+  document.querySelector('[data-l="エリア"]').addEventListener('change', function(){ lcollect(); S.LE.f['主担当ドライバー名'] = ''; renderLocEdit(); });
+  var bar = '<button class="btn sub" id="lb-cancel" style="flex:0 0 26%">一覧に戻る</button><button class="btn" id="lb-check"><i class="ti ti-list-check"></i>確認する</button>';
+  if(LE.id && LE.flag !== '有効') bar += '<button class="btn go" id="lb-start" style="flex:0 0 30%"><i class="ti ti-player-play"></i>販売を始める</button>';
+  if(LE.id && LE.flag === '有効') bar += '<button class="btn sub" id="lb-end" style="flex:0 0 30%;color:var(--red);border-color:var(--red)"><i class="ti ti-player-stop"></i>販売を終える</button>';
+  $('bar').style.display = ''; $('bar-in').innerHTML = bar;
+  $('lb-cancel').addEventListener('click', function(){ S.LE = null; S.tab = 'loc'; render(); });
+  $('lb-check').addEventListener('click', locCheck);
+  if($('lb-start')) $('lb-start').addEventListener('click', function(){ locStart(LE.id); });
+  if($('lb-end')) $('lb-end').addEventListener('click', function(){ locEnd(LE.id); });
+}
+function lpayload(){
+  lcollect();
+  var f = Object.assign({}, S.LE.f);
+  if(!f['営業終了時刻'] && f['終了時刻']) f['営業終了時刻'] = f['終了時刻'];
+  var keys = ['拠点名','表示名','エリア','主担当ドライバー名','マップURL','表示順','開始時刻','終了時刻','営業終了時刻','販売曜日','天候影響区分','基本ギャラ（円）','PayPay QR','レベル','箱','自動振替先'];
+  var out = {}; keys.forEach(function(k){ out[k] = f[k] == null ? '' : String(f[k]); });
+  // 主担当が空＝エリアの主担当に任せる（既存でエリアを変えていなければ今のまま）
+  if(!out['主担当ドライバー名']) delete out['主担当ドライバー名'];
+  return { loc: S.LE.id, fields: out };
+}
+async function locCheck(){
+  var body = lpayload();
+  $('lb-check').disabled = true;
+  try{
+    var r = await api('hqlocsave', Object.assign({ dry: true }, body));
+    if(r.nothing){ toast('変更はありません'); return; }
+    modal('<h2>この内容で書きます</h2><pre>' + esc(r.summary.join('\n\n')) + '</pre>'
+      + (!r.isNew && S.LE.flag === '有効' ? '<div class="warn">⚠ 営業中の拠点です。保存するとすぐにシフト・配分・レジに効きます。</div>' : '')
+      + '<div class="acts"><button class="btn sub" id="m-no">戻って直す</button><button class="btn" id="m-go"><i class="ti ti-device-floppy"></i>保存する</button></div>');
+    $('m-no').addEventListener('click', closeModal);
+    $('m-go').addEventListener('click', async function(){
+      S.busy = true; $('m-go').disabled = true; $('m-go').innerHTML = '<span class="spinner w"></span>保存しています…';
+      try{
+        var s = await api('hqlocsave', body);
+        closeModal(); S.busy = false;
+        toast(s.isNew ? s.loc + ' を下書きで保存しました' : s.loc + ' を保存しました');
+        await load(); openLoc(s.loc);
+      }catch(e){
+        S.busy = false;
+        $('sheet').innerHTML = '<h2>保存できませんでした</h2><div class="err">' + esc(e.message) + '</div><div class="acts"><button class="btn" id="m-no">閉じる</button></div>';
+        $('m-no').addEventListener('click', closeModal);
+      }
+    });
+  }catch(e){
+    modal('<h2>直してほしい所があります</h2><div class="err">' + esc(e.message) + '</div><div class="acts"><button class="btn" id="m-no">戻って直す</button></div>');
+    $('m-no').addEventListener('click', closeModal);
+  }finally{ if($('lb-check')) $('lb-check').disabled = false; }
+}
+function doneSheet_(title, text, id){
+  $('sheet').innerHTML = '<h2>' + esc(title) + '</h2><pre>' + esc(text) + '</pre><div class="acts"><button class="btn" id="m-no">閉じる</button></div>';
+  $('m-no').addEventListener('click', function(){ closeModal(); load().then(function(){ openLoc(id); }); });
+}
+async function locStart(id){
+  try{
+    var d = await api('hqlocstart', { loc: id, dry: true });
+    modal('<h2>' + esc(id + '「' + d.name + '」の販売を始めます') + '</h2>'
+      + '<div class="sum" style="font-size:13px;line-height:1.6">有効フラグを「有効」にして、GAS のキャッシュを捨てます。シフト・配分・レジに出るようになります。</div>'
+      + (d.warn.length ? '<div class="warn" style="margin-top:8px">' + d.warn.map(esc).join('<br>') + '</div>' : '')
+      + '<pre>このあと必要なこと\n' + d.after.map(function(x, i){ return (i+1) + '. ' + x; }).join('\n') + '</pre>'
+      + '<div class="acts"><button class="btn sub" id="m-no">やめる</button><button class="btn go" id="m-go"><i class="ti ti-player-play"></i>販売を始める</button></div>');
+    $('m-no').addEventListener('click', closeModal);
+    $('m-go').addEventListener('click', async function(){
+      S.busy = true; $('m-go').disabled = true; $('m-no').disabled = true; $('m-go').innerHTML = '<span class="spinner w"></span>有効にしています…';
+      try{ var r = await api('hqlocstart', { loc: id }); doneSheet_('販売を始めました', r.result + '\n\nこのあと必要なこと\n' + r.after.map(function(x, i){ return (i+1) + '. ' + x; }).join('\n'), id); }
+      catch(e){ doneSheet_('失敗しました', e.message, id); }
+      S.busy = false;
+    });
+  }catch(e){ toast(e.message, true); }
+}
+function tomorrow_(){ var t = new Date(Date.now() + 9*3600*1000 + 86400000); return t.toISOString().slice(0, 10); }
+function locEnd(id){
+  var l = (S.data.locs || []).filter(function(x){ return x.id === id; })[0];
+  modal('<h2>' + esc(id + '「' + l.f['拠点名'] + '」の販売を終える') + '</h2>'
+    + '<div class="sum" style="font-size:13px;line-height:1.7"><b>① 配る数を0にする</b>（先にやる）<br>この日から、当日配分・初回納品を0にして、置き弁設定も止めます。当日と過去は触りません。</div>'
+    + '<label class="f">この日から配らない</label><input type="date" id="m-from" value="' + tomorrow_() + '" min="' + tomorrow_() + '">'
+    + '<button class="btn" id="m-z" style="margin-top:8px"><i class="ti ti-list-check"></i>何が0になるか確かめる</button><div id="m-zr"></div>'
+    + '<div class="sum" style="font-size:13px;line-height:1.7;margin-top:14px"><b>② 無効にする</b>（最後の日の回収が済んでから）<br>⚠ ①より先に無効にすると配分調整から見えなくなり、残った数が仕込み・発注にだけ乗ります。</div>'
+    + '<button class="btn sub" id="m-off" style="margin-top:8px;color:var(--red);border-color:var(--red)"><i class="ti ti-ban"></i>無効にする</button>'
+    + '<div class="acts"><button class="btn sub" id="m-no">閉じる</button></div>');
+  $('m-no').addEventListener('click', closeModal);
+  $('m-z').addEventListener('click', async function(){
+    var from = $('m-from').value; $('m-z').disabled = true;
+    try{
+      var d = await api('hqlocretire', { loc: id, from: from, dry: true });
+      var days = Object.keys(d.byDate).sort().map(function(k){ return k + '　' + d.byDate[k] + '個'; }).join('\n');
+      $('m-zr').innerHTML = '<pre>' + esc(from + ' 以降で0にするもの：' + d.cells + 'セル（当日配分 ' + d.sumL + '個・初回納品 ' + d.sumG + '個）' + (days ? '\n' + days : '') + (d.okiben ? '\n置き弁設定も止めます' : '')) + '</pre>'
+        + '<button class="btn" id="m-zgo" style="background:var(--red)"><i class="ti ti-player-stop"></i>' + esc(from) + ' から0にする</button>';
+      $('m-zgo').addEventListener('click', async function(){
+        S.busy = true; $('m-zgo').disabled = true; $('m-zgo').innerHTML = '<span class="spinner w"></span>0にしています…';
+        try{ var r = await api('hqlocretire', { loc: id, from: from }); $('m-zr').innerHTML = '<pre>✅ ' + esc(from) + ' から0にしました（' + r.cells + 'セル）。\n最後の日の回収が済んだら、下の「無効にする」を押してください。</pre>'; }
+        catch(e){ $('m-zr').innerHTML = '<div class="err">' + esc(e.message) + '</div>'; }
+        S.busy = false;
+      });
+    }catch(e){ $('m-zr').innerHTML = '<div class="err">' + esc(e.message) + '</div>'; }
+    finally{ if($('m-z')) $('m-z').disabled = false; }
+  });
+  $('m-off').addEventListener('click', async function(){
+    if(!confirm(id + '「' + l.f['拠点名'] + '」を無効にします。①（配る数を0）は済んでいますか？')) return;
+    S.busy = true; $('m-off').disabled = true;
+    try{ var r = await api('hqlocoff', { loc: id }); doneSheet_('無効にしました', r.result, id); }
+    catch(e){ toast(e.message, true); $('m-off').disabled = false; }
+    S.busy = false;
+  });
+}
+
 /* ── 起動 ── */
 document.querySelectorAll('.tab').forEach(function(t){
   t.addEventListener('click', function(){
@@ -622,11 +850,12 @@ document.querySelectorAll('.tab').forEach(function(t){
     var to = t.getAttribute('data-t');
     if(to === 'edit' && S.tab !== 'edit') { openEdit(null); return; }
     if(S.tab === 'edit') collect();
+    if(to === 'loc'){ S.LE = null; }
     S.tab = to; render();
   });
 });
-$('reload').addEventListener('click', function(){ if(S.tab === 'edit' && !confirm('入力中の内容は消えます。読み直しますか？')) return; S.E = null; S.tab = 'list'; load(); });
-window.addEventListener('beforeunload', function(e){ if(S.tab === 'edit' && S.E){ e.preventDefault(); e.returnValue = ''; } });
+$('reload').addEventListener('click', function(){ if((S.tab === 'edit' || S.tab === 'locedit') && !confirm('入力中の内容は消えます。読み直しますか？')) return; S.E = null; S.LE = null; S.tab = S.tab === 'locedit' || S.tab === 'loc' ? 'loc' : 'list'; load(); });
+window.addEventListener('beforeunload', function(e){ if((S.tab === 'edit' && S.E) || (S.tab === 'locedit' && S.LE)){ e.preventDefault(); e.returnValue = ''; } });
 login_().then(function(ok){
   if(ok === true) afterLogin_();
   else if(ok === null) showPwGate_();
