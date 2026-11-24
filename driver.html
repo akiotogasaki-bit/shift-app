@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v8.26 (2026-11-25) 【買い物先ごとに分ける】社長「業者に業務スーパー・ハナマサを追加」「つくね・青がっぱは業務スーパーに買い物」。★買い物の一覧を買い物先（業務スーパー・ハナマサ など＝業者マスタの備考に「買い物先」と書いた業者）ごとに見出し付きで出す。業者「買い物」の品目と臨時の依頼は「その他の買い物」。買い物先が1つも無い日は見出しを出さない（従来どおり）。要: メインGAS @1008 以降。 -->
 <!-- driver v8.25 (2026-11-25) 【🛒 買い物リスト】社長決定「発注の買い物はドライバーが行く。Aで。買い物は水曜と日曜に行く」「回収タブの上に買い物ありとだして、タップでチェックリストが出る」。★回収タブの一番上に「🛒 買い物あり ◯品（残り◯）」のカードを出し、タップで下から一覧が開く。1品ずつタップで「買った✓」＝メインGAS「買い物チェック」シートに残る（もう一度タップで取り消し）。★中身＝在庫入力で業者「買い物」の品目を**その日に**数えた発注数（必要数−在庫）＋在庫入力「臨時の買い物」タブで頼まれた物。データ源は GET `getShoppingForDriver`、✓は POST `markShoppingBought`。★買い物の日（水・日）で在庫入力がまだの時は「在庫入力待ち」と薄く出す。それ以外の日で何も無ければカードは出さない。★⚠ 新しいタイマーは足していない。`reloadCollectionData_` が呼ばれる時（回収タブを開く／🔄更新／前面復帰／巡回）に3分に1回だけ取り直す。要: メインGAS @1007 以降。 -->
 <!-- driver v8.24 (2026-11-24) 【💬 相談に社長の決定が返る】社長決定 A案「社長の決定待ちの相談は、Claude に相談して、変更・維持も含めて最終どうしたかを相談者に戻したい」。★相談タブに「🧭 社長の決定（○/○ ○:○○ の相談）【変更する／今のまま／保留】」の吹き出しを出す（Cockpit の「相談」タブで社長が決めると Firebase boss 関数 creply が書く。同時に本人へ LINE も届く）。要: Firebase consult/boss 2026-11-24。 -->
 <!-- driver v8.23 (2026-11-20) 【押し引きの元データの穴4〜7】社長決定「画面だけで全部進めて」（FC0次準備）。★④積み込みの確定を確かめられない時（通信失敗・古い応答）は黄色の帯で知らせる（ゲートはしない）。★⑤積み込みを確定した直後に1回だけ「開店前に先に下ろす拠点はありますか？」→OKで「車載を減らす」を開く。★⑥出発から30分過ぎた自分の搬送中を回収タブの一番上に赤カードで出す（タップで移動タブ。loadTodayMoves_ のたびに出し直す）。★⑦巡回で推奨の数を1つも触らずに送る時だけ確認（入力欄に data-rec で推奨を覚えさせ、置く/下げると数の両方で比べる）。GAS変更なし。 -->
@@ -169,6 +170,7 @@ body {
 .shop-row .sr-name { font-size:16px; font-weight:800; }
 .shop-row.bought .sr-name { text-decoration:line-through; color:#999; }
 .shop-row .sr-qty { margin-left:auto; font-size:17px; font-weight:900; white-space:nowrap; }
+.shop-store { font-size:13px; font-weight:800; color:#8a4b0b; background:#FFF4E5; border-radius:8px; padding:6px 10px; margin:10px 0 2px; }
 .shop-row .sr-note { font-size:11px; color:#888; font-weight:600; }
 .drr-bg { position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:3000; display:none; align-items:flex-end; justify-content:center; }
 .drr-bg.show { display:flex; }
@@ -3648,14 +3650,21 @@ function shopRenderList_() {
     + (d.countedAt ? '（在庫入力 ' + d.countedAt + '）' : '');
   const el = document.getElementById('shop-list');
   if (!(d.items || []).length) { el.innerHTML = '<div class="cst-empty">今日の買い物はありません</div>'; return; }
-  el.innerHTML = d.items.map((x, i) =>
+  // ★v8.26 買い物先（業務スーパー・ハナマサ など）ごとに見出しを付ける。先の無い物は「その他の買い物」
+  const idx = d.items.map((x, i) => i);
+  const stores = [];
+  d.items.forEach(x => { const k = x.store || ''; if (stores.indexOf(k) < 0) stores.push(k); });
+  stores.sort((a, b) => (a === '') - (b === ''));
+  const multi = stores.length > 1 || stores[0] !== '';
+  el.innerHTML = stores.map(st => (multi ? '<div class="shop-store">🏪 ' + shopEsc_(st || 'その他の買い物') + '</div>' : '')
+    + idx.filter(i => (d.items[i].store || '') === st).map(i => { const x = d.items[i]; return (
     '<div class="shop-row' + (x.bought ? ' bought' : '') + '" onclick="shopToggle_(' + i + ')">'
     + '<div class="sr-box">' + (x.bought ? '✓' : '') + '</div>'
     + '<div><div class="sr-name">' + shopEsc_(x.name) + '</div>'
     + ((x.kind === '臨時' || x.boughtBy) ? '<div class="sr-note">'
         + (x.kind === '臨時' ? '臨時' + (x.requestedBy ? '（' + shopEsc_(x.requestedBy) + '）' : '') : '')
         + (x.boughtBy ? ' ✓' + shopEsc_(x.boughtBy) : '') + '</div>' : '')
-    + '</div><div class="sr-qty">' + shopEsc_(x.qty) + shopEsc_(x.unit || '') + '</div></div>').join('');
+    + '</div><div class="sr-qty">' + shopEsc_(x.qty) + shopEsc_(x.unit || '') + '</div></div>'); }).join('')).join('');
 }
 function shopOpen_() { shopRenderList_(); document.getElementById('shop-bg').classList.add('show'); shopRefresh_(true); }
 function shopClose_() { document.getElementById('shop-bg').classList.remove('show'); }
