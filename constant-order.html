@@ -158,6 +158,9 @@
 
 <script>
 // ════════════════════════════════════════════
+//  ★v5.6 (2026-11-25) 社長「黒米は10日で1袋。残りが0.4を切ったくらいで1袋頼みたい」→ B 発注点。
+//       定数管理で「発注点」を入れた品目は、在庫を小数で入れられ、在庫＜発注点 なら「頼む数」を発注（それ以外は0）。
+//       発注点が空欄の品目は従来どおり 必要数−在庫（整数）。
 //  ★v5.5 (2026-11-25) 社長「タブののし発注はいらない」→ のし発注タブを外した（のしは在庫入力タブの場所「のし」で数える）。
 //  ★v5.4 (2026-11-25) 社長「朝のチェックは当日分」→ A「🛒 買い物タブにまとめる」。
 //       「臨時の買い物」タブ→「🛒 買い物」：①買い物品目の在庫チェック（**今日の日付**で保存・水日だけ出る）
@@ -408,8 +411,24 @@ function renderOrder(t, vendor) {
 }
 
 // ★v5.4 1品の行（在庫入力タブ・買い物タブ共通）。dateOverride＝保存する日付（空＝対象日の選択）
+// ★v5.6 発注点の品目か（null／空＝従来）
+function hasRop_(it) { return it.reorderPoint !== null && it.reorderPoint !== undefined && it.reorderPoint !== ''; }
+// ★v5.6 発注数の計算（発注点の品目＝在庫＜発注点で頼む数／それ以外＝必要数−在庫）
+function calcOrder_(inputEl, stock) {
+  const rp = inputEl.dataset.rop;
+  if (rp !== undefined && rp !== '') return (stock < Number(rp)) ? (Number(inputEl.dataset.ropq) || 0) : 0;
+  const target = parseInt(inputEl.dataset.target, 10) || 0;
+  return Math.max(0, target - stock);
+}
+function parseStock_(inputEl, raw) {
+  const rop = inputEl.dataset.rop !== undefined && inputEl.dataset.rop !== '';
+  let v = rop ? Math.round(parseFloat(raw) * 10) / 10 : parseInt(raw, 10);
+  if (isNaN(v) || v < 0) v = 0;
+  return v;
+}
 function stockItemHtml_(it, dateOverride) {
       const target = Number(it.target) || 0;
+      const rop = hasRop_(it);
       const hasSaved = (it.currentOrderQty !== null && it.currentOrderQty !== undefined);
       const savedOrder = hasSaved ? Number(it.currentOrderQty) : '';
       const stockVal = (it.currentStock !== null && it.currentStock !== undefined) ? Number(it.currentStock) : '';
@@ -417,10 +436,10 @@ function stockItemHtml_(it, dateOverride) {
       const meta = [it.kind, it.vendor, it.checkDows ? it.checkDows + 'のみ' : ''].filter(Boolean).join('・');
   return `
       <div class="item">
-        <div class="item-top"><span class="item-name">${escHtml(it.name)}<small class="item-meta">${escHtml(meta)}</small></span><span class="item-target">必要 <b>${target}</b>${escHtml(it.unit||'')}</span></div>
+        <div class="item-top"><span class="item-name">${escHtml(it.name)}<small class="item-meta">${escHtml(meta)}</small></span><span class="item-target">${rop ? (escHtml(it.reorderPoint) + escHtml(it.unit||'') + 'を切ったら <b>' + escHtml(it.reorderQty) + '</b>' + escHtml(it.unit||'')) : ('必要 <b>' + target + '</b>' + escHtml(it.unit||''))}</span></div>
         <div class="item-calc">
           <div class="qbox"><label>在庫</label>
-            <input class="num-in stock" type="number" inputmode="numeric" min="0" step="1" placeholder="—" value="${stockVal}"
+            <input class="num-in stock" type="number" inputmode="${rop ? 'decimal' : 'numeric'}" min="0" step="${rop ? '0.1' : '1'}" placeholder="${rop ? '例 0.5' : '—'}" value="${stockVal}" data-rop="${rop ? escHtml(it.reorderPoint) : ''}" data-ropq="${rop ? escHtml(it.reorderQty) : ''}"
               data-vendor="${escHtml(it.vendor)}" data-const-id="${escHtml(it.id)}" data-target="${target}" data-saved-order="${savedOrder}" data-saved-stock="${stockVal}" data-date="${escHtml(dateOverride)}"
               oninput="onStockInput(this)" onblur="saveOrder(this)"></div>
           <span class="arrow-mid">→</span>
@@ -441,10 +460,12 @@ function onStockInput(inputEl) {
     numEl.textContent = hasPrev ? String(Number(prev)) : '0';
     orderBox.classList.toggle('dim', !hasPrev); noteEl.textContent = ''; return;
   }
-  let stock = parseInt(raw, 10); if (isNaN(stock) || stock < 0) stock = 0;
-  const order = Math.max(0, target - stock);
+  const stock = parseStock_(inputEl, raw);   // ★v5.6
+  const order = calcOrder_(inputEl, stock);
   numEl.textContent = String(order); orderBox.classList.remove('dim');
-  noteEl.textContent = (stock >= target && target > 0) ? '在庫が目標数に達しています（発注 0）' : '';
+  noteEl.textContent = (inputEl.dataset.rop !== '' && inputEl.dataset.rop !== undefined)
+    ? (order > 0 ? '発注点を切ったので ' + order + ' 頼みます' : 'まだ発注点より多いので 0')
+    : ((stock >= target && target > 0) ? '在庫が目標数に達しています（発注 0）' : '');
 }
 
 async function saveOrder(inputEl) {
@@ -452,9 +473,9 @@ async function saveOrder(inputEl) {
   if (raw === '') return;
   const item = inputEl.closest('.item'), tagEl = item.querySelector('.js-tag');
   const target = parseInt(inputEl.dataset.target, 10) || 0;
-  let stock = parseInt(raw, 10); if (isNaN(stock) || stock < 0) stock = 0;
+  const stock = parseStock_(inputEl, raw);   // ★v5.6
   inputEl.value = String(stock);
-  const order = Math.max(0, target - stock);
+  const order = calcOrder_(inputEl, stock);
   const prev = inputEl.dataset.savedOrder;
   if (prev !== '' && Number(prev) === order && inputEl.dataset.savedStock === String(stock)) return;
   const sel = document.getElementById('dateSel'); const date = inputEl.dataset.date || (sel ? sel.value : '');   // ★v5.4 買い物タブは当日
