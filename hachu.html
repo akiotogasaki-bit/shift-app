@@ -1,0 +1,1375 @@
+<!DOCTYPE html>
+<!-- hachu.html v1.0 (2026-11-25) 【発注アプリを配分アプリ（kanri）から独立】社長指示「配分アプリにタブとして乗ってる発注を別アプリに」「発注アプリのタブで定数管理のタブをつけて 商品名・必要数・単位・在庫チェック曜日・業者 を入力して食材マスタとリンク」。
+     ★📋 発注タブ＝kanri.html v4.xx の発注タブをそのまま移植（getOrderData・先行発注・コピー文・発注済みフラグ・定数発注の入力）。localStorage のキーも同じなので発注済みのチェックは引き継がれる（同じドメイン）。
+     ★📐 定数管理タブ＝定数発注マスタ（A〜K列）を1行ずつ編集。商品名は食材マスタから選び、無い名前は保存時に食材マスタへ自動で足して C列に紐付け。在庫チェック曜日（空＝毎日）・場所（在庫入力のまとめ方）・区分（食材/包材/消耗品）。場所の並びは ScriptProperties「CONST_PLACES」。
+     要メインGAS @999（getConstantAdmin / saveConstantMasterRow / deleteConstantMasterRow / saveConstantPlaces / getStockCheckForStaff）。 -->
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>お江戸弁当 発注</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Yu Gothic', 'Meiryo', sans-serif; font-size: 13px; background: #f5f5f5; color: #212121; }
+<style id="app-style">
+/* @page は全環境で確実に効く静的指定（用紙＝縦）。横向きはシート1・2をCSS回転で実現（A案） */
+@page { size: A4; margin: 3mm; }
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-print-color-adjust: exact !important;
+  print-color-adjust: exact !important;
+}
+
+body {
+  font-family: 'Yu Gothic', 'Meiryo', sans-serif;
+  font-size: 13px;
+  background: #f5f5f5;
+  color: #212121;
+}
+
+/* ── ヘッダー ── */
+.app-header {
+  background: #1a3c5e;
+  color: white;
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.app-header h1 { font-size: 15px; font-weight: bold; }
+/* ── v3.36: 再取込ボタン（ヘッダー右） ── */
+.reimport-btn {
+  margin-left: auto;
+  background: #2e7d32;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: bold;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.reimport-btn:disabled { opacity: .6; cursor: default; }
+/* ── v3.36: 盛り出し 合計バー（白米/玄米/全体） ── */
+.morirashi-totals {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 18px;
+  margin: 10px 0 4px;
+  padding: 8px 14px;
+  border: 2px solid #1a3c5e;
+  border-radius: 8px;
+  background: #f1f5f9;
+  font-size: 13px;
+  font-weight: bold;
+}
+.morirashi-totals .mt-label { color: #1a3c5e; font-size: 14px; }
+.morirashi-totals .mt-rice  { color: #37474f; }
+.morirashi-totals .mt-brown { color: #8d6e63; }
+.morirashi-totals .mt-grand { color: #1a3c5e; margin-left: auto; font-size: 14px; }
+.morirashi-totals b { font-size: 16px; }
+
+/* ── タブバー ── */
+.tab-bar {
+  background: #1a3c5e;
+  border-bottom: 2px solid #0d2a42;
+  display: flex;
+  padding: 0 8px;
+  position: sticky;
+  top: 37px;
+  z-index: 99;
+  /* v3.28: スマホで横にはみ出した分は白背景に乗らずスクロールで見せる */
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;       /* Firefox: スクロールバー非表示 */
+  -ms-overflow-style: none;    /* IE/Edge: 同上 */
+}
+.tab-bar::-webkit-scrollbar { display: none; }  /* Chrome/Safari: 同上 */
+.tab-btn {
+  padding: 7px 14px;
+  color: rgba(255,255,255,0.65);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: inherit;
+  border-bottom: 3px solid transparent;
+  white-space: nowrap;
+  flex: 0 0 auto;   /* v3.28: 縮小させずサイズ維持（横スクロール用） */
+  transition: color 0.15s;
+}
+.tab-btn:hover { color: rgba(255,255,255,0.9); }
+.tab-btn.active { color: #fff; border-bottom-color: #64b5f6; font-weight: bold; }
+.tab-btn:disabled { color: rgba(255,255,255,0.3); cursor: default; }
+
+/* ── タブコンテンツ ── */
+.tab-pane { display: none; padding: 12px 14px; }
+.tab-pane.active { display: block; }
+.placeholder-msg { text-align: center; padding: 60px; color: #888; font-size: 15px; }
+
+/* ── コントロールバー（共通） ── */
+.ctrl-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.ctrl-bar label { font-size: 12px; color: #555; }
+.ctrl-bar input[type="date"] {
+  padding: 4px 8px;
+  border: 1px solid #bbb;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 13px;
+}
+.btn {
+  padding: 5px 14px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: bold;
+}
+.btn-primary { background: #1a3c5e; color: white; }
+.btn-primary:hover { background: #274f7a; }
+.btn-print { background: #546e7a; color: white; }
+.btn-print:hover { background: #607d8b; }
+
+.status-msg {
+  font-size: 12px;
+  color: #888;
+  margin-left: 4px;
+}
+.status-msg.err { color: #c62828; }
+
+/* ── シート1 コンテンツ ── */
+.sheet1-content {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+/* ── 発注タブ ── */
+.order-ctrl { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.order-week-btn {
+  padding: 4px 13px;
+  border: 1px solid #64b5f6;
+  border-radius: 14px;
+  background: transparent;
+  color: #90caf9;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+.order-week-btn:hover { background: rgba(100,181,246,0.15); }
+.order-date-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.order-date-lbl {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 11px;
+  border: 1px solid #aaa;
+  border-radius: 14px;
+  cursor: pointer;
+  font-size: 12px;
+  user-select: none;
+  transition: background 0.12s, color 0.12s;
+}
+.order-date-lbl:hover { border-color: #64b5f6; }
+.order-date-lbl.checked { background: #1565c0; color: #fff; border-color: #1565c0; font-weight: bold; }
+.order-date-lbl input { display: none; }
+.order-date-lbl.disabled {
+  background: #eee;
+  color: #aaa;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+  .s4-ctrl {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.s4-week-btn {
+  padding: 6px 12px;
+  border: 1px solid #1976d2;
+  background: #e3f2fd;
+  color: #1976d2;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 10pt;
+}
+.s4-week-btn:hover { background: #bbdefb; }
+ 
+.s4-date-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.s4-date-lbl {
+  padding: 6px 10px;
+  border: 1px solid #aaa;
+  border-radius: 4px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 10pt;
+  background: #fafafa;
+  min-width: 48px;
+  text-align: center;
+}
+.s4-date-lbl:hover { border-color: #64b5f6; }
+.s4-date-lbl.checked {
+  background: #1565c0;
+  color: #fff;
+  border-color: #1565c0;
+  font-weight: bold;
+}
+.s4-date-lbl.disabled {
+  background: #eee;
+  color: #aaa;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.s4-date-lbl.today { border-color: #ef6c00; border-width: 2px; }
+.s4-date-lbl input { display: none; }
+ 
+.s4-sel-info {
+  font-size: 9.5pt;
+  color: #555;
+  margin-bottom: 10px;
+}
+ 
+.s4-meta {
+  font-size: 9pt;
+  color: #777;
+  margin: 8px 0 4px;
+}
+.s4-warn-box {
+  background: #fff8e1;
+  border: 1px solid #ffe082;
+  padding: 10px 14px;
+  border-radius: 4px;
+  margin-top: 12px;
+  font-size: 10pt;
+}
+.s4-warn-row {
+  margin: 4px 0;
+  line-height: 1.5;
+  word-break: break-all;
+}
+.order-sel-info { font-size: 12px; color: #555; margin-bottom: 10px; min-height: 18px; }
+/* ── 🕐 先行発注（食材マスタK列「発注タイミング」・2026-08-28） ── */
+.ot-wrap { margin-top: 12px; }
+.order-vendor-body > .ot-wrap:first-child { margin-top: 0; }
+.ot-head { font-size: 13px; font-weight: bold; color: #4527a0; margin-bottom: 6px; }
+.ot-hint { font-size: 11.5px; color: #666; margin-bottom: 8px; line-height: 1.6; }
+.ot-card {
+  border: 1px solid #b39ddb; border-left: 5px solid #7e57c2; border-radius: 8px;
+  background: #f7f4ff; padding: 10px 12px; margin-bottom: 8px;
+}
+.ot-card.ot-today { border-color: #ffb74d; border-left-color: #ef6c00; background: #fff8e1; }
+.ot-card.ot-late  { border-color: #ef9a9a; border-left-color: #c62828; background: #ffebee; }
+.ot-card-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.ot-vendor { font-weight: bold; font-size: 14px; }
+.ot-flow { font-size: 13px; color: #333; }
+.ot-flow b { color: #4527a0; }
+.ot-card.ot-today .ot-flow b { color: #ef6c00; }
+.ot-card.ot-late  .ot-flow b { color: #c62828; }
+.ot-badge { font-size: 11px; font-weight: bold; border-radius: 10px; padding: 2px 8px; }
+.ot-badge-today { background: #ef6c00; color: #fff; }
+.ot-badge-late  { background: #c62828; color: #fff; }
+.ot-badge-warn  { background: #fff; color: #c62828; border: 1px solid #c62828; }
+.ot-badge-plain { background: #ede7f6; color: #4527a0; border: 1px solid #b39ddb; }
+.order-vendor-head .ot-badge { margin-left: 4px; }
+.ot-copy-btn {
+  margin-left: auto; background: #7e57c2; color: #fff; border: none; border-radius: 6px;
+  padding: 5px 12px; font-size: 12px; cursor: pointer;
+}
+.ot-copy-btn:hover { background: #673ab7; }
+.ot-table { width: 100%; border-collapse: collapse; font-size: 13px; background: #fff; }
+.ot-table th, .ot-table td { border: 1px solid #d7cbf0; padding: 5px 8px; }
+.ot-table th { background: #ede7f6; font-size: 12px; }
+.ot-use { font-size: 11.5px; color: #555; margin-top: 6px; }
+.order-vendor-list { display: flex; flex-direction: column; gap: 10px; }
+.order-vendor-card { border: 2px solid #bbb; border-radius: 6px; overflow: hidden; background: white; }
+.order-vendor-head {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  cursor: pointer;
+  gap: 8px;
+}
+.order-vendor-name { font-size: 13px; font-weight: bold; flex: 1; }
+.order-vendor-summary { font-size: 11px; opacity: 0.85; font-weight: normal; }
+.order-done-wrap { display: flex; align-items: center; gap: 4px; font-size: 12px; cursor: pointer; }
+.order-done-cb { width: 15px; height: 15px; cursor: pointer; accent-color: #fff; }
+.order-copy-btn {
+  padding: 3px 10px;
+  border-radius: 4px;
+  border: 1px solid white;
+  background: rgba(255,255,255,0.15);
+  color: white;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: inherit;
+  transition: background 0.12s;
+}
+.order-copy-btn:hover { background: rgba(255,255,255,0.3); }
+.order-vendor-body { padding: 10px 14px; }
+.order-vendor-card.collapsed .order-vendor-body { display: none; }
+.order-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 6px; }
+.order-table th, .order-table td { padding: 5px 8px; border: 0.5px solid #ddd; }
+.order-table th { background: rgba(0,0,0,0.04); font-weight: bold; font-size: 12px; }
+.order-table td.order-need { font-size: 14px; text-align: right; width: 28%; color: #333; }
+.order-table td.order-qty  { font-size: 15px; font-weight: bold; text-align: right; width: 22%; color: #0d47a1; }
+/* ── 未マッピング警告エリア ── */
+.order-warn-wrap {
+  margin: 8px 0;
+  border: 1px solid #ffcc80;
+  background: #fff8e1;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+.order-warn-head {
+  font-weight: bold;
+  color: #e65100;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.order-warn-body { display: none; margin-top: 6px; padding-left: 18px; }
+.order-warn-body.open { display: block; }
+.order-warn-section { margin-top: 6px; }
+.order-warn-section:first-child { margin-top: 0; }
+.order-warn-label { font-weight: bold; color: #bf360c; margin-bottom: 2px; }
+.order-warn-items { color: #555; line-height: 1.5; word-break: break-all; }
+.order-bd-toggle {
+  font-size: 11px;
+  color: #1565c0;
+  cursor: pointer;
+  padding: 2px 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: none;
+  font-family: inherit;
+  margin-top: 4px;
+}
+.order-bd-toggle:hover { text-decoration: underline; }
+.order-breakdown { display: none; margin-top: 8px; border-top: 1px dashed #ddd; padding-top: 8px; }
+.order-breakdown.open { display: block; }
+.order-bd-row {
+  display: flex;
+  gap: 6px;
+  padding: 3px 0;
+  border-bottom: 1px dotted #eee;
+  font-size: 11px;
+}
+.order-bd-row:last-child { border-bottom: none; }
+.order-bd-date { color: #555; min-width: 80px; flex-shrink: 0; }
+.order-bd-items { flex: 1; color: #333; }
+/* ── 定数発注セクション (v3.12) ── */
+.order-constants-section { margin-top: 14px; padding-top: 12px; border-top: 2px dashed #999; }
+.order-constants-head { font-weight: bold; margin-bottom: 8px; color: #1A3C5E; font-size: 14px; }
+.order-constants-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.order-constants-table th, .order-constants-table td { padding: 5px 8px; border: 0.5px solid #ddd; }
+.order-constants-table th { background: rgba(0,0,0,0.04); font-weight: bold; font-size: 12px; }
+.order-constants-table td.const-name { text-align: left; }
+.order-constants-table td.const-qty { text-align: right; width: 30%; }
+.order-constants-table td.const-unit { text-align: center; width: 15%; color: #555; }
+.order-constants-table input[type="number"] { width: 90px; padding: 4px 6px; border: 1px solid #ccc; border-radius: 4px; text-align: right; font-size: 14px; }
+.order-constants-table input[type="number"]:focus { border-color: #1976d2; outline: none; box-shadow: 0 0 0 2px rgba(25,118,210,0.2); }
+.order-constants-table input.saving { border-color: #ff9800; background: #fff8e1; }
+.order-constants-table input.saved { border-color: #4caf50; background: #e8f5e9; transition: background 0.4s; }
+/* v3.31: 定数を横に参考表示 + テンキー入力 */
+.order-constants-table .const-qty-wrap { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+.order-constants-table .const-ref { font-size: 11px; color: #999; white-space: nowrap; }
+/* 業者カラー */
+.ovc-red    { border-color: #c62828; }
+.ovc-red    .order-vendor-head { background: #c62828; color: white; }
+.ovc-blue   { border-color: #1565c0; }
+.ovc-blue   .order-vendor-head { background: #1565c0; color: white; }
+.ovc-orange { border-color: #e65100; }
+.ovc-orange .order-vendor-head { background: #e65100; color: white; }
+.ovc-brown  { border-color: #4e342e; }
+.ovc-brown  .order-vendor-head { background: #4e342e; color: white; }
+.ovc-purple { border-color: #6a1b9a; }
+.ovc-purple .order-vendor-head { background: #6a1b9a; color: white; }
+.ovc-teal   { border-color: #00695c; }
+.ovc-teal   .order-vendor-head { background: #00695c; color: white; }
+.ovc-gray   { border-color: #546e7a; }
+.ovc-gray   .order-vendor-head { background: #546e7a; color: white; }
+/* ── 定数管理 ── */
+.ca-ctrl { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:10px; }
+.ca-ctrl select, .ca-ctrl input { padding:6px 8px; border:1px solid #bbb; border-radius:5px; font-family:inherit; font-size:13px; }
+.ca-places { background:#fff; border:1px solid #dde3ea; border-radius:8px; padding:8px 10px; margin-bottom:10px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.ca-places input { flex:1; min-width:220px; padding:6px 8px; border:1px solid #bbb; border-radius:5px; font-size:13px; font-family:inherit; }
+.ca-places .lbl { font-weight:bold; color:#1a3c5e; }
+.ca-place-head { display:flex; justify-content:space-between; margin:14px 0 6px; padding:6px 12px; background:#1a3c5e; color:#fff; font-weight:bold; border-radius:6px; font-size:14px; }
+.ca-place-head.unset { background:#8a96a3; }
+.ca-row { background:#fff; border:1px solid #dde3ea; border-radius:8px; padding:9px 11px; margin-bottom:7px; }
+.ca-row.dirty { border-color:#f0a030; box-shadow:0 0 0 2px rgba(240,160,48,.18); }
+.ca-row.is-new { border-style:dashed; }
+.ca-l1 { display:flex; gap:8px; align-items:center; }
+.ca-name { flex:1; font-size:15px; font-weight:bold; padding:6px 8px; border:1px solid #ccc; border-radius:5px; font-family:inherit; min-width:0; }
+.ca-id { font-size:11px; color:#8a96a3; white-space:nowrap; }
+.ca-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(120px, 1fr)); gap:6px 10px; margin-top:7px; }
+.ca-grid label { display:flex; flex-direction:column; font-size:11px; color:#5a6a7a; gap:2px; }
+.ca-grid input, .ca-grid select { padding:5px 7px; border:1px solid #ccc; border-radius:5px; font-size:14px; font-family:inherit; width:100%; }
+.ca-l3 { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:7px; }
+.ca-lbl { font-size:11px; color:#5a6a7a; }
+.ca-dows { display:flex; gap:4px; }
+.ca-dow { width:32px; height:30px; border:1px solid #bbb; border-radius:5px; background:#fff; font-weight:bold; cursor:pointer; font-family:inherit; }
+.ca-dow.on { background:#0E7C66; border-color:#0E7C66; color:#fff; }
+.ca-dowhint { font-size:11px; color:#8a96a3; }
+.ca-l4 { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:7px; }
+.ca-note { flex:1; min-width:160px; padding:5px 7px; border:1px solid #ccc; border-radius:5px; font-size:13px; font-family:inherit; }
+.ca-link { font-size:11px; padding:2px 7px; border-radius:10px; white-space:nowrap; }
+.ca-link.ok { background:#e6f3ef; color:#0E7C66; }
+.ca-link.new { background:#fbeede; color:#b5600e; }
+.ca-save:disabled { opacity:.4; cursor:default; }
+.ca-del { background:#fff; color:#c62828; border:1px solid #e4b6b1; }
+.ca-msg { font-size:12px; color:#0E7C66; }
+.ca-msg.err { color:#c62828; }
+@media (max-width: 600px) { .tab-pane { padding:10px 8px; } }
+</style>
+</head>
+<body>
+
+<div class="app-header">
+  <h1>🧾 発注</h1>
+</div>
+
+<div class="tab-bar">
+  <button class="tab-btn active" data-tab="order">📋 発注</button>
+  <button class="tab-btn" data-tab="const">📐 定数管理</button>
+</div>
+
+<div class="tab-pane active" id="tab-order">
+  <div class="order-ctrl">
+    <button class="order-week-btn" id="order-btn-week0">今週 月〜日</button>
+    <button class="order-week-btn" id="order-btn-week1">来週 月〜日</button>
+    <button class="btn btn-primary" id="order-btn-fetch">取得</button>
+    <span class="status-msg" id="order-status-msg"></span>
+  </div>
+  <div class="order-date-row" id="order-date-row"></div>
+  <div class="order-sel-info" id="order-sel-info">日付を選択して取得ボタンを押してください</div>
+  <div class="order-warn-wrap" id="order-warn-wrap" style="display:none;"></div>
+  <div class="order-vendor-list" id="order-body"></div>
+</div>
+
+<div class="tab-pane" id="tab-const">
+  <div class="ca-ctrl">
+    <button class="btn btn-primary" onclick="caAdd()">＋ 品目を追加</button>
+    <select id="ca-filter-place"></select>
+    <input id="ca-q" placeholder="商品名・業者で検索">
+    <button class="btn" onclick="caLoad()">🔄 再読込</button>
+    <span class="status-msg" id="ca-status"></span>
+  </div>
+  <div class="ca-places">
+    <span class="lbl">場所の並び（在庫入力の順番）</span>
+    <input id="ca-places-input" placeholder="例：調味料棚、入口、コンロ下">
+    <button class="btn btn-primary" onclick="caSavePlaces()">並びを保存</button>
+  </div>
+  <datalist id="ca-ing-list"></datalist>
+  <div id="ca-body"><div class="placeholder-msg">読み込み中…</div></div>
+</div>
+
+<script>
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxkcAI-Nkl3aoUZKgluss5AawPDc7aluPokONkYz6f2ikwl0S487JvhKdKh6QSp1xhEhA/exec';
+function escHtml(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+async function gasGetJson(url, tries) {
+  const TRIES = tries || 3;
+  let lastErr = '';
+  for (let attempt = 1; attempt <= TRIES; attempt++) {
+    try {
+      const u = (attempt === 1) ? url
+              : url + (url.indexOf('?') >= 0 ? '&' : '?') + '_r=' + attempt + '.' + Date.now();
+      const res = await fetch(u);
+      const txt = await res.text();
+      if (!res.ok) {
+        lastErr = 'HTTP ' + res.status;
+      } else {
+        let j = null;
+        try { j = JSON.parse(txt); } catch (e) { j = null; }
+        if (j && typeof j === 'object') {
+          const keys = Object.keys(j);
+          // doGet の既定応答（未知の action で返る {"dates":[...]}）＝中身が来ていない
+          if (!(keys.length === 1 && keys[0] === 'dates')) return j;
+          lastErr = 'doGetの既定応答が返りました';
+        } else {
+          lastErr = 'JSONではない応答（' + String(txt).substring(0, 40) + '…）';
+        }
+      }
+    } catch (e) {
+      lastErr = String((e && e.message) || e);
+    }
+    if (attempt < TRIES) await new Promise(r => setTimeout(r, attempt * 1200));
+  }
+  console.warn('[gasGetJson] ' + TRIES + '回とも失敗:', url, lastErr);
+  return { ok: false, error: '取得に失敗しました（' + TRIES + '回試行）: ' + lastErr };
+}
+
+// ═══════════════════════════════════════
+// 発注タブ
+// ═══════════════════════════════════════
+
+// 業者名→カラークラス（食材マスタの業者名に合わせて追記可）
+const VENDOR_COLOR_MAP = {
+  '鶏肉業者': 'red',   '魚業者':   'blue',  '卵業者':   'orange',
+  '米業者':   'brown', '食品問屋': 'purple', '豆腐業者': 'teal',
+};
+const VENDOR_KW_MAP = [
+  ['鶏','red'],['肉','red'],['魚','blue'],['鮭','blue'],['水産','blue'],
+  ['卵','orange'],['玉子','orange'],['野菜','orange'],
+  ['米','brown'],['穀','brown'],
+  ['食品','purple'],['問屋','purple'],
+  ['豆腐','teal'],['乳','teal'],
+];
+function getVendorColorClass(n) {
+  if (VENDOR_COLOR_MAP[n]) return 'ovc-' + VENDOR_COLOR_MAP[n];
+  for (const [kw, col] of VENDOR_KW_MAP) { if (n.includes(kw)) return 'ovc-' + col; }
+  return 'ovc-gray';
+}
+
+// 発注済みフラグ（localStorage）
+let _orderDoneFlags = {};
+let _orderDoneFlagsKey = '';
+function loadOrderDoneFlags(key) {
+  _orderDoneFlagsKey = 'orderDone_' + key;
+  try { _orderDoneFlags = JSON.parse(localStorage.getItem(_orderDoneFlagsKey) || '{}'); }
+  catch(e) { _orderDoneFlags = {}; }
+}
+function saveOrderDoneFlags() {
+  try { localStorage.setItem(_orderDoneFlagsKey, JSON.stringify(_orderDoneFlags)); } catch(e) {}
+}
+
+// 選択日セット
+const orderSelectedDates = new Set();
+
+// 日付チェックボックス初期化（翌日から月〜日・14日分・今日以前はdisabled）
+// v2.1: 土日含む対応＋タイムゾーンバグ修正（UTC算術で統一）
+function initOrderDateChecks() {
+  /* ★2026-09-30 v3.96 日付の切替を朝7時に（社長指示）。0:00〜6:59 は前日扱い＝その日の日付を納品日に選べる。
+     社長の稼働は0時〜14時なので、深夜に翌朝ぶんを発注すると0時切替では当日が選べなかった。 */
+  const todayStr = orderTodayStr();
+  const [tYear, tMonth, tDay] = todayStr.split('-').map(Number);
+
+  const startUtc = new Date(Date.UTC(tYear, tMonth - 1, tDay + 1));
+  const startDow = startUtc.getUTCDay();
+  const daysFromMonday = (startDow === 0) ? 6 : startDow - 1;
+  const thisMondayUtc = new Date(startUtc.getTime() - daysFromMonday * 86400000);
+
+  const DOW = ['日','月','火','水','木','金','土'];
+  const row = document.getElementById('order-date-row');
+  row.innerHTML = '';
+  orderSelectedDates.clear();
+
+  for (let i = 0; i < 14; i++) {
+    const d = new Date(thisMondayUtc.getTime() + i * 86400000);
+    const dateStr = d.toISOString().slice(0, 10);
+    const dispDay = d.getUTCDate();
+    const dispMonth = d.getUTCMonth() + 1;
+    const dispDow = d.getUTCDay();
+    const isDisabled = dateStr <= todayStr;
+    const wn = (i < 7) ? 0 : 1;
+
+    const lbl = document.createElement('label');
+    let cls = 'order-date-lbl';
+    if (isDisabled) cls += ' disabled';
+    lbl.className = cls;
+    lbl.dataset.date = dateStr;
+    lbl.dataset.week = wn;
+
+    if (isDisabled) {
+      lbl.innerHTML = `${dispMonth}/${dispDay}(${DOW[dispDow]})`;
+    } else {
+      lbl.innerHTML = `<input type="checkbox" value="${dateStr}"> ${dispMonth}/${dispDay}(${DOW[dispDow]})`;
+      lbl.querySelector('input').addEventListener('change', e => {
+        if (e.target.checked) {
+          orderSelectedDates.add(dateStr);
+          lbl.classList.add('checked');
+        } else {
+          orderSelectedDates.delete(dateStr);
+          lbl.classList.remove('checked');
+        }
+      });
+    }
+    row.appendChild(lbl);
+  }
+}
+
+function orderSelectWeek(wn) {
+  document.querySelectorAll('#order-date-row .order-date-lbl').forEach(lbl => {
+    if (lbl.classList.contains('disabled')) return;
+    const cb = lbl.querySelector('input');
+    if (!cb) return;
+    const dateStr = lbl.dataset.date;
+    if (parseInt(lbl.dataset.week) === wn) {
+      cb.checked = true;
+      orderSelectedDates.add(dateStr);
+      lbl.classList.add('checked');
+    } else {
+      cb.checked = false;
+      orderSelectedDates.delete(dateStr);
+      lbl.classList.remove('checked');
+    }
+  });
+}
+
+const orderStatus = document.getElementById('order-status-msg');
+function orderSetStatus(msg, isErr) {
+  orderStatus.textContent = msg;
+  orderStatus.className = 'status-msg' + (isErr ? ' err' : '');
+}
+
+document.getElementById('order-btn-fetch').addEventListener('click', fetchOrderData);
+document.getElementById('order-btn-week0').addEventListener('click', () => orderSelectWeek(0));
+document.getElementById('order-btn-week1').addEventListener('click', () => orderSelectWeek(1));
+
+async function fetchOrderData() {
+  const dates = Array.from(orderSelectedDates).sort();
+  if (dates.length === 0) { orderSetStatus('日付を1日以上選択してください', true); return; }
+  orderSetStatus('取得中…');
+  document.getElementById('order-body').innerHTML = '';
+  document.getElementById('order-warn-wrap').style.display = 'none';
+  document.getElementById('order-warn-wrap').innerHTML = '';
+  try {
+    const data = await gasGetJson(GAS_URL + '?action=getOrderData&dates=' + encodeURIComponent(JSON.stringify(dates)));   // ★2026-09-13 v3.83
+    if (!data.ok) { orderSetStatus(data.error || '取得エラー', true); return; }
+    orderSetStatus('');
+    loadOrderDoneFlags(dates.join('_'));
+    renderOrderWarnings(data.warnings);
+    renderOrderData(data);
+  } catch(e) {
+    orderSetStatus('通信エラー: ' + e.message, true);
+  }
+}
+
+// 未マッピング警告エリアを描画
+function renderOrderWarnings(warnings) {
+  const wrap = document.getElementById('order-warn-wrap');
+  if (!warnings) { wrap.style.display = 'none'; return; }
+  const up = warnings.unmappedProducts    || [];
+  const us = warnings.unmappedShikomiIds  || [];
+  const ud = warnings.unmappedDeliveryIds || [];
+  const totalCount = up.length + us.length + ud.length;
+  if (totalCount === 0) { wrap.style.display = 'none'; return; }
+
+  let body = '';
+  if (up.length > 0) {
+    body += '<div class="order-warn-section"><div class="order-warn-label">未マッピング商品（単価マスタで仕込みID/食材IDが未設定）：' + up.length + '件</div>'
+         + '<div class="order-warn-items">' + up.map(escHtml).join('、') + '</div></div>';
+  }
+  if (us.length > 0) {
+    body += '<div class="order-warn-section"><div class="order-warn-label">未マッピング仕込みID（仕込みマスタに登録なし）：' + us.length + '件</div>'
+         + '<div class="order-warn-items">' + us.map(escHtml).join('、') + '</div></div>';
+  }
+  if (ud.length > 0) {
+    body += '<div class="order-warn-section"><div class="order-warn-label">未マッピング配達商品ID（単価マスタに登録なし）：' + ud.length + '件</div>'
+         + '<div class="order-warn-items">' + ud.map(escHtml).join('、') + '</div></div>';
+  }
+
+  wrap.innerHTML = '<div class="order-warn-head" onclick="toggleOrderWarn()">'
+                + '<span id="order-warn-arrow">▶</span>'
+                + '<span>⚠️ 未マッピング警告 ' + totalCount + '件（クリックで詳細）</span>'
+                + '</div>'
+                + '<div class="order-warn-body" id="order-warn-body">' + body + '</div>';
+  wrap.style.display = '';
+}
+
+function toggleOrderWarn() {
+  const body  = document.getElementById('order-warn-body');
+  const arrow = document.getElementById('order-warn-arrow');
+  if (!body) return;
+  body.classList.toggle('open');
+  if (arrow) arrow.textContent = body.classList.contains('open') ? '▼' : '▶';
+}
+
+// 必要量の表示用フォーマット（数値＋単位、小数1桁、kg帯は kg 換算）
+function formatNeedAmount(total, unit) {
+  const u = String(unit || '').trim();
+  // g → 1000 以上で kg 表示
+  if (u === 'g' && total >= 1000) {
+    return (Math.round(total / 100) / 10) + 'kg';
+  }
+  // ml → 1000 以上で L 表示
+  if (u === 'ml' && total >= 1000) {
+    return (Math.round(total / 100) / 10) + 'L';
+  }
+  // 小数1桁表示（整数になればドット省略）
+  const rounded = Math.round(total * 10) / 10;
+  const display = (rounded === Math.floor(rounded)) ? String(Math.floor(rounded)) : rounded.toFixed(1);
+  return display + u;
+}
+
+function renderOrderData(data) {
+  const { dates, vendors, dailyBreakdown } = data;
+  const DOW = ['日','月','火','水','木','金','土'];
+  const timed = data.timedOrders || [];   // ★2026-08-28 先行発注
+
+  const datesLabel = dates.map(d => {
+    const dt = new Date(d.replace(/-/g, '/'));
+    return `${dt.getMonth()+1}/${dt.getDate()}(${DOW[dt.getDay()]})`;
+  }).join('・');
+  document.getElementById('order-sel-info').textContent = `選択中：${datesLabel}（${dates.length}日分合計）`;
+
+  const body = document.getElementById('order-body');
+  if ((!vendors || vendors.length === 0) && timed.length === 0) {
+    body.innerHTML = '<div class="placeholder-msg">発注データがありません<br><small>食材マスタと単価マスタの食材ID/仕込みID列を確認してください</small></div>';
+    return;
+  }
+
+  // ★2026-08-28 v3.60 先行発注は業者カードの中に入れる。元のインデックス(gi)は
+  //   コピーボタンが data.timedOrders から引くので保持する。
+  const timedByVendor = {};
+  timed.forEach((g, gi) => {
+    const vn = g.vendorName || '未分類';
+    if (!timedByVendor[vn]) timedByVendor[vn] = [];
+    timedByVendor[vn].push({ gi: gi, g: g });
+  });
+
+  let html = '';
+  vendors.forEach(v => {
+    const cc    = getVendorColorClass(v.name);
+    const safeN = v.name.replace(/[^\w\u3000-\u9FFF]/g, '_'); // CSSセーフなID用
+    const isDone = _orderDoneFlags[v.name] || false;
+
+    // 食材テーブル（3列：食材名 / 必要量 / パック数）
+    const rows = v.items.map(it =>
+      `<tr>
+         <td>${escHtml(it.name)}</td>
+         <td class="order-need">${formatNeedAmount(it.total, it.unit)}</td>
+         <td class="order-qty">${it.packCeil}P</td>
+       </tr>`
+    ).join('');
+
+    // 日別内訳
+    const bdId = 'order-bd-' + safeN;
+    let bdRows = '';
+    dates.forEach(d => {
+      const dayItems = (dailyBreakdown[d] || []).filter(it => it.vendorName === v.name);
+      if (!dayItems.length) return;
+      const dt = new Date(d.replace(/-/g, '/'));
+      const lbl = `${dt.getMonth()+1}/${dt.getDate()}(${DOW[dt.getDay()]})`;
+      const items = dayItems.map(it => `${escHtml(it.name)} ${formatNeedAmount(it.total, it.unit)}(${it.packCeil}P)`).join(' / ');
+      bdRows += `<div class="order-bd-row"><span class="order-bd-date">${lbl}</span><span class="order-bd-items">${items}</span></div>`;
+    });
+    const bdSection = bdRows
+      ? `<button class="order-bd-toggle" onclick="toggleOrderBd('${bdId}')"><span id="${bdId}-arrow">▶</span> 日別内訳</button>
+         <div class="order-breakdown" id="${bdId}">${bdRows}</div>`
+      : '';
+
+    // 定数発注セクション (v3.12)
+    let constSection = '';
+    const consts = v.constants || [];
+    if (consts.length > 0) {
+      const constRows = consts.map(c => {
+        const safeVendor = escHtml(v.name);
+        const safeConstId = escHtml(c.id);
+        const savedQty = (c.currentQty !== undefined && c.currentQty !== null) ? Number(c.currentQty) : 0; // v3.31: 既定は0（定数は横に参考表示）
+        return `<tr>
+          <td class="const-name">${escHtml(c.name)}</td>
+          <td class="const-qty"><div class="const-qty-wrap"><input type="number" inputmode="numeric" min="0" step="1" value="${savedQty}"
+            data-vendor="${safeVendor}" data-const-id="${safeConstId}"
+            data-default="${c.defaultQty}" data-saved="${savedQty}"
+            onfocus="onConstFocus(this)" onblur="saveConstantInput(this)" /><span class="const-ref">定数 ${escHtml(String(c.defaultQty))}</span></div></td>
+          <td class="const-unit">${escHtml(c.unit || '')}</td>
+        </tr>`;
+      }).join('');
+      constSection = `<div class="order-constants-section">
+        <div class="order-constants-head">📦 定数発注</div>
+        <table class="order-constants-table">
+          <thead><tr>
+            <th style="text-align:left">品目名</th>
+            <th style="text-align:right">数量</th>
+            <th style="text-align:center">単位</th>
+          </tr></thead>
+          <tbody>${constRows}</tbody>
+        </table>
+      </div>`;
+    }
+
+    // ★2026-08-28 v3.60 この業者の先行発注（山商のささみ等）
+    const timedEntries  = timedByVendor[v.name] || [];
+    const timedSection  = orderBuildTimedHtml(timedEntries);
+    const timedBadge    = orderBuildTimedBadge(timedEntries);
+    delete timedByVendor[v.name];
+
+    const itemTable = v.items.length === 0 ? '' : `
+          <table class="order-table">
+            <thead><tr>
+              <th style="text-align:left">食材名</th>
+              <th style="text-align:right;width:28%">必要量</th>
+              <th style="text-align:right;width:22%">パック数</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>`;
+
+    html += `
+      <div class="order-vendor-card ${cc}${isDone ? ' done' : ''}" id="ovc-${safeN}">
+        <div class="order-vendor-head" onclick="toggleOrderCard('${safeN}')">
+          <span class="order-vendor-name">${escHtml(v.name)}</span>
+          <span class="order-vendor-summary">（${v.items.length}品目${consts.length > 0 ? '＋定数' + consts.length : ''}${timedEntries.length > 0 ? '＋先行' + timedEntries.length : ''}）</span>
+          ${timedBadge}
+          <div style="display:flex;align-items:center;gap:8px;margin-left:auto;" onclick="event.stopPropagation()">
+            <label class="order-done-wrap">
+              <input type="checkbox" class="order-done-cb" data-vendor="${escHtml(v.name)}"
+                ${isDone ? 'checked' : ''} onchange="onOrderDone('${escHtml(v.name)}',this.checked)">
+              発注済み
+            </label>
+            <button class="order-copy-btn" onclick="copyOrderText('${escHtml(v.name)}')">📋 コピー</button>
+          </div>
+        </div>
+        <div class="order-vendor-body" id="ovcb-${safeN}">
+          ${itemTable}
+          ${timedSection}
+          ${constSection}
+          ${bdSection}
+        </div>
+      </div>`;
+  });
+
+  // ★2026-08-28 v3.60 先行発注しか無い業者（通常の食材も定数発注も持たない）は
+  //   サーバー側で業者カードが作られないので、ここでカードを足す。
+  Object.keys(timedByVendor).forEach(vn => {
+    const entries = timedByVendor[vn];
+    const cc      = getVendorColorClass(vn);
+    const safeN   = vn.replace(/[^\w\u3000-\u9FFF]/g, '_');
+    const isDone  = _orderDoneFlags[vn] || false;
+    html += `
+      <div class="order-vendor-card ${cc}${isDone ? ' done' : ''}" id="ovc-${safeN}">
+        <div class="order-vendor-head" onclick="toggleOrderCard('${safeN}')">
+          <span class="order-vendor-name">${escHtml(vn)}</span>
+          <span class="order-vendor-summary">（先行${entries.length}）</span>
+          ${orderBuildTimedBadge(entries)}
+          <div style="display:flex;align-items:center;gap:8px;margin-left:auto;" onclick="event.stopPropagation()">
+            <label class="order-done-wrap">
+              <input type="checkbox" class="order-done-cb" data-vendor="${escHtml(vn)}"
+                ${isDone ? 'checked' : ''} onchange="onOrderDone('${escHtml(vn)}',this.checked)">
+              発注済み
+            </label>
+          </div>
+        </div>
+        <div class="order-vendor-body" id="ovcb-${safeN}">
+          ${orderBuildTimedHtml(entries)}
+        </div>
+      </div>`;
+  });
+
+  body.innerHTML = html;
+  window._orderData = data;
+}
+
+// ★2026-08-28 先行発注セクション（食材マスタK列「発注タイミング」を持つ食材だけ）
+//   ★2026-08-28 v3.60 業者カードの中に入れる（社長「山商の発注欄に出したい」）。
+//   使用日ではなく「発注日 → 納品日」の束で表示する。通常の食材表からは外れている。
+//   entries = [{ gi, g }]（gi は data.timedOrders の元インデックス＝コピーボタンが引く）
+function orderBuildTimedHtml(entries) {
+  if (!entries || entries.length === 0) return '';
+  const DOW = ['日','月','火','水','木','金','土'];
+
+  const fmt = ds => {
+    const dt = new Date(String(ds).replace(/-/g, '/'));
+    return `${dt.getMonth()+1}/${dt.getDate()}(${DOW[dt.getDay()]})`;
+  };
+  const todayStr = orderTodayStr();
+
+  let h = '<div class="ot-wrap">'
+        + '<div class="ot-head">🕐 先行発注（納品日が使用日と違う食材）</div>'
+        + '<div class="ot-hint">食材マスタ K列「発注タイミング」に曜日ルールがある食材です。使う日ではなく<b>発注日ごと</b>にまとめています。'
+        + '上の食材表には出ません（二重発注を防ぐため）。</div>';
+
+  entries.forEach(en => {
+    const g = en.g;
+    let cls = '', badge = '';
+    if (g.orderDate < todayStr) {
+      cls = ' ot-late';  badge = '<span class="ot-badge ot-badge-late">発注日を過ぎています</span>';
+    } else if (g.orderDate === todayStr) {
+      cls = ' ot-today'; badge = '<span class="ot-badge ot-badge-today">今日発注</span>';
+    }
+    if (g.ruleOk === false) {
+      badge += '<span class="ot-badge ot-badge-warn">この曜日のルール未設定</span>';
+    }
+
+    const rows = (g.items || []).map(it =>
+      `<tr>
+         <td>${escHtml(it.name)}</td>
+         <td style="text-align:right">${formatNeedAmount(it.total, it.unit)}</td>
+         <td style="text-align:right">${it.packCeil}P</td>
+       </tr>`
+    ).join('');
+
+    const useLbl = (g.useDates || []).map(fmt).join('・');
+
+    h += `<div class="ot-card${cls}">
+      <div class="ot-card-head">
+        <span class="ot-flow">発注 <b>${fmt(g.orderDate)}</b> → 納品 <b>${fmt(g.deliveryDate)}</b></span>
+        ${badge}
+        <button class="ot-copy-btn" onclick="event.stopPropagation();copyTimedOrderText(${en.gi})">📋 コピー</button>
+      </div>
+      <table class="ot-table">
+        <thead><tr>
+          <th style="text-align:left">食材名</th>
+          <th style="text-align:right;width:28%">必要量</th>
+          <th style="text-align:right;width:22%">パック数</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div class="ot-use">使用日：${useLbl}</div>
+    </div>`;
+  });
+
+  return h + '</div>';
+}
+
+// 業者カードの見出しに出すバッジ（カードを開かなくても発注日が来ているのが分かるように）
+function orderBuildTimedBadge(entries) {
+  if (!entries || entries.length === 0) return '';
+  const todayStr = orderTodayStr();
+  let late = 0, today = 0;
+  entries.forEach(en => {
+    if (en.g.orderDate < todayStr) late++;
+    else if (en.g.orderDate === todayStr) today++;
+  });
+  if (late)  return '<span class="ot-badge ot-badge-late">🕐 先行発注 発注日超過' + late + '件</span>';
+  if (today) return '<span class="ot-badge ot-badge-today">🕐 先行発注 今日発注' + today + '件</span>';
+  return '<span class="ot-badge ot-badge-plain">🕐 先行発注' + entries.length + '件</span>';
+}
+
+/* ★2026-09-30 v3.96 発注タブの「今日」は朝7時で切り替える（JST−7時間＝UTC+2時間）。 */
+function orderTodayStr() {
+  const CUTOVER_HOUR = 7;   // ⚠ トップレベルの const にしない（読み込み順で TDZ になりうる）
+  return new Date(Date.now() + (9 - CUTOVER_HOUR) * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+// ★2026-08-28 先行発注のコピー（納品日は使用日ではなく、その束の納品日を書く）
+function copyTimedOrderText(gi) {
+  const data = window._orderData;
+  if (!data || !data.timedOrders || !data.timedOrders[gi]) return;
+  const g = data.timedOrders[gi];
+  const DOW = ['日','月','火','水','木','金','土'];
+  const dt = new Date(String(g.deliveryDate).replace(/-/g, '/'));
+  const dateLabel = `${dt.getMonth()+1}/${dt.getDate()}(${DOW[dt.getDay()]})`;
+
+  const itemLines = (g.items || []).map(it => {
+    const need = formatNeedAmount(it.total, it.unit);
+    const pack = `${it.packCeil}パック`;
+    const unitMode = it.unitMode || 'pack';
+    let qty;
+    if (unitMode === 'kg')       qty = need;
+    else if (unitMode === 'both') qty = `${need} / ${pack}`;
+    else                          qty = pack;
+    return `・${it.name} ${qty}`;
+  });
+
+  const sep = '━━━━━━━━━━━━━━━━';
+  const text = [
+    'お世話になっております。お江戸弁当です。',
+    '下記、発注をお願いいたします。',
+    '',
+    `▼納品日：${dateLabel}`,
+    sep,
+    ...itemLines,
+    sep,
+    '',
+    'よろしくお願いいたします。'
+  ].join('\n');
+
+  navigator.clipboard.writeText(text).then(
+    () => { orderSetStatus(g.vendorName + '（納品 ' + dateLabel + '）のコピー完了'); setTimeout(() => orderSetStatus(''), 2500); },
+    () => {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); orderSetStatus('コピー完了'); setTimeout(() => orderSetStatus(''), 2500); }
+      catch(e2) { orderSetStatus('コピー失敗', true); }
+      finally { document.body.removeChild(ta); }
+    }
+  );
+}
+
+function toggleOrderCard(safeN) {
+  const body = document.getElementById('ovcb-' + safeN);
+  if (body) body.style.display = body.style.display === 'none' ? '' : 'none';
+}
+
+function toggleOrderBd(bdId) {
+  const el    = document.getElementById(bdId);
+  const arrow = document.getElementById(bdId + '-arrow');
+  if (!el) return;
+  el.classList.toggle('open');
+  if (arrow) arrow.textContent = el.classList.contains('open') ? '▼' : '▶';
+}
+
+function onOrderDone(vendorName, checked) {
+  _orderDoneFlags[vendorName] = checked;
+  saveOrderDoneFlags();
+  const safeN = vendorName.replace(/[^\w\u3000-\u9FFF]/g, '_');
+  const card  = document.getElementById('ovc-' + safeN);
+  if (card) card.classList.toggle('done', checked);
+}
+
+function copyOrderText(vendorName) {
+  const data = window._orderData;
+  if (!data) return;
+  const vendor = data.vendors.find(v => v.name === vendorName);
+  if (!vendor) return;
+ 
+  const DOW = ['日','月','火','水','木','金','土'];
+ 
+  // 先頭日付のみ表示
+  let dateLabel = '';
+  const firstDate = data.dates && data.dates[0];
+  if (firstDate) {
+    const dt = new Date(firstDate.replace(/-/g, '/'));
+    dateLabel = `${dt.getMonth()+1}/${dt.getDate()}(${DOW[dt.getDay()]})`;
+  }
+ 
+  // v3.11: 食材ごとに unitMode を取得（食材マスタJ列「発注単位区分」由来）
+  // 食材J列が空欄の場合は 'pack' をデフォルトとする
+  const itemLines = vendor.items.map(it => {
+    const need = formatNeedAmount(it.total, it.unit);
+    const pack = `${it.packCeil}パック`;
+    const unitMode = it.unitMode || 'pack';
+    let qty;
+    if (unitMode === 'kg') {
+      qty = need;
+    } else if (unitMode === 'both') {
+      qty = `${need} / ${pack}`;
+    } else {
+      // default: pack
+      qty = pack;
+    }
+    return `・${it.name} ${qty}`;
+  });
+
+  // v3.12: 定数発注リスト（0/空欄スキップ・現在の入力値を優先）
+  const constants = vendor.constants || [];
+  // DOM から最新の入力値を取得（保存前の編集中の値も反映）
+  const constLines = constants
+    .map(c => {
+      const safeVendor = vendorName.replace(/"/g, '\\"');
+      const inputEl = document.querySelector(`input[data-vendor="${safeVendor}"][data-const-id="${c.id}"]`);
+      const qty = inputEl ? Number(inputEl.value) || 0 : (Number(c.currentQty) || 0);
+      return { name: c.name, unit: c.unit || '', qty: qty };
+    })
+    .filter(c => c.qty > 0)
+    .map(c => `・${c.name} ${c.qty}${c.unit}`);
+ 
+  // 案C: 区切り線フォーマット
+  const sep = '━━━━━━━━━━━━━━━━';
+  const lines = [
+    'お世話になっております。お江戸弁当です。',
+    '下記、発注をお願いいたします。',
+    '',
+    `▼納品日：${dateLabel}`,
+    sep,
+    ...itemLines
+  ];
+  // 定数発注があればセクション追加
+  if (constLines.length > 0) {
+    lines.push(sep);
+    lines.push(...constLines);
+  }
+  lines.push(sep);
+  lines.push('');
+  lines.push('よろしくお願いいたします。');
+
+  const text = lines.join('\n');
+ 
+  navigator.clipboard.writeText(text).then(
+    () => { orderSetStatus(vendorName + ' のコピー完了'); setTimeout(() => orderSetStatus(''), 2500); },
+    () => {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); orderSetStatus(vendorName + ' のコピー完了'); setTimeout(() => orderSetStatus(''), 2500); }
+      catch(e2) { orderSetStatus('コピー失敗', true); }
+      finally { document.body.removeChild(ta); }
+    }
+  );
+}
+
+// v3.31: 入力欄フォーカス時、既定の「0」は消して入力しやすく（非0は全選択）
+function onConstFocus(inputEl) {
+  if (inputEl.value === '0') inputEl.value = '';
+  else inputEl.select();
+}
+
+// v3.12 / v3.31: 定数発注の入力値をGAS経由で保存（blur時に自動呼出）
+async function saveConstantInput(inputEl) {
+  const vendorName = inputEl.dataset.vendor;
+  const constId = inputEl.dataset.constId;
+  let qty = parseInt(inputEl.value, 10);
+  if (isNaN(qty) || qty < 0) qty = 0;
+  inputEl.value = String(qty);              // v3.31: 空欄や不正値は0に正規化して表示
+  const prevSaved = parseInt(inputEl.dataset.saved, 10);
+  const prev = isNaN(prevSaved) ? 0 : prevSaved;
+  if (qty === prev) return;                 // v3.31: 変化なし（タップして離れただけ等）は保存しない
+  const data = window._orderData;
+  if (!data) return;
+  const firstDate = data.firstDate || (data.dates && data.dates[0]);
+  if (!firstDate) return;
+
+  // 視覚フィードバック（保存中）
+  inputEl.classList.remove('saved');
+  inputEl.classList.add('saving');
+
+  try {
+    let userId = '';
+    try {
+      if (typeof getCurrentUserId === 'function') userId = getCurrentUserId() || '';
+    } catch(_) {}
+
+    const params = new URLSearchParams();
+    params.append('action', 'saveConstantOrderInput');
+    params.append('date', firstDate);
+    params.append('vendorName', vendorName);
+    params.append('constId', constId);
+    params.append('qty', String(qty));
+    params.append('userId', userId);
+
+    const res = await fetch(GAS_URL, { method: 'POST', body: params });
+    const json = await res.json();
+
+    inputEl.classList.remove('saving');
+    if (json && json.success) {
+      inputEl.classList.add('saved');
+      setTimeout(() => inputEl.classList.remove('saved'), 1500);
+      // メモリ内データも更新
+      inputEl.dataset.saved = String(qty);   // v3.31: 保存済み値を更新（変化なし判定用）
+      const vendor = data.vendors.find(v => v.name === vendorName);
+      if (vendor && vendor.constants) {
+        const c = vendor.constants.find(x => x.id === constId);
+        if (c) c.currentQty = qty;
+      }
+    } else {
+      console.warn('定数発注入力保存失敗', json && json.error);
+      orderSetStatus('保存失敗: ' + (json && json.error ? json.error : '不明'), true);
+    }
+  } catch(e) {
+    inputEl.classList.remove('saving');
+    console.warn('定数発注入力保存エラー', e);
+    orderSetStatus('保存通信エラー', true);
+  }
+}
+
+// 発注タブ 初期化
+initOrderDateChecks();
+
+// ════════════════════════════════════════════
+// 📐 定数管理（★2026-11-25 新設）
+//   定数発注マスタの 商品名・必要数・単位・在庫チェック曜日・業者・場所・区分 を編集。
+//   商品名は食材マスタから選ぶ。候補に無い名前で保存すると、サーバーが食材マスタに1行足して紐付ける。
+//   保存は1行ずつ（saveConstantMasterRow）。在庫入力（constant-order.html）に即反映。
+// ════════════════════════════════════════════
+const CA_DOWS = ['月','火','水','木','金','土','日'];
+let CA = { loaded:false, list:[], places:[], kinds:[], ings:[], vendors:[], filterPlace:'', q:'', newSeq:0 };
+
+function caEsc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function caStatus(msg, err){ const el = document.getElementById('ca-status'); el.textContent = msg || ''; el.className = 'status-msg' + (err ? ' err' : ''); }
+
+async function caLoad(){
+  caStatus('読み込み中…');
+  const d = await gasGetJson(GAS_URL + '?action=getConstantAdmin');
+  if (!d || !d.ok) { caStatus('取得エラー: ' + ((d && d.error) || '不明'), true); return; }
+  CA.list = d.list || []; CA.places = d.places || []; CA.kinds = d.kinds || [];
+  CA.ings = d.ingredients || []; CA.vendors = d.vendors || [];
+  CA.loaded = true;
+  caStatus(CA.list.length + '品目');
+  caRenderPlaceBar(); caRender();
+}
+
+function caIngByName(name){ return CA.ings.find(g => g.name === name) || null; }
+
+function caRenderPlaceBar(){
+  const sel = document.getElementById('ca-filter-place');
+  const opts = ['<option value="">すべての場所</option>'].concat(CA.places.map(p => `<option value="${caEsc(p)}">${caEsc(p)}</option>`))
+    .concat(['<option value="__none__">場所未設定</option>']);
+  sel.innerHTML = opts.join(''); sel.value = CA.filterPlace;
+  document.getElementById('ca-places-input').value = CA.places.join('、');
+  document.getElementById('ca-ing-list').innerHTML = CA.ings.map(g => `<option value="${caEsc(g.name)}">${caEsc((g.vendor||'') + ' ' + (g.unit||''))}</option>`).join('');
+}
+
+function caRowHtml(r){
+  const key = r.id || r._tmp;
+  const dows = String(r.checkDows || '');
+  const chips = CA_DOWS.map(w => `<button type="button" class="ca-dow${dows.indexOf(w) >= 0 ? ' on' : ''}" data-w="${w}" onclick="caToggleDow(this)">${w}</button>`).join('');
+  const placeOpts = ['<option value="">（未設定）</option>'].concat(CA.places.map(p => `<option${p === r.place ? ' selected' : ''}>${caEsc(p)}</option>`));
+  if (r.place && CA.places.indexOf(r.place) < 0) placeOpts.push(`<option selected>${caEsc(r.place)}</option>`);
+  const vendOpts = ['<option value="">（未設定）</option>'].concat(CA.vendors.map(v => `<option${v === r.vendor ? ' selected' : ''}>${caEsc(v)}</option>`));
+  const kindOpts = CA.kinds.map(k => `<option${k === (r.kind || '食材') ? ' selected' : ''}>${caEsc(k)}</option>`).join('');
+  const link = r.ingredientId ? `<span class="ca-link ok">🔗 食材マスタ ${caEsc(r.ingredientId)}</span>` : `<span class="ca-link new">保存すると食材マスタに追加</span>`;
+  return `
+  <div class="ca-row${r.id ? '' : ' is-new'}" data-key="${caEsc(key)}" data-id="${caEsc(r.id || '')}" data-ing="${caEsc(r.ingredientId || '')}">
+    <div class="ca-l1">
+      <input class="ca-name" list="ca-ing-list" value="${caEsc(r.name)}" placeholder="商品名（食材マスタから選ぶ）" oninput="caOnName(this)">
+      <span class="ca-id">${caEsc(r.id || '新規')}</span>
+    </div>
+    <div class="ca-grid">
+      <label>必要数<input class="ca-qty" type="number" inputmode="numeric" min="0" step="1" value="${caEsc(r.qty)}" oninput="caDirty(this)"></label>
+      <label>単位<input class="ca-unit" value="${caEsc(r.unit)}" oninput="caDirty(this)"></label>
+      <label>業者<select class="ca-vendor" onchange="caDirty(this)">${vendOpts.join('')}</select></label>
+      <label>場所<select class="ca-place" onchange="caDirty(this)">${placeOpts.join('')}</select></label>
+      <label>区分<select class="ca-kind" onchange="caDirty(this)">${kindOpts}</select></label>
+      <label>表示順<input class="ca-order" type="number" inputmode="numeric" value="${caEsc(r.order)}" oninput="caDirty(this)"></label>
+    </div>
+    <div class="ca-l3">
+      <span class="ca-lbl">在庫チェック曜日</span><span class="ca-dows">${chips}</span><span class="ca-dowhint">${dows ? '' : '（空＝毎日）'}</span>
+    </div>
+    <div class="ca-l4">
+      <input class="ca-note" value="${caEsc(r.note)}" placeholder="備考" oninput="caDirty(this)">
+      ${link}
+      <button class="btn btn-primary ca-save" onclick="caSave(this)" disabled>保存</button>
+      <button class="btn ca-del" onclick="caDelete(this)">削除</button>
+      <span class="ca-msg"></span>
+    </div>
+  </div>`;
+}
+
+function caRender(){
+  const wrap = document.getElementById('ca-body');
+  const q = CA.q.trim();
+  let rows = CA.list.filter(r => {
+    if (CA.filterPlace === '__none__' && r.place) return false;
+    if (CA.filterPlace && CA.filterPlace !== '__none__' && r.place !== CA.filterPlace) return false;
+    if (q && String(r.name).indexOf(q) < 0 && String(r.vendor).indexOf(q) < 0) return false;
+    return true;
+  });
+  const order = CA.places.concat(['']);
+  const groups = {};
+  rows.forEach(r => { const p = CA.places.indexOf(r.place) >= 0 ? r.place : (r.place || ''); (groups[p] = groups[p] || []).push(r); });
+  Object.keys(groups).forEach(p => { if (order.indexOf(p) < 0) order.splice(order.length - 1, 0, p); });
+  let html = '';
+  order.forEach(p => {
+    const g = groups[p]; if (!g || !g.length) return;
+    g.sort((a, b) => (Number(a.order) || 9999) - (Number(b.order) || 9999));
+    html += `<div class="ca-place-head${p ? '' : ' unset'}">📍 ${caEsc(p || '場所未設定')}<span>${g.length}品</span></div>` + g.map(caRowHtml).join('');
+  });
+  wrap.innerHTML = html || '<div class="placeholder-msg">該当する品目がありません</div>';
+}
+
+function caDirty(el){
+  const row = el.closest('.ca-row'); row.classList.add('dirty');
+  row.querySelector('.ca-save').disabled = false;
+  row.querySelector('.ca-msg').textContent = '';
+}
+function caToggleDow(btn){
+  btn.classList.toggle('on');
+  const row = btn.closest('.ca-row');
+  row.querySelector('.ca-dowhint').textContent = row.querySelectorAll('.ca-dow.on').length ? '' : '（空＝毎日）';
+  caDirty(btn);
+}
+function caOnName(el){
+  const row = el.closest('.ca-row');
+  const g = caIngByName(el.value.trim());
+  const link = row.querySelector('.ca-link');
+  if (g) {
+    row.dataset.ing = g.id;
+    link.className = 'ca-link ok'; link.textContent = '🔗 食材マスタ ' + g.id;
+    const u = row.querySelector('.ca-unit'); if (!u.value && g.unit) u.value = g.unit;
+    const v = row.querySelector('.ca-vendor');
+    if (!v.value && g.vendor) { if (!Array.from(v.options).some(o => o.value === g.vendor)) v.add(new Option(g.vendor, g.vendor)); v.value = g.vendor; }
+  } else {
+    row.dataset.ing = '';
+    link.className = 'ca-link new'; link.textContent = el.value.trim() ? '保存すると食材マスタに追加' : '';
+  }
+  caDirty(el);
+}
+
+function caAdd(){
+  const r = { _tmp: 'new' + (++CA.newSeq), id:'', name:'', qty:'', unit:'', vendor:'', place: (CA.filterPlace && CA.filterPlace !== '__none__') ? CA.filterPlace : '', kind:'食材', order:'', note:'', checkDows:'', ingredientId:'' };
+  const wrap = document.getElementById('ca-body');
+  wrap.insertAdjacentHTML('afterbegin', caRowHtml(r));
+  const row = wrap.firstElementChild; row.querySelector('.ca-name').focus();
+}
+
+async function caSave(btn){
+  const row = btn.closest('.ca-row'); const msg = row.querySelector('.ca-msg');
+  const name = row.querySelector('.ca-name').value.trim();
+  if (!name) { msg.textContent = '商品名を入れてください'; msg.className = 'ca-msg err'; return; }
+  const body = {
+    action: 'saveConstantMasterRow', id: row.dataset.id, name: name, ingredientId: row.dataset.ing,
+    qty: row.querySelector('.ca-qty').value, unit: row.querySelector('.ca-unit').value.trim(),
+    vendor: row.querySelector('.ca-vendor').value, place: row.querySelector('.ca-place').value,
+    kind: row.querySelector('.ca-kind').value, order: row.querySelector('.ca-order').value,
+    note: row.querySelector('.ca-note').value.trim(),
+    checkDows: Array.from(row.querySelectorAll('.ca-dow.on')).map(b => b.dataset.w).join('・')
+  };
+  btn.disabled = true; msg.textContent = '保存中…'; msg.className = 'ca-msg';
+  try {
+    const res = await fetch(GAS_URL, { method:'POST', body: new URLSearchParams(body) });
+    const j = await res.json();
+    if (!j || !j.ok) throw new Error((j && j.error) || '保存に失敗しました');
+    const rec = { id: j.id, name: body.name, ingredientId: j.ingredientId, vendor: body.vendor, unit: body.unit, qty: Number(body.qty) || 0,
+                  order: body.order, note: body.note, checkDows: body.checkDows, kind: body.kind, place: body.place };
+    const k = CA.list.findIndex(x => x.id === j.id);
+    if (k >= 0) CA.list[k] = rec; else CA.list.push(rec);
+    if (j.ingredientAdded) CA.ings.push({ id: j.ingredientId, name: body.name, unit: body.unit, vendor: body.vendor });
+    caRenderPlaceBar(); caRender();
+    caStatus('✓ ' + body.name + ' を保存しました' + (j.ingredientAdded ? '（食材マスタに ' + j.ingredientId + ' として追加）' : ''));
+  } catch (e) {
+    btn.disabled = false; msg.textContent = '保存失敗: ' + e.message; msg.className = 'ca-msg err';
+  }
+}
+
+async function caDelete(btn){
+  const row = btn.closest('.ca-row');
+  const id = row.dataset.id; const name = row.querySelector('.ca-name').value;
+  if (!id) { row.remove(); return; }
+  if (!confirm('「' + name + '」を定数発注マスタから消します。\n（食材マスタの行は残ります）よろしいですか？')) return;
+  btn.disabled = true;
+  try {
+    const res = await fetch(GAS_URL, { method:'POST', body: new URLSearchParams({ action:'deleteConstantMasterRow', id: id }) });
+    const j = await res.json();
+    if (!j || !j.ok) throw new Error((j && j.error) || '削除に失敗しました');
+    CA.list = CA.list.filter(x => x.id !== id); caRender(); caStatus('✓ ' + name + ' を消しました');
+  } catch (e) { btn.disabled = false; row.querySelector('.ca-msg').textContent = '削除失敗: ' + e.message; }
+}
+
+async function caSavePlaces(){
+  const raw = document.getElementById('ca-places-input').value;
+  const arr = raw.split(/[、,，\n]/).map(s => s.trim()).filter(Boolean);
+  if (!arr.length) { caStatus('場所を1つ以上入れてください', true); return; }
+  caStatus('場所の並びを保存中…');
+  try {
+    const res = await fetch(GAS_URL, { method:'POST', body: new URLSearchParams({ action:'saveConstantPlaces', places: JSON.stringify(arr) }) });
+    const j = await res.json();
+    if (!j || !j.ok) throw new Error((j && j.error) || '保存に失敗しました');
+    CA.places = j.places; caRenderPlaceBar(); caRender(); caStatus('✓ 場所の並びを保存しました');
+  } catch (e) { caStatus('保存失敗: ' + e.message, true); }
+}
+
+document.getElementById('ca-filter-place').addEventListener('change', e => { CA.filterPlace = e.target.value; caRender(); });
+document.getElementById('ca-q').addEventListener('input', e => { CA.q = e.target.value; caRender(); });
+window.addEventListener('beforeunload', e => { if (document.querySelector('.ca-row.dirty')) { e.preventDefault(); e.returnValue = ''; } });
+
+
+// タブ切替
+document.querySelectorAll('.tab-btn').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('.tab-btn').forEach(x => x.classList.toggle('active', x === b));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.toggle('active', p.id === 'tab-' + b.dataset.tab));
+  if (b.dataset.tab === 'const' && !CA.loaded) caLoad();
+}));
+</script>
+</body>
+</html>
