@@ -8,7 +8,8 @@
 <link rel="apple-touch-icon" href="cockpit-icon.png?v=2">
 <link rel="icon" href="cockpit-icon.png?v=2">
 <link rel="manifest" href="hq.webmanifest">
-<!-- boss/hq v1.4 (2026-11-24) ★v1.4 拠点タブ（社長「新規拠点も簡単に入力できるように、既存の店舗も営業時間・ギャラも変えれるように」）。
+<!-- boss/hq v1.5 (2026-11-24) ★v1.5 営業終了時刻の欄をなくした（社長「営業終了時刻は全て勤務終了時刻に合わせて」）。勤務の終了がそのまま営業終了時刻に入る（hq.js）。同日、拠点マスタのずれていた11拠点も勤務の終了にそろえた。
+     boss/hq v1.4 (2026-11-24) ★v1.4 拠点タブ（社長「新規拠点も簡単に入力できるように、既存の店舗も営業時間・ギャラも変えれるように」）。
      一覧（エリアのチップ・営業中→無効の順）／新規＝下書き（無効）で L035 の下へ・エリアの色と入力規則は同じエリアの行から写す・主担当はエリアから／
      既存の営業時間・営業終了時刻・販売曜日・ギャラ・PayPay QR・レベル・箱・自動振替先を直せる／「販売を始める」／「販売を終える」＝①locretire で明日以降を0 → ②回収後に無効。→ functions/hq.js
      boss/hq v1.3 (2026-11-24) ★v1.3 一覧の「無効（下書き・販売をやめた物）」を一番下へ（社長「無効の物は一番下に出そうか」）。「無効だけ」で絞った時は無効の見出しだけ出す。
@@ -133,7 +134,7 @@ details{margin-top:8px;} summary{font-size:12px;color:var(--navy);cursor:pointer
     <button class="tab" data-t="loc">拠点</button>
   </div>
   <div class="body"><div id="root"><div class="inline-loading"><span class="spinner"></span>読み込み中…</div></div></div>
-  <div class="ver">boss/hq v1.4</div>
+  <div class="ver">boss/hq v1.5</div>
 </div>
 <div class="bar" id="bar" style="display:none"><div class="in" id="bar-in"></div></div>
 <div class="modal" id="modal"><div class="sheet" id="sheet"></div></div>
@@ -717,11 +718,10 @@ function renderLocEdit(){
     + '<details><summary>マップ・表示順</summary>'
     + '<label class="f">マップURL</label>' + linp('マップURL', 'https://maps.app.goo.gl/…')
     + '<label class="f">表示順（小さいほど上）</label>' + linp('表示順', '例：14.1', 'number') + '</details></div>';
-  h += '<div class="card"><h3><span class="n">2</span>営業</h3><div class="grid3">'
+  h += '<div class="card"><h3><span class="n">2</span>営業</h3><div class="grid2">'
     + '<div><label class="f">勤務 開始</label>' + linp('開始時刻', '', 'time') + '</div>'
-    + '<div><label class="f">勤務 終了</label>' + linp('終了時刻', '', 'time') + '</div>'
-    + '<div><label class="f">営業終了時刻</label>' + linp('営業終了時刻', '', 'time') + '</div></div>'
-    + '<div class="hint">営業終了時刻＝振替のバナーを出し始める時刻（渡す側の締め）。勤務の終了より早いことが多い（例 勤務〜13:00・営業終了12:40）。空欄なら勤務の終了と同じにします。</div>'
+    + '<div><label class="f">勤務 終了（＝営業終了時刻）</label>' + linp('終了時刻', '', 'time') + '</div></div>'
+    + '<div class="hint">営業終了時刻（振替のバナー・販売ペースの基準）は、勤務の終了と同じ時刻が自動で入ります。</div>'
     + '<label class="f">販売する曜日（全部に印＝毎日）</label><div class="seg">'
     + DOWS_.map(function(w){ var on = !dows || dows.indexOf(w) >= 0; return '<label class="'+(on?'on':'')+'" style="justify-content:center"><input type="checkbox" name="ldow" value="'+w+'"'+(on?' checked':'')+'>'+w+'</label>'; }).join('') + '</div>'
     + '<label class="f">天候影響区分</label>' + lsel('天候影響区分', ['屋内','屋外'], '空欄') + '</div>';
@@ -751,8 +751,8 @@ function renderLocEdit(){
 function lpayload(){
   lcollect();
   var f = Object.assign({}, S.LE.f);
-  if(!f['営業終了時刻'] && f['終了時刻']) f['営業終了時刻'] = f['終了時刻'];
-  var keys = ['拠点名','表示名','エリア','主担当ドライバー名','マップURL','表示順','開始時刻','終了時刻','営業終了時刻','販売曜日','天候影響区分','基本ギャラ（円）','PayPay QR','レベル','箱','自動振替先'];
+  // ★v1.5 営業終了時刻は送らない（サーバーが勤務の終了を入れる・社長決定 11/24）
+  var keys = ['拠点名','表示名','エリア','主担当ドライバー名','マップURL','表示順','開始時刻','終了時刻','販売曜日','天候影響区分','基本ギャラ（円）','PayPay QR','レベル','箱','自動振替先'];
   var out = {}; keys.forEach(function(k){ out[k] = f[k] == null ? '' : String(f[k]); });
   // 主担当が空＝エリアの主担当に任せる（既存でエリアを変えていなければ今のまま）
   if(!out['主担当ドライバー名']) delete out['主担当ドライバー名'];
