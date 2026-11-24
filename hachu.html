@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- hachu.html v1.3 (2026-11-25) 【今日の発注チェック】社長「毎日の発注で発注もれがないように、在庫管理をした後に発注したかのチェックリスト」→ A。発注タブの一番上に「発注が要る業者」だけを並べ、☐→☑で発注済み。チェックはサーバー（シート「発注チェック」）に残り、誰の端末からも同じ。業者カードの「発注済み」と同じもの（どちらで押しても両方に反映）。要: メインGAS @1013 以降。 -->
 <!-- hachu.html v1.2 (2026-11-25) 【定数管理に「発注点」「頼む数」】社長「黒米は10日で1袋。残りが0.4を切ったくらいで1袋頼みたい」→ B。発注点を入れた品目は、在庫入力で在庫＜発注点 の時だけ頼む数を発注（小数可）。空欄＝従来の 必要数−在庫。定数発注マスタM・N列。要: メインGAS @1012 以降。 -->
 <!-- hachu.html v1.1 (2026-11-25) 【定数管理に「毎回買う（在庫チェックなし）」】社長「つくね・青がっぱは臨時で頼むから在庫チェックには出さなくていい／買い物リストにはそれぞれ3ケースと出したい」。○の品目は在庫入力に出ず、買い物の日（水・日）に必要数のままドライバーの買い物に出る。定数発注マスタL列。要: メインGAS @1009 以降。 -->
 <!-- hachu.html v1.0 (2026-11-25) 【発注アプリを配分アプリ（kanri）から独立】社長指示「配分アプリにタブとして乗ってる発注を別アプリに」「発注アプリのタブで定数管理のタブをつけて 商品名・必要数・単位・在庫チェック曜日・業者 を入力して食材マスタとリンク」。
@@ -304,6 +305,17 @@ body {
 .ot-table th { background: #ede7f6; font-size: 12px; }
 .ot-use { font-size: 11.5px; color: #555; margin-top: 6px; }
 .order-vendor-list { display: flex; flex-direction: column; gap: 10px; }
+/* ★v1.3 今日の発注チェック */
+.ochk { background:#fff; border:2px solid #1A3C5E; border-radius:12px; padding:10px 12px; margin:10px 0; }
+.ochk-head { font-weight:800; font-size:15px; display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+.ochk-head .ochk-sum { margin-left:auto; font-size:12px; font-weight:700; }
+.ochk-head .ochk-sum.ng { color:#C0392B; } .ochk-head .ochk-sum.ok { color:#1E7A43; }
+.ochk-row { display:flex; align-items:center; gap:10px; padding:8px 4px; border-top:1px solid #eee; cursor:pointer; }
+.ochk-row .ochk-box { width:24px; height:24px; border:2px solid #1A3C5E; border-radius:6px; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:900; flex:none; }
+.ochk-row.done .ochk-box { background:#27AE60; border-color:#27AE60; }
+.ochk-row .ochk-name { font-weight:800; }
+.ochk-row.done .ochk-name { color:#888; text-decoration:line-through; }
+.ochk-row .ochk-sub { margin-left:auto; font-size:12px; color:#666; text-align:right; }
 .order-vendor-card { border: 2px solid #bbb; border-radius: 6px; overflow: hidden; background: white; }
 .order-vendor-head {
   display: flex;
@@ -470,6 +482,7 @@ body {
   </div>
   <div class="order-date-row" id="order-date-row"></div>
   <div class="order-sel-info" id="order-sel-info">日付を選択して取得ボタンを押してください</div>
+  <div id="order-checklist"></div>
   <div class="order-warn-wrap" id="order-warn-wrap" style="display:none;"></div>
   <div class="order-vendor-list" id="order-body"></div>
 </div>
@@ -657,8 +670,10 @@ async function fetchOrderData() {
     if (!data.ok) { orderSetStatus(data.error || '取得エラー', true); return; }
     orderSetStatus('');
     loadOrderDoneFlags(dates.join('_'));
+    await loadOrderChecks_(dates.join('_'));   // ★v1.3 サーバーの発注チェックを混ぜる
     renderOrderWarnings(data.warnings);
     renderOrderData(data);
+    renderOrderChecklist_(data);
   } catch(e) {
     orderSetStatus('通信エラー: ' + e.message, true);
   }
@@ -1021,9 +1036,61 @@ function toggleOrderBd(bdId) {
   if (arrow) arrow.textContent = el.classList.contains('open') ? '▼' : '▶';
 }
 
+// ★v1.3 今日の発注チェック（サーバー）
+let _orderCheckAt = {};
+async function loadOrderChecks_(key) {
+  _orderCheckAt = {};
+  try {
+    const j = await gasGetJson(GAS_URL + '?action=getOrderChecks&key=' + encodeURIComponent(key) + '&_cb=' + Date.now());
+    if (j && j.ok) {
+      Object.keys(j.checks || {}).forEach(v => { _orderDoneFlags[v] = !!j.checks[v].done; _orderCheckAt[v] = j.checks[v].done ? j.checks[v].at : ''; });
+      saveOrderDoneFlags();
+    }
+  } catch (e) { /* 取れない時は端末の記録だけで出す */ }
+}
+function orderNeedsList_(data) {
+  return (data.vendors || []).map(v => {
+    const nItems = (v.items || []).length;
+    const nConst = (v.constants || []).filter(c => Number(c.currentQty) > 0).length;
+    return { name: v.name, nItems, nConst };
+  }).filter(x => x.nItems + x.nConst > 0);
+}
+function renderOrderChecklist_(data) {
+  const el = document.getElementById('order-checklist');
+  if (!el) return;
+  const list = orderNeedsList_(data || window._orderData || {});
+  if (!list.length) { el.innerHTML = ''; return; }
+  const left = list.filter(x => !_orderDoneFlags[x.name]).length;
+  el.innerHTML = '<div class="ochk"><div class="ochk-head">✅ 今日の発注チェック<span class="ochk-sum ' + (left ? 'ng' : 'ok') + '">'
+    + (left ? '未発注 ' + left + '社' : '全部発注しました') + '</span></div>'
+    + list.map(x => {
+        const d = !!_orderDoneFlags[x.name];
+        const sub = [x.nItems ? '食材' + x.nItems : '', x.nConst ? '定数' + x.nConst : ''].filter(Boolean).join('・')
+          + (d && _orderCheckAt[x.name] ? '<br>' + escHtml(_orderCheckAt[x.name]) + ' 発注済み' : '');
+        return '<div class="ochk-row' + (d ? ' done' : '') + '" onclick="onOrderDone(\'' + escHtml(x.name).replace(/'/g, "\\'") + '\',' + (!d) + ')">'
+          + '<div class="ochk-box">' + (d ? '✓' : '') + '</div><div class="ochk-name">' + escHtml(x.name) + '</div>'
+          + '<div class="ochk-sub">' + sub + '</div></div>';
+      }).join('') + '</div>';
+}
+
 function onOrderDone(vendorName, checked) {
   _orderDoneFlags[vendorName] = checked;
   saveOrderDoneFlags();
+  // ★v1.3 サーバーにも残す（誰の端末からも同じに見える）
+  _orderCheckAt[vendorName] = checked ? '今' : '';
+  const cb = document.querySelector('.order-done-cb[data-vendor="' + vendorName.replace(/"/g, '\\"') + '"]');
+  if (cb) cb.checked = checked;
+  renderOrderChecklist_();
+  (async () => {
+    let j = null;
+    for (let i = 0; i < 3 && !(j && j.ok); i++) {
+      try {
+        const r = await fetch(GAS_URL, { method: 'POST', body: new URLSearchParams({ action: 'setOrderCheck', key: _orderDoneFlagsKey.replace(/^orderDone_/, ''), vendor: vendorName, done: checked ? '1' : '0' }) });
+        j = await r.json();
+      } catch (e) { await new Promise(r => setTimeout(r, 2000)); }
+    }
+    if (!(j && j.ok)) orderSetStatus(vendorName + ' の発注済みを保存できませんでした（この端末には残っています）', true);
+  })();
   const safeN = vendorName.replace(/[^\w\u3000-\u9FFF]/g, '_');
   const card  = document.getElementById('ovc-' + safeN);
   if (card) card.classList.toggle('done', checked);
