@@ -168,6 +168,7 @@
 
 <script>
 // ════════════════════════════════════════════
+//  ★v5.9 (2026-11-25) 注文単位（例 数える＝箱・頼む＝ケース）。発注点の表示と発注の数の単位に使う。
 //  ★v5.8 (2026-11-25) 社長「買い物（タブ）は数字を入れて毎回保存じゃなくて、最後に一回保存で良い」「在庫チェックも毎回保存なら、それも最後の一回に変えて」。
 //       在庫入力タブ・買い物タブ①とも、入れても保存しない（計算だけ）。画面の下に固定の「💾 まとめて保存」。
 //       ①在庫チェックの行は入力しても保存しない（発注数の計算だけ）。下の「💾 まとめて保存」で入れた品目を順に保存する。
@@ -456,14 +457,14 @@ function stockItemHtml_(it, dateOverride) {
       const meta = [it.kind, it.vendor, it.checkDows ? it.checkDows + 'のみ' : ''].filter(Boolean).join('・');
   return `
       <div class="item">
-        <div class="item-top"><span class="item-name">${escHtml(it.name)}<small class="item-meta">${escHtml(meta)}</small></span><span class="item-target">${rop ? (escHtml(it.reorderPoint) + escHtml(it.unit||'') + 'を切ったら <b>' + escHtml(it.reorderQty) + '</b>' + escHtml(it.unit||'')) : ('必要 <b>' + target + '</b>' + escHtml(it.unit||''))}</span></div>
+        <div class="item-top"><span class="item-name">${escHtml(it.name)}<small class="item-meta">${escHtml(meta)}</small></span><span class="item-target">${rop ? (escHtml(it.reorderPoint) + escHtml(it.unit||'') + 'を切ったら <b>' + escHtml(it.reorderQty) + '</b>' + escHtml(it.orderUnit || it.unit || '')) : ('必要 <b>' + target + '</b>' + escHtml(it.unit||''))}</span></div>
         <div class="item-calc">
           <div class="qbox"><label>在庫</label>
             <input class="num-in stock" type="number" inputmode="${rop ? 'decimal' : 'numeric'}" min="0" step="${rop ? '0.1' : '1'}" placeholder="${rop ? '例 0.5' : '—'}" value="${stockVal}" data-rop="${rop ? escHtml(it.reorderPoint) : ''}" data-ropq="${rop ? escHtml(it.reorderQty) : ''}"
               data-vendor="${escHtml(it.vendor)}" data-const-id="${escHtml(it.id)}" data-target="${target}" data-saved-order="${savedOrder}" data-saved-stock="${stockVal}" data-date="${escHtml(dateOverride)}"
               oninput="onStockInput(this);stockDirty_()"></div>
           <span class="arrow-mid">→</span>
-          <div class="order-box${hasSaved?'':' dim'}"><span class="lbl">${dateOverride ? '買う' : '発注'}</span><span class="num js-order">${dispOrder}</span><span class="u">${escHtml(it.unit||'')}</span></div>
+          <div class="order-box${hasSaved?'':' dim'}"><span class="lbl">${dateOverride ? '買う' : '発注'}</span><span class="num js-order">${dispOrder}</span><span class="u">${escHtml(it.orderUnit || it.unit || '')}</span></div>
           <span class="save-tag js-tag"></span>
         </div>
         <div class="note-row js-note"></div>

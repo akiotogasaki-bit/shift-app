@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- hachu.html v1.6 (2026-11-25) 【注文単位】数える単位と頼む単位が違う品目（例 ニトリルL＝5箱を切ったら1ケース）。定数発注マスタO列。発注タブのコピー文もこの単位で出る。要: メインGAS @1016 以降。 -->
 <!-- hachu.html v1.5 (2026-11-25) 【チェックリストから買い物先を外す】社長「業務スーパー・ハナマサはチェックリストから外して」。業者「買い物」と業者マスタ備考に「買い物先」の業者（GAS getOrderChecks の shopVendors）は出さない。業者カードはそのまま。要: メインGAS @1014 以降。 -->
 <!-- hachu.html v1.4 (2026-11-25) 【ホーム画面に置ける】社長「発注アプリ・在庫チェックのアプリもホーム画面に追加したい」。hachu.webmanifest・hachu-icon.png（在庫入力と同じクリップボードの絵を紺に）。LIFF を使っていないのでそのまま置ける。 -->
 <!-- hachu.html v1.3 (2026-11-25) 【今日の発注チェック】社長「毎日の発注で発注もれがないように、在庫管理をした後に発注したかのチェックリスト」→ A。発注タブの一番上に「発注が要る業者」だけを並べ、☐→☑で発注済み。チェックはサーバー（シート「発注チェック」）に残り、誰の端末からも同じ。業者カードの「発注済み」と同じもの（どちらで押しても両方に反映）。要: メインGAS @1013 以降。 -->
@@ -1313,6 +1314,7 @@ function caRowHtml(r){
       <label>区分<select class="ca-kind" onchange="caDirty(this)">${kindOpts}</select></label>
       <label>表示順<input class="ca-order" type="number" inputmode="numeric" value="${caEsc(r.order)}" oninput="caDirty(this)"></label>
       <label title="在庫がこの数を切ったら「頼む数」だけ発注。空欄＝必要数−在庫">発注点<input class="ca-rop" type="number" inputmode="decimal" min="0" step="0.1" placeholder="空＝使わない" value="${caEsc(r.reorderPoint === null || r.reorderPoint === undefined ? '' : r.reorderPoint)}" oninput="caDirty(this)"></label>
+      <label title="頼む時の単位（例 ケース）。空欄＝単位と同じ">注文単位<input class="ca-ounit" value="${caEsc(r.orderUnit || '')}" placeholder="空＝単位と同じ" oninput="caDirty(this)"></label>
       <label title="発注点を切った時に頼む数">頼む数<input class="ca-ropq" type="number" inputmode="decimal" min="0" step="0.1" value="${caEsc(r.reorderPoint === null || r.reorderPoint === undefined ? '' : r.reorderQty)}" oninput="caDirty(this)"></label>
     </div>
     <div class="ca-l3">
@@ -1399,7 +1401,8 @@ async function caSave(btn){
     checkDows: Array.from(row.querySelectorAll('.ca-dow.on')).map(b => b.dataset.w).join('・'),
     fixedBuy: row.querySelector('.ca-fixedbuy') && row.querySelector('.ca-fixedbuy').checked ? '1' : '0',
     reorderPoint: row.querySelector('.ca-rop') ? row.querySelector('.ca-rop').value.trim() : '',
-    reorderQty: row.querySelector('.ca-ropq') ? row.querySelector('.ca-ropq').value.trim() : ''
+    reorderQty: row.querySelector('.ca-ropq') ? row.querySelector('.ca-ropq').value.trim() : '',
+    orderUnit: row.querySelector('.ca-ounit') ? row.querySelector('.ca-ounit').value.trim() : ''
   };
   if (body.reorderPoint !== '' && !(Number(body.reorderQty) > 0)) { msg.textContent = '発注点を入れたら「頼む数」も入れてください'; msg.className = 'ca-msg err'; return; }
   btn.disabled = true; msg.textContent = '保存中…'; msg.className = 'ca-msg';
@@ -1409,7 +1412,7 @@ async function caSave(btn){
     if (!j || !j.ok) throw new Error((j && j.error) || '保存に失敗しました');
     const rec = { id: j.id, name: body.name, ingredientId: j.ingredientId, vendor: body.vendor, unit: body.unit, qty: Number(body.qty) || 0,
                   order: body.order, note: body.note, checkDows: body.checkDows, kind: body.kind, place: body.place, fixedBuy: body.fixedBuy === '1',
-                  reorderPoint: body.reorderPoint === '' ? null : Number(body.reorderPoint), reorderQty: Number(body.reorderQty) || 0 };
+                  reorderPoint: body.reorderPoint === '' ? null : Number(body.reorderPoint), reorderQty: Number(body.reorderQty) || 0, orderUnit: body.orderUnit };
     const k = CA.list.findIndex(x => x.id === j.id);
     if (k >= 0) CA.list[k] = rec; else CA.list.push(rec);
     if (j.ingredientAdded) CA.ings.push({ id: j.ingredientId, name: body.name, unit: body.unit, vendor: body.vendor });
