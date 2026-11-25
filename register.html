@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ja">
+<!-- register v3.44 (2026-11-26) 【2次へ切り替えた日の「報告の修正」で現金差異が−ギャラになるのを直す】11/25 パソナ（2次）で現金誤差−4,500円。締めの送信（submitFinal）は1次のギャラを開始金・最終金額から引いて送るのに、締めた直後の修正画面（goToEdit）は引く前の額（state.registerStart・register-end）をそのまま出して送り直していた。★切り替え後は同じ額（state.calcTotalSalary、無ければ sw2ndPay1_ で計算し直す）を引いて出す。サーバーの報告を読む方の修正画面（loadEditFromReport）は元から引いた後の額なので触っていない。 -->
 <!-- register v3.43 (2026-11-24) 【2次販売の満腹系を500円に】社長指示「２次販売の時の満腹弁当は500円の販売価格にして欲しい」。★sw2ndPrice_ の500円の区分に満腹系を足した（海苔弁系・満腹系・他社商品＝500円／お茶100円／それ以外300円）。★メインGAS _ccAddToSecond_（回収の🛒2次販売→二次販売拠点の300円/500円への振り分け）も同じ区分に揃えた。二次販売レジ（?mode=2nd）は300円/500円ボタンのままで変更なし。 -->
 <!-- register v3.42 (2026-11-18) 【在庫の一覧に「売ったのに納品0」の商品を出し、赤く知らせる】社長決定 B案。11/18 銀座で南蛮・油淋鶏を納品数0のまま売り、在庫の一覧（ふつうの表示）が「納品>0 か移動あり」しか出さないため、直そうとしても出てこなかった。★ふつうの表示に「売った数が1以上」の商品も出す。★納品＋移動より多く売れている商品は行を赤枠にして「⚠ 納品数を入れてください」（押すと編集モード）。★該当がある時だけ一覧の上に赤い帯で商品名を並べる。納品数を自動で書き換えはしない。販売画面・締め・2次販売・編集モードの中身は変えていない。GAS変更なし。 -->
 <!-- register v3.40 (2026-11-17) 【二次販売レジ：開店後の持ち込みを締めの前に納品数へ足す】社長決定 A案。ドライバーが回収で「🛒 2次販売」→行き先を選ぶと、メインGASが「二次販売納品」に300円・500円で追記する。開店前の分は開始時の既定値に入る。開店後の分は締め画面に入る時に読み直し、今の納品数より多い区分だけ確認を出して上げる（下げない）。通常レジ・その場の2次（移動で入る）は変わらない。要: メインGAS 2026-11-17・driver v8.21。 -->
@@ -5838,8 +5839,18 @@ function goToEdit() {
       <span class="form-unit">個</span>
     </div>
   `).join('');
-  document.getElementById('edit-register-start').value  = state.registerStart || 0;
-  document.getElementById('edit-register-end').value    = parseInt(document.getElementById('register-end')?.value) || 0;
+  // ★v3.44 2次へ切り替えた日は、締めの送信と同じく1次のギャラを引いた額を出す（そのまま送り直すと−ギャラの差異が出る）
+  let _editPay1 = 0;
+  if (isSwitched_()) {
+    _editPay1 = Number(state.calcTotalSalary);
+    if (!isFinite(_editPay1)) {
+      const _mk = state['makanaiあり'] ? 0 : 300;
+      const _lp = calcLatePenalty(parseInt(document.getElementById('late-minutes')?.value) || 0);
+      _editPay1 = sw2ndPay1_(state.sw2nd.first, _mk, _lp).total + ((state.okibenGig && state.okibenGig.amount) || 0);
+    }
+  }
+  document.getElementById('edit-register-start').value  = (state.registerStart || 0) - _editPay1;
+  document.getElementById('edit-register-end').value    = (parseInt(document.getElementById('register-end')?.value) || 0) - _editPay1;
   document.getElementById('edit-cash-sales').value      = state.cashSales || 0;
   document.getElementById('edit-paypay-amount').value   = state.paypayAmount || 0;
   document.getElementById('edit-diff-comment').value    = document.getElementById('diff-comment')?.value || '';
