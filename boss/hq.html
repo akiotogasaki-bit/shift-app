@@ -8,7 +8,8 @@
 <link rel="apple-touch-icon" href="cockpit-icon.png?v=2">
 <link rel="icon" href="cockpit-icon.png?v=2">
 <link rel="manifest" href="hq.webmanifest">
-<!-- boss/hq v1.5 (2026-11-24) ★v1.5 営業終了時刻の欄をなくした（社長「営業終了時刻は全て勤務終了時刻に合わせて」）。勤務の終了がそのまま営業終了時刻に入る（hq.js）。同日、拠点マスタのずれていた11拠点も勤務の終了にそろえた。
+<!-- boss/hq v1.6 (2026-11-26) ★v1.6 セカンド（二次販売）拠点も作れるように（社長「本部アプリの新規作る時セカンド拠点の場合は？」→ 本部アプリに足す）。拠点一覧に「セカンド」のチップ・「＋ セカンドを足す」。入れるのは拠点名とギャラ（既定1500）だけ・エリアは二次販売で固定・番号は L80x の次・行は最後のセカンドの下・下書き（無効）→「販売を始める」。終える時は配分が無いので「無効にする」だけ。→ functions/hq.js buildSecondPlan
+     boss/hq v1.5 (2026-11-24) ★v1.5 営業終了時刻の欄をなくした（社長「営業終了時刻は全て勤務終了時刻に合わせて」）。勤務の終了がそのまま営業終了時刻に入る（hq.js）。同日、拠点マスタのずれていた11拠点も勤務の終了にそろえた。
      boss/hq v1.4 (2026-11-24) ★v1.4 拠点タブ（社長「新規拠点も簡単に入力できるように、既存の店舗も営業時間・ギャラも変えれるように」）。
      一覧（エリアのチップ・営業中→無効の順）／新規＝下書き（無効）で L035 の下へ・エリアの色と入力規則は同じエリアの行から写す・主担当はエリアから／
      既存の営業時間・営業終了時刻・販売曜日・ギャラ・PayPay QR・レベル・箱・自動振替先を直せる／「販売を始める」／「販売を終える」＝①locretire で明日以降を0 → ②回収後に無効。→ functions/hq.js
@@ -636,23 +637,27 @@ function renderLocList(){
   $('root').innerHTML = '<div class="tools"><input id="lq" placeholder="拠点名・ID で探す" value="'+esc(S.lq||'')+'">'
     + '<select id="lflt"><option value="all">全部</option><option value="on">営業中だけ</option><option value="off">無効・下書きだけ</option></select></div>'
     + '<div class="cats" id="lcats"></div>'
-    + '<button class="btn" id="lnew-btn"><i class="ti ti-plus"></i>新しい拠点を登録する</button><div id="llst"></div>';
+    + '<div style="display:flex;gap:8px"><button class="btn" id="lnew-btn"><i class="ti ti-plus"></i>新しい拠点を登録する</button>'
+    + '<button class="btn sub" id="lnew2-btn" style="flex:0 0 38%"><i class="ti ti-plus"></i>セカンドを足す</button></div><div id="llst"></div>';
   $('lflt').value = S.lflt || 'all';
   $('lq').addEventListener('input', function(e){ S.lq = e.target.value; renderLocItems_(); });
   $('lflt').addEventListener('change', function(e){ S.lflt = e.target.value; renderLocItems_(); });
   $('lcats').addEventListener('click', function(e){ var b = e.target.closest('.cat'); if(!b) return; S.larea = b.getAttribute('data-c'); renderLocItems_(); });
   $('lnew-btn').addEventListener('click', function(){ openLoc(null); });
+  $('lnew2-btn').addEventListener('click', function(){ openLoc(null, 'second'); });
   renderLocItems_();
 }
 function renderLocItems_(){
-  var locs = S.data.locs || [], q = String(S.lq||'').trim(), flt = S.lflt || 'all';
+  var secs = S.data.seconds || [];
+  var locs = (S.data.locs || []).concat(secs), q = String(S.lq||'').trim(), flt = S.lflt || 'all';
   var passF = function(l){ return flt === 'on' ? l.flag === '有効' : flt === 'off' ? l.flag !== '有効' : true; };
   var cnt = {}, total = 0;
   locs.forEach(function(l){ if(!passF(l)) return; var a = String(l.f['エリア']||'') || '（未設定）'; cnt[a] = (cnt[a]||0) + 1; total++; });
   var areas = (S.data.locChoices['エリア'] || []).slice(); if(cnt['（未設定）']) areas.push('（未設定）');
+  if(secs.length) areas.push(SECOND_AREA_);
   if(S.larea && areas.indexOf(S.larea) < 0) S.larea = '';
   var chip = function(c, label, n){ return '<button type="button" class="cat'+((S.larea||'') === c ? ' on' : '')+(n ? '' : ' zero')+'" data-c="'+esc(c)+'">'+esc(label)+'<span>'+n+'</span></button>'; };
-  $('lcats').innerHTML = chip('', 'すべて', total) + areas.map(function(a){ return chip(a, a, cnt[a]||0); }).join('');
+  $('lcats').innerHTML = chip('', 'すべて', total) + areas.map(function(a){ return chip(a, a === SECOND_AREA_ ? 'セカンド' : a, cnt[a]||0); }).join('');
   var list = locs.filter(function(l){
     if(!passF(l)) return false;
     if(S.larea && (String(l.f['エリア']||'') || '（未設定）') !== S.larea) return false;
@@ -661,7 +666,7 @@ function renderLocItems_(){
   var byOrder = function(a, b){ return (Number(a.f['表示順'])||999) - (Number(b.f['表示順'])||999); };
   var on = list.filter(function(l){ return l.flag === '有効'; }).sort(byOrder), off = list.filter(function(l){ return l.flag !== '有効'; }).sort(byOrder);
   var row = function(l){
-    var sub = [l.f['エリア'], l.f['勤務時間'], l.f['レベル'] ? 'レベル' + l.f['レベル'] : '', l.f['販売曜日'] ? l.f['販売曜日'] + 'だけ' : ''].filter(Boolean).join('・');
+    var sub = [l.kind === 'second' ? 'セカンド（二次販売）' : l.f['エリア'], l.f['勤務時間'], l.f['レベル'] ? 'レベル' + l.f['レベル'] : '', l.f['販売曜日'] ? l.f['販売曜日'] + 'だけ' : ''].filter(Boolean).join('・');
     return '<div class="item" data-loc="'+esc(l.id)+'"><div class="id">'+esc(l.id)+'</div>'
       + '<div class="nm">'+esc(l.f['拠点名'])+' '+locBadge(l)+'<small>'+esc(sub)+'</small></div>'
       + '<div class="pr">'+yen(l.f['基本ギャラ（円）'])+'<small>ギャラ</small></div></div>';
@@ -674,11 +679,18 @@ function renderLocItems_(){
   var box = $('lcats'), sel = box.querySelector('.cat.on');
   if(sel && box.scrollWidth > box.clientWidth) box.scrollLeft = Math.max(0, sel.offsetLeft - box.offsetLeft - (box.clientWidth - sel.offsetWidth) / 2);
 }
-function openLoc(id){
+var SECOND_AREA_ = '二次販売';
+function findLoc_(id){ return (S.data.locs || []).concat(S.data.seconds || []).filter(function(x){ return x.id === id; })[0]; }
+function openLoc(id, kind){
   var f = {}, flag = '';
   if(id){
-    var l = (S.data.locs || []).filter(function(x){ return x.id === id; })[0]; if(!l) return;
-    Object.keys(l.f).forEach(function(k){ f[k] = l.f[k] == null ? '' : String(l.f[k]); }); flag = l.flag;
+    var l = findLoc_(id); if(!l) return;
+    Object.keys(l.f).forEach(function(k){ f[k] = l.f[k] == null ? '' : String(l.f[k]); }); flag = l.flag; kind = l.kind || 'shop';
+  }
+  if(kind === 'second'){
+    if(!id) f['基本ギャラ（円）'] = '1500';
+    S.LE = { id: id || '', flag: flag, f: f, kind: 'second' };
+    S.tab = 'locedit'; render(); window.scrollTo(0, 0); return;
   }
   var w = String(f['勤務時間']||'').split(/[~〜～]/);
   f['開始時刻'] = pad2_(w[0] && w[0].trim()); f['終了時刻'] = pad2_(w[1] && w[1].trim());
@@ -702,7 +714,36 @@ function lsel(k, opts, blankLabel){
     + opts.map(function(o){ var val = typeof o === 'string' ? o : o[0], lab = typeof o === 'string' ? o : o[1];
       return '<option value="'+esc(val)+'"'+(v === val ? ' selected' : '')+'>'+esc(lab)+'</option>'; }).join('') + '</select>';
 }
+function renderSecondEdit_(){
+  var LE = S.LE, isNew = !LE.id;
+  var h = isNew ? '<div class="draftnote"><b>セカンド（二次販売）の拠点を下書きで足します。</b>エリアは「二次販売」で入り、番号は L80x の次になります。保存しても二次販売レジにはまだ出ません。使う日の前に「販売を始める」を押してください。</div>'
+    : '<div class="draftnote">'+esc(LE.id)+'「'+esc(LE.f['拠点名'])+'」（セカンド）を直しています　'+locBadge(LE)
+      + (LE.flag === '有効' ? '<br>⚠ 使っている拠点です。保存した内容はすぐに二次販売レジに効きます。' : '<br>無効の拠点です。「販売を始める」で有効になります。') + '</div>';
+  h += '<div class="card"><h3><span class="n">1</span>セカンド</h3>'
+    + '<label class="f">拠点名 <b>必須</b></label>' + linp('拠点名', '例：セカンド芝浦')
+    + '<div class="hint">今のセカンドは「セカンド＋場所」の名前です（セカンド神谷・セカンド十番 など）。二次販売レジの拠点一覧にこの名前で出ます。</div>'
+    + '<label class="f">基本ギャラ（円・1回あたり） <b>必須</b></label>' + linp('基本ギャラ（円）', '1500', 'number')
+    + '<div class="hint">勤務時間・ドライバー・配分はセカンドには使わないので入れません（今のセカンド8か所と同じ）。</div></div>';
+  $('root').innerHTML = h;
+  var bar = '<button class="btn sub" id="lb-cancel" style="flex:0 0 20%">戻る</button><button class="btn" id="lb-check"><i class="ti ti-list-check"></i>確認する</button>';
+  if(LE.id && LE.flag !== '有効') bar += '<button class="btn go" id="lb-start" style="flex:0 0 30%"><i class="ti ti-player-play"></i>販売を始める</button>';
+  if(LE.id && LE.flag === '有効') bar += '<button class="btn sub" id="lb-end" style="flex:0 0 30%;color:var(--red);border-color:var(--red)"><i class="ti ti-ban"></i>無効にする</button>';
+  $('bar').style.display = ''; $('bar-in').innerHTML = bar;
+  $('lb-cancel').addEventListener('click', function(){ S.LE = null; S.tab = 'loc'; render(); });
+  $('lb-check').addEventListener('click', locCheck);
+  if($('lb-start')) $('lb-start').addEventListener('click', function(){ locStart(LE.id); });
+  if($('lb-end')) $('lb-end').addEventListener('click', function(){ secondOff_(LE.id); });
+}
+async function secondOff_(id){
+  var l = findLoc_(id);
+  if(!confirm(id + '「' + l.f['拠点名'] + '」を無効にします。二次販売レジ・回収の行き先から消えます。')) return;
+  S.busy = true;
+  try{ var r = await api('hqlocoff', { loc: id }); modal(''); doneSheet_('無効にしました', r.result, id); }
+  catch(e){ toast(e.message, true); }
+  S.busy = false;
+}
 function renderLocEdit(){
+  if(S.LE && S.LE.kind === 'second') return renderSecondEdit_();
   var LE = S.LE, d = S.data, c = d.locChoices, isNew = !LE.id;
   var dows = String(LE.f['販売曜日']||'');
   var autoDrv = c['エリアの主担当'][LE.f['エリア']] || '';
@@ -751,6 +792,7 @@ function renderLocEdit(){
 function lpayload(){
   lcollect();
   var f = Object.assign({}, S.LE.f);
+  if(S.LE.kind === 'second') return { loc: S.LE.id, kind: 'second', fields: { 拠点名: String(f['拠点名']||''), '基本ギャラ（円）': String(f['基本ギャラ（円）']||'') } };
   // ★v1.5 営業終了時刻は送らない（サーバーが勤務の終了を入れる・社長決定 11/24）
   var keys = ['拠点名','表示名','エリア','主担当ドライバー名','マップURL','表示順','開始時刻','終了時刻','販売曜日','天候影響区分','基本ギャラ（円）','PayPay QR','レベル','箱','自動振替先'];
   var out = {}; keys.forEach(function(k){ out[k] = f[k] == null ? '' : String(f[k]); });
@@ -794,7 +836,7 @@ async function locStart(id){
   try{
     var d = await api('hqlocstart', { loc: id, dry: true });
     modal('<h2>' + esc(id + '「' + d.name + '」の販売を始めます') + '</h2>'
-      + '<div class="sum" style="font-size:13px;line-height:1.6">有効フラグを「有効」にして、GAS のキャッシュを捨てます。シフト・配分・レジに出るようになります。</div>'
+      + '<div class="sum" style="font-size:13px;line-height:1.6">有効フラグを「有効」にして、GAS のキャッシュを捨てます。' + ((findLoc_(id)||{}).kind === 'second' ? '二次販売レジと回収の行き先に出るようになります。' : 'シフト・配分・レジに出るようになります。') + '</div>'
       + (d.warn.length ? '<div class="warn" style="margin-top:8px">' + d.warn.map(esc).join('<br>') + '</div>' : '')
       + '<pre>このあと必要なこと\n' + d.after.map(function(x, i){ return (i+1) + '. ' + x; }).join('\n') + '</pre>'
       + '<div class="acts"><button class="btn sub" id="m-no">やめる</button><button class="btn go" id="m-go"><i class="ti ti-player-play"></i>販売を始める</button></div>');
