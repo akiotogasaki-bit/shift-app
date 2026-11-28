@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ja">
+<!-- register v3.47 (2026-11-28) 【有高を入れた時に「ギャラを抜きましたか」を1回聞く】社長指示「レジで有高を入力する時にギャラを抜いていますかと一度注意を入れてほしい」。★「集計する」を押した時に、ギャラの額と入れた有高を見せて確認（OK＝抜いた後の金額／キャンセル＝入れ直し）。同じ有高・同じギャラなら再集計では聞かない。ギャラ0円の人には出さない。 -->
 <!-- register v3.46 (2026-11-28) 【締めは「あるはずのお金」を先に出してからレジ有高】社長決定の順番＝締めるでPayPayデータを取得→販売員は残数を入力→納品数−残数で売上→ギャラを表示→PayPay・ギャラを引いてあるべき現金→販売員がレジ有高を入力。目的は「抜けない仕組み」を伝えること。★残数は空欄から数えて入れる（全レジ・空欄では締めない）。★「レジにあるはずのお金」＝（納品＋移動−賄い−残り）×値段＋お茶−クーポン−PayPayの実際の入金（メインGAS ppClient&mode=actual・取れなければアプリの額）−ギャラ＋開始金。★レジ有高はギャラを抜いた後で入れる（サーバーへは今までどおり抜く前＝入れた額＋ギャラ）。★合計が合っていてPayPayのアプリ入力だけ違う＝「PayPayと現金の入力ミスがあったようです（お金は合っています）」と柔らかく（理由は不要）。差がある時は理由を書いて提出。二次販売はPayPayをアプリの額で。 -->
 <!-- register v3.45 (2026-11-28) 【2次販売を300円・500円にそろえ、車から置いた分を自動で納品へ】社長決定（2026-11-28・案1）。★その場の2次（レジのまま切り替え）も300円・500円（＋残っているお茶100円）で打つ＝切り替えた時の残りを値段の区分に換えて納品にする（sw2ndPriceQty_・sw2nd.unified。前から切り替えている端末は弁当の種類のまま）。★ドライバーが車から2次に置いた分（メインGAS placeToSecond→二次販売納品）を確認なしで自動で納品に足す（sd2ndTopUp_：締めの時＋開いている間3分おき・下げない）。★2次の締めで売れた数が納品より多い商品は残りが空欄になる＝空欄のままでは締めさせない（数えるまで止める）。★他社弁当の残りの入力欄は切り替えた2次にも出す。要メインGAS 2026-11-28（placeToSecond）。→ 40_ドキュメント/引き継ぎ_2次販売の一本化と車載経由の持ち込み_2026-11-28.md -->
 <!-- register v3.44 (2026-11-26) 【2次へ切り替えた日の「報告の修正」で現金差異が−ギャラになるのを直す】11/25 パソナ（2次）で現金誤差−4,500円。締めの送信（submitFinal）は1次のギャラを開始金・最終金額から引いて送るのに、締めた直後の修正画面（goToEdit）は引く前の額（state.registerStart・register-end）をそのまま出して送り直していた。★切り替え後は同じ額（state.calcTotalSalary、無ければ sw2ndPay1_ で計算し直す）を引いて出す。サーバーの報告を読む方の修正画面（loadEditFromReport）は元から引いた後の額なので触っていない。 -->
@@ -4995,8 +4996,27 @@ async function calcFinal() {
   //   ここで固定し、以後の再集計では取り直さない＝**画面に出た額と実際に渡す現金を一致させる**。
   if (!state.okibenGig) { await fetchOkibenGig_(); }
   // ★v3.46 先に「あるはずのお金」を出す（まだなら計算する）
+  state._calcAborted = true;   // ★v3.47 途中で止めたら submitFinal も送らない（最後まで来たら false に戻す）
   { const ok = await calcExpected_(); if (!ok) return; }   // 毎回出し直す（残数・賄い・遅刻を直した後でも合うように）
   const regAfterGig  = parseInt(document.getElementById('register-end').value) || 0;   // ★v3.46 ギャラを抜いた後の有高
+  /* ★v3.47 (2026-11-28) 社長「レジで有高を入力する時にギャラを抜いていますかと一度注意を入れてほしい」。
+     v3.46 から有高は「ギャラを抜いた後」。抜く前の額を入れるとギャラの分だけ多く見える。
+     同じ有高・同じギャラで一度「はい」を押したら、再集計では聞かない。ギャラ0円（社員・ドライバー・スポット）は聞かない。 */
+  {
+    const g = Number(state.expect && state.expect.gig) || 0;
+    const key = regAfterGig + '|' + g;
+    if (g > 0 && state._gigAskedFor !== key) {
+      const okGig = confirm('ギャラ（¥' + g.toLocaleString() + '）は金庫から抜きましたか？\n\n'
+        + '「レジ有高」には、ギャラを抜いた後の金額（¥' + regAfterGig.toLocaleString() + '）を入れてください。\n\n'
+        + '抜いた後の金額なら「OK」、まだ抜いていない・抜く前の金額なら「キャンセル」を押して入れ直してください。');
+      if (!okGig) {
+        try { const el = document.getElementById('register-end'); el.focus(); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+        return;
+      }
+      state._gigAskedFor = key;
+    }
+  }
+  state._calcAborted = false;
   const registerEnd  = regAfterGig + (state.expect.gig || 0);                          // サーバーへは今までどおり「抜く前」
   const cashFromReg  = registerEnd - state.registerStart;
   // PayPayお釣りで現金返金した分を差し引く
@@ -5615,6 +5635,7 @@ async function submitFinal() {
   // ★2026-08-06 calcFinal を async にしたので await する。await しないと
   //   置き弁ギャラを取り終える前に payload を組んでしまい、送信額と支払記録がずれる。
   try { await calcFinal(); } catch (e) { console.error('submitFinal recalc error:', e); }
+  if (state._calcAborted) return;   // ★v3.47 残数の空欄・ギャラの確認でキャンセル → 送らない
   // ★ 追加販売モード対応：clearSavedStateは呼ばない（再開時にstate保持）
   const diff = document.getElementById('res-diff').textContent;
   const hasDiff = diff.includes('差異');
