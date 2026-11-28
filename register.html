@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ja">
+<!-- register v3.45 (2026-11-28) 【2次販売を300円・500円にそろえ、車から置いた分を自動で納品へ】社長決定（2026-11-28・案1）。★その場の2次（レジのまま切り替え）も300円・500円（＋残っているお茶100円）で打つ＝切り替えた時の残りを値段の区分に換えて納品にする（sw2ndPriceQty_・sw2nd.unified。前から切り替えている端末は弁当の種類のまま）。★ドライバーが車から2次に置いた分（メインGAS placeToSecond→二次販売納品）を確認なしで自動で納品に足す（sd2ndTopUp_：締めの時＋開いている間3分おき・下げない）。★2次の締めで売れた数が納品より多い商品は残りが空欄になる＝空欄のままでは締めさせない（数えるまで止める）。★他社弁当の残りの入力欄は切り替えた2次にも出す。要メインGAS 2026-11-28（placeToSecond）。→ 40_ドキュメント/引き継ぎ_2次販売の一本化と車載経由の持ち込み_2026-11-28.md -->
 <!-- register v3.44 (2026-11-26) 【2次へ切り替えた日の「報告の修正」で現金差異が−ギャラになるのを直す】11/25 パソナ（2次）で現金誤差−4,500円。締めの送信（submitFinal）は1次のギャラを開始金・最終金額から引いて送るのに、締めた直後の修正画面（goToEdit）は引く前の額（state.registerStart・register-end）をそのまま出して送り直していた。★切り替え後は同じ額（state.calcTotalSalary、無ければ sw2ndPay1_ で計算し直す）を引いて出す。サーバーの報告を読む方の修正画面（loadEditFromReport）は元から引いた後の額なので触っていない。 -->
 <!-- register v3.43 (2026-11-24) 【2次販売の満腹系を500円に】社長指示「２次販売の時の満腹弁当は500円の販売価格にして欲しい」。★sw2ndPrice_ の500円の区分に満腹系を足した（海苔弁系・満腹系・他社商品＝500円／お茶100円／それ以外300円）。★メインGAS _ccAddToSecond_（回収の🛒2次販売→二次販売拠点の300円/500円への振り分け）も同じ区分に揃えた。二次販売レジ（?mode=2nd）は300円/500円ボタンのままで変更なし。 -->
 <!-- register v3.42 (2026-11-18) 【在庫の一覧に「売ったのに納品0」の商品を出し、赤く知らせる】社長決定 B案。11/18 銀座で南蛮・油淋鶏を納品数0のまま売り、在庫の一覧（ふつうの表示）が「納品>0 か移動あり」しか出さないため、直そうとしても出てこなかった。★ふつうの表示に「売った数が1以上」の商品も出す。★納品＋移動より多く売れている商品は行を赤枠にして「⚠ 納品数を入れてください」（押すと編集モード）。★該当がある時だけ一覧の上に赤い帯で商品名を並べる。納品数を自動で書き換えはしない。販売画面・締め・2次販売・編集モードの中身は変えていない。GAS変更なし。 -->
@@ -1747,12 +1748,43 @@ function is2ndProd_(p) { return String((p && p.category) || '').trim() === SECON
    state.sw2nd が入っている間だけ、値段・出す商品・ギャラの計算が変わる。 */
 function isSwitched_() { return !!state.sw2nd; }
 function sw2ndPrice_(p) {
+  if (is2ndProd_(p)) return Number(p.price) || 0;   // ★v3.45 300円・500円の商品はそのまま
   if (String(p.name || '').indexOf('お茶') >= 0) return 100;
   const c = String(p.category || '').trim();
   return (c === '海苔弁系' || c === '満腹系' || c === '他社商品') ? 500 : 300;
 }
 function applySw2ndPrices_() {
   [state.allProducts, state.products].forEach(list => (list || []).forEach(p => { p.price = sw2ndPrice_(p); }));
+}
+/* ★v3.45 (2026-11-28)【その場の2次も300円・500円の2品で打つ】社長「セカンドだとレジには500円と300円しか
+   出ないけど、商品名を選ぶセカンドもあるらしい。それは500円と300円の表示に統一して」。
+   切り替えた時の残り（弁当の種類）を値段の区分に換えて納品にし（sw2ndPriceQty_）、レジに出すのは
+   2次の2品（単価マスタ カテゴリー＝二次販売）＋残っているお茶（100円）だけにする。
+   ⚠ 11/28 より前に切り替えた端末（state.sw2nd.unified が無い）は弁当の種類のまま＝途中で形を変えない。 */
+function sw2ndPriceQty_(stock) {
+  const sp = state.secondProducts || [];
+  const p500 = sp.find(p => Number(p.price) === 500), p300 = sp.find(p => Number(p.price) === 300);
+  if (!p500 || !p300) return null;
+  const out = {};
+  Object.keys(stock || {}).forEach(pid => {
+    const n = Number(stock[pid]) || 0;
+    if (n <= 0) return;
+    const p = (state.allProducts || []).find(x => String(x.id) === String(pid)) || { id: pid, name: '', category: '' };
+    if (String(p.name || '').indexOf('お茶') >= 0) { out[pid] = (out[pid] || 0) + n; return; }   // お茶はそのまま（100円）
+    const to = sw2ndPrice_(p) === 500 ? p500.id : p300.id;
+    out[to] = (out[to] || 0) + n;
+  });
+  return out;
+}
+function applySw2ndProducts_() {
+  if (!state.sw2nd || !state.sw2nd.unified) return;
+  const sp = (state.secondProducts || []).slice();
+  if (!sp.length) return;
+  const keep = sp.map(p => String(p.id));
+  const tea = (state.sw2nd.teaProducts || []).filter(p => keep.indexOf(String(p.id)) < 0);
+  state.allProducts = sp.concat(tea);
+  state.products    = state.allProducts.slice();
+  state.activeCategory = null;
 }
 
 // ★2026-08-13 レジの拠点一覧に出してはいけない拠点（エリア列で見分ける）。
@@ -2146,6 +2178,9 @@ function applyMasterToState(data) {
   //   一度絞られると元に戻す手段が無く、古いキャッシュで欠けた商品リストのまま営業していた。
   state.allProducts   = normalized;
   state.products      = normalized.slice();
+  // ★v3.45 (2026-11-28) その場の2次も300円・500円で打つ（社長「500円と300円の表示に統一して」）。
+  //   通常レジは2次の2品を一覧から外しているので、切り替えた時に使う原本をここで持っておく。
+  state.secondProducts = rawProducts.map(p => ({ ...p, price: Number(p.price) })).filter(is2ndProd_);
   // ★2026-10-14 v3.34 二次販売の締めで残りを数える他社弁当（単価マスタ カテゴリー＝他社商品）
   state.extProducts   = rawProducts.filter(p => String(p.category || '').trim() === '他社商品');
   // ★2026-08-13 拠点も同じ規則で分ける。通常レジに二次販売拠点が並ぶと押し間違えるため。
@@ -2163,6 +2198,7 @@ function applyMasterToState(data) {
   // ★v3.36 今日のシフト。日付が今日のものだけ使う（マスタは24時間キャッシュされるので前日のシフトが残りうる）
   const _ts = data.todayShift;
   state.todayShift = (!IS_2ND && _ts && _ts.locs && _ts.date === menuToday_()) ? _ts.locs : {};
+  if (state.sw2nd) { try { applySw2ndProducts_(); applySw2ndPrices_(); } catch (e) {} }   // ★v3.45 マスタを読み直しても2次の2品のまま
   return true;
 }
 
@@ -4405,7 +4441,7 @@ function restoreState() {
     // ★2026-08-18 v3.26 復元した納品数・販売数を見てから絞り込みをやり直す。
     //   「実際に届いた／既に売った商品」は献立に無くても必ず出す（offMenuProductIds_ が判定）。
     try { filterStoppedProducts(); } catch (e) {}
-    if (state.sw2nd) applySw2ndPrices_();   // ★v3.38
+    if (state.sw2nd) { applySw2ndProducts_(); applySw2ndPrices_(); }   // ★v3.38／★v3.45 2次の2品に戻す
     return {
       savedUserId:   save.userId || '',
       savedUserName: save.userName || '',
@@ -4644,8 +4680,11 @@ function renderSw2ndStock_() {
   const stock = sw2ndStock_();
   const items = (state.products || []).filter(p => stock[p.id]);
   const box = document.getElementById('sw2nd-stock');
+  const q2 = sw2ndPriceQty_(stock) || {};
+  const sum2 = (state.secondProducts || []).map(p => q2[p.id] ? `${p.name} <b>${q2[p.id]}個</b>` : '').filter(Boolean).join('　');
   box.innerHTML = items.length
     ? items.map(p => `${p.name}　<b>${stock[p.id]}個</b>（2次 ¥${sw2ndPrice_(p)}）`).join('<br>')
+      + (sum2 ? `<div style="margin-top:8px;font-weight:700;">2次のレジ：${sum2}</div>` : '')
     : '残りがありません。';
 }
 
@@ -4662,6 +4701,11 @@ async function confirmSw2nd_() {
   if (sw2ndBusy) return;
   const stock = sw2ndStock_();
   if (!Object.keys(stock).length) { showToast('残りがないので切り替えられません'); return; }
+  // ★v3.45 2次は300円・500円（＋お茶）で打つ＝残りを値段の区分に換えて2次の納品にする
+  const stock2 = sw2ndPriceQty_(stock);
+  if (!stock2) { showToast('2次の300円・500円の商品が読めませんでした。少し待ってからお試しください', 5000); return; }
+  const teaProducts = (state.allProducts || []).filter(p => String(p.name || '').indexOf('お茶') >= 0 && stock[p.id])
+                        .map(p => ({ ...p }));
   const from = state.location;
   let to;
   if (sw2ndPick.mode === 'here') {
@@ -4708,7 +4752,7 @@ async function confirmSw2nd_() {
     second: {
       action: 'submitStart', userId: state.userId, userName: state.userName,
       locationId: to.id, locationName: to.name,
-      registerStart: start2, deliveryCount: stock, timestamp: new Date().toISOString(),
+      registerStart: start2, deliveryCount: stock2, timestamp: new Date().toISOString(),
     },
   };
   sw2ndBusy = true;
@@ -4723,11 +4767,12 @@ async function confirmSw2nd_() {
     return;
   }
   shadowSend_(payload.second);
-  state.sw2nd = { fromId: from.id, fromName: from.name, mode: sw2ndPick.mode, loc: to, first: firstF };
+  state.sw2nd = { fromId: from.id, fromName: from.name, mode: sw2ndPick.mode, loc: to, first: firstF,
+                  unified: true, base: stock2, teaProducts: teaProducts };   // ★v3.45 base＝切り替えた時の納品（車から置いた分はこの上に足す）
   state.location      = to;
   state.baseGigSalary = 0;
   state.registerStart = start2;
-  state.deliveryCount = stock;
+  state.deliveryCount = Object.assign({}, stock2);
   state.cart = [];
   state.cashSales = 0; state.paypayCount = 0; state.paypayAmount = 0; state.paypayReceivedTotal = 0;
   state.soldCount = 0; state.teaSoldCount = 0; state.productSales = {}; state.soldOutMap = {}; state.history = [];
@@ -4736,6 +4781,7 @@ async function confirmSw2nd_() {
   state.activeCategory = null;
   hoPending = [];
   try { renderHandoverBanner_(); } catch (e) {}
+  applySw2ndProducts_();
   applySw2ndPrices_();
   ['start-location-name', 'reg-location-name', 'final-location-name'].forEach(id => {
     document.getElementById(id).textContent = to.name;
@@ -5105,7 +5151,7 @@ function renderExt2ndInputs() {
   const card = document.getElementById('card-ext2nd');
   if (!card) return;
   const list = state.extProducts || [];
-  if (!IS_2ND || !list.length) { card.style.display = 'none'; return; }
+  if (!sd2ndActive_() || !list.length) { card.style.display = 'none'; return; }   // ★v3.45 切り替えも
   card.style.display = 'block';
   state.ext2nd = state.ext2nd || {};
   document.getElementById('ext2nd-inputs').innerHTML = list.map(p => {
@@ -5127,19 +5173,19 @@ function onExt2ndInput(pid) {
   saveState();
 }
 function ext2ndMissing_() {
-  if (!IS_2ND) return [];
+  if (!sd2ndActive_()) return [];
   const v = state.ext2nd || {};
   return (state.extProducts || []).filter(p => v[p.id] === undefined || v[p.id] === '').map(p => p.displayName || p.name);
 }
 function ext2ndPayload_() {
-  if (isSwitched_()) {   // ★v3.38 切り替え後は残数の入力がそのまま他社弁当の残り
+  if (isSwitched_() && !(state.sw2nd && state.sw2nd.unified)) {   // ★v3.38 切り替え後は残数の入力がそのまま他社弁当の残り（★v3.45 300円/500円の端末は下の入力欄）
     const list = (state.extProducts || []).filter(p => Number(state.deliveryCount[p.id]) > 0);
     if (!list.length) return null;
     const o2 = {};
     list.forEach(p => { o2[p.id] = Number((state.residualDetail || {})[p.id]) || 0; });
     return o2;
   }
-  if (!IS_2ND || !(state.extProducts || []).length) return null;
+  if (!sd2ndActive_() || !(state.extProducts || []).length) return null;
   const o = {};
   (state.extProducts || []).forEach(p => { o[p.id] = Number((state.ext2nd || {})[p.id]) || 0; });
   return o;
@@ -5443,6 +5489,16 @@ async function submitFinal() {
   const hasDiff = diff.includes('差異');
   const comment = document.getElementById('diff-comment').value.trim();
   if (hasDiff && !comment) { showToast('差異の理由を入力してください'); return; }
+  /* ★v3.45 (2026-11-28) 社長決定「数えるまで止める」。2次で売れた数が納品より多いと残りが計算できず空欄になる。
+     空欄は送ると0になり、11/27 セカンド神谷は 納品43・販売57・残0 で締まって約45個の残りが記録から消えた。 */
+  if (sd2ndActive_()) {
+    const blank = rcBentoProducts().filter(p => { const el = document.getElementById(`residual-${p.id}`); return el && el.value === ''; });
+    if (blank.length) {
+      showToast('「' + blank.map(p => p.name).join('・') + '」の残りが空欄です。実物を数えて入れてください（売れた数が納品より多く、計算できません）', 7000);
+      try { document.getElementById(`residual-${blank[0].id}`).scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+      return;
+    }
+  }
   // ★v3.34 二次販売：他社弁当の残りは必須（空欄＝まだ数えていない）
   const extMissing = ext2ndMissing_();
   if (extMissing.length) {
@@ -5694,8 +5750,15 @@ function resumeForAdditionalSales() {
    開店前の分は開始時の既定値に入るが、開店後の分はそのままだと締めの納品数に入らない。
    今の納品数より持ち込みの合計が多い区分だけ、確認を出してから上げる（下げはしない＝手で数えた分を消さない）。
    取れない時は何もせず締めへ進む。 */
+/* ★v3.40 → ★v3.45 (2026-11-28)【車から置いた分を確認なしで自動で納品へ】社長決定「2次のレジは置いた分を
+   確認なしで自動で納品に足す」。11/27 セカンド神谷は締めの確認が通らず、持ち込み102個なのに納品43のまま締まった。
+   ・二次販売レジ（?mode=2nd）＝納品の目安（二次販売納品の合計）より少ない区分だけ上げる（下げない）。
+   ・その場の2次（切り替え・300円/500円になった端末）＝切り替えた時の納品（sw2nd.base）＋車から置いた分。
+   締めの画面に入る時と、開いている間は3分おき（SD2ND_POLL_MS）に呼ぶ。2次のレジは多くて数台なので /exec の負担は小さい。 */
+function sd2ndActive_() { return IS_2ND || !!(state.sw2nd && state.sw2nd.unified); }
 async function sd2ndTopUp_() {
-  if (!IS_2ND || !state.location || !state.location.id) return;
+  if (!sd2ndActive_() || !state.location || !state.location.id) return;
+  if (!IS_2ND && !state.startReported) return;
   try {
     const url = `${state.GAS_URL}?action=getPlannedDelivery&date=${encodeURIComponent(ppToday())}`
               + `&loc=${encodeURIComponent(state.location.id)}&_cb=${Date.now()}${Math.random().toString(36).slice(2, 7)}`;
@@ -5705,21 +5768,24 @@ async function sd2ndTopUp_() {
     ]);
     if (!j || !j.ok) return;
     const plan = j.deliveryCount || {};
+    const base = (!IS_2ND && state.sw2nd && state.sw2nd.base) || {};
     const up = [];
     Object.keys(plan).forEach(pid => {
-      const want = Number(plan[pid]) || 0, cur = Number((state.deliveryCount || {})[pid]) || 0;
+      const want = (Number(base[pid]) || 0) + (Number(plan[pid]) || 0);
+      const cur  = Number((state.deliveryCount || {})[pid]) || 0;
       if (want > cur) up.push({ pid, want, cur });
     });
     if (!up.length) return;
-    const nm = pid => { const p = (state.products || []).find(x => String(x.id) === String(pid)); return p ? p.name : pid; };
-    const lines = up.map(u => nm(u.pid) + '：' + u.cur + '個 → ' + u.want + '個（+' + (u.want - u.cur) + '）');
-    if (!confirm('ドライバーが開店後に持ち込んだ分があります。\n納品数を次のように直しますか？\n\n' + lines.join('\n'))) return;
+    const nm = pid => { const p = (state.allProducts || state.products || []).find(x => String(x.id) === String(pid)); return p ? p.name : pid; };
     up.forEach(u => { state.deliveryCount[u.pid] = u.want; sendDeliveryUpdate(u.pid, u.want); });
     saveState();
     try { renderStockList(); renderProducts(); } catch (e) {}
-    showToast('納品数を直しました（' + lines.length + '品）');
+    try { syncResidualDefaults(); } catch (e) {}
+    showToast('🚚 ドライバーが置いた分を納品に足しました（' + up.map(u => nm(u.pid) + ' +' + (u.want - u.cur)).join('・') + '）', 5000);
   } catch (e) { console.warn('sd2ndTopUp_', e); }
 }
+const SD2ND_POLL_MS = 3 * 60 * 1000;
+setInterval(() => { try { if (sd2ndActive_() && document.visibilityState === 'visible') sd2ndTopUp_(); } catch (e) {} }, SD2ND_POLL_MS);
 
 async function enterFinalScreen() {
   if (!(await hoGateBeforeClose_())) return;   // ★v3.39 必ず取り直してから下の判定をする
