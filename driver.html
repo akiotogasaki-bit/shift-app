@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- driver v8.29 (2026-11-28) 【2次は「場所」に置く】社長決定（案A）「二次販売のレジが開く前に回収している場面は全然ある。持ち込み先を決める段階で開いていなかったら」。★「🛒 2次に置く」の置く先を、その日開いたレジ→2次の場所の一覧に（神谷・十番・小石川・芝商店街・銀座のセカンド＋神保町・茶2・森ビル・虎ノ門の2次）。開いているレジがある場所に「営業中」。★レジが開く前に置いた分は、その場所であとから開いたレジ（セカンドでも切り替えた2次でも）が自動で納品に拾う（メインGAS：拠点マスタ「同じ場所の1次」で場所をまとめる）。 -->
 <!-- driver v8.28 (2026-11-28) 【2次販売は車載経由・置いた時に納品】社長決定（2026-11-28・案1）「回収時は車載として持って、おいたときに初めて納品としてカウント。その時点での在庫を全部置くボタンと数を入力もできるようにする」。★回収の「🛒 2次販売」（行き先を選ぶ＝回収した瞬間に行き先の納品）をやめ「🚚 車に積む（2次販売へ）」に＝残りは自分の車載に入る（メインGAS submitCollectionCheck→collectToVehicle）。★移動タブに「🛒 2次に置く」＝その日レジを開いた2次だけを選べる・「車の在庫を全部置く」で車載の数を入れる・数は直せる→placeToSecond（車載が減り、300円/500円に換えて2次の納品へ）。11/27 セカンド神谷で「持ち込み102なのにレジ43・残0」と記録が割れた件と、開いていないセカンド神保町に14個が入った件の直し。要メインGAS 2026-11-28・register v3.45。→ 40_ドキュメント/引き継ぎ_2次販売の一本化と車載経由の持ち込み_2026-11-28.md -->
 <!-- driver v8.27 (2026-11-25) 【💴 立替精算タブ】社長決定「B アプリにタブ」＋締め＝毎週（月〜日）・現金で渡すが店の小口とは分ける・ドライバーだけ・承認は Cockpit・要確認＝カード/PayPay払いと二重送信。★タブ「💴 立替」で自分のお金で立て替えたレシートを撮る→端末で長い辺1600pxに縮めて Firebase の tatekae 関数へ直接（GAS の /exec は通らない）→Claude が読んで「✅ ENEOS 4,200円（旅費交通費）／今週の立替 12,650円」をその場で返す。★週ごとの一覧（承認待ち／承認済（受け取り待ち）／受け取り済）。★タブは tatekae 関数が答えた端末にだけ出す（関数が無い間・ログインできていない端末は出ない）。★店の小口のお金で買った物は今までどおり公式LINEへ（取り違え＝二重払いを防ぐため入口を分けた）。要: Firebase tatekae 2026-11-25。 -->
 <!-- driver v8.26 (2026-11-25) 【買い物先ごとに分ける】社長「業者に業務スーパー・ハナマサを追加」「つくね・青がっぱは業務スーパーに買い物」。★買い物の一覧を買い物先（業務スーパー・ハナマサ など＝業者マスタの備考に「買い物先」と書いた業者）ごとに見出し付きで出す。業者「買い物」の品目と臨時の依頼は「その他の買い物」。買い物先が1つも無い日は見出しを出さない（従来どおり）。要: メインGAS @1008 以降。 -->
@@ -2297,15 +2298,16 @@ body {
       </div>
 
       <!-- ★v8.28 (2026-11-28)【🛒 2次に置く】社長決定「回収時は車載として持って、おいたときに初めて納品としてカウント。
-           その時点での在庫を全部置くボタンと数を入力もできるようにする」。置ける先は**その日レジを開いた2次だけ**
-           （同じ場所に2つのレジがある日も、開いている方にしか入らない）。メインGAS placeToSecond。 -->
+           その時点での在庫を全部置くボタンと数を入力もできるようにする」。置く先は2次の**場所**（★v8.29 社長決定・案A）。
+           レジが開く前でも置ける＝置いた分は、その場所であとから開いたレジ（セカンドでも、切り替えた2次でも）が拾う。メインGAS placeToSecond。 -->
       <div id="s2-box">
         <button type="button" class="rv-open" id="s2-open" onclick="s2Toggle_()" style="background:#7D3C98;color:#FFF;">
           🛒 2次に置く（車から2次販売へ）
         </button>
         <div id="s2-panel" style="display:none;">
           <div class="rv-note">置いた数が、そのまま2次のレジの納品になります（300円・500円に換えて自動で入ります）。</div>
-          <div class="sv-sec">どの2次に置きますか？<span class="rv-req">必須</span></div>
+          <div class="sv-sec">どの2次の場所に置きますか？<span class="rv-req">必須</span></div>
+          <div class="rv-note">「営業中」はレジが開いています。開く前でも置けます（開いた時に自動で納品に入ります）。</div>
           <div class="sv-loc-grid" id="s2-loc-list"><div class="rv-note">読み込み中…</div></div>
           <button type="button" class="rv-open" id="s2-all" onclick="s2FillAll_()" style="margin:8px 0;">🚚 車の在庫を全部置く（数を入れる）</button>
           <div class="sv-sec">何を何個 置きますか？</div>
@@ -8323,8 +8325,8 @@ function s2Render_() {
   const box = document.getElementById('s2-loc-list');
   if (box) {
     box.innerHTML = s2Open.length
-      ? s2Open.map(l => `<button type="button" class="sv-loc${s2Loc === l.id ? ' on' : ''}" onclick="s2Pick_('${_esc(l.id)}')">${_esc(l.name)}</button>`).join('')
-      : '<div class="rv-note">今日レジを開いている2次がまだありません。2次の販売員がレジを開いてから置いてください。</div>';
+      ? s2Open.map(l => `<button type="button" class="sv-loc${s2Loc === l.id ? ' on' : ''}" onclick="s2Pick_('${_esc(l.id)}')">${_esc(l.name)}${l.open ? ' <span style="font-size:11px;color:#1E8449;font-weight:700;">営業中</span>' : ''}</button>`).join('')
+      : '<div class="rv-note">2次の場所が読めませんでした。閉じて開き直してください。</div>';
   }
   const rows = document.getElementById('s2-rows');
   if (!rows) return;
@@ -8387,7 +8389,8 @@ async function s2Submit_() {
     })});
     const d = await res.json();
     if (!d || !d.ok) throw new Error((d && d.error) || '置けませんでした');
-    showToast(nm + ' に ' + d.added + '個 置きました（2次の納品に入りました）', 'success', 5000);
+    const _op = (s2Open.find(l => l.id === s2Loc) || {}).open;
+    showToast(nm + ' に ' + d.added + '個 置きました' + (_op ? '（2次の納品に入りました）' : '（レジが開いた時に納品に入ります）'), 'success', 5000);
     document.querySelectorAll('#s2-rows input').forEach(i => { i.value = ''; });
     try { await loadTodayMoves_(); } catch (e) {}
     await ptRefresh_();
