@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- kanri.html v4.27 (2026-11-28) 【🗺 エリア配分タブを追加】社長「今の配分表と並行してもう１つ配分表を作って欲しい。拠点毎ではなく各エリア毎、銀座エリアだけは拠点毎の配分。車載は今まで通り別で記載」→A案（新しいタブ・拠点配分タブはそのまま）／エリア外は拠点ごとに残す。★データは拠点配分と同じ getSheet1Data。芝・神谷・お茶の水・赤坂は拠点の数を足して1エリア1列（arToAreaData）、銀座エリアの拠点・置き弁・セカンドは拠点のまま、車載5台は今までどおり別列＋車載計・中計。描画は renderSheet1 を共用（_bodyId／_title／_groupOf を渡した時だけ描く先・見出し・区切り線が変わる）。印刷CSSは #tab-sheet1 の指定を #tab-area にも複製。一括印刷には入れていない。GAS変更なし。 -->
 <!-- kanri.html v4.26 (2026-11-25) 【発注タブを発注アプリ（hachu.html）へ独立】社長指示「配分アプリにタブとして乗ってる発注を別アプリにしたい」。発注タブの画面・JS（getVendorColorClass〜saveConstantInput・initOrderDateChecks）は hachu.html へそのまま移植して、ここからは外した。タブの位置には発注アプリを開くリンクを置いた。発注済みフラグ（localStorage）は同じドメインなので発注アプリにも引き継がれる。発注タブのCSSは残してあるが、使っていない。GAS変更なし。 -->
 <!-- kanri.html v4.25 (2026-11-23) 【決定を Firebase が自分で書く準備】段階Aの切り替え（社長「大丈夫そうなら移行しよう」）。Firebase の decide が G列を自分で書いた回は返事に by:'firebase'・cacheCleared が付く。GAS のキャッシュを消せなかった時だけ②を取り直す（bmLoadDate の fresh）。GAS を叩く回は今までどおり。GAS変更なし。 -->
 <!-- kanri.html v4.24 (2026-11-23) 【献立：⚙のローテ変更が確定済みの日にも効く】社長「11/24から海苔弁と全六のローテを切り替えたい。保存して反映を押したけどうまく動かない。前回もそうだった」。原因＝毎晩21時の自動確定（menuAutoConfirm_）で翌月末まで献立が確定済みになり、⚙を保存しても確定済みの日は動かなかった。★GAS `_menuReapplyAutoRows_`＝⚙保存の直後に、明日以降で「自動で確定した日（auto:true）」だけ新ルールで書き直す（手で保存した日は触らない）。★画面＝明日の営業日が書き換わったら、続けてその日の「決定」（初回納品＝仕込みの元）を自動で流す。G列はL列が変わっても動かないため、これが無いと仕込み表が古い献立のまま出る。要メインGAS v2026-11-23。 -->
@@ -1142,13 +1143,16 @@ body {
 @media screen {
   /* テーブルを横幅いっぱいに伸ばす */
   #tab-sheet1 .matrix-table,
+  #tab-area .matrix-table,
   #tab-sheet2 .matrix-table,
   #tab-sheet3 .matrix-table {
     width: 100%;
     font-size: 13px;
   }
   #tab-sheet1 .matrix-table th,
+  #tab-area .matrix-table th,
   #tab-sheet1 .matrix-table td,
+  #tab-area .matrix-table td,
   #tab-sheet2 .matrix-table th,
   #tab-sheet2 .matrix-table td,
   #tab-sheet3 .matrix-table th,
@@ -1159,6 +1163,7 @@ body {
   }
   /* 商品名セル：表示名が収まるよう内容なりの幅に */
   #tab-sheet1 .matrix-table td.cell-name,
+  #tab-area .matrix-table td.cell-name,
   #tab-sheet2 .matrix-table td.cell-name,
   #tab-sheet3 .matrix-table td.cell-name {
     width: auto;
@@ -1167,7 +1172,9 @@ body {
   }
   /* セクション見出し行（白米／玄米）も拡大 */
   #tab-sheet1 .matrix-table td.cell-section-rice,
+  #tab-area .matrix-table td.cell-section-rice,
   #tab-sheet1 .matrix-table td.cell-section-brown,
+  #tab-area .matrix-table td.cell-section-brown,
   #tab-sheet2 .matrix-table td.cell-section-rice,
   #tab-sheet2 .matrix-table td.cell-section-brown,
   #tab-sheet3 .matrix-table td.cell-section-rice,
@@ -1177,11 +1184,12 @@ body {
     line-height: 32px;
   }
   /* シート1：右の拠点リストも合わせて拡大 */
-  #tab-sheet1 .ref-table { font-size: 12px; }
+  #tab-sheet1 .ref-table, #tab-area .ref-table { font-size: 12px; }
   #tab-sheet1 .ref-table th,
-  #tab-sheet1 .ref-table td { height: 26px; line-height: 26px; }
-  #tab-sheet1 .ref-table td.col-name { width: 130px; }
-  #tab-sheet1 .ref-table td.col-sp   { width: 90px; font-size: 11px; }
+  #tab-area .ref-table th,
+  #tab-sheet1 .ref-table td, #tab-area .ref-table td { height: 26px; line-height: 26px; }
+  #tab-sheet1 .ref-table td.col-name, #tab-area .ref-table td.col-name { width: 130px; }
+  #tab-sheet1 .ref-table td.col-sp, #tab-area .ref-table td.col-sp { width: 90px; font-size: 11px; }
   /* シート3：配達カードを画面では少し見やすく */
   #tab-sheet3 .delivery-card .delivery-body { font-size: 11px; }
   #tab-sheet3 .delivery-row .lbl { font-size: 10px; width: 42px; }
@@ -1234,7 +1242,7 @@ body {
     outline-offset: -2px;
   }
   /* ════════ シート1：縦用紙上で横長に回転（A案） ════════ */
-  #tab-sheet1.active {
+  #tab-sheet1.active, #tab-area.active {
     display: block !important;
     padding: 2mm;
     position: absolute;
@@ -1245,17 +1253,17 @@ body {
     transform-origin: top left;
     transform: rotate(-90deg) translateX(-100%);
   }
-  #tab-sheet1 .sheet1-content {
+  #tab-sheet1 .sheet1-content, #tab-area .sheet1-content {
     display: flex;
     gap: 4px;
     align-items: flex-start;
   }
-  #tab-sheet1 .table-wrap {
+  #tab-sheet1 .table-wrap, #tab-area .table-wrap {
     flex: 0 0 auto;
     overflow: visible;
     min-width: 0;
   }
-  #tab-sheet1 .ref-panel { flex: 0 0 auto; }
+  #tab-sheet1 .ref-panel, #tab-area .ref-panel { flex: 0 0 auto; }
   /* ★2026-08-24 v3.68【印刷幅は width ではなく font-size で決まる】
        🔴 v3.67 で 24px→20px にしたが**1pxも縮まなかった**（実測：表の幅 1035px→1035px）。
           この表は `table-layout: auto` なので CSS の width は「最低これだけ」の意味しかなく、
@@ -1268,11 +1276,12 @@ body {
           ／ **8pt=1033px(+52 ←採用)** ／ 7.5pt=1000px(+85)。
           7pt まで下げても 996px でほぼ縮まない（商品名60px・中計・合計が下限になるため）。
        ★8pt 採用＝拠点があと2〜3個増えても収まる。数字は現在の約84%。 */
-  #tab-sheet1 .matrix-table { font-size: 8pt; }
+  #tab-sheet1 .matrix-table, #tab-area .matrix-table { font-size: 8pt; }
   /* データセル：高さ24pxは据え置き＝行数・縦の見た目は今までどおり。
      width は上記のとおり下限指定にすぎないので、実幅より小さい16pxを置いて文字サイズに任せる。 */
   #tab-sheet1 .matrix-table th,
-  #tab-sheet1 .matrix-table td {
+  #tab-area .matrix-table th,
+  #tab-sheet1 .matrix-table td, #tab-area .matrix-table td {
     width: 16px;
     height: 24px;
     line-height: 24px;
@@ -1280,17 +1289,23 @@ body {
   }
   /* 中計・合計は3桁〜4桁が入る（中計600台／総合計1000台）ので下限を広めに取る */
   #tab-sheet1 .matrix-table th.cell-veh,
+  #tab-area .matrix-table th.cell-veh,
   #tab-sheet1 .matrix-table td.cell-veh,
+  #tab-area .matrix-table td.cell-veh,
   #tab-sheet1 .matrix-table th.cell-sub,
+  #tab-area .matrix-table th.cell-sub,
   #tab-sheet1 .matrix-table td.cell-sub,
+  #tab-area .matrix-table td.cell-sub,
   #tab-sheet1 .matrix-table th.cell-tot,
-  #tab-sheet1 .matrix-table td.cell-tot {
+  #tab-area .matrix-table th.cell-tot,
+  #tab-sheet1 .matrix-table td.cell-tot, #tab-area .matrix-table td.cell-tot {
     width: 23px;
     min-width: 23px;
   }
   /* 商品名セル：固定幅・はみ出しは切り詰め */
   #tab-sheet1 .matrix-table th:first-child,
-  #tab-sheet1 .matrix-table td.cell-name {
+  #tab-area .matrix-table th:first-child,
+  #tab-sheet1 .matrix-table td.cell-name, #tab-area .matrix-table td.cell-name {
     width: 60px;
     max-width: 60px;
     height: 24px;
@@ -1307,25 +1322,28 @@ body {
      文字数の根拠（実測）＝拠点名セルの内幅57px／8ptの全角5文字=53.3px・6文字=64px → ちょうど5文字。
        販売員セルの内幅43px／7ptの全角4文字=37.3px・5文字=46.6px → ちょうど4文字（見出し「販売員名」も37.3pxで収まる）。
      ※画面表示（@media screen）は従来どおりフル表示。切り詰めるのは印刷だけ。 */
-  #tab-sheet1 .ref-table {
+  #tab-sheet1 .ref-table, #tab-area .ref-table {
     font-size: 8pt;
     table-layout: fixed;
     width: 102px;
   }
   #tab-sheet1 .ref-table th,
-  #tab-sheet1 .ref-table td {
+  #tab-area .ref-table th,
+  #tab-sheet1 .ref-table td, #tab-area .ref-table td {
     height: 14px;
     line-height: 14px;
   }
   #tab-sheet1 .ref-table th.col-name,
-  #tab-sheet1 .ref-table td.col-name {
+  #tab-area .ref-table th.col-name,
+  #tab-sheet1 .ref-table td.col-name, #tab-area .ref-table td.col-name {
     width: 58px;
     padding: 0 0 0 2px;
     overflow: hidden;
     white-space: nowrap;
   }
   #tab-sheet1 .ref-table th.col-sp,
-  #tab-sheet1 .ref-table td.col-sp {
+  #tab-area .ref-table th.col-sp,
+  #tab-sheet1 .ref-table td.col-sp, #tab-area .ref-table td.col-sp {
     width: 44px;
     font-size: 7pt;
     padding: 0;
@@ -1385,7 +1403,7 @@ body {
   /* ★v3.52 他社弁当の総数行は印刷にも出す（背景を落とさない） */
   /* ★v3.59 シート1（拠点配分表）にも同じ扱いを追加 */
   #tab-sheet2 .matrix-table tr.s2-ext-row td,
-  #tab-sheet1 .matrix-table tr.s2-ext-row td {
+  #tab-sheet1 .matrix-table tr.s2-ext-row td, #tab-area .matrix-table tr.s2-ext-row td {
     background: #ede7f6 !important; color: #4527a0 !important;
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
@@ -2400,6 +2418,7 @@ body {
 
 <div class="tab-bar">
   <button class="tab-btn active" data-tab="sheet1">📋 拠点配分</button>
+  <button class="tab-btn" data-tab="area">🗺 エリア配分</button>
   <button class="tab-btn" data-tab="sheet2">📦 午前盛り出し</button>
   <button class="tab-btn" data-tab="sheet3">🚚 午後便盛り出し</button>
   <button class="tab-btn" data-tab="sheet4">🍳 仕込み</button>
@@ -2432,6 +2451,19 @@ body {
     <span class="status-msg" id="s1-status-msg"></span>
   </div>
   <div id="sheet1-body"></div>
+</div>
+
+<!-- ★v4.27 エリア配分（拠点配分と同じデータ。芝・神谷・お茶の水・赤坂はエリア1列、銀座は拠点ごと、車載は別列） -->
+<div class="tab-pane" id="tab-area">
+  <div class="ctrl-bar">
+    <label>日付：</label>
+    <input type="date" id="ar-date-input">
+    <button class="btn btn-primary" id="ar-btn-fetch">取得</button>
+    <button class="btn btn-print" onclick="window.print()">🖨 印刷</button>
+    <button class="btn btn-print" onclick="macPrintCurrent()" title="この Mac の印刷係が軽いPDFにしてプリンターへ送ります（Brother で止まる時用）">🖨 Macで印刷</button>
+    <span class="status-msg" id="ar-status-msg"></span>
+  </div>
+  <div id="area-body"></div>
 </div>
 
 <!-- シート2 -->
@@ -4289,7 +4321,8 @@ async function fetchSheet1() {
 }
 
 function renderSheet1(data) {
-  const body = document.getElementById('sheet1-body');
+  // ★v4.27 エリア配分タブも同じ関数で描く（_bodyId／_title／_groupOf はエリア配分だけが渡す）
+  const body = document.getElementById(data._bodyId || 'sheet1-body');
   const { dateLabel, rice, brown } = data;
 
   // ★2026-08-24 v3.66【車載を前半12の直後へ／中計はその右】社長指定の並び＝
@@ -4412,6 +4445,8 @@ function renderSheet1(data) {
     // ★2026-11-17 v4.22 社長「中計以降の拠点は、やる・やらないが日によって違うけど、中計の次から4拠点ずつで太線」。
     //   中計より右は本来の位置ではなく**その日に出ている拠点**を左から4つずつ数える。
     if (vIdx >= subtotalInsertAt) return ((vIdx - subtotalInsertAt + 1) % 4 === 0) ? ' cell-bold-boundary' : '';
+    // ★v4.27 エリア配分：中計より左は「エリア列｜銀座の拠点｜車載」の切れ目に線
+    if (data._groupOf) return (data._groupOf[visLocIds[vIdx]] !== data._groupOf[visLocIds[vIdx + 1]]) ? ' cell-bold-boundary' : '';
     const posA = origIndexById[visLocIds[vIdx]];
     const posB = origIndexById[visLocIds[vIdx + 1]];
     for (let oi = posA; oi < posB; oi++) {
@@ -4760,12 +4795,111 @@ function renderSheet1(data) {
   }
 
   body.innerHTML = `
-    <div class="page-title">📋 ${escHtml(dateLabel)}　拠点配分表</div>
+    <div class="page-title">${data._title ? escHtml(data._title) : '📋 ' + escHtml(dateLabel) + '　拠点配分表'}</div>
     <div class="sheet1-content">
       <div class="table-wrap">${tableHTML}</div>
       <div class="ref-panel">${refHTML}</div>
     </div>`;
 }
+
+// ═══════════════════════════════════════
+// ★2026-11-28 v4.27 エリア配分（社長「今の配分表と並行してもう１つ。拠点毎ではなく各エリア毎、
+//   銀座エリアだけは拠点毎。車載は今まで通り別で記載」→A案＝新しいタブ／エリア外は拠点ごとに残す）。
+//   データは拠点配分と同じ getSheet1Data。拠点の数を足して「エリアという仮の拠点」を作り、
+//   renderSheet1 にそのまま渡す（合計・セパレート・他社3品・0列の非表示が拠点配分と同じ計算になる）。
+//   エリアにまとめる＝エリア列が入っていて、銀座・車載・二次販売ではなく、置き弁でもない拠点。
+//   並び＝拠点マスタの順（芝→神谷→お茶の水→赤坂→銀座の各拠点）→ 車載5台 → 車載計・中計 → 置き弁・セカンド。
+// ═══════════════════════════════════════
+const AR_KEEP_AREAS_ = ['銀座'];          // 拠点ごとに出すエリア
+const AR_NOMERGE_AREAS_ = ['車載', '二次販売'];
+const AR_VEH_RE_ = /^L9\d\d$/;
+
+function arSetStatus(msg, isErr) {
+  const el = document.getElementById('ar-status-msg');
+  el.textContent = msg;
+  el.className = 'status-msg' + (isErr ? ' err' : '');
+}
+
+function arToAreaData(data, colorMap) {
+  const locs = data.locations || [];
+  const rows = [].concat(data.rice || [], data.brown || []);
+  const qtyOf = lid => rows.reduce((a, r) => a + (Number((r.byLocation || {})[lid]) || 0), 0);
+  const head = [], veh = [], tail = [], groupOf = {}, members = {};
+  const cm = Object.assign({}, colorMap || {});
+  locs.forEach(l => {
+    const area = String(l.area || '').trim();
+    if (AR_VEH_RE_.test(l.id)) { veh.push(l); groupOf[l.id] = 'veh'; return; }
+    const merge = area && !l.isOkiben && AR_KEEP_AREAS_.indexOf(area) < 0 && AR_NOMERGE_AREAS_.indexOf(area) < 0;
+    if (merge) {
+      const aid = 'AREA_' + area;
+      if (!members[aid]) {
+        members[aid] = [];
+        const short = area.replace(/[バパ]ーク$/, '');
+        head.push({ id: aid, name: short + 'エリア', displayName: short.slice(0, 2), area: area, isMain: false, isOkiben: false, salesPerson: '' });
+        groupOf[aid] = 'area';
+      }
+      members[aid].push(l);
+      if (l.isMain || !cm[aid]) cm[aid] = (colorMap || {})[l.id] || cm[aid];   // 色はメイン拠点の色
+      return;
+    }
+    if (area && AR_KEEP_AREAS_.indexOf(area) >= 0 && !l.isOkiben) { head.push(l); groupOf[l.id] = 'keep_' + area; return; }
+    tail.push(l); groupOf[l.id] = 'tail';
+  });
+  // 右の拠点名パネル：エリア列は「何拠点ぶんか」を販売員欄に出す（その日に数がある拠点だけ数える）
+  head.forEach(h => {
+    if (!members[h.id]) return;
+    const used = members[h.id].filter(m => qtyOf(m.id) > 0);
+    h.salesPerson = used.length + '拠点';
+    h.name = h.name + '（' + used.map(m => m.name).join('・') + '）';
+  });
+  const fold = r => {
+    const bl = Object.assign({}, r.byLocation || {});
+    Object.keys(members).forEach(aid => {
+      let s = 0;
+      members[aid].forEach(m => { s += Number(bl[m.id]) || 0; delete bl[m.id]; });
+      bl[aid] = s;
+    });
+    return Object.assign({}, r, { byLocation: bl });
+  };
+  return Object.assign({}, data, {
+    locations: head.concat(veh, tail),
+    subtotalSplit: head.length,
+    rice: (data.rice || []).map(fold),
+    brown: (data.brown || []).map(fold),
+    _driverColorMap: cm,
+    _bodyId: 'area-body',
+    _title: '🗺 ' + (data.dateLabel || '') + '　エリア配分表',
+    _groupOf: groupOf
+  });
+}
+
+async function fetchArea() {
+  const dateVal = document.getElementById('ar-date-input').value;
+  if (!dateVal) { arSetStatus('日付を選択してください', true); return; }
+  arSetStatus('取得中…');
+  document.getElementById('area-body').innerHTML = '';
+  try {
+    const [data, colorMap] = await Promise.all([
+      gasGetJson(GAS_URL + '?action=getSheet1Data&date=' + dateVal),
+      loadDriverColorMap(dateVal)
+    ]);
+    if (!data.ok) { arSetStatus(data.error || '取得エラー', true); return; }
+    arSetStatus('');
+    renderSheet1(arToAreaData(data, colorMap));
+  } catch (e) {
+    arSetStatus('通信エラー: ' + e.message, true);
+  }
+}
+document.getElementById('ar-btn-fetch').addEventListener('click', fetchArea);
+// タブを開いた時：拠点配分の日付を引き継いで、まだ描いていなければ取りに行く
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  if (btn.dataset.tab !== 'area') return;
+  btn.addEventListener('click', () => {
+    if (document.getElementById('area-body').innerHTML) return;
+    document.getElementById('ar-date-input').value = document.getElementById('s1-date-input').value || TODAY;
+    fetchArea();
+  });
+});
 
 // ═══════════════════════════════════════
 // シート2
