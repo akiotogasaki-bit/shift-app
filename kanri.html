@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- kanri.html v4.28 (2026-11-28) 【エリア配分：銀座にもエリア計の列】社長「配分表　銀座エリアもエリアの合計数を出して欲しい。その上で詳細も」。★並び＝エリア計（芝・神谷・お茶・赤坂・銀座計）｜銀座の拠点（詳細）｜車載。銀座計は見せるだけの列で、中計・拠点合計・合計には入れない（renderSheet1 の _noSum。入れると二重に数える）。拠点配分タブは変わらない。GAS変更なし。 -->
 <!-- kanri.html v4.27 (2026-11-28) 【🗺 エリア配分タブを追加】社長「今の配分表と並行してもう１つ配分表を作って欲しい。拠点毎ではなく各エリア毎、銀座エリアだけは拠点毎の配分。車載は今まで通り別で記載」→A案（新しいタブ・拠点配分タブはそのまま）／エリア外は拠点ごとに残す。★データは拠点配分と同じ getSheet1Data。芝・神谷・お茶の水・赤坂は拠点の数を足して1エリア1列（arToAreaData）、銀座エリアの拠点・置き弁・セカンドは拠点のまま、車載5台は今までどおり別列＋車載計・中計。描画は renderSheet1 を共用（_bodyId／_title／_groupOf を渡した時だけ描く先・見出し・区切り線が変わる）。印刷CSSは #tab-sheet1 の指定を #tab-area にも複製。一括印刷には入れていない。GAS変更なし。 -->
 <!-- kanri.html v4.26 (2026-11-25) 【発注タブを発注アプリ（hachu.html）へ独立】社長指示「配分アプリにタブとして乗ってる発注を別アプリにしたい」。発注タブの画面・JS（getVendorColorClass〜saveConstantInput・initOrderDateChecks）は hachu.html へそのまま移植して、ここからは外した。タブの位置には発注アプリを開くリンクを置いた。発注済みフラグ（localStorage）は同じドメインなので発注アプリにも引き継がれる。発注タブのCSSは残してあるが、使っていない。GAS変更なし。 -->
 <!-- kanri.html v4.25 (2026-11-23) 【決定を Firebase が自分で書く準備】段階Aの切り替え（社長「大丈夫そうなら移行しよう」）。Firebase の decide が G列を自分で書いた回は返事に by:'firebase'・cacheCleared が付く。GAS のキャッシュを消せなかった時だけ②を取り直す（bmLoadDate の fresh）。GAS を叩く回は今までどおり。GAS変更なし。 -->
@@ -4377,7 +4378,9 @@ function renderSheet1(data) {
   // 商品行の中計：サーバーの row.subtotal（先頭12拠点）ではなく、並べ替え後の
   //   先頭 subtotalSplit 列＝前半12＋車載 から数え直す。0拠点で隠れた列も足す
   //   （隠れる＝その日0なので値は変わらないが、定義を可視状態に依存させない）。
-  const s1SubIds = locations.slice(0, subtotalSplit).map(l => l.id);
+  // ★v4.28 エリア配分の「銀座計」のように、見せるだけで合計に入れない列（入れると二重に数える）
+  const s1NoSum = data._noSum || {};
+  const s1SubIds = locations.slice(0, subtotalSplit).map(l => l.id).filter(id => !s1NoSum[id]);
   function s1Subtotal(row) {
     if (!row || !row.byLocation) return 0;   // ★v3.99 他社も車載ぶんは数える（byLocation は車載だけ）
     let s = 0;
@@ -4571,6 +4574,7 @@ function renderSheet1(data) {
         v += Number((r.byLocation || {})[lid]) || 0;
       });
       byLoc[lid] = v;
+      if (s1NoSum[lid]) return;
       if (idx < subtotalSplit) sub += v;
       if (isVeh || isOki) veh += v;   // ★v4.15 車載計＝盛る数（置き弁の満腹も含む）
     });
@@ -4612,7 +4616,7 @@ function renderSheet1(data) {
     const byLoc = {}; let sub = 0, veh = 0, tot = 0;
     locIds.forEach((lid, idx) => {
       let v = 0; rs.forEach(r => { v += Number((r.byLocation || {})[lid]) || 0; });
-      byLoc[lid] = v; tot += v;
+      byLoc[lid] = v; if (s1NoSum[lid]) return; tot += v;
       if (idx < subtotalSplit) sub += v;
       if (VEH_RE_S1.test(lid)) veh += v;
     });
@@ -4644,6 +4648,7 @@ function renderSheet1(data) {
       let sum = 0;
       allRows.forEach(r => { if (isTea(r)) return; sum += Number(r.byLocation[lid]) || 0; });
       grandByLoc[lid] = sum;
+      if (s1NoSum[lid]) return;
       if (idx < subtotalSplit) grandSub += sum;
       if (VEH_RE_S1.test(lid)) grandVeh += sum;
     });
@@ -4656,7 +4661,7 @@ function renderSheet1(data) {
     allRows.forEach(r => {
       if (isTea(r)) return;
       if (r.isExternal) { if (s1ExtHasVeh(r)) grandTotal += Number(r.total) || 0; return; }
-      locIds.forEach(lid => { grandTotal += Number(r.byLocation[lid]) || 0; });
+      locIds.forEach(lid => { if (!s1NoSum[lid]) grandTotal += Number(r.byLocation[lid]) || 0; });
     });
     html += '<tr class="cat-row cat-grand">';
     html += '<td class="cell-name cat-label">拠点合計</td>';
@@ -4695,6 +4700,7 @@ function renderSheet1(data) {
         let sum = 0;
         catLocRows.forEach(r => { sum += Number(r.byLocation[lid]) || 0; });
         byLocation[lid] = sum;
+        if (s1NoSum[lid]) return;
         catLocRows.forEach(r => { if (!r.isExternal) total += Number(r.byLocation[lid]) || 0; });
         if (idx < subtotalSplit) subtotal += sum;
         if (VEH_RE_S1.test(lid)) catVeh += sum;
@@ -4824,43 +4830,50 @@ function arToAreaData(data, colorMap) {
   const locs = data.locations || [];
   const rows = [].concat(data.rice || [], data.brown || []);
   const qtyOf = lid => rows.reduce((a, r) => a + (Number((r.byLocation || {})[lid]) || 0), 0);
-  const head = [], veh = [], tail = [], groupOf = {}, members = {};
+  // ★v4.28 社長「銀座エリアもエリアの合計数を出して欲しい。その上で詳細も」
+  //   銀座＝エリア計の列（見せるだけ・合計に入れない＝_noSum）＋拠点ごとの列（詳細）。
+  //   並び＝エリア計の列（芝・神谷・お茶・赤坂・銀座計）｜銀座の拠点｜車載｜…
+  const areaCols = [], keepCols = [], veh = [], tail = [], groupOf = {}, members = {}, noSum = {};
   const cm = Object.assign({}, colorMap || {});
+  const areaCol = (area, isKeep) => {
+    const aid = 'AREA_' + area;
+    if (!members[aid]) {
+      members[aid] = [];
+      const short = area.replace(/[バパ]ーク$/, '');
+      areaCols.push({ id: aid, name: short + 'エリア', displayName: isKeep ? short.slice(0, 2) + '計' : short.slice(0, 2),
+                      area: area, isMain: false, isOkiben: false, salesPerson: '' });
+      groupOf[aid] = 'area';
+      if (isKeep) noSum[aid] = true;
+    }
+    return aid;
+  };
   locs.forEach(l => {
     const area = String(l.area || '').trim();
     if (AR_VEH_RE_.test(l.id)) { veh.push(l); groupOf[l.id] = 'veh'; return; }
-    const merge = area && !l.isOkiben && AR_KEEP_AREAS_.indexOf(area) < 0 && AR_NOMERGE_AREAS_.indexOf(area) < 0;
-    if (merge) {
-      const aid = 'AREA_' + area;
-      if (!members[aid]) {
-        members[aid] = [];
-        const short = area.replace(/[バパ]ーク$/, '');
-        head.push({ id: aid, name: short + 'エリア', displayName: short.slice(0, 2), area: area, isMain: false, isOkiben: false, salesPerson: '' });
-        groupOf[aid] = 'area';
-      }
-      members[aid].push(l);
-      if (l.isMain || !cm[aid]) cm[aid] = (colorMap || {})[l.id] || cm[aid];   // 色はメイン拠点の色
-      return;
-    }
-    if (area && AR_KEEP_AREAS_.indexOf(area) >= 0 && !l.isOkiben) { head.push(l); groupOf[l.id] = 'keep_' + area; return; }
-    tail.push(l); groupOf[l.id] = 'tail';
+    const usable = area && !l.isOkiben && AR_NOMERGE_AREAS_.indexOf(area) < 0;
+    if (!usable) { tail.push(l); groupOf[l.id] = 'tail'; return; }
+    const isKeep = AR_KEEP_AREAS_.indexOf(area) >= 0;
+    const aid = areaCol(area, isKeep);
+    members[aid].push(l);
+    if (l.isMain || !cm[aid]) cm[aid] = (colorMap || {})[l.id] || cm[aid];   // 色はメイン拠点の色
+    if (isKeep) { keepCols.push(l); groupOf[l.id] = 'keep_' + area; }
   });
   // 右の拠点名パネル：エリア列は「何拠点ぶんか」を販売員欄に出す（その日に数がある拠点だけ数える）
-  head.forEach(h => {
-    if (!members[h.id]) return;
+  areaCols.forEach(h => {
     const used = members[h.id].filter(m => qtyOf(m.id) > 0);
     h.salesPerson = used.length + '拠点';
-    h.name = h.name + '（' + used.map(m => m.name).join('・') + '）';
+    h.name = h.name + (noSum[h.id] ? '計' : '') + '（' + used.map(m => m.name).join('・') + '）';
   });
   const fold = r => {
     const bl = Object.assign({}, r.byLocation || {});
     Object.keys(members).forEach(aid => {
       let s = 0;
-      members[aid].forEach(m => { s += Number(bl[m.id]) || 0; delete bl[m.id]; });
+      members[aid].forEach(m => { s += Number(bl[m.id]) || 0; if (!noSum[aid]) delete bl[m.id]; });
       bl[aid] = s;
     });
     return Object.assign({}, r, { byLocation: bl });
   };
+  const head = areaCols.concat(keepCols);
   return Object.assign({}, data, {
     locations: head.concat(veh, tail),
     subtotalSplit: head.length,
@@ -4869,7 +4882,8 @@ function arToAreaData(data, colorMap) {
     _driverColorMap: cm,
     _bodyId: 'area-body',
     _title: '🗺 ' + (data.dateLabel || '') + '　エリア配分表',
-    _groupOf: groupOf
+    _groupOf: groupOf,
+    _noSum: noSum
   });
 }
 
