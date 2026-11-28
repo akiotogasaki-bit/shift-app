@@ -1,4 +1,6 @@
 <!DOCTYPE html>
+<!-- driver v8.28 (2026-11-28) 【2次販売は車載経由・置いた時に納品】社長決定（2026-11-28・案1）「回収時は車載として持って、おいたときに初めて納品としてカウント。その時点での在庫を全部置くボタンと数を入力もできるようにする」。★回収の「🛒 2次販売」（行き先を選ぶ＝回収した瞬間に行き先の納品）をやめ「🚚 車に積む（2次販売へ）」に＝残りは自分の車載に入る（メインGAS submitCollectionCheck→collectToVehicle）。★移動タブに「🛒 2次に置く」＝その日レジを開いた2次だけを選べる・「車の在庫を全部置く」で車載の数を入れる・数は直せる→placeToSecond（車載が減り、300円/500円に換えて2次の納品へ）。11/27 セカンド神谷で「持ち込み102なのにレジ43・残0」と記録が割れた件と、開いていないセカンド神保町に14個が入った件の直し。要メインGAS 2026-11-28・register v3.45。→ 40_ドキュメント/引き継ぎ_2次販売の一本化と車載経由の持ち込み_2026-11-28.md -->
+<!-- driver v8.27 (2026-11-25) 【💴 立替精算タブ】社長決定「B アプリにタブ」＋締め＝毎週（月〜日）・現金で渡すが店の小口とは分ける・ドライバーだけ・承認は Cockpit・要確認＝カード/PayPay払いと二重送信。★タブ「💴 立替」で自分のお金で立て替えたレシートを撮る→端末で長い辺1600pxに縮めて Firebase の tatekae 関数へ直接（GAS の /exec は通らない）→Claude が読んで「✅ ENEOS 4,200円（旅費交通費）／今週の立替 12,650円」をその場で返す。★週ごとの一覧（承認待ち／承認済（受け取り待ち）／受け取り済）。★タブは tatekae 関数が答えた端末にだけ出す（関数が無い間・ログインできていない端末は出ない）。★店の小口のお金で買った物は今までどおり公式LINEへ（取り違え＝二重払いを防ぐため入口を分けた）。要: Firebase tatekae 2026-11-25。 -->
 <!-- driver v8.26 (2026-11-25) 【買い物先ごとに分ける】社長「業者に業務スーパー・ハナマサを追加」「つくね・青がっぱは業務スーパーに買い物」。★買い物の一覧を買い物先（業務スーパー・ハナマサ など＝業者マスタの備考に「買い物先」と書いた業者）ごとに見出し付きで出す。業者「買い物」の品目と臨時の依頼は「その他の買い物」。買い物先が1つも無い日は見出しを出さない（従来どおり）。要: メインGAS @1008 以降。 -->
 <!-- driver v8.25 (2026-11-25) 【🛒 買い物リスト】社長決定「発注の買い物はドライバーが行く。Aで。買い物は水曜と日曜に行く」「回収タブの上に買い物ありとだして、タップでチェックリストが出る」。★回収タブの一番上に「🛒 買い物あり ◯品（残り◯）」のカードを出し、タップで下から一覧が開く。1品ずつタップで「買った✓」＝メインGAS「買い物チェック」シートに残る（もう一度タップで取り消し）。★中身＝在庫入力で業者「買い物」の品目を**その日に**数えた発注数（必要数−在庫）＋在庫入力「臨時の買い物」タブで頼まれた物。データ源は GET `getShoppingForDriver`、✓は POST `markShoppingBought`。★買い物の日（水・日）で在庫入力がまだの時は「在庫入力待ち」と薄く出す。それ以外の日で何も無ければカードは出さない。★⚠ 新しいタイマーは足していない。`reloadCollectionData_` が呼ばれる時（回収タブを開く／🔄更新／前面復帰／巡回）に3分に1回だけ取り直す。要: メインGAS @1007 以降。 -->
 <!-- driver v8.24 (2026-11-24) 【💬 相談に社長の決定が返る】社長決定 A案「社長の決定待ちの相談は、Claude に相談して、変更・維持も含めて最終どうしたかを相談者に戻したい」。★相談タブに「🧭 社長の決定（○/○ ○:○○ の相談）【変更する／今のまま／保留】」の吹き出しを出す（Cockpit の「相談」タブで社長が決めると Firebase boss 関数 creply が書く。同時に本人へ LINE も届く）。要: Firebase consult/boss 2026-11-24。 -->
@@ -1882,6 +1884,31 @@ body {
     padding: 20px; text-align: center; color: var(--ink-mute); font-size: 13px;
   }
 
+/* ★v8.27 立替精算 */
+.tk2-top{background:#fff;border:1px solid #e3ddd0;border-radius:14px;padding:14px;margin:4px 0 12px;}
+.tk2-sum{font-size:13px;color:var(--ink-mute);}
+.tk2-sum b{font-size:24px;color:var(--ink);margin:0 2px;}
+.tk2-shot{display:block;width:100%;margin-top:12px;padding:14px;border:none;border-radius:12px;background:var(--blue);color:#fff;font-size:16px;font-weight:700;font-family:inherit;cursor:pointer;}
+.tk2-pick{display:block;width:100%;margin-top:8px;padding:10px;border:1px solid #c9c2b2;border-radius:12px;background:#fff;color:var(--ink);font-size:13px;font-family:inherit;cursor:pointer;}
+.tk2-res{margin-top:12px;padding:12px;border-radius:12px;font-size:14px;line-height:1.6;}
+.tk2-res.ok{background:#eaf7ee;border:1px solid #9fd3ad;}
+.tk2-res.warn{background:#fff6e5;border:1px solid #e6c06e;}
+.tk2-res.ng{background:#fdecec;border:1px solid #e9a3a3;}
+.tk2-res.busy{background:#eef3fb;border:1px solid #b9cbe8;color:#1d4f91;}
+.tk2-hint{font-size:11px;color:var(--ink-mute);margin-top:10px;line-height:1.5;}
+.tk2-week{background:#fff;border:1px solid #e3ddd0;border-radius:12px;margin-bottom:10px;overflow:hidden;}
+.tk2-wh{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#f7f4ec;font-size:13px;}
+.tk2-wh b{font-size:15px;}
+.tk2-st{font-size:11px;padding:2px 8px;border-radius:10px;background:#e8e8e8;white-space:nowrap;}
+.tk2-st.wait{background:#fff0cc;color:#8a5a00;}
+.tk2-st.ok{background:#dff3e4;color:#1d6b33;}
+.tk2-st.done{background:#e3ecf9;color:#1d4f91;}
+.tk2-it{display:flex;justify-content:space-between;gap:8px;padding:8px 12px;border-top:1px solid #f0ece2;font-size:13px;}
+.tk2-it small{color:var(--ink-mute);display:block;font-size:11px;}
+.tk2-it .amt{font-weight:700;white-space:nowrap;}
+.tk2-it.rv .amt{color:#b06d00;}
+.tk2-it.x{opacity:.5;}
+.tk2-it.x .amt{text-decoration:line-through;}
 </style>
 </head>
 <body>
@@ -2001,6 +2028,10 @@ body {
       📦 承認
       <span class="tab-badge red" id="approval-badge" style="display:none;">0</span>
     </button>
+    <!-- ★v8.27 立替精算（tatekae 関数が答えた端末にだけ出す） -->
+    <button class="tab-btn" id="tab-btn-tatekae" onclick="switchTab('tatekae')" style="display:none;">
+      💴 立替
+    </button>
   </div>
 
   <div id="tab-collection" class="tab-panel active">
@@ -2037,6 +2068,20 @@ body {
 
   <div id="tab-approval" class="tab-panel">
     <div id="approval-list"></div>
+  </div>
+
+  <!-- ★v8.27 立替精算 -->
+  <div id="tab-tatekae" class="tab-panel">
+    <div class="tk2-top">
+      <div class="tk2-sum" id="tk2-sum">今週の立替 <b>--</b></div>
+      <button class="tk2-shot" id="tk2-shot" onclick="document.getElementById('tk2-cam').click()">📷 レシートを撮る</button>
+      <button class="tk2-pick" onclick="document.getElementById('tk2-file').click()">🖼 写真から選ぶ</button>
+      <input type="file" id="tk2-cam" accept="image/*" capture="environment" style="display:none" onchange="tk2Pick_(this)">
+      <input type="file" id="tk2-file" accept="image/*" style="display:none" onchange="tk2Pick_(this)">
+      <div id="tk2-res"></div>
+      <div class="tk2-hint">自分のお金で立て替えたレシート・領収書を1枚ずつ撮ってください（ガソリン・駐車場・高速・買い出しなど）。月〜日で締めて、社長が確認したら現金で精算します。<br>🔴 お店の小口のお金で買った物はここではなく、今までどおり公式LINEへ送ってください。</div>
+    </div>
+    <div id="tk2-weeks"></div>
   </div>
 
   <div id="tab-residual" class="tab-panel">
@@ -2248,6 +2293,25 @@ body {
           <div id="rv-rows"></div>
           <button type="button" class="rv-submit" id="rv-submit" onclick="rvSubmit_()">記録する</button>
           <button type="button" class="sv-close" onclick="rvToggle_()">閉じる</button>
+        </div>
+      </div>
+
+      <!-- ★v8.28 (2026-11-28)【🛒 2次に置く】社長決定「回収時は車載として持って、おいたときに初めて納品としてカウント。
+           その時点での在庫を全部置くボタンと数を入力もできるようにする」。置ける先は**その日レジを開いた2次だけ**
+           （同じ場所に2つのレジがある日も、開いている方にしか入らない）。メインGAS placeToSecond。 -->
+      <div id="s2-box">
+        <button type="button" class="rv-open" id="s2-open" onclick="s2Toggle_()" style="background:#7D3C98;color:#FFF;">
+          🛒 2次に置く（車から2次販売へ）
+        </button>
+        <div id="s2-panel" style="display:none;">
+          <div class="rv-note">置いた数が、そのまま2次のレジの納品になります（300円・500円に換えて自動で入ります）。</div>
+          <div class="sv-sec">どの2次に置きますか？<span class="rv-req">必須</span></div>
+          <div class="sv-loc-grid" id="s2-loc-list"><div class="rv-note">読み込み中…</div></div>
+          <button type="button" class="rv-open" id="s2-all" onclick="s2FillAll_()" style="margin:8px 0;">🚚 車の在庫を全部置く（数を入れる）</button>
+          <div class="sv-sec">何を何個 置きますか？</div>
+          <div id="s2-rows"></div>
+          <button type="button" class="rv-submit" id="s2-submit" onclick="s2Submit_()">置く</button>
+          <button type="button" class="sv-close" onclick="s2Toggle_()">閉じる</button>
         </div>
       </div>
 
@@ -2913,6 +2977,114 @@ async function cstPost_(body) {
   };
   setTimeout(tick, 3000);
 })();
+/* ★v8.27 立替精算。相談と同じく GAS は通さず Firebase の tatekae 関数へ直接。
+   タブは関数が「me」に答えた端末にだけ出す（関数を出す前に配っても誰にも見えない）。 */
+var TK2_URL_ = 'https://asia-northeast1-oedo-bento.cloudfunctions.net/tatekae';
+var tk2Busy_ = false;
+async function tk2Post_(body) {
+  var u = (window.firebase && firebase.apps && firebase.apps.length) ? firebase.auth().currentUser : null;
+  if (!u) throw new Error('ログインできていません。開き直してください');
+  var tok = await u.getIdToken();
+  var r = await fetch(TK2_URL_, { method: 'POST', body: JSON.stringify(Object.assign({ fbIdToken: tok }, body)) });
+  var j = await r.json().catch(function () { return null; });
+  if (!j || !j.ok) throw new Error((j && j.error) || ('通信エラー ' + r.status));
+  return j;
+}
+(function () {
+  var n = 0, hooked = false, lastUid = '';
+  var check = async function (u) {
+    if (!u || u.uid === lastUid) return;
+    lastUid = u.uid;
+    try { await tk2Post_({ mode: 'me' }); document.getElementById('tab-btn-tatekae').style.display = ''; }
+    catch (e) { lastUid = ''; }
+  };
+  var tick = function () {
+    n++;
+    if (!hooked && window.firebase && firebase.apps && firebase.apps.length) {
+      hooked = true;
+      try { firebase.auth().onAuthStateChanged(check); } catch (e) {}
+      return;
+    }
+    if (n < 300) setTimeout(tick, 2000);
+  };
+  setTimeout(tick, 3500);
+})();
+/** レシートは字が細かいので相談のスクショより大きく（長い辺1600px）。上限は base64 で約2.2MB */
+function tk2Shrink_(file) {
+  return new Promise(function (ok, ng) {
+    var url = URL.createObjectURL(file);
+    var img = new Image();
+    img.onload = function () {
+      try {
+        var side = 1600, w = img.naturalWidth, h = img.naturalHeight;
+        var k = Math.min(1, side / Math.max(w, h));
+        var c = document.createElement('canvas');
+        c.width = Math.round(w * k); c.height = Math.round(h * k);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        var q = 0.85, d = c.toDataURL('image/jpeg', q);
+        while (d.length > 2200 * 1024 && q > 0.4) { q -= 0.15; d = c.toDataURL('image/jpeg', q); }
+        URL.revokeObjectURL(url);
+        if (d.length > 2200 * 1024) ng(new Error('写真が大きすぎます')); else ok(d);
+      } catch (e) { ng(e); }
+    };
+    img.onerror = function () { URL.revokeObjectURL(url); ng(new Error('写真を読めませんでした')); };
+    img.src = url;
+  });
+}
+function tk2Yen_(v) { return (Math.round(Number(v) || 0)).toLocaleString('ja-JP') + '円'; }
+function tk2Res_(cls, html) { document.getElementById('tk2-res').innerHTML = html ? '<div class="tk2-res ' + cls + '">' + html + '</div>' : ''; }
+function tk2SetSum_(total, n, rvAmt) {
+  document.getElementById('tk2-sum').innerHTML = '今週の立替 <b>' + esc_(tk2Yen_(total)) + '</b>（' + (n || 0) + '件）'
+    + (rvAmt ? '<br>社長の確認待ち ' + esc_(tk2Yen_(rvAmt)) : '');
+}
+async function tk2Pick_(inp) {
+  var f = inp.files && inp.files[0];
+  inp.value = '';
+  if (!f || tk2Busy_) return;
+  tk2Busy_ = true;
+  var btn = document.getElementById('tk2-shot');
+  btn.disabled = true; btn.textContent = '読み取り中…';
+  tk2Res_('busy', '📤 送っています。30秒ほどで金額が出ます…');
+  try {
+    var img = await tk2Shrink_(f);
+    var j = await tk2Post_({ mode: 'send', img: img, name: state.userName || '' });
+    var head = esc_(j.vendor || '') + ' ' + esc_(tk2Yen_(j.total));
+    if (j.status === '記録済') tk2Res_('ok', '✅ ' + head + '（' + esc_(j.account) + '）<br>今週の立替 合計 <b>' + esc_(tk2Yen_(j.weekTotal)) + '</b>');
+    else if (j.status === '要確認') tk2Res_('warn', '⚠ ' + head + '<br>' + esc_(j.why) + '<br>社長が確認してから合計に入ります。');
+    else tk2Res_('ng', '✖ 読めませんでした：' + esc_(j.why || '') + '<br>明るい所で、レシート全体が入るように撮り直してください。');
+    tk2SetSum_(j.weekTotal, j.weekN, j.weekReviewAmt);
+    tk2Load_();
+  } catch (e) {
+    tk2Res_('ng', '✖ 送れませんでした：' + esc_(e.message) + '<br>電波の良い所でもう一度押してください。');
+  } finally {
+    tk2Busy_ = false; btn.disabled = false; btn.textContent = '📷 レシートを撮る';
+  }
+}
+async function tk2Load_() {
+  var box = document.getElementById('tk2-weeks');
+  try {
+    var j = await tk2Post_({ mode: 'list' });
+    var cur = (j.weeks || []).filter(function (w) { return w.current; })[0];
+    if (cur) tk2SetSum_(cur.total, cur.n, cur.reviewAmt);
+    var h = '';
+    (j.weeks || []).forEach(function (w) {
+      if (!w.items.length && !w.current) return;
+      var st = w.current ? '今週（日曜締め）' : w.state;
+      var cls = w.current ? '' : /受け取り済/.test(st) ? 'done' : /承認済|渡した/.test(st) ? 'ok' : 'wait';
+      h += '<div class="tk2-week"><div class="tk2-wh"><span>' + esc_(w.label) + ' <span class="tk2-st ' + cls + '">' + esc_(st) + '</span></span><b>' + esc_(tk2Yen_(w.total)) + '</b></div>';
+      if (!w.items.length) h += '<div class="tk2-it"><span><small>まだありません</small></span></div>';
+      w.items.forEach(function (x) {
+        var c = x.status === '要確認' ? 'rv' : (x.status === '記録済' ? '' : 'x');
+        var sub = (x.date ? x.date.slice(5).replace('-', '/') : '') + ' ' + (x.status === '記録済' ? (x.account || '') : x.status === '要確認' ? '確認待ち：' + (x.why || '') : x.status + (x.why ? '：' + x.why : ''));
+        h += '<div class="tk2-it ' + c + '"><span>' + esc_(x.vendor || '（読めず）') + '<small>' + esc_(sub) + '</small></span><span class="amt">' + esc_(tk2Yen_(x.total)) + '</span></div>';
+      });
+      h += '</div>';
+    });
+    box.innerHTML = h;
+  } catch (e) {
+    box.innerHTML = '<div class="tk2-hint">一覧を読めませんでした：' + esc_(e.message) + '</div>';
+  }
+}
 function cstKind_(k) {
   cstKindSel_ = k;
   document.querySelectorAll('#cst-bg .cst-kind').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-kind') === k); });
@@ -3870,8 +4042,8 @@ function renderSecondSection_() {
        + `<span style="background:#7D3C98;color:#FFF;font-size:11px;font-weight:700;padding:1px 8px;border-radius:10px;">${locs.length}</span></div>`
        + `<div class="list-wrap sp-sec">${cards}`
        + `<div style="font-size:11px;color:var(--ink-mute);padding:4px 4px 2px;line-height:1.5;">`
-       +   `<b style="color:#C0392B;">⚠ 回収で「🛒 2次販売」を押して行き先を選んだ分は、自動で納品に足されています。ここで入れると二重になります。</b><br>`
-       +   `ここに入れるのは<b>回収を通さずに持って行った分</b>（車載・厨房から直接など）だけです。<br>`
+       +   `<b style="color:#C0392B;">⚠ 車から置く時は、移動タブの「🛒 2次に置く」を使ってください（車載が減り、2次の納品に自動で入ります）。ここで入れると二重になります。</b><br>`
+       +   `ここに入れるのは<b>車を通さずに持って行った分</b>（厨房から直接など）だけです。<br>`
        +   `<b>残数・現金の回収は、下の「未回収」から同じ拠点をタップ</b>してください。</div>`
        + `</div>`;
 }
@@ -3944,8 +4116,8 @@ function sdRender_() {
   if (hint) {
     hint.innerHTML = isSet
       ? '<b>その日の合計</b>を入れ直します。押し間違えて増えてしまった時に使ってください。'
-      : '<b style="color:#C0392B;">⚠ 回収の「🛒 2次販売」で行き先を選んだ分は、もう足されています。</b><br>'
-        + '<b>回収を通さずに持って行った分だけ</b>を入れてください（前の分に足されます）。';
+      : '<b style="color:#C0392B;">⚠ 車から置いた分（移動タブの「🛒 2次に置く」）は、もう足されています。</b><br>'
+        + '<b>車を通さずに持って行った分だけ</b>を入れてください（前の分に足されます）。';
   }
   const send = document.getElementById('sd-send');
   if (send) send.textContent = isSet ? 'この数に訂正する' : '追加で登録する';
@@ -3981,8 +4153,8 @@ async function submitSecondDeliv() {
   const msg = isSet
     ? name + ' の合計を訂正します。\n\n' + detail + '\n合計 ' + before + '個 → ' + sum + '個\n\n訂正しますか？'
     : name + ' に追加します。\n\n' + detail + '\n合計 ' + before + '個 → ' + (before + sum) + '個\n\n'
-      + '⚠ 回収の「🛒 2次販売」で行き先を選んだ分は、もう足されています（' + before + '個に含まれています）。\n'
-      + 'これは回収を通さずに持って行った分ですか？';   // ★v8.22 二重入力の防止
+      + '⚠ 車から置いた分（🛒 2次に置く）は、もう足されています（' + before + '個に含まれています）。\n'
+      + 'これは車を通さずに持って行った分ですか？';   // ★v8.22 二重入力の防止／★v8.28 文言
   if (!confirm(msg)) return;
 
   const btn = document.getElementById('sd-send');
@@ -5097,7 +5269,7 @@ async function confirmCash(kind) {
   if (!cashModalLocId) return;
   // ★2026-08-07 行き先はここで控えを取る。この関数の途中で closeCashModal() が走り
   //   ccPlannedTo が空に戻るため、後段の案内文が参照できなくなる。
-  const planned = (kind === '移動' || kind === '2次販売') ? ccPlannedTo.slice() : [];   // ★v8.21 2次販売も行き先を送る
+  const planned = (kind === '移動') ? ccPlannedTo.slice() : [];   // ★v8.28 2次販売は行き先を選ばない（車載に積む）
   // ★2026-08-18 当日欠勤（レジ未開始）。closeCashModal() で ccNoRegister が戻るので控えを取る。
   const noReg = ccNoRegister;
   // ★2026-08-18 当日欠勤は「まだ売っていない弁当を丸ごと動かす」操作なので、必ず一度止めて確認する。
@@ -5330,13 +5502,11 @@ async function confirmCash(kind) {
     } else if (residualMsg) {
       showToast(residualMsg, 'error', 6000);
     } else if (kind === '2次販売') {
-      // ★v8.21 行き先に足せた時はその数を出す
+      // ★v8.28 残りは車載に積んだ（2次の納品になるのは、2次の場所で「🛒 2次に置く」をした時）
       if (secondAddedX && secondAddedX.added) {
-        showToast(secondAddedX.toName + ' の納品に ' + secondAddedX.added + '個 足しました（回収済み）', 'success', 5000);
-      } else if (planned.length) {
-        showToast('⚠️ 回収済みにしましたが、' + planned[0].name + ' の納品に足せませんでした。社長に連絡してください', 'error', 7000);
+        showToast(secondAddedX.toName + ' に ' + secondAddedX.added + '個 積みました（回収済み）。2次の場所で、移動タブの「🛒 2次に置く」から置いてください', 'success', 7000);
       } else {
-        showToast('2次販売として記録し回収済みにしました', 'success');
+        showToast('⚠️ 回収済みにしましたが、車載に積んだ記録が作れませんでした。社長に連絡してください', 'error', 7000);
       }
     } else {
       showToast('現金有高を記録し回収済みにしました', 'success');
@@ -6226,6 +6396,10 @@ function switchTab(tab) {
   document.getElementById('tab-approval').classList.toggle('active', tab === 'approval');
   document.getElementById('tab-btn-approval').classList.toggle('active', tab === 'approval');
   if (tab === 'approval') loadDeliveryApprovals();
+  // ★v8.27 立替精算
+  document.getElementById('tab-tatekae').classList.toggle('active', tab === 'tatekae');
+  document.getElementById('tab-btn-tatekae').classList.toggle('active', tab === 'tatekae');
+  if (tab === 'tatekae') tk2Load_();
   // ★2026-08-20 v5.2 回収タブに戻った時にレジ報告を取り直す（60秒スロットル）
   if (tab === 'collection') reloadCollectionData_(false);
   // ★v3.3 リアルタイム（dashboard から移設）
@@ -8113,6 +8287,113 @@ async function rvSubmit_() {
     rvRender_();
   } catch (e) {
     showToast(e.message || '記録に失敗しました', 'error');
+    if (btn) { btn.disabled = false; btn.textContent = orig; }
+  }
+}
+
+/* ★v8.28 (2026-11-28)【🛒 2次に置く】→ 上の HTML のコメント。
+   置く先＝メインGAS getSecondOpen（開始ログにその日の行がある L8xx／L0xx_2 で、まだ締めていないもの）。
+   商品＝いま車載にある弁当（お茶は置かない）。「全部置く」は車載の数をそのまま入れるだけ（送るのは「置く」を押した時）。 */
+let s2Loc = '', s2Open = [];
+function s2Toggle_() {
+  const p = document.getElementById('s2-panel');
+  const b = document.getElementById('s2-open');
+  if (!p) return;
+  const show = (p.style.display === 'none');
+  p.style.display = show ? '' : 'none';
+  if (b) b.textContent = show ? '🛒 2次に置く（閉じる）' : '🛒 2次に置く（車から2次販売へ）';
+  if (show) s2Load_();
+}
+async function s2Load_() {
+  const box = document.getElementById('s2-loc-list');
+  if (box) box.innerHTML = '<div class="rv-note">読み込み中…</div>';
+  try {
+    const d = await fetch(`${GAS_URL}?action=getSecondOpen&date=${getDateStrOffset_(0)}&_cb=${Date.now()}`, { redirect: 'follow' }).then(r => r.json());
+    s2Open = (d && d.ok && d.locs) ? d.locs : [];
+  } catch (e) { s2Open = []; }
+  if (s2Loc && !s2Open.some(l => l.id === s2Loc)) s2Loc = '';
+  try { await loadVehicleStock_(); } catch (e) {}
+  s2Render_();
+}
+function _s2IsTea_(pid) {
+  const p = (state.products || []).find(x => String(x.id) === String(pid));
+  return !!(p && String(p.name || '').indexOf('お茶') >= 0);
+}
+function s2Render_() {
+  const box = document.getElementById('s2-loc-list');
+  if (box) {
+    box.innerHTML = s2Open.length
+      ? s2Open.map(l => `<button type="button" class="sv-loc${s2Loc === l.id ? ' on' : ''}" onclick="s2Pick_('${_esc(l.id)}')">${_esc(l.name)}</button>`).join('')
+      : '<div class="rv-note">今日レジを開いている2次がまだありません。2次の販売員がレジを開いてから置いてください。</div>';
+  }
+  const rows = document.getElementById('s2-rows');
+  if (!rows) return;
+  const st = state.move && state.move.vehicle;
+  const items = (st && st.remaining && st.remaining.items) ? st.remaining.items : null;
+  if (!items) { rows.innerHTML = '<div class="rv-note">車載の残りが取れませんでした。閉じて開き直してください。</div>'; s2Sync_(); return; }
+  const pids = Object.keys(items).filter(pid => (Number(items[pid]) || 0) > 0 && !_s2IsTea_(pid));
+  rows.innerHTML = pids.length
+    ? pids.map(pid => `<div class="rv-row">
+        <span class="rv-nm">${_esc(_moveProdName_(pid))}</span>
+        <span class="rv-have">車載 ${items[pid]}個</span>
+        <input type="number" inputmode="numeric" min="0" max="${items[pid]}" data-pid="${_esc(pid)}" placeholder="0">
+      </div>`).join('')
+    : '<div class="rv-note">車載に弁当がありません。</div>';
+  s2Sync_();
+}
+function s2Pick_(id) { s2Loc = id; s2Render_(); }
+function s2FillAll_() {
+  const st = state.move && state.move.vehicle;
+  const items = (st && st.remaining && st.remaining.items) || {};
+  document.querySelectorAll('#s2-rows input').forEach(i => {
+    const pid = i.getAttribute('data-pid');
+    i.value = String(Number(items[pid]) || 0);
+  });
+  s2Sync_();
+}
+function s2Sync_() {
+  const btn = document.getElementById('s2-submit');
+  if (!btn) return;
+  let n = 0;
+  document.querySelectorAll('#s2-rows input').forEach(i => { n += parseInt(i.value, 10) || 0; });
+  const nm = (s2Open.find(l => l.id === s2Loc) || {}).name || '';
+  btn.disabled = !(s2Loc && n > 0);
+  btn.textContent = s2Loc ? ('置く（' + nm + 'へ ' + n + '個）') : '置く2次を選んでください';
+}
+document.addEventListener('input', e => {
+  if (e.target && e.target.closest && e.target.closest('#s2-rows')) s2Sync_();
+});
+async function s2Submit_() {
+  if (!s2Loc) { showToast('置く2次を選んでください', 'error'); return; }
+  const qty = {};
+  document.querySelectorAll('#s2-rows input').forEach(i => {
+    const pid = i.getAttribute('data-pid');
+    const q = parseInt(i.value, 10) || 0;
+    if (pid && q > 0) qty[pid] = q;
+  });
+  if (!Object.keys(qty).length) { showToast('個数を入れてください', 'error'); return; }
+  const nm = (s2Open.find(l => l.id === s2Loc) || {}).name || s2Loc;
+  const btn = document.getElementById('s2-submit');
+  const orig = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '送信中…'; }
+  try {
+    const veh = _svVehicle_();
+    if (!veh) throw new Error('どの車載から出すかを選んでください');
+    const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({
+      action: 'placeToSecond', date: getDateStrOffset_(0),
+      driverUserId: state.userId, driverName: state.userName,
+      vehicleLocationId: veh.id, vehiclePicked: _svVehPicked_(),
+      toLocationId: s2Loc, toLocationName: nm, qty: qty,
+    })});
+    const d = await res.json();
+    if (!d || !d.ok) throw new Error((d && d.error) || '置けませんでした');
+    showToast(nm + ' に ' + d.added + '個 置きました（2次の納品に入りました）', 'success', 5000);
+    document.querySelectorAll('#s2-rows input').forEach(i => { i.value = ''; });
+    try { await loadTodayMoves_(); } catch (e) {}
+    await ptRefresh_();
+    s2Render_();
+  } catch (e) {
+    showToast(e.message || '置けませんでした', 'error', 6000);
     if (btn) { btn.disabled = false; btn.textContent = orig; }
   }
 }
@@ -10713,10 +10994,11 @@ function rtEscapeHtml(s) {
          2次販売 … 種別だけ記録する（売上の付け方は後決め） -->
     <div class="cash-modal-btns" id="cc-kind-btns" style="display:none;">
       <button class="cash-modal-btn move"   id="cc-btn-move"   onclick="openCollectDestPicker_()" disabled>🔄 移動</button>
-      <button class="cash-modal-btn second" id="cc-btn-second" onclick="openCollectSecondPicker_()" disabled>🛒 2次販売</button>
+      <button class="cash-modal-btn second" id="cc-btn-second" onclick="confirmCash('2次販売')" disabled>🚚 車に積む（2次販売へ）</button>
     </div>
     <div class="cc-kind-hint" id="cc-kind-hint" style="display:none;">
-      移動＝残った弁当を積んで運ぶ（下ろす拠点は移動タブで登録）<br>2次販売＝この場から別の売り方をする
+      移動＝残った弁当を別の拠点へ運ぶ（下ろす拠点は移動タブで登録）<br>
+      車に積む＝残りを自分の車載に入れる。2次販売の場所に着いたら、移動タブの「🛒 2次に置く」で置く（置いた時に2次の納品になります）
     </div>
   </div>
 </div>
