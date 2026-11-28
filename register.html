@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ja">
+<!-- register v3.46 (2026-11-28) 【締めは「あるはずのお金」を先に出してからレジ有高】社長決定の順番＝締めるでPayPayデータを取得→販売員は残数を入力→納品数−残数で売上→ギャラを表示→PayPay・ギャラを引いてあるべき現金→販売員がレジ有高を入力。目的は「抜けない仕組み」を伝えること。★残数は空欄から数えて入れる（全レジ・空欄では締めない）。★「レジにあるはずのお金」＝（納品＋移動−賄い−残り）×値段＋お茶−クーポン−PayPayの実際の入金（メインGAS ppClient&mode=actual・取れなければアプリの額）−ギャラ＋開始金。★レジ有高はギャラを抜いた後で入れる（サーバーへは今までどおり抜く前＝入れた額＋ギャラ）。★合計が合っていてPayPayのアプリ入力だけ違う＝「PayPayと現金の入力ミスがあったようです（お金は合っています）」と柔らかく（理由は不要）。差がある時は理由を書いて提出。二次販売はPayPayをアプリの額で。 -->
 <!-- register v3.45 (2026-11-28) 【2次販売を300円・500円にそろえ、車から置いた分を自動で納品へ】社長決定（2026-11-28・案1）。★その場の2次（レジのまま切り替え）も300円・500円（＋残っているお茶100円）で打つ＝切り替えた時の残りを値段の区分に換えて納品にする（sw2ndPriceQty_・sw2nd.unified。前から切り替えている端末は弁当の種類のまま）。★ドライバーが車から2次に置いた分（メインGAS placeToSecond→二次販売納品）を確認なしで自動で納品に足す（sd2ndTopUp_：締めの時＋開いている間3分おき・下げない）。★2次の締めで売れた数が納品より多い商品は残りが空欄になる＝空欄のままでは締めさせない（数えるまで止める）。★他社弁当の残りの入力欄は切り替えた2次にも出す。要メインGAS 2026-11-28（placeToSecond）。→ 40_ドキュメント/引き継ぎ_2次販売の一本化と車載経由の持ち込み_2026-11-28.md -->
 <!-- register v3.44 (2026-11-26) 【2次へ切り替えた日の「報告の修正」で現金差異が−ギャラになるのを直す】11/25 パソナ（2次）で現金誤差−4,500円。締めの送信（submitFinal）は1次のギャラを開始金・最終金額から引いて送るのに、締めた直後の修正画面（goToEdit）は引く前の額（state.registerStart・register-end）をそのまま出して送り直していた。★切り替え後は同じ額（state.calcTotalSalary、無ければ sw2ndPay1_ で計算し直す）を引いて出す。サーバーの報告を読む方の修正画面（loadEditFromReport）は元から引いた後の額なので触っていない。 -->
 <!-- register v3.43 (2026-11-24) 【2次販売の満腹系を500円に】社長指示「２次販売の時の満腹弁当は500円の販売価格にして欲しい」。★sw2ndPrice_ の500円の区分に満腹系を足した（海苔弁系・満腹系・他社商品＝500円／お茶100円／それ以外300円）。★メインGAS _ccAddToSecond_（回収の🛒2次販売→二次販売拠点の300円/500円への振り分け）も同じ区分に揃えた。二次販売レジ（?mode=2nd）は300円/500円ボタンのままで変更なし。 -->
@@ -1282,9 +1283,71 @@ html, body { overscroll-behavior-y: contain; }
     </div>
   </div>
   <div class="form-section">
+    <!-- ★2026-08-03 v3.8：計算値（納品＋移動−販売−賄い）を**最初から入れておく**方式に変更（社長決定）。
+         2026-07-31 の「理論残を見せない」方針はここで撤回。回収モーダル（driver v2.1）と同じく
+         「報告されている数字を既定で表示し、違うときだけ直す」に揃える。
+         差異を拾う役割は、ドライバーが回収時に実物を数える実査（submitCollectionCheck）に一本化する。 -->
     <div class="form-card">
-      <div class="form-card-title">レジ最終金額</div>
-      <div style="font-size:13px;color:var(--red);font-weight:700;margin:6px 0 10px;">⚠️ ギャラを抜く前の金庫の有高を入力してください</div>
+      <div class="form-card-title">レジに残った数</div>
+      <div style="font-size:12px;color:var(--ink-mute);line-height:1.7;margin-bottom:8px;">
+        <b>実物を数えて、全部入れてください（0個は「0」）。</b><br>賄いで食べた分は、この下の「賄い」に入れてください。
+      </div>
+      <!-- ★2026-09-16 v3.30 車から下ろしたぶんが未到着の時だけ出る -->
+      <div id="residual-pending-warn" style="display:none;background:#5D4037;color:#FFF;border-radius:8px;padding:9px 11px;font-size:12px;line-height:1.7;margin-bottom:8px;"></div>
+      <div id="residual-inputs"></div>
+      <div class="form-row" style="border-top:1px solid var(--border);margin-top:6px;padding-top:8px;">
+        <span class="form-label" style="font-weight:700;">残り合計</span>
+        <span style="font-weight:700;font-size:16px;" id="residual-total">0個</span>
+      </div>
+    </div>
+
+    <!-- ★2026-10-14 v3.34 二次販売レジだけ：他社弁当の残り（業者SSの「二次販売後残数」になる） -->
+    <div class="form-card" id="card-ext2nd" style="display:none;">
+      <div class="form-card-title">他社弁当の残り</div>
+      <div style="font-size:12px;color:var(--ink-mute);line-height:1.7;margin-bottom:8px;">
+        二次販売が終わった時に<b>残っている数</b>を数えて入れてください。<br>持ってきていない商品は <b>0</b> を入れてください。
+      </div>
+      <div id="ext2nd-inputs"></div>
+    </div>
+
+    <div class="form-card" id="card-makanai">
+      <div class="form-card-title">賄い</div>
+      <div class="form-row">
+        <span class="form-label">本日の賄い</span>
+        <span style="font-size:12px;color:var(--ink-mute);margin-right:8px;" id="makanai-note">無しの場合+¥300</span>
+        <div class="coupon-toggle" id="makanai-toggle" onclick="toggleMakanai()" style="background:var(--green);"></div>
+        <span style="font-size:13px;color:var(--ink-soft);margin-left:8px;" id="makanai-label">有り</span>
+      </div>
+      <!-- ★2026-07-31 Phase C：賄いを個数で記録する（1人1日1個まで） -->
+      <div id="makanai-detail-box" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
+        <div style="font-size:12px;color:var(--ink-mute);line-height:1.7;margin-bottom:8px;" id="makanai-limit-note">食べたお弁当を選んでください。</div>
+        <div id="makanai-inputs"></div>
+        <div class="form-row" style="margin-top:4px;">
+          <span class="form-label" style="font-weight:700;">賄い合計</span>
+          <span style="font-weight:700;" id="makanai-total">0個</span>
+          <span style="font-size:12px;margin-left:8px;" id="makanai-over"></span>
+        </div>
+      </div>
+    </div>
+    <div class="form-card" id="card-late">
+      <div class="form-card-title">遅刻</div>
+      <div class="form-row">
+        <span class="form-label">遅刻時間</span>
+        <input type="number" class="form-input" id="late-minutes" value="" placeholder="0" min="0" inputmode="numeric" style="width:80px;text-align:right;" oninput="updateLatePenalty();saveState();refreshFinalIfShown();">
+        <span class="form-unit">分</span>
+        <span style="font-size:12px;color:var(--red);margin-left:8px;" id="late-penalty-preview"></span>
+      </div>
+    </div>
+    <!-- ★v3.46 (2026-11-28)【レジにあるはずのお金】社長決定の順番＝締めるでPayPayを取得→残数→納品数−残数で売上→
+         ギャラ→PayPay・ギャラを引いてあるべき現金→レジ有高。目的は「抜けない仕組み」を伝えること。 -->
+    <div class="form-card" id="card-expect">
+      <div class="form-card-title">レジにあるはずのお金</div>
+      <div id="expect-body" style="font-size:13px;line-height:1.8;color:var(--ink-soft);">残数・賄い・遅刻を入れてから「計算する」を押してください。</div>
+      <button type="button" class="btn-secondary" id="btn-expect" onclick="calcExpected_()" style="margin-top:8px;width:100%;">計算する</button>
+    </div>
+    <div class="form-card" id="card-regend">
+      <div class="form-card-title">レジ有高</div>
+      <div style="font-size:13px;color:var(--red);font-weight:700;margin:6px 0 10px;">⚠️ ギャラを抜いた後の金庫の有高を入力してください</div>
       <div class="form-row">
         <span class="form-label">最終金額</span>
         <input type="number" class="form-input" id="register-end" placeholder="0" inputmode="numeric" oninput="saveState()">
@@ -1365,61 +1428,6 @@ html, body { overscroll-behavior-y: contain; }
           <span class="cash-total-amount" id="end-cash-total">¥0</span>
           <button type="button" class="cash-clear-btn" onclick="clearCashBreakdown('end')">クリア</button>
         </div>
-      </div>
-    </div>
-    <!-- ★2026-08-03 v3.8：計算値（納品＋移動−販売−賄い）を**最初から入れておく**方式に変更（社長決定）。
-         2026-07-31 の「理論残を見せない」方針はここで撤回。回収モーダル（driver v2.1）と同じく
-         「報告されている数字を既定で表示し、違うときだけ直す」に揃える。
-         差異を拾う役割は、ドライバーが回収時に実物を数える実査（submitCollectionCheck）に一本化する。 -->
-    <div class="form-card">
-      <div class="form-card-title">レジに残った数</div>
-      <div style="font-size:12px;color:var(--ink-mute);line-height:1.7;margin-bottom:8px;">
-        計算上の残り数を入れてあります。<br><b>実際に数えて違っていたら直してください。</b>賄いで食べた分は、この下の「賄い」に入れてください。
-      </div>
-      <!-- ★2026-09-16 v3.30 車から下ろしたぶんが未到着の時だけ出る -->
-      <div id="residual-pending-warn" style="display:none;background:#5D4037;color:#FFF;border-radius:8px;padding:9px 11px;font-size:12px;line-height:1.7;margin-bottom:8px;"></div>
-      <div id="residual-inputs"></div>
-      <div class="form-row" style="border-top:1px solid var(--border);margin-top:6px;padding-top:8px;">
-        <span class="form-label" style="font-weight:700;">残り合計</span>
-        <span style="font-weight:700;font-size:16px;" id="residual-total">0個</span>
-      </div>
-    </div>
-
-    <!-- ★2026-10-14 v3.34 二次販売レジだけ：他社弁当の残り（業者SSの「二次販売後残数」になる） -->
-    <div class="form-card" id="card-ext2nd" style="display:none;">
-      <div class="form-card-title">他社弁当の残り</div>
-      <div style="font-size:12px;color:var(--ink-mute);line-height:1.7;margin-bottom:8px;">
-        二次販売が終わった時に<b>残っている数</b>を数えて入れてください。<br>持ってきていない商品は <b>0</b> を入れてください。
-      </div>
-      <div id="ext2nd-inputs"></div>
-    </div>
-
-    <div class="form-card" id="card-makanai">
-      <div class="form-card-title">賄い</div>
-      <div class="form-row">
-        <span class="form-label">本日の賄い</span>
-        <span style="font-size:12px;color:var(--ink-mute);margin-right:8px;" id="makanai-note">無しの場合+¥300</span>
-        <div class="coupon-toggle" id="makanai-toggle" onclick="toggleMakanai()" style="background:var(--green);"></div>
-        <span style="font-size:13px;color:var(--ink-soft);margin-left:8px;" id="makanai-label">有り</span>
-      </div>
-      <!-- ★2026-07-31 Phase C：賄いを個数で記録する（1人1日1個まで） -->
-      <div id="makanai-detail-box" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
-        <div style="font-size:12px;color:var(--ink-mute);line-height:1.7;margin-bottom:8px;" id="makanai-limit-note">食べたお弁当を選んでください。</div>
-        <div id="makanai-inputs"></div>
-        <div class="form-row" style="margin-top:4px;">
-          <span class="form-label" style="font-weight:700;">賄い合計</span>
-          <span style="font-weight:700;" id="makanai-total">0個</span>
-          <span style="font-size:12px;margin-left:8px;" id="makanai-over"></span>
-        </div>
-      </div>
-    </div>
-    <div class="form-card" id="card-late">
-      <div class="form-card-title">遅刻</div>
-      <div class="form-row">
-        <span class="form-label">遅刻時間</span>
-        <input type="number" class="form-input" id="late-minutes" value="" placeholder="0" min="0" inputmode="numeric" style="width:80px;text-align:right;" oninput="updateLatePenalty();saveState();refreshFinalIfShown();">
-        <span class="form-unit">分</span>
-        <span style="font-size:12px;color:var(--red);margin-left:8px;" id="late-penalty-preview"></span>
       </div>
     </div>
   </div>
@@ -4878,11 +4886,118 @@ function clearCashBreakdown(prefix) {
 // ═══════════════════════════════════════════════════════════════
 // FINAL REPORT
 // ═══════════════════════════════════════════════════════════════
+/* ═══ ★v3.46 (2026-11-28)【レジにあるはずのお金】═══════════════════════════════
+   社長決定の順番：締めるでPayPayを取得 → 残数 → 納品数−残数で売上 → ギャラ → PayPay・ギャラを引いてあるべき現金 → レジ有高。
+   社長「レジ金を抜いたことを知りたいのがメインじゃなくて、抜けない仕組みになっている事を伝えるのがメイン」。
+   ・売上＝弁当（お茶以外）ごとに（納品＋移動−賄い−数えた残り）×値段 ＋ お茶の売上（レジの記録）− クーポン
+   ・PayPay＝**PayPayの実際の入金**（締めの画面を開いた時にワーカーが取得・メインGAS ppClient&mode=actual）。
+     取れない時・二次販売（PayPayが1次の店舗と同じQRに入る）はアプリで打った額。
+   ・あるはずの現金（ギャラを抜いた後）＝開始金 ＋ 売上 − PayPay − ギャラ
+   ⚠ ギャラの式は calcFinal と同じ（gigCalc_）。サーバーへ送るレジ最終金額は今までどおり「ギャラを抜く前」。 */
+let ppActualTimer = null;
+function ppActualStart_() {
+  clearInterval(ppActualTimer);
+  state.ppActual = null;
+  if (IS_2ND || isSwitched_() || !state.location || !state.location.id) return;
+  const since = Date.now();
+  let tries = 0;
+  state.ppActual = { status: 'waiting' };
+  const ask = async () => {
+    tries++;
+    try {
+      const r = await fetch(ppClientUrl('actual') + `&since=${since}&_cb=${Date.now()}`);
+      const j = await r.json();
+      if (j && j.ok && j.ready) {
+        clearInterval(ppActualTimer);
+        state.ppActual = { status: 'ok', found: !!j.found, sum: Number(j.sum) || 0, count: Number(j.count) || 0 };
+        if (state.expect) calcExpected_();
+        return;
+      }
+    } catch (e) { /* 次の周回で聞き直す */ }
+    if (tries >= 20) { clearInterval(ppActualTimer); state.ppActual = { status: 'failed' }; if (state.expect) calcExpected_(); }
+  };
+  ppActualTimer = setInterval(ask, 4000);   // 4秒 × 20 ＝ 約80秒で諦める
+  setTimeout(ask, 1500);
+}
+function expectReset_() {
+  state.expect = null;
+  const b = document.getElementById('expect-body');
+  if (b) b.innerHTML = '残数・賄い・遅刻を入れてから「計算する」を押してください。';
+}
+// ギャラ（calcFinal と同じ式）。置き弁の現金ギャラも含む
+function gigCalc_() {
+  const nonTeaSold   = state.soldCount - (state.teaSoldCount || 0);
+  const makanaiBonus = IS_2ND ? 0 : (state['makanaiあり'] ? 0 : 300);
+  const lateMinutes  = parseInt((document.getElementById('late-minutes') || {}).value) || 0;
+  const latePenalty  = IS_2ND ? 0 : calcLatePenalty(lateMinutes);
+  const role         = state.staffRole || '販売員';
+  let totalSalary = 0;
+  if (isSwitched_()) totalSalary = sw2ndPay1_(state.sw2nd.first, makanaiBonus, latePenalty).total;
+  else if (IS_2ND) totalSalary = (state.isSpot || role === '社員' || role === 'ドライバー') ? 0 : state.baseGigSalary;
+  else if (state.isSpot || role === '社員' || role === 'ドライバー') totalSalary = 0;
+  else if (state.fixedSalary > 0) totalSalary = state.fixedSalary + makanaiBonus - latePenalty;
+  else {
+    const incentive = nonTeaSold >= 20 ? Math.floor(nonTeaSold / state.incentiveUnit) * state.incentiveRate : 0;
+    totalSalary = state.baseGigSalary + incentive + makanaiBonus - latePenalty;
+  }
+  return totalSalary + ((state.okibenGig && state.okibenGig.amount) || 0);
+}
+async function calcExpected_() {
+  const blank = rcBentoProducts().filter(p => { const el = document.getElementById(`residual-${p.id}`); return el && el.value === ''; });
+  if (blank.length) {
+    showToast('「' + blank.map(p => p.name).join('・') + '」の残りが空欄です。実物を数えて入れてください（0個は0）', 6000);
+    try { document.getElementById(`residual-${blank[0].id}`).scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+    return false;
+  }
+  recalcResidualState();
+  if (!state.okibenGig) { try { await fetchOkibenGig_(); } catch (e) {} }
+  const yen = n => '¥' + (Number(n) || 0).toLocaleString();
+  let sales = 0;
+  rcBentoProducts().forEach(p => {
+    const delivery = Number((state.deliveryCount || {})[p.id]) || 0;
+    const mv       = Number((state.moveAdj || {})[p.id]) || 0;
+    const mk       = state['makanaiあり'] ? (Number((state.makanaiDetail || {})[p.id]) || 0) : 0;
+    const res      = Number((state.residualDetail || {})[p.id]) || 0;
+    sales += (delivery + mv - mk - res) * (Number(p.price) || 0);
+  });
+  (state.products || []).filter(p => String(p.name || '').indexOf('お茶') >= 0).forEach(p => {
+    sales += (Number((state.productSales || {})[p.id]) || 0) * (Number(p.price) || 0);
+  });
+  const coupon = (state.history || []).filter(h => h.status === 'active').reduce((a, h) => a + (Number(h.couponAmount) || 0), 0);
+  sales -= coupon;
+  const pa = state.ppActual || {};
+  const useActual = pa.status === 'ok' && pa.found;
+  const paypayUsed = useActual ? pa.sum : (Number(state.paypayAmount) || 0);
+  const gig = gigCalc_();
+  const start = Number(state.registerStart) || 0;
+  const expectCash = start + sales - paypayUsed - gig;
+  state.expect = { sales, coupon, paypayUsed, paypaySrc: useActual ? 'actual' : 'app', gig, start, expectCash };
+  const ppNote = useActual ? '（PayPayの記録）'
+    : (pa.status === 'waiting' ? '（PayPayの記録を取得中のため、いまはアプリの入力。取れたら自動で直ります）'
+       : (IS_2ND || isSwitched_()) ? '（アプリの入力）' : '（PayPayの記録が取れなかったので、アプリの入力）');
+  const b = document.getElementById('expect-body');
+  if (b) b.innerHTML =
+      `<div style="display:flex;justify-content:space-between;"><span>売上（納品−数えた残り）</span><b>${yen(sales)}</b></div>`
+    + (coupon ? `<div style="font-size:11px;opacity:.8;">（クーポン ${yen(coupon)} を引いた額）</div>` : '')
+    + `<div style="display:flex;justify-content:space-between;"><span>PayPay${ppNote}</span><span>− ${yen(paypayUsed)}</span></div>`
+    + `<div style="display:flex;justify-content:space-between;"><span>ギャラ</span><span>− ${yen(gig)}</span></div>`
+    + `<div style="display:flex;justify-content:space-between;"><span>開始金</span><span>＋ ${yen(start)}</span></div>`
+    + `<div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);margin-top:6px;padding-top:6px;font-size:16px;font-weight:800;color:var(--ink);"><span>レジに残っているはずの現金</span><span>${yen(expectCash)}</span></div>`
+    + `<div style="font-size:12px;margin-top:6px;">ギャラを受け取ってから、金庫の現金を数えて下の「レジ有高」に入れてください。<br>このあとドライバーも現金を数えて照合します。</div>`;
+  const btn = document.getElementById('btn-expect');
+  if (btn) btn.textContent = '計算し直す';
+  saveState();
+  return true;
+}
+
 async function calcFinal() {
   // ★2026-08-06 置き弁ギャラ（現金で当日渡す未払い分）を最初の集計時に1回だけ取りに行く。
   //   ここで固定し、以後の再集計では取り直さない＝**画面に出た額と実際に渡す現金を一致させる**。
   if (!state.okibenGig) { await fetchOkibenGig_(); }
-  const registerEnd  = parseInt(document.getElementById('register-end').value) || 0;
+  // ★v3.46 先に「あるはずのお金」を出す（まだなら計算する）
+  { const ok = await calcExpected_(); if (!ok) return; }   // 毎回出し直す（残数・賄い・遅刻を直した後でも合うように）
+  const regAfterGig  = parseInt(document.getElementById('register-end').value) || 0;   // ★v3.46 ギャラを抜いた後の有高
+  const registerEnd  = regAfterGig + (state.expect.gig || 0);                          // サーバーへは今までどおり「抜く前」
   const cashFromReg  = registerEnd - state.registerStart;
   // PayPayお釣りで現金返金した分を差し引く
   const cashRefund   = Math.max(0, (state.paypayReceivedTotal || 0) - state.paypayAmount);
@@ -4968,15 +5083,29 @@ async function calcFinal() {
   }
   document.getElementById('res-makanai-row').style.display = state['makanaiあり'] ? 'none' : '';
 
+  /* ★v3.46 判定は「あるはずのお金」（数えた残りから出した売上・PayPayの実際の入金・ギャラ）と有高の差。
+     合計が合っていて、PayPayのアプリ入力だけが実際の入金と違う＝現金とPayPayの打ち分け違い → 柔らかく伝えるだけ（理由は不要）。
+     ⚠ レジの記録との差（上の diff）はサーバーの「現金差異」として今までどおり残る。 */
   const diffEl = document.getElementById('res-diff');
-  if (diff === 0) {
-    diffEl.textContent = '±0円　✓ 一致';
+  const exp = state.expect;
+  const expectCash = exp.start + exp.sales - exp.paypayUsed - totalSalary;   // ギャラはこの集計の値で（表示と同じ式）
+  const xd  = regAfterGig - expectCash;
+  const missplit = (xd === 0 && exp.paypaySrc === 'actual' && exp.paypayUsed !== state.paypayAmount);
+  const alertP = document.querySelector('#diff-alert p');
+  if (xd === 0 && !missplit) {
+    diffEl.textContent = '±0円　✓ ぴったりです';
     diffEl.className = 'result-value ok';
     document.getElementById('diff-alert').style.display = 'none';
+  } else if (missplit) {
+    diffEl.textContent = '±0円　✓ お金は合っています';
+    diffEl.className = 'result-value ok';
+    document.getElementById('diff-alert').style.display = 'block';
+    if (alertP) alertP.textContent = 'PayPayと現金の入力ミスがあったようです（お金は合っています）。分かれば書いてください（なくても提出できます）';
   } else {
-    diffEl.textContent = `${diff > 0 ? '+' : ''}${diff.toLocaleString()}円　⚠️ 差異あり`;
+    diffEl.textContent = `${xd > 0 ? '+' : ''}${xd.toLocaleString()}円　⚠️ 差異あり`;
     diffEl.className = 'result-value ng';
     document.getElementById('diff-alert').style.display = 'block';
+    if (alertP) alertP.textContent = 'あるはずのお金と' + Math.abs(xd).toLocaleString() + '円の差があります。お釣りの渡し間違いや、PayPayと現金の打ち間違いのこともあります。分かる範囲で理由を書いてください（必須）';
   }
 
   document.getElementById('final-results').style.display = 'block';
@@ -5122,8 +5251,10 @@ function rcExpectedResidual(pid) {          // 旧名は0丸めのまま残す�
 }
 // 入力欄に入れる既定値。計算が負なら**空欄**（勝手に0を書かない）
 function rcDefaultResidualValue_(pid) {
-  const n = rcExpectedResidualRaw_(pid);
-  return n < 0 ? '' : String(n);
+  // ★v3.46 (2026-11-28) 残数は**空欄から数えて入れる**（社長決定「販売員は残数を入力」）。
+  //   計算値を最初から入れておくと、数えずに送っても「売上」と「お金」が必ず一致して見え、
+  //   あるはずのお金の照合が意味を成さない（11/27 セカンド神谷の「残0」も同じ形）。
+  return '';
 }
 // ★2026-09-16 v3.30 1つでも手で打った欄があるか（＝自動上書きを止める合図）
 function rcAnyTouched_() {
@@ -5491,7 +5622,7 @@ async function submitFinal() {
   if (hasDiff && !comment) { showToast('差異の理由を入力してください'); return; }
   /* ★v3.45 (2026-11-28) 社長決定「数えるまで止める」。2次で売れた数が納品より多いと残りが計算できず空欄になる。
      空欄は送ると0になり、11/27 セカンド神谷は 納品43・販売57・残0 で締まって約45個の残りが記録から消えた。 */
-  if (sd2ndActive_()) {
+  {   // ★v3.46 全レジ：残数は空欄のままでは締めない（2次は v3.45 から）
     const blank = rcBentoProducts().filter(p => { const el = document.getElementById(`residual-${p.id}`); return el && el.value === ''; });
     if (blank.length) {
       showToast('「' + blank.map(p => p.name).join('・') + '」の残りが空欄です。実物を数えて入れてください（売れた数が納品より多く、計算できません）', 7000);
@@ -5517,7 +5648,7 @@ async function submitFinal() {
     date: new Date().toLocaleDateString('ja-JP'),
     deliveryCount: state.deliveryCount,
     registerStart: state.registerStart,
-    registerEnd: parseInt(document.getElementById('register-end').value) || 0,
+    registerEnd: (parseInt(document.getElementById('register-end').value) || 0) + (Number(state.calcTotalSalary) || 0),   // ★v3.46 画面はギャラを抜いた後・送るのは抜く前
     cashSales: state.cashSales,
     paypayAmount: state.paypayAmount,
     paypayReceivedTotal: state.paypayReceivedTotal || 0,
@@ -5825,6 +5956,8 @@ async function enterFinalScreen() {
   // ★2026-07-31 PayPayの取得・取込をここで先に走らせておく。
   //   販売員が現金有高や残数を入力している間に済むので、送信後の待ち時間が体感から消える。
   try { ppPrefetch(); } catch (e) { console.error('PayPay先取りに失敗:', e); }
+  try { ppActualStart_(); } catch (e) { console.error('PayPay実績の取得に失敗:', e); }   // ★v3.46
+  try { expectReset_(); } catch (e) {}
   // ★2026-07-31 Phase C：残数・賄いの入力欄を用意する
   try {
     renderResidualInputs();
@@ -5916,7 +6049,8 @@ function goToEdit() {
     }
   }
   document.getElementById('edit-register-start').value  = (state.registerStart || 0) - _editPay1;
-  document.getElementById('edit-register-end').value    = (parseInt(document.getElementById('register-end')?.value) || 0) - _editPay1;
+  // ★v3.46 締めの画面の有高は「ギャラを抜いた後」で入っている＝抜く前に直す（送信と同じ式）
+  document.getElementById('edit-register-end').value    = (parseInt(document.getElementById('register-end')?.value) || 0) + (Number(state.calcTotalSalary) || 0) - _editPay1;
   document.getElementById('edit-cash-sales').value      = state.cashSales || 0;
   document.getElementById('edit-paypay-amount').value   = state.paypayAmount || 0;
   document.getElementById('edit-diff-comment').value    = document.getElementById('diff-comment')?.value || '';
