@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- kanri.html v4.30 (2026-11-28) 【必要な包材＝午前分・全六に満腹込み】社長「満腹は全六にプラス」「午前の盛り出し表の合計とあってる？」→C案。★全六＝全六−カツ重＋自社の満腹系＋メンチ。★数えるのは拠点＋午前便だけ（午後便の配達は入れない）＝身＋全六＋満腹＋松が午前の盛り出し表の合計（お茶除く）と一致。11/27＝身805・全六510・満腹60・計1375。GAS変更なし。 -->
 <!-- kanri.html v4.29 (2026-11-28) 【配分表の右：販売員は拠点ごと／必要な包材】社長「拠点の販売員情報はエリアでまとめずに拠点毎に出して欲しい」「種類別の合計とは別に必要な包材を種類別の下に表示したい」。★エリア配分の右の一覧＝エリア列の中の拠点を1行ずつ（銀座計は詳細と重なるので出さない）。★両方の配分表の種類別の合計の下に「必要な包材」（s1PackagingHTML）＝富重 身（海苔弁＋カツ重＋配達梅＋竹）／富重 透明（海苔弁＋カツ重）／富重 共蓋（配達梅＋竹）／松（配達 松）／全六（全六−カツ重＋メンチ）／満腹（あさひめ）。海苔弁・カツ重・全六は拠点ぶん＋等級なしの配達ぶん。配達の等級は盛り出し表（getSheet2Data／getSheet3Data）から取るので、拠点配分・エリア配分の取得と一括印刷で一緒に取る。GAS変更なし。 -->
 <!-- kanri.html v4.28 (2026-11-28) 【エリア配分：銀座にもエリア計の列】社長「配分表　銀座エリアもエリアの合計数を出して欲しい。その上で詳細も」。★並び＝エリア計（芝・神谷・お茶・赤坂・銀座計）｜銀座の拠点（詳細）｜車載。銀座計は見せるだけの列で、中計・拠点合計・合計には入れない（renderSheet1 の _noSum。入れると二重に数える）。拠点配分タブは変わらない。GAS変更なし。 -->
 <!-- kanri.html v4.27 (2026-11-28) 【🗺 エリア配分タブを追加】社長「今の配分表と並行してもう１つ配分表を作って欲しい。拠点毎ではなく各エリア毎、銀座エリアだけは拠点毎の配分。車載は今まで通り別で記載」→A案（新しいタブ・拠点配分タブはそのまま）／エリア外は拠点ごとに残す。★データは拠点配分と同じ getSheet1Data。芝・神谷・お茶の水・赤坂は拠点の数を足して1エリア1列（arToAreaData）、銀座エリアの拠点・置き弁・セカンドは拠点のまま、車載5台は今までどおり別列＋車載計・中計。描画は renderSheet1 を共用（_bodyId／_title／_groupOf を渡した時だけ描く先・見出し・区切り線が変わる）。印刷CSSは #tab-sheet1 の指定を #tab-area にも複製。一括印刷には入れていない。GAS変更なし。 -->
@@ -4839,8 +4840,9 @@ function renderSheet1(data) {
 function s1PackagingHTML(data, allRows) {
   const isTea = r => r && r.baseName && r.baseName.indexOf('お茶') >= 0;
   const isKatsu = r => /カツ重|かつ重/.test(String((r && r.baseName) || ''));
-  const kindOf = (r, cat) => isKatsu(r) ? 'katsu' : (cat === '海苔弁系' ? 'nori' : (cat === '全六' || cat === '全' ? 'zen' : ''));
-  const t = { nori: 0, katsu: 0, zen: 0, menchi: 0, asahime: 0, ume: 0, take: 0, matsu: 0 };
+  // ★v4.30 社長「満腹は全六にプラス」→自社の満腹系は全六の容器。午前の盛り出し表の合計と合わせるため午前分（拠点＋午前便）だけ数える
+  const kindOf = (r, cat) => isKatsu(r) ? 'katsu' : (cat === '海苔弁系' ? 'nori' : (cat === '全六' || cat === '全' ? 'zen' : (cat === '満腹系' ? 'man' : '')));
+  const t = { nori: 0, katsu: 0, zen: 0, man: 0, menchi: 0, asahime: 0, ume: 0, take: 0, matsu: 0 };
   (allRows || []).forEach(r => {
     if (!r || isTea(r)) return;
     const n = Number(r.total) || 0;
@@ -4848,9 +4850,9 @@ function s1PackagingHTML(data, allRows) {
     const k = kindOf(r, String(r.category || '').trim());
     if (k) t[k] += n;
   });
-  const hasDeliv = !!(data._s2 && data._s2.ok && data._s3 && data._s3.ok);
+  const hasDeliv = !!(data._s2 && data._s2.ok);
   if (hasDeliv) {
-    [data._s2, data._s3].forEach(sd => {
+    [data._s2].forEach(sd => {   // 午前便だけ（午後便は入れない）
       const dv = sd.deliveries || [];
       [].concat(sd.rice || [], sd.brown || []).forEach(r => {
         if (!r || isTea(r) || r.isExternal) return;
@@ -4871,16 +4873,16 @@ function s1PackagingHTML(data, allRows) {
     ['富重　透明', t.nori + t.katsu,                  '海苔弁 ' + t.nori + '＋カツ重 ' + t.katsu],
     ['富重　共蓋', t.ume + t.take,                    '配達梅 ' + t.ume + '＋竹 ' + t.take],
     ['松',         t.matsu,                            '配達 松'],
-    ['全六',       t.zen + t.menchi,                   '全六（カツ重を除く） ' + t.zen + '＋メンチ ' + t.menchi],
+    ['全六',       t.zen + t.man + t.menchi,           '全六（カツ重を除く） ' + t.zen + '＋満腹 ' + t.man + '＋メンチ ' + t.menchi],
     ['満腹',       t.asahime,                          'あさひめ（南蛮・油淋鶏）']
   ];
   let h = '<table class="ref-table s1-pack-table" style="margin-top:10px;">'
-    + '<tr><th class="col-name" colspan="2">必要な包材</th></tr>';
+    + '<tr><th class="col-name" colspan="2">必要な包材（午前）</th></tr>';
   rows.forEach(x => {
     h += `<tr title="${escHtml(x[2])}"><td class="col-name">${escHtml(x[0])}</td>`
       + `<td class="col-sp" style="text-align:right;font-weight:800;">${x[1]}</td></tr>`;
   });
-  if (!hasDeliv) h += '<tr><td colspan="2" style="font-size:10px;color:#c62828;">配達の数が取れていません（梅・竹・松は0で出ています）</td></tr>';
+  if (!hasDeliv) h += '<tr><td colspan="2" style="font-size:10px;color:#c62828;">午前便の配達の数が取れていません（梅・竹・松は0で出ています）</td></tr>';
   return h + '</table>';
 }
 
