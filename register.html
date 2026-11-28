@@ -5006,9 +5006,7 @@ async function calcFinal() {
     const g = Number(state.expect && state.expect.gig) || 0;
     const key = regAfterGig + '|' + g;
     if (g > 0 && state._gigAskedFor !== key) {
-      const okGig = confirm('ギャラ（¥' + g.toLocaleString() + '）は金庫から抜きましたか？\n\n'
-        + '「レジ有高」には、ギャラを抜いた後の金額（¥' + regAfterGig.toLocaleString() + '）を入れてください。\n\n'
-        + '抜いた後の金額なら「OK」、まだ抜いていない・抜く前の金額なら「キャンセル」を押して入れ直してください。');
+      const okGig = confirm('ギャラ ¥' + g.toLocaleString() + ' は抜きましたか？\n（有高はギャラを抜いた後の金額）');
       if (!okGig) {
         try { const el = document.getElementById('register-end'); el.focus(); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
         return;
